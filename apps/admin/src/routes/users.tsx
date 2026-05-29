@@ -1003,7 +1003,7 @@ function UsersListView() {
       key: 'fullName',
       label: 'Person',
       sortable: true,
-      width: '300px',
+      width: '340px',
       render: (user) => (
         <button
           type="button"
@@ -1016,7 +1016,7 @@ function UsersListView() {
           aria-label={`Open ${user.fullName}`}
           data-testid={`users-open-detail-${user.id}`}
           data-user-full-name={user.fullName}
-          className="group flex min-w-0 items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
+          className="group flex w-full min-w-0 max-w-full items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white shadow-sm">
             {getInitials(user.fullName)}
@@ -1100,9 +1100,9 @@ function UsersListView() {
       key: 'lastActive',
       label: 'Activity',
       sortable: true,
-      width: '200px',
+      width: '220px',
       render: (user) => (
-        <span className="block truncate text-sm text-muted-foreground" title={user.lastActive}>{user.lastActive}</span>
+        <span className="block min-w-0 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={user.lastActive}>{user.lastActive}</span>
       ),
     },
     {
@@ -2352,7 +2352,7 @@ function UsersListView() {
             <DataGrid
               columns={columns}
               data={data}
-              tableMinWidth="1068px"
+              tableMinWidth="1128px"
               loading={isLoading}
               interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}

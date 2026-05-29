@@ -2015,7 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
-      width: '360px',
+      width: '420px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2044,13 +2044,13 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
-      width: '132px',
-      render: (page) => <span className="text-muted-foreground">{formatDate(page.lastUpdated)}</span>
+      width: '150px',
+      render: (page) => <span className="block min-w-0 break-words leading-5 text-muted-foreground [overflow-wrap:anywhere]">{formatDate(page.lastUpdated)}</span>
     },
     {
       key: 'actions',
       label: '',
-      width: '150px',
+      width: '168px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const publishBlocker = readiness ? getPublishBlocker(readiness) : null;
@@ -4118,7 +4118,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          tableMinWidth="1968px"
+          tableMinWidth="2100px"
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}

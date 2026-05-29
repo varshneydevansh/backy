@@ -307,6 +307,8 @@ export function DataGrid<T extends { id: string }>({
                                     {columns.map((col) => {
                                         const columnKey = getColumnKey(col);
                                         const columnLabel = getColumnLabel(col);
+                                        const cellContent = col.render ? col.render(item) : String(item[col.key as keyof T]);
+
                                         return (
                                             <td
                                                 key={columnKey}
@@ -320,7 +322,13 @@ export function DataGrid<T extends { id: string }>({
                                                 data-column-label={columnLabel}
                                                 data-cell-overflow-policy="clip-and-wrap"
                                             >
-                                                {col.render ? col.render(item) : String(item[col.key as keyof T])}
+                                                <div
+                                                    className="min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]"
+                                                    data-testid="admin-data-grid-cell-content"
+                                                    data-cell-content-policy="constrained-wrapped-content"
+                                                >
+                                                    {cellContent}
+                                                </div>
                                             </td>
                                         );
                                     })}
