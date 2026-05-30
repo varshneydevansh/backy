@@ -91,9 +91,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Active batch:** Batch 5: Ongoing UX Scout And Polish
 
-**What was just finished:** Batch 5 has completed several pushed polish checkpoints while staying open-ended: component drag previews no longer leak the component rail into the canvas, Inspector/Layers affordances are clearer, Pages/Users/Settings dense layout overlap was reduced, public custom-domain discovery/hosted resolution now requires verified DNS state by default, Help explains verified domain/subdomain routing, and the Layers map now exposes nav child-link counts and link href metadata.
+**What was just finished:** Batch 5 has completed several pushed polish checkpoints while staying open-ended: component drag previews no longer leak the component rail into the canvas, Inspector/Layers affordances are clearer, Pages/Users/Settings dense layout overlap was reduced, public custom-domain discovery/hosted resolution now requires verified DNS state by default, Help explains verified domain/subdomain routing, the Layers map now exposes nav child-link counts and link href metadata, and editor preview mode now keeps zoom canvas-scoped instead of letting Mac pinch/Cmd-scroll zoom the whole browser page.
 
-**Single next action:** Continue Batch 5 by choosing the next focused, testable release polish slice across blog/newsletter authoring, Help discoverability, layer-map/mobile responsive editor behavior, or site/domain management wording.
+**Single next action:** Continue Batch 5 by choosing the next focused, testable release polish slice across blog/newsletter authoring, responsive section/layout behavior, Help discoverability, layer-map/mobile editor behavior, or site/domain management wording.
 
 ## Active Compute
 

@@ -2059,6 +2059,7 @@ export function CanvasEditor({
   const [clipboardElements, setClipboardElements] = useState<EditorClipboardItem[]>([]);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  const canvasScaleRef = useRef(1);
   const canvasZoomRef = useRef(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
   const isCanvasAutoFitRef = useRef(true);
@@ -2107,6 +2108,10 @@ export function CanvasEditor({
     () => buildRulerTicks(renderedCanvasSize.height, activeCanvasScale),
     [activeCanvasScale, renderedCanvasSize.height],
   );
+
+  useEffect(() => {
+    canvasScaleRef.current = canvasScale;
+  }, [canvasScale]);
 
   useEffect(() => {
     canvasZoomRef.current = canvasZoom;
@@ -2196,6 +2201,13 @@ export function CanvasEditor({
     return nextZoom;
   }, [clampCanvasZoom]);
 
+  const setCanvasScaleValue = useCallback((value: number) => {
+    const nextScale = clampCanvasZoom(value);
+    canvasScaleRef.current = nextScale;
+    setCanvasScale(nextScale);
+    return nextScale;
+  }, [clampCanvasZoom]);
+
   const setCanvasAutoFitValue = useCallback((value: boolean) => {
     isCanvasAutoFitRef.current = value;
     setIsCanvasAutoFit(value);
@@ -2205,13 +2217,14 @@ export function CanvasEditor({
     computeNextZoom: (currentZoom: number) => number,
     anchor?: { clientX: number; clientY: number },
   ) => {
-    const currentZoom = canvasZoomRef.current;
+    const currentZoom = isPreview ? canvasScaleRef.current : canvasZoomRef.current;
     const nextZoom = clampCanvasZoom(Number(computeNextZoom(currentZoom).toFixed(2)));
     const viewport = canvasViewportRef.current;
+    const applyActiveCanvasScale = isPreview ? setCanvasScaleValue : setCanvasZoomValue;
 
     setCanvasAutoFitValue(false);
     if (!viewport || Math.abs(nextZoom - currentZoom) < 0.001) {
-      setCanvasZoomValue(nextZoom);
+      applyActiveCanvasScale(nextZoom);
       return;
     }
 
@@ -2226,12 +2239,12 @@ export function CanvasEditor({
     const nextScrollLeft = (viewport.scrollLeft + anchorX) * zoomRatio - anchorX;
     const nextScrollTop = (viewport.scrollTop + anchorY) * zoomRatio - anchorY;
 
-    setCanvasZoomValue(nextZoom);
+    applyActiveCanvasScale(nextZoom);
     window.requestAnimationFrame(() => {
       viewport.scrollLeft = Math.max(0, nextScrollLeft);
       viewport.scrollTop = Math.max(0, nextScrollTop);
     });
-  }, [clampCanvasZoom, setCanvasAutoFitValue, setCanvasZoomValue]);
+  }, [clampCanvasZoom, isPreview, setCanvasAutoFitValue, setCanvasScaleValue, setCanvasZoomValue]);
 
   const preventCanvasBrowserZoom = useCallback((event: Event) => {
     if (event.cancelable) {
@@ -2562,10 +2575,6 @@ export function CanvasEditor({
   }, [isCanvasPanActive]);
 
   useLayoutEffect(() => {
-    if (isPreview) {
-      return undefined;
-    }
-
     const viewport = canvasViewportRef.current;
     if (!viewport) {
       return undefined;
@@ -2617,15 +2626,34 @@ export function CanvasEditor({
   const applyFitCanvas = useCallback(() => {
     const container = canvasViewportRef.current;
     if (!container) {
-      setCanvasZoomValue(1);
+      if (isPreview) {
+        setCanvasScaleValue(1);
+      } else {
+        setCanvasZoomValue(1);
+      }
       return;
     }
 
     const availableWidth = Math.max(container.clientWidth - 96, 1);
     const availableHeight = Math.max(container.clientHeight - 120, 1);
-    const nextScale = Math.min(1.5, availableWidth / size.width, availableHeight / size.height);
-    setCanvasZoomValue(Number(nextScale.toFixed(2)));
-  }, [setCanvasZoomValue, size.height, size.width]);
+    const fitWidth = isPreview ? renderedCanvasSize.width : size.width;
+    const fitHeight = isPreview ? renderedCanvasSize.height : size.height;
+    const nextScale = Math.min(1.5, availableWidth / fitWidth, availableHeight / fitHeight);
+    const normalizedScale = Number(nextScale.toFixed(2));
+    if (isPreview) {
+      setCanvasScaleValue(normalizedScale);
+      return;
+    }
+    setCanvasZoomValue(normalizedScale);
+  }, [
+    isPreview,
+    renderedCanvasSize.height,
+    renderedCanvasSize.width,
+    setCanvasScaleValue,
+    setCanvasZoomValue,
+    size.height,
+    size.width,
+  ]);
 
   const handleFitCanvas = useCallback(() => {
     setCanvasAutoFitValue(true);
@@ -6664,7 +6692,7 @@ export function CanvasEditor({
         e.code === 'Digit0' ||
         e.code === 'Numpad0'
       );
-      if (!isPreview && (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut)) {
+      if (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut) {
         preventCanvasBrowserZoom(e);
         if (isZoomOutShortcut) {
           handleZoomOut();
@@ -7032,18 +7060,18 @@ export function CanvasEditor({
 
     const updateScale = () => {
       if (!isPreview) {
-        setCanvasScale(1);
+        setCanvasScaleValue(1);
         return;
       }
 
       const availableWidth = Math.max(container.clientWidth - 64, 0);
       const availableHeight = Math.max(container.clientHeight - 64, 0);
 
-      const widthScale = availableWidth / size.width;
-      const heightScale = availableHeight / size.height;
+      const widthScale = availableWidth / renderedCanvasSize.width;
+      const heightScale = availableHeight / renderedCanvasSize.height;
       const nextScale = Math.min(1, widthScale, heightScale);
 
-      setCanvasScale(Number.isFinite(nextScale) ? Math.max(0.25, nextScale) : 1);
+      setCanvasScaleValue(Number.isFinite(nextScale) ? Math.max(0.25, nextScale) : 1);
     };
 
     updateScale();
@@ -7058,7 +7086,7 @@ export function CanvasEditor({
       resizeObserver.disconnect();
       window.removeEventListener('resize', updateScale);
     };
-  }, [isPreview, size.width, size.height]);
+  }, [isPreview, renderedCanvasSize.height, renderedCanvasSize.width, setCanvasScaleValue]);
 
   useEffect(() => {
     if (!isCanvasAutoFit || isPreview) {
@@ -7308,7 +7336,9 @@ export function CanvasEditor({
     : isCanvasPanMode ? 'selected' : 'ready';
   const zoomSliderActionStatus = `Canvas zoom slider set to ${zoomPercent}%. Range ${CANVAS_ZOOM_MIN * 100}-${CANVAS_ZOOM_MAX * 100}%`;
   const editorZoomActionStatus = [
-    editorCommandStatusText(panCommand),
+    isPreview
+      ? 'Preview zoom is canvas-scoped and uses the expanded rendered content bounds.'
+      : editorCommandStatusText(panCommand),
     editorCommandStatusText(zoomOutCommand),
     zoomSliderActionStatus,
     editorCommandStatusText(zoomInCommand),
@@ -8760,6 +8790,11 @@ export function CanvasEditor({
             )}
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
+            data-preview-zoom={isPreview ? 'canvas-scoped' : undefined}
+            data-preview-scale-basis={isPreview ? 'expanded-content-bounds' : undefined}
+            data-preview-scale-width={isPreview ? renderedCanvasSize.width : undefined}
+            data-preview-scale-height={isPreview ? renderedCanvasSize.height : undefined}
+            data-preview-scroll-owner={isPreview ? 'editor-canvas-viewport' : undefined}
             data-canvas-zoom-listener-scope="window-visualviewport-document-root-body-shell-viewport-surface-capture"
             data-canvas-zoom-native-phase="layout-effect-capture"
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
@@ -9203,12 +9238,17 @@ export function CanvasEditor({
                 {isPreview ? (
                   <div
                     ref={canvasScaleSurfaceRef}
-                    className="overflow-auto shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
+                    className="overflow-visible shadow-[0_28px_70px_rgba(15,23,42,0.18)]"
                     data-testid="editor-canvas-scale-surface"
                     data-canvas-scale={activeCanvasScale}
                     data-canvas-zoom-surface="true"
                     data-canvas-zoom-surface-listener="native-capture"
                     data-preview-content-bounds="expanded"
+                    data-preview-zoom="canvas-scoped"
+                    data-preview-scroll-owner="editor-canvas-viewport"
+                    data-preview-scale-basis="expanded-content-bounds"
+                    data-preview-scale-width={renderedCanvasSize.width}
+                    data-preview-scale-height={renderedCanvasSize.height}
                     style={{
                       ...editorThemeCssVariables,
                       width: renderedCanvasSize.width,
@@ -9435,7 +9475,7 @@ export function CanvasEditor({
               </div>
             )}
 
-            {!isPreview && (
+            {(
               <div
                 className="pointer-events-none absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-zoom-controls"
@@ -9443,6 +9483,8 @@ export function CanvasEditor({
                 aria-describedby={editorZoomActionStatusId}
                 data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
                 data-canvas-scale={activeCanvasScale}
+                data-preview-zoom={isPreview ? 'canvas-scoped' : undefined}
+                data-preview-scale-basis={isPreview ? 'expanded-content-bounds' : undefined}
                 data-zoom-percent={zoomPercent}
                 data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
                 data-pan-active={isCanvasPanActive ? 'true' : 'false'}
@@ -9455,29 +9497,33 @@ export function CanvasEditor({
                 <span id={editorZoomActionStatusId} className="sr-only" data-testid="editor-zoom-action-status" aria-live="polite">
                   {editorZoomActionStatus}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleToggleCanvasPanMode}
-                  className={cn(
-                    'pointer-events-auto rounded-md p-1.5 transition-colors',
-                    isCanvasPanMode
-                      ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
-                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
-                  )}
-                  title={isCanvasPanMode ? 'Disable pan navigation (H, hold Space)' : 'Enable pan navigation (H, hold Space)'}
-                  aria-label={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
-                  aria-pressed={isCanvasPanMode}
-                  aria-keyshortcuts="H Space"
-                  data-testid="editor-pan-toggle"
-                  aria-describedby={editorZoomActionStatusId}
-                  data-command-id={panCommand?.id}
-                  data-action-state={panActionState}
-                  data-action-status={editorCommandStatusText(panCommand)}
-                  data-disabled-reason={editorCommandDisabledReason(panCommand)}
-                >
-                  <Hand className="h-4 w-4" />
-                </button>
-                <div className="mx-1 h-5 w-px bg-slate-200" />
+                {!isPreview && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleToggleCanvasPanMode}
+                      className={cn(
+                        'pointer-events-auto rounded-md p-1.5 transition-colors',
+                        isCanvasPanMode
+                          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950'
+                      )}
+                      title={isCanvasPanMode ? 'Disable pan navigation (H, hold Space)' : 'Enable pan navigation (H, hold Space)'}
+                      aria-label={isCanvasPanMode ? 'Disable pan navigation' : 'Enable pan navigation'}
+                      aria-pressed={isCanvasPanMode}
+                      aria-keyshortcuts="H Space"
+                      data-testid="editor-pan-toggle"
+                      aria-describedby={editorZoomActionStatusId}
+                      data-command-id={panCommand?.id}
+                      data-action-state={panActionState}
+                      data-action-status={editorCommandStatusText(panCommand)}
+                      data-disabled-reason={editorCommandDisabledReason(panCommand)}
+                    >
+                      <Hand className="h-4 w-4" />
+                    </button>
+                    <div className="mx-1 h-5 w-px bg-slate-200" />
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={handleZoomOut}

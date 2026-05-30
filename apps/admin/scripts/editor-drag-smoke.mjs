@@ -628,6 +628,18 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('handleFitCanvas();'),
     'Editor keyboard handler must support capture-phase Cmd/Ctrl zoom in, zoom out, and fit canvas shortcuts before browser page zoom',
   );
+  assert(
+    source.includes('const canvasScaleRef = useRef(1);') &&
+      source.includes('const currentZoom = isPreview ? canvasScaleRef.current : canvasZoomRef.current;') &&
+      source.includes('const applyActiveCanvasScale = isPreview ? setCanvasScaleValue : setCanvasZoomValue;') &&
+      source.includes('data-preview-zoom={isPreview ?') &&
+      source.includes('data-preview-scale-basis={isPreview ?') &&
+      source.includes('data-preview-scroll-owner={isPreview ?') &&
+      source.includes('data-preview-content-bounds="expanded"') &&
+      source.includes('data-preview-zoom="canvas-scoped"') &&
+      source.includes('data-preview-scale-basis="expanded-content-bounds"'),
+    'Editor preview mode must keep zoom canvas-scoped, use expanded content bounds for scale, and expose scroll/scale policy metadata.',
+  );
   assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata and keep the floating shell hit-through for canvas selection');
   assert(source.includes('data-testid="editor-zoom-out"') && source.includes('aria-keyshortcuts="Control+- Meta+-"') && source.includes('data-testid="editor-zoom-in"') && source.includes('aria-keyshortcuts="Control+= Meta+="') && source.includes('data-testid="editor-zoom-fit"') && source.includes('aria-keyshortcuts="Control+0 Meta+0"'), 'Editor zoom buttons must expose keyboard shortcut metadata');
   assert(source.includes('const CANVAS_ZOOM_PERCENT_STEP = 5') && source.includes('handleCanvasZoomPercentChange') && source.includes('data-testid="editor-zoom-slider"') && source.includes('data-zoom-min={CANVAS_ZOOM_MIN * 100}') && source.includes('data-zoom-max={CANVAS_ZOOM_MAX * 100}') && smokeSource.includes('setCanvasZoomSlider'), 'Editor zoom controls must expose a direct canvas zoom slider with rendered smoke coverage');
@@ -912,7 +924,8 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-zoom-scope="canvas"') &&
       source.includes('data-keyboard-zoom-scope="editor-window"') &&
       source.includes('data-keyboard-zoom-capture-targets="window-document-root-body-shell-viewport"') &&
-      source.includes('if (!isPreview && (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut))') &&
+      source.includes('if (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut)') &&
+      source.includes('Preview zoom is canvas-scoped and uses the expanded rendered content bounds.') &&
       smokeSource.includes('dispatchCanvasWheelZoom') &&
       smokeSource.includes('dispatchCdpCanvasWheelZoom') &&
       smokeSource.includes('dispatchEditorShellWheelZoom') &&

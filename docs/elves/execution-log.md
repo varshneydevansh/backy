@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 03:26 IST
+- **Last updated:** 2026-05-31 03:47 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 03:47 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; preview zoom friction reduced; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: preview mode now uses the same canvas-scoped zoom path as edit mode, including Cmd/Ctrl keyboard zoom, wheel zoom, Mac pinch gesture handling, and fit-to-canvas. Preview scale is backed by the expanded rendered canvas bounds instead of only the base canvas size, so overflow content participates in preview fitting.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: source guard now asserts preview canvas zoom metadata, expanded-content scale basis, and the preview scroll owner contract.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Decision made:**
+- Kept the existing editor layout and canvas model; this slice only fixes the preview zoom/scale behavior that caused browser-level zoom in the canvas preview path.
+
+**Next:**
+1. Continue Batch 5 on the next highest-friction editor/content surface: responsive section/layout flow, blog/newsletter authoring, Help discoverability, or site/domain management wording.
+2. Keep each slice small, verified, committed, and pushed.
 
 ## 2026-05-31 03:08 IST
 
