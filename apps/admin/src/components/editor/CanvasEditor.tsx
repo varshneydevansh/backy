@@ -399,6 +399,7 @@ const MIN_GRID_SIZE = 1;
 const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
 const MAX_CANVAS_DIMENSION = 3840;
+const CANVAS_CONTENT_PADDING = 48;
 const EDITOR_SHORTCUT_BLOCK_SELECTOR = [
   '[contenteditable="true"]',
   '[role="textbox"]',
@@ -1076,6 +1077,15 @@ const collectCanvasContentBounds = (
     { maxX: 0, maxY: 0 },
   )
 );
+
+const expandCanvasSizeToContent = (
+  canvasSize: CanvasSize,
+  bounds: { maxX: number; maxY: number },
+): CanvasSize => ({
+  ...canvasSize,
+  width: Math.max(canvasSize.width, Math.ceil(bounds.maxX)),
+  height: Math.max(canvasSize.height, Math.ceil(bounds.maxY + CANVAS_CONTENT_PADDING)),
+});
 
 const SECTION_FLOW_ELEMENT_TYPES = new Set<CanvasElement['type']>(['section', 'header', 'footer', 'nav']);
 
@@ -2033,15 +2043,10 @@ export function CanvasEditor({
     () => collectCanvasContentBounds(displayedElements),
     [displayedElements],
   );
-  const renderedCanvasSize = useMemo<CanvasSize>(() => (
-    isPreview
-      ? {
-          ...size,
-          width: Math.max(size.width, Math.ceil(displayedContentBounds.maxX)),
-          height: Math.max(size.height, Math.ceil(displayedContentBounds.maxY + 48)),
-        }
-      : size
-  ), [displayedContentBounds.maxX, displayedContentBounds.maxY, isPreview, size]);
+  const renderedCanvasSize = useMemo<CanvasSize>(
+    () => expandCanvasSizeToContent(size, displayedContentBounds),
+    [displayedContentBounds, size],
+  );
   const scaledCanvasWidth = Math.max(1, Math.round(renderedCanvasSize.width * activeCanvasScale));
   const scaledCanvasHeight = Math.max(1, Math.round(renderedCanvasSize.height * activeCanvasScale));
   const zoomPercent = Math.round(activeCanvasScale * 100);
@@ -9248,10 +9253,11 @@ export function CanvasEditor({
                         data-canvas-scale={activeCanvasScale}
                         data-canvas-zoom-surface="true"
                         data-canvas-zoom-surface-listener="native-capture"
+                        data-editor-content-bounds="expanded"
                         style={{
                           ...editorThemeCssVariables,
-                          width: size.width,
-                          height: size.height,
+                          width: renderedCanvasSize.width,
+                          height: renderedCanvasSize.height,
                           transform: `scale(${activeCanvasScale})`,
                           transformOrigin: 'top left',
                           touchAction: 'pan-x pan-y',
@@ -9265,7 +9271,7 @@ export function CanvasEditor({
                           onSelect={handleSelect}
                           onSelectMany={handleCanvasSelectMany}
                           onToggleSelect={handleCanvasToggleSelect}
-                          size={size}
+                          size={renderedCanvasSize}
                           onSizeChange={(newSize) => {
                             if (isCanvasMutationDisabled) {
                               return;
@@ -9293,8 +9299,9 @@ export function CanvasEditor({
 
             {!isPreview && (
               <div
-                className="absolute bottom-4 left-4 z-30 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
+                className="pointer-events-none absolute bottom-4 left-4 z-30 flex items-center gap-2 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 text-xs font-medium text-slate-700 shadow-lg backdrop-blur"
                 data-testid="editor-grid-snap-controls"
+                data-overlay-hit-through="true"
                 aria-describedby={editorGridSnapActionStatusId}
                 data-snap-enabled={snapEnabled ? 'true' : 'false'}
                 data-grid-visible={showGrid ? 'true' : 'false'}
@@ -9310,7 +9317,7 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleToggleGridVisibility}
                   className={cn(
-                    'flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
+                    'pointer-events-auto flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
                     showGrid
                       ? 'bg-slate-100 text-slate-800 ring-1 ring-slate-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
@@ -9332,7 +9339,7 @@ export function CanvasEditor({
                   type="button"
                   onClick={handleToggleSnap}
                   className={cn(
-                    'flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
+                    'pointer-events-auto flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
                     snapEnabled
                       ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
                       : 'text-slate-500 hover:bg-slate-100 hover:text-slate-950',
@@ -9352,7 +9359,7 @@ export function CanvasEditor({
                   {snapEnabled ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
                 </button>
                 <label
-                  className="flex items-center gap-1.5"
+                  className="pointer-events-auto flex items-center gap-1.5"
                   title="Grid size"
                   aria-describedby={editorGridSnapActionStatusId}
                   data-action-state="ready"

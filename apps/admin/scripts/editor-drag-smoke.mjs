@@ -636,7 +636,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-pan-toggle"') && source.includes('data-pan-keyshortcuts="toggle:H;temporary:Space"') && source.includes('aria-keyshortcuts="H Space"'), 'Editor pan toggle must expose H and Space pan shortcut metadata');
   assert(source.includes("key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleGridVisibility();'), 'Editor keyboard handler must support G as a grid visibility shortcut');
   assert(source.includes("key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleSnap();'), 'Editor keyboard handler must support S as a snapping shortcut without intercepting Cmd/Ctrl+S save');
-  assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata for custom admin clients');
+  assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata and keep the floating shell hit-through for canvas selection');
   assert(source.includes('data-testid="editor-grid-visibility-toggle"') && source.includes('aria-keyshortcuts="G"') && source.includes('data-testid="editor-snap-toggle"') && source.includes('aria-keyshortcuts="S"'), 'Editor grid and snap toggle controls must expose keyboard shortcut metadata');
   assert(
     source.includes("const editorGridSnapActionStatusId = 'editor-grid-snap-action-status';") &&
@@ -1420,7 +1420,9 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes("mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace'") && source.includes("activeMarqueeSelection.mode === 'add'") && source.includes('data-selection-mode={marqueeSelection.mode}'), 'Editor canvas marquee selection must support additive Shift/Cmd/Ctrl marquee selection');
   assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
   assert(source.includes("isPreview ? 'overflow-auto' : 'overflow-visible'") && source.includes('data-preview-scroll-policy={isPreview ?'), 'Editor preview canvas must remain scrollable when authored content extends beyond the selected viewport.');
-  assert(editorSource.includes('const collectCanvasContentBounds = (') && editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
+  assert(editorSource.includes('const collectCanvasContentBounds = (') && editorSource.includes('const expandCanvasSizeToContent = (') && editorSource.includes('height: Math.max(canvasSize.height, Math.ceil(bounds.maxY + CANVAS_CONTENT_PADDING))'), 'Editor shell must calculate a content-aware canvas frame for authored elements beyond the selected viewport.');
+  assert(editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
+  assert(editorSource.includes('data-editor-content-bounds="expanded"') && editorSource.includes('width: renderedCanvasSize.width') && editorSource.includes('height: renderedCanvasSize.height'), 'Editor edit surface must also expand to authored content bounds so resized root sections do not clip later layers.');
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
   assert(editorSource.includes('const applyRootSectionFlow = (') && editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') && editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);'), 'Editor root sections, headers, footers, and nav bars must push following root layers when their height changes.');
 };
@@ -27873,7 +27875,7 @@ const main = async () => {
       : [
           await dragElement(client, 'smoke-heading', 90, 40),
           await dragElement(client, 'smoke-image', 80, 40),
-          await dragElement(client, 'smoke-box', 70, 30),
+          await dragSelectionHandle(client, 'smoke-box', 70, 30),
           await dragElement(client, 'smoke-child-button', 40, 20),
           await dragElement(client, 'smoke-form', 60, 30),
         ];
