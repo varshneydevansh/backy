@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 03:08 IST
+- **Last updated:** 2026-05-31 03:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -53,6 +53,13 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `18f6877c fix(editor): clarify inspector affordances`
 - `b056a40f fix(admin): reduce dense table overlap`
 - `30d47ca0 fix(public): require verified custom domains`
+- `882a41f6 fix(admin): explain verified domain routing`
+- `5a81efd8 fix(editor): clarify nav layers in layer map`
+
+**Follow-up checkpoint at 03:26 IST:**
+- Help now has a source-guarded `verified-domain-routing` topic explaining that a saved custom domain is only setup intent until exact-host DNS verification is marked `verified`, and the copyable frontend-agent brief now tells agents to verify DNS before relying on domain discovery or host-to-site routing.
+- The editor Layers map now exposes `data-layer-nav-link-count`, `data-layer-link-href`, and a readable meta line such as `nav · 3 links · site.navigation.primary` or `link · /about`, making navigation child layers easier to identify and select.
+- Additional commands passed: `npm run test:help --workspace @backy-cms/admin`, `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin`, `npm run typecheck --workspace @backy-cms/admin`, and `git diff --check`.
 
 **Next:**
 1. Continue Batch 5 on the next highest-friction creation surface: blog/newsletter authoring, Help discoverability, layer-map/mobile responsive editor behavior, or site/domain management wording.

@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Start Batch 5: Ongoing UX Scout And Polish.
+- **Next required action:** Continue Batch 5: Ongoing UX Scout And Polish.
 
 ## Effort Standard
 
@@ -91,7 +91,7 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Active batch:** Batch 5: Ongoing UX Scout And Polish
 
-**What was just finished:** Batch 5 has completed several pushed polish checkpoints while staying open-ended: component drag previews no longer leak the component rail into the canvas, Inspector/Layers affordances are clearer, Pages/Users/Settings dense layout overlap was reduced, and public custom-domain discovery/hosted resolution now requires verified DNS state by default.
+**What was just finished:** Batch 5 has completed several pushed polish checkpoints while staying open-ended: component drag previews no longer leak the component rail into the canvas, Inspector/Layers affordances are clearer, Pages/Users/Settings dense layout overlap was reduced, public custom-domain discovery/hosted resolution now requires verified DNS state by default, Help explains verified domain/subdomain routing, and the Layers map now exposes nav child-link counts and link href metadata.
 
 **Single next action:** Continue Batch 5 by choosing the next focused, testable release polish slice across blog/newsletter authoring, Help discoverability, layer-map/mobile responsive editor behavior, or site/domain management wording.
 

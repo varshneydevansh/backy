@@ -21,6 +21,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Marquee selection must store the original client pointer and reproject it against the current canvas rect during moves. Storing only the pointer-down canvas coordinate lets the visual origin drift when zoom/scroll settling changes the canvas rect.
 - [2026-05-31] Component-library drag previews should clear sticky preview state and stage the custom drag image as a rendered behind-page element before `setDragImage`; offscreen-only drag images can let Chrome fall back to rail screenshots.
 - [2026-05-31] Dense route tables should be fixed with route-local width and wrapping contracts before changing shared `DataGrid`; Pages and Users need different operational copy budgets.
+- [2026-05-31] Navigation layers need visible child-link metadata in the layer map. Showing only `nav` or a generated id makes users think menu items are not separately selectable even when child link layers exist.
 
 ## Product and Domain Invariants
 
@@ -29,6 +30,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-30] Every page/blog/product/form/custom frontend path must preserve design tokens, fonts, colors, media assets, animations, interactions, responsive overrides, editable maps, and API-visible properties.
 - [2026-05-31] Production Vercel runbooks must keep `backy-admin` as a protected Vite shell with only public/admin API base URLs; server-only admin keys, database URLs, provider secrets, and cron secrets belong on `backy-public`, never in `VITE_*` env.
 - [2026-05-31] Public custom-domain and locale-domain discovery must require `site.settings.domainVerification.status === "verified"` for the exact host. A saved domain string alone is configuration intent, not routing permission.
+- [2026-05-31] Help content should mirror deploy behavior immediately after hardening changes; otherwise users and frontend agents keep following the old, looser mental model.
 
 ## Known Traps
 
