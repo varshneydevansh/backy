@@ -555,6 +555,7 @@ export function ComponentLibrary({
       }
       : groupedItems
   ), [favoriteKeySet, favoriteSearchItems, groupedItems, selectedCategory]);
+  const componentPreviewVisible = Boolean(previewItem);
   const renderCategoryButton = (cat: ComponentLibraryCategory) => (
     <button
       key={cat.id}
@@ -866,10 +867,14 @@ export function ComponentLibrary({
 
       {/* Components List */}
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2 pb-3"
+        className={cn(
+          'min-h-0 flex-1 space-y-3 overflow-y-auto p-2',
+          componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3',
+        )}
         data-testid="editor-component-list"
         data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
         data-component-preview-reserved-space="sticky-footer"
+        data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
           items.length > 0 && (
@@ -1001,7 +1006,7 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
 
   return (
     <div
-      className="pointer-events-none shrink-0 overflow-hidden border-t border-slate-200 bg-slate-50/95 p-3 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)] overflow-hidden border-t border-slate-200 bg-slate-50/95 p-2.5 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
       data-testid="editor-component-preview"
       data-component-preview={itemKey}
       data-component-preview-placement="sticky-footer"
@@ -1018,7 +1023,7 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
         </span>
       </div>
       <div className="overflow-hidden rounded-md border border-slate-200 bg-white p-2">
-        <div className="flex h-24 items-center justify-center rounded bg-[linear-gradient(45deg,#f8fafc_25%,transparent_25%),linear-gradient(-45deg,#f8fafc_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f8fafc_75%),linear-gradient(-45deg,transparent_75%,#f8fafc_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0]">
+        <div className="flex h-20 items-center justify-center rounded bg-[linear-gradient(45deg,#f8fafc_25%,transparent_25%),linear-gradient(-45deg,#f8fafc_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f8fafc_75%),linear-gradient(-45deg,transparent_75%,#f8fafc_75%)] bg-[length:12px_12px] bg-[position:0_0,0_6px,6px_-6px,-6px_0]">
           <ComponentPreviewArtwork item={item} />
         </div>
       </div>

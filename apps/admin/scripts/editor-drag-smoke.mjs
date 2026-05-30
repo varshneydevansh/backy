@@ -1575,6 +1575,10 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
       source.includes('data-component-preview-reserved-space="sticky-footer"') &&
+      source.includes('const componentPreviewVisible = Boolean(previewItem);') &&
+      source.includes("componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3'") &&
+      source.includes("data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}") &&
+      source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
       source.includes('data-component-preview-placement="sticky-footer"') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
