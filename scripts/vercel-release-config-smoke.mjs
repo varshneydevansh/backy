@@ -56,6 +56,14 @@ for (const snippet of [
   'Root Directory: `apps/admin`',
   'NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
   'VITE_BACKY_ADMIN_API_BASE_URL',
+  'CRON_SECRET',
+  'same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`',
+  '### Protected topology',
+  'BACKY_PUBLIC_API_BASE_URL',
+  'BACKY_SITE_ID',
+  'BACKY_SITE_PUBLIC_HOST',
+  'GET /api/sites/:siteId/agent-handoff',
+  'akriti.devanshvarshney.com',
 ]) {
   assert(readme.includes(snippet), `README release runbook is missing: ${snippet}`);
 }

@@ -110,6 +110,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Development Command: `npm run dev`
 - Runtime config: set `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, storage/provider secrets, and `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`.
 - Cron config: `apps/public/vercel.json` schedules `/api/admin/commerce/reconcile?limit=100` at `0 3 * * *`.
+- Cron protection: set `CRON_SECRET` to the same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`. Vercel sends it as a bearer token, and Backy authenticates the scheduled reconciliation request through the admin-key path.
 
 ### `backy-admin`
 
@@ -119,6 +120,14 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Output Directory: `dist`
 - Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`, and `VITE_BACKY_ADMIN_API_KEY`.
 - SPA routing and baseline headers are tracked in `apps/admin/vercel.json`.
+
+### Protected topology
+
+- Keep `backy-admin` private or access-controlled. It is the editor/admin shell and should call the protected `backy-public` admin APIs with an admin API key.
+- Keep `backy-public` public for rendering, discovery, forms, comments, newsletter signup, and custom frontend API reads. Admin writes still require sessions or admin API keys.
+- Run custom website frontends as separate Vercel projects when useful. Each frontend should set `BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `BACKY_SITE_ID=<site-id-or-slug>`, and optionally `BACKY_SITE_PUBLIC_HOST=<custom-host>`.
+- Subdomains such as `akriti.devanshvarshney.com`, `blog.devanshvarshney.com`, or `docs.devanshvarshney.com` are modeled as site custom domains. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
+- Frontend builders and AI agents should start with `GET /api/sites/:siteId/agent-handoff`, then read manifest, OpenAPI, render, and frontend-design before creating UI or templates. Do not copy Backy content into a frontend-local JSON source of truth.
 
 Run `npm run test:vercel-release-config` before release to verify the checked-in Vercel topology and launch homepage links.
 
