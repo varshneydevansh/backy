@@ -504,14 +504,15 @@ const assertSettingsSourceContracts = () => {
     'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
   );
   assert(
-    settingsRoute.includes('className="relative z-[70] flex flex-wrap items-center gap-2"') &&
+    settingsRoute.includes('className="relative z-[130] flex flex-wrap items-center gap-2"') &&
       settingsRoute.includes('data-stack-layer="settings-header-actions-above-workbar"') &&
-      settingsRoute.includes('className="group relative z-[80] transition-[margin] [&[open]]:mb-32"') &&
+      settingsRoute.includes('className="group relative z-[140] transition-[margin] [&[open]]:mb-32"') &&
       settingsRoute.includes('data-stack-layer="settings-header-more-actions-above-workbar"') &&
       settingsRoute.includes('data-open-reserves-workbar-gap="true"') &&
       settingsRoute.includes('data-stack-layer="settings-header-secondary-menu-above-workbar"') &&
       settingsRoute.includes('data-stack-layer="settings-workbar-under-header-actions"') &&
-      settingsRoute.includes('sm:top-full sm:z-[90] sm:min-w-52') &&
+      settingsRoute.includes('absolute right-0 top-full z-[150]') &&
+      settingsRoute.includes('min-w-52 max-w-[calc(100vw-2rem)]') &&
       settingsRoute.includes('data-testid="settings-header-secondary-action-menu"') &&
       settingsSmokeSource.includes('const assertSettingsHeaderActionMenuLayer = async (client) =>') &&
       settingsSmokeSource.includes('state.topElementWithinMenu') &&
@@ -1685,7 +1686,7 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       state.menuLayer === 'settings-header-secondary-menu-above-workbar' &&
       state.workbarLayer === 'settings-workbar-under-header-actions' &&
       state.menuPosition === 'absolute' &&
-      state.menuZIndex === '90' &&
+      state.menuZIndex === '150' &&
       state.workbarZIndex === '10' &&
       state.detailsReservesWorkbarGap &&
       state.detailsMarginBottom >= 120 &&
