@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
+import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Send, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
 import {
     AdminContentApiError,
     archiveBlogPost,
@@ -127,6 +127,11 @@ const BLOG_EDITOR_CONTROL_AREAS = [
         title: 'Comments',
         detail: 'Review pending, approved, reported, spam, and blocked public discussion state.',
         href: '#blog-editor-comments',
+    },
+    {
+        title: 'Newsletter',
+        detail: 'Prepare this report as a provider-safe newsletter issue source.',
+        href: '#blog-editor-newsletter',
     },
     {
         title: 'Revisions',
@@ -2185,6 +2190,9 @@ function EditBlogPostPage() {
     const publicResolveUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/resolve?path=${encodeURIComponent(publicPath)}`;
     const publicPostCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/blog/${encodeURIComponent(postId)}/comments`;
     const moderationCommentsUrl = `${publicApiBase}/sites/${encodeURIComponent(activeSiteId)}/comments?targetType=post&targetId=${encodeURIComponent(postId)}&limit=100&sort=newest`;
+    const newsletterSendableSubscribersUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=sendable`;
+    const newsletterHeldSubscribersUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=held`;
+    const newsletterContactSyncUrl = `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/forms/{formId}/contacts/sync`;
     const siteCommentPolicy = selectedSite?.settings?.commentPolicy || null;
     const blogPublishImpact = {
         schemaVersion: 'backy.blog-publish-impact.v1',
@@ -2298,6 +2306,56 @@ function EditBlogPostPage() {
         },
     };
     const blogPublishImpactText = JSON.stringify(blogPublishImpact, null, 2);
+    const newsletterIssueHandoff = {
+        schemaVersion: 'backy.blog-newsletter-issue-source.v1',
+        generatedAt: new Date().toISOString(),
+        sourcePost: {
+            id: post.id,
+            title: title || post.title,
+            slug: normalizedSlug || post.slug,
+            path: publicPath,
+            status,
+            scheduledAt: status === 'scheduled' ? scheduledAt : null,
+            excerpt,
+            author: selectedAuthor
+                ? { id: selectedAuthor.id, name: selectedAuthor.name }
+                : { id: selectedAuthorId, name: selectedAuthorId },
+            categoryIds: selectedCategoryIds,
+            tagIds: selectedTagIds,
+            featuredImageId,
+        },
+        newsletterWorkspace: {
+            route: '/newsletter',
+            siteId: activeSiteId,
+            focusPanel: 'newsletter-issue-handoff',
+            copyAction: 'newsletter-copy-issue-handoff',
+        },
+        endpoints: {
+            publicPostBySlug: publicPostBySlugUrl,
+            publicRender: publicRenderUrl,
+            publicResolve: publicResolveUrl,
+            sendReadySubscribers: newsletterSendableSubscribersUrl,
+            heldSubscribers: newsletterHeldSubscribersUrl,
+            contactSyncTemplate: newsletterContactSyncUrl,
+        },
+        issueReadiness: {
+            published: status === 'published',
+            routeReady: routeAvailability.status === 'available',
+            featuredImageReady: Boolean(selectedFeaturedImage || !featuredImageId),
+            blockingFindings: readinessFindings.map((finding) => ({
+                id: finding.id,
+                severity: finding.severity,
+                message: finding.message,
+            })),
+        },
+        providerBoundary: {
+            externalDeliveryRequired: true,
+            keepsProviderSecretsOutOfPayload: true,
+            excludedSecrets: ['provider API keys', 'SMTP credentials', 'bounce webhook secrets', 'mailbox credentials'],
+            note: 'Use Backy for post/source content, subscriber state, consent, and sync URLs. Use a mail provider for bulk delivery, bounces, complaints, unsubscribe enforcement, SPF/DKIM/DMARC, and sender reputation.',
+        },
+    };
+    const newsletterIssueHandoffText = JSON.stringify(newsletterIssueHandoff, null, 2);
     const editorHandoff = {
         generatedAt: new Date().toISOString(),
         post: {
@@ -2462,6 +2520,7 @@ function EditBlogPostPage() {
                 : null,
         },
         publishImpact: blogPublishImpact,
+        newsletterIssue: newsletterIssueHandoff,
         revisions: revisions.map((revision) => ({
             id: revision.id,
             note: revision.note,
@@ -4004,6 +4063,76 @@ function EditBlogPostPage() {
 	                                    >
                                         Copy handoff
                                     </Button>
+                                </div>
+                            </PanelContent>
+                        </Panel>
+
+                        <Panel
+                            id="blog-editor-newsletter"
+                            className="scroll-mt-24"
+                            data-testid="blog-editor-newsletter-issue"
+                            data-newsletter-issue-schema="backy.blog-newsletter-issue-source.v1"
+                            data-send-ready-sync-url={newsletterSendableSubscribersUrl}
+                            data-contact-sync-url={newsletterContactSyncUrl}
+                        >
+                            <PanelHeader
+                                title="Newsletter issue"
+                                description="Provider-safe handoff for turning this report into a subscriber issue."
+                                icon={<Send className="size-4" />}
+                            />
+                            <PanelContent className="space-y-4">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <BlogEditorContractTile label="Post status" value={status} />
+                                    <BlogEditorContractTile label="Issue source" value={status === 'published' ? 'Ready' : 'Publish or schedule first'} />
+                                    <BlogEditorContractTile label="Subscribers" value="audience=sendable" />
+                                    <BlogEditorContractTile label="Delivery" value="External provider" />
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-lg border border-border bg-background p-3">
+                                        <div className="text-xs font-medium text-muted-foreground">Send-ready subscriber sync</div>
+                                        <div className="mt-2 break-all font-mono text-xs text-foreground">{newsletterSendableSubscribersUrl}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-background p-3">
+                                        <div className="text-xs font-medium text-muted-foreground">Contact sync template</div>
+                                        <div className="mt-2 break-all font-mono text-xs text-foreground">{newsletterContactSyncUrl}</div>
+                                    </div>
+                                </div>
+                                <pre
+                                    className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground"
+                                    data-testid="blog-editor-newsletter-handoff-json"
+                                >
+{newsletterIssueHandoffText}
+                                </pre>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    <Button
+                                        type="button"
+                                        onClick={() => void copyEditorHandoffText(newsletterIssueHandoffText, 'Blog newsletter issue handoff')}
+                                        disabled={editorCommandBusy || !canViewBlog}
+                                        title={blogEditorHandoffDisabledReason || undefined}
+                                        variant="outline"
+                                        iconStart={<Copy className="size-4" />}
+                                        className="w-full"
+                                        aria-describedby={blogEditorCommandActionStatusId}
+                                        data-testid="blog-editor-copy-newsletter-issue-handoff"
+                                        data-action-state={blogEditorHandoffDisabledReason ? editorCommandBusy ? 'busy' : 'blocked' : 'ready'}
+                                        data-action-status={blogEditorHandoffActionStatus}
+                                        data-disabled-reason={blogEditorHandoffDisabledReason || undefined}
+                                    >
+                                        Copy issue handoff
+                                    </Button>
+                                    <Link
+                                        to="/newsletter"
+                                        search={{ siteId: activeSiteId }}
+                                        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-semibold transition-colors hover:bg-accent focus-ring"
+                                        data-testid="blog-editor-open-newsletter"
+                                        data-target-site-id={activeSiteId}
+                                    >
+                                        <Send className="size-4" />
+                                        Open Newsletter
+                                    </Link>
+                                </div>
+                                <div className="rounded-lg border border-dashed border-border bg-background p-3 text-xs leading-5 text-muted-foreground">
+                                    Backy provides the post source, public render/resolve URLs, send-ready subscriber sync, contact sync template, and consent-safe audience state. Keep provider API keys, SMTP credentials, bounce webhook secrets, and mailbox credentials outside copied article or canvas payloads.
                                 </div>
                             </PanelContent>
                         </Panel>

@@ -249,6 +249,27 @@ const assertBlogEditorFallbackIsReadOnly = () => {
     'Blog editor publish panel must expose a copyable taxonomy, media, comment, readiness, and action-impact handoff before status changes',
   );
   assert(
+    source.includes("title: 'Newsletter'") &&
+      source.includes("href: '#blog-editor-newsletter'") &&
+      source.includes("schemaVersion: 'backy.blog-newsletter-issue-source.v1'") &&
+      source.includes('const newsletterIssueHandoff = {') &&
+      source.includes('sendReadySubscribers: newsletterSendableSubscribersUrl') &&
+      source.includes('contactSyncTemplate: newsletterContactSyncUrl') &&
+      source.includes('externalDeliveryRequired: true') &&
+      source.includes('newsletterIssue: newsletterIssueHandoff') &&
+      source.includes('data-testid="blog-editor-newsletter-issue"') &&
+      source.includes('data-testid="blog-editor-newsletter-handoff-json"') &&
+      source.includes('data-testid="blog-editor-copy-newsletter-issue-handoff"') &&
+      source.includes('data-testid="blog-editor-open-newsletter"') &&
+      source.includes('to="/newsletter"') &&
+      source.includes('search={{ siteId: activeSiteId }}') &&
+      source.includes('audience=sendable') &&
+      source.includes('provider API keys') &&
+      source.includes('SMTP credentials') &&
+      source.includes('bounce webhook secrets'),
+    'Blog editor must expose a provider-safe newsletter issue handoff for report posts and preserve site-scoped navigation to Newsletter.',
+  );
+  assert(
     source.includes('const loadBlogEditorPermissions = useCallback(() => {') &&
       source.includes('data-testid="blog-editor-permission-state"') &&
       source.includes('Blog editor permissions could not be verified') &&

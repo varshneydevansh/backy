@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 04:06 IST
+- **Last updated:** 2026-05-31 04:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 04:26 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; blog-to-newsletter authoring workflow improved; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/routes/blog.$postId.tsx`: blog posts now expose a dedicated Newsletter issue panel. It includes a copyable `backy.blog-newsletter-issue-source.v1` handoff, send-ready subscriber sync URL, held-subscriber URL, contact-sync template, source post metadata, public render/resolve URLs, issue readiness, and explicit external mail-provider boundary metadata.
+- `apps/admin/src/routes/blog.$postId.tsx`: editor handoff JSON now includes `newsletterIssue`, and the command-center map includes a Newsletter section so report authors can move from writing a post to preparing a provider-safe newsletter issue without knowing the separate Newsletter workspace first.
+- `apps/admin/scripts/blog-editor-smoke.mjs`: source guard now asserts the Blog editor newsletter issue panel, copy action, active-site Newsletter link, send-ready sync, and secret-exclusion boundary.
+
+**Commands run:**
+- `BACKY_BLOG_EDITOR_SOURCE_ONLY=1 npm run test:blog-editor --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: layer-map/mobile editor behavior, site/domain management wording, or additional blog/newsletter ergonomics.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 04:06 IST
 
