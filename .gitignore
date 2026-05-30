@@ -67,5 +67,7 @@ tmp/
 .tmp/
 .codex/
 .codex-tmp/
+.playwright-mcp/
+docs/audit/
 *.sqlite
 *.sqlite3
