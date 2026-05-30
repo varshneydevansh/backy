@@ -419,6 +419,23 @@ const content: PageContent = {
       },
     },
     {
+      id: 'binding-priority-nav',
+      type: 'nav',
+      x: 724,
+      y: 320,
+      width: 150,
+      height: 72,
+      props: {
+        navItems: [
+          { label: 'Home', href: '/' },
+        ],
+        navigationSource: 'manual',
+        navigationBinding: 'site.navigation.primary',
+        chromeRole: 'site.header.navigation',
+        ariaLabel: 'Binding priority nav',
+      },
+    },
+    {
       id: 'styled-embed',
       type: 'embed',
       x: 724,
@@ -1071,6 +1088,9 @@ assert(html.includes('href="/docs"'), `Nav item href was not rendered: ${html}`)
 assert(html.includes('gap:22px'), `Nav gap was not rendered: ${html}`);
 assert(html.includes('border-color:#64748b'), `Nav border color was not rendered: ${html}`);
 assert(html.includes('box-shadow:0 6px 14px rgba(100, 116, 139, 0.22)'), `Nav shadow was not rendered: ${html}`);
+assert(html.includes('aria-label="Binding priority nav"'), `Binding-priority nav was not rendered: ${html}`);
+assert(html.includes('data-backy-navigation-source="site-primary"'), `Site navigation binding did not override stale manual source: ${html}`);
+assert(html.includes('data-backy-navigation-binding="site.navigation.primary"'), `Site navigation binding metadata was not rendered: ${html}`);
 assert(html.includes('title="Styled embed"'), `Embed title was not rendered: ${html}`);
 assert(html.includes('src="https://example.com/embed"'), `Embed src was not rendered: ${html}`);
 assert(html.includes('data-backy-embed-allowed-hosts='), `Embed allowlist metadata was not rendered: ${html}`);

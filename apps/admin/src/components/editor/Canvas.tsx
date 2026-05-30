@@ -51,13 +51,22 @@ const resolveNavigationBindingMetadata = (
 ) => {
   const rawBinding = typeof bindingValue === 'string' ? bindingValue.trim() : '';
   const rawSource = typeof sourceValue === 'string' ? sourceValue.trim() : '';
-  const navigationSource = rawSource === 'site-primary' || rawSource === 'site-footer' || rawSource === 'manual'
-    ? rawSource
-    : rawBinding === 'site.navigation.primary' || rawSource === 'site.navigation.primary'
+  const sourceFromBinding = rawBinding === 'site.navigation.primary'
+    ? 'site-primary'
+    : rawBinding === 'site.navigation.footer'
+      ? 'site-footer'
+      : rawBinding === 'manual.navItems'
+        ? 'manual'
+        : null;
+  const navigationSource = sourceFromBinding || (
+    rawSource === 'site-primary' || rawSource === 'site-footer' || rawSource === 'manual'
+      ? rawSource
+      : rawSource === 'site.navigation.primary'
       ? 'site-primary'
-      : rawBinding === 'site.navigation.footer' || rawSource === 'site.navigation.footer'
+      : rawSource === 'site.navigation.footer'
         ? 'site-footer'
-        : 'manual';
+        : 'manual'
+  );
   const navigationBinding = rawBinding || (
     navigationSource === 'site-primary'
       ? 'site.navigation.primary'
