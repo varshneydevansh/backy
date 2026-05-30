@@ -972,7 +972,8 @@ function FormsRoute() {
   const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
   const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
   const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);
+  const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);
+  const isFormsBusy = isLoading || isFormMutationBusy;
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -1008,7 +1009,7 @@ function FormsRoute() {
   const formsCreatePermissionDisabledReason = !canCreateForms
     ? createPermissionTitle || 'Your account cannot create forms.'
     : '';
-  const formsCreateBusyDisabledReason = isFormsBusy
+  const formsCreateBusyDisabledReason = isFormMutationBusy
     ? 'Form creation is temporarily unavailable while Backy updates forms or submissions.'
     : '';
   const formsCreateDisabledReason = formsCreatePermissionDisabledReason || formsCreateBusyDisabledReason;
@@ -1264,7 +1265,7 @@ function FormsRoute() {
   const formsCommandSecondaryActionStatusId = 'forms-command-secondary-action-status';
   const formsViewDisabledReason = !canViewForms
     ? viewPermissionTitle || 'Your account cannot view forms.'
-    : isFormsBusy
+    : isFormMutationBusy
       ? 'Forms are temporarily unavailable while Backy updates forms or submissions.'
       : '';
   const formsExportDisabledReason = !canExportForms
@@ -2136,18 +2137,63 @@ function FormsRoute() {
         canExportActivity ? listAdminAuditLogs({ siteId: activeSiteId, limit: 40 }).catch(() => null) : Promise.resolve(null),
       ]);
       const loadedForms = loadedFormsResult.forms;
+      const nextInbox: Record<string, FormInbox> = Object.fromEntries(
+        loadedForms.map((form): [string, FormInbox] => [form.id, {
+          form,
+          submissions: [],
+          total: 0,
+        }]),
+      );
+      const selectedDetailForm = (
+        selectedFormId && loadedForms.find((form) => form.id === selectedFormId)
+      ) || loadedForms[0] || null;
+
+      setForms(loadedForms);
+      setCollections(loadedCollections);
+      setInboxByForm(nextInbox);
+      setFormsAnalytics(loadedAnalytics);
+      setFormsPersistenceCertification(loadedFormsResult.persistenceCertification || null);
+      setFormsAuditLogs((loadedAuditResult?.logs || []).filter(isFormsAuditLog).slice(0, 8));
+      setSelectedFormId(selectedDetailForm?.id || null);
+
+      if (selectedDetailForm) {
+        const [selectedDetail, selectedDeliveryEvents] = await Promise.all([
+          getFormWithSubmissions(activeSiteId, selectedDetailForm.id, { limit: 100 }).catch(() => null),
+          listFormDeliveryEvents(activeSiteId, selectedDetailForm.id, { limit: 50 })
+            .then((result) => result.events)
+            .catch(() => []),
+        ]);
+        setInboxByForm((current) => ({
+          ...current,
+          [selectedDetailForm.id]: {
+            form: selectedDetail?.form || selectedDetailForm,
+            submissions: selectedDetail?.submissions.data || [],
+            total: selectedDetail?.submissions.pagination?.total ?? selectedDetail?.submissions.data.length ?? 0,
+          },
+        }));
+        setDeliveryEventsByForm((current) => ({
+          ...current,
+          [selectedDetailForm.id]: selectedDeliveryEvents,
+        }));
+      }
+
+      setIsLoading(false);
+
+      const remainingForms = selectedDetailForm
+        ? loadedForms.filter((form) => form.id !== selectedDetailForm.id)
+        : loadedForms;
       const inboxPairs = await Promise.all(
-        loadedForms.map(async (form) => {
-          const detail = await getFormWithSubmissions(activeSiteId, form.id, { limit: 100 });
+        remainingForms.map(async (form) => {
+          const detail = await getFormWithSubmissions(activeSiteId, form.id, { limit: 100 }).catch(() => null);
           return [form.id, {
-            form: detail.form,
-            submissions: detail.submissions.data || [],
-            total: detail.submissions.pagination?.total ?? detail.submissions.data.length,
+            form: detail?.form || form,
+            submissions: detail?.submissions.data || [],
+            total: detail?.submissions.pagination?.total ?? detail?.submissions.data.length ?? 0,
           }] as const;
         }),
       );
       const deliveryPairs = await Promise.all(
-        loadedForms.map(async (form) => {
+        remainingForms.map(async (form) => {
           try {
             const result = await listFormDeliveryEvents(activeSiteId, form.id, { limit: 50 });
             return [form.id, result.events] as const;
@@ -2156,19 +2202,8 @@ function FormsRoute() {
           }
         }),
       );
-      const nextInbox = Object.fromEntries(inboxPairs);
-      setForms(loadedForms);
-      setCollections(loadedCollections);
-      setInboxByForm(nextInbox);
-      setDeliveryEventsByForm(Object.fromEntries(deliveryPairs));
-      setFormsAnalytics(loadedAnalytics);
-      setFormsPersistenceCertification(loadedFormsResult.persistenceCertification || null);
-      setFormsAuditLogs((loadedAuditResult?.logs || []).filter(isFormsAuditLog).slice(0, 8));
-      setSelectedFormId((current) => (
-        current && loadedForms.some((form) => form.id === current)
-          ? current
-          : loadedForms[0]?.id || null
-      ));
+      setInboxByForm((current) => ({ ...current, ...Object.fromEntries(inboxPairs) }));
+      setDeliveryEventsByForm((current) => ({ ...current, ...Object.fromEntries(deliveryPairs) }));
     } catch (loadError) {
       if (isAdminPermissionDeniedError(loadError)) {
         setForms([]);
@@ -2192,7 +2227,7 @@ function FormsRoute() {
   };
 
   const createFormFromTemplate = async (template: FormTemplateBlueprint) => {
-    if (isFormsBusy) return;
+    if (isFormMutationBusy) return;
     if (!canCreateForms) {
       setError(createPermissionTitle || 'Your account cannot create forms.');
       setNotice(null);
@@ -2234,7 +2269,7 @@ function FormsRoute() {
       }));
       setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
-      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      navigate({ to: '/forms', search: { siteId: activeSiteId, formId: created.id }, replace: true });
       const message = `${template.title} form created. It is active and ready for public submissions.`;
       setNotice(message);
       setNoticeCanvasAction(buildFormCanvasNoticeAction(message, template.pageTemplate, created.id));
@@ -2246,7 +2281,7 @@ function FormsRoute() {
   };
 
   const createFormFromFrontendTemplate = async (template: SiteFrontendDesignTemplate, blueprint: FormTemplateBlueprint) => {
-    if (isFormsBusy) return;
+    if (isFormMutationBusy) return;
     if (!canCreateForms) {
       setError(createPermissionTitle || 'Your account cannot create forms.');
       setNotice(null);
@@ -2290,7 +2325,7 @@ function FormsRoute() {
       }));
       setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
-      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      navigate({ to: '/forms', search: { siteId: activeSiteId, formId: created.id }, replace: true });
       const message = `${template.name} form created from the frontend design contract.`;
       setNotice(message);
       setNoticeCanvasAction(buildFormCanvasNoticeAction(message, blueprint.pageTemplate, created.id));
@@ -2301,12 +2336,12 @@ function FormsRoute() {
     }
   };
 
-  const createBlankStandaloneForm = async () => {
-    if (isFormsBusy) return;
+  const createBlankStandaloneForm = async (): Promise<boolean> => {
+    if (isFormMutationBusy) return false;
     if (!canCreateForms) {
       setError(createPermissionTitle || 'Your account cannot create forms.');
       setNotice(null);
-      return;
+      return false;
     }
 
     const suffix = Date.now().toString(36);
@@ -2356,10 +2391,12 @@ function FormsRoute() {
       setDeliveryEventsByForm((current) => ({ ...current, [created.id]: [] }));
       setSelectedFormId(created.id);
       setFormDraft(cloneFormDefinition(created));
-      updateFormsRouteSearch({ formId: created.id, q: undefined, source: undefined, state: undefined, destination: undefined, readiness: undefined });
+      navigate({ to: '/forms', search: { siteId: activeSiteId, formId: created.id }, replace: true });
       setNotice('Blank standalone form created. Add fields or save changes in the builder.');
+      return true;
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create blank form');
+      return false;
     } finally {
       setIsCreatingTemplateId(null);
     }
@@ -2370,11 +2407,12 @@ function FormsRoute() {
       handledQuickCreateRef.current = '';
       return;
     }
-    if (isPermissionMatrixPending || isFormsBusy) return;
+    if (isPermissionMatrixPending || isLoading || isFormMutationBusy) return;
 
     const requestKey = `${activeSiteId}:${routeSearch.quickCreate}`;
-    if (handledQuickCreateRef.current === requestKey) return;
-    handledQuickCreateRef.current = requestKey;
+    const pendingRequestKey = `pending:${requestKey}`;
+    if (handledQuickCreateRef.current === requestKey || handledQuickCreateRef.current === pendingRequestKey) return;
+    handledQuickCreateRef.current = pendingRequestKey;
 
     setFormSearchQuery('');
     setFormSourceFilter('all');
@@ -2387,20 +2425,12 @@ function FormsRoute() {
     setSelectedFormId(null);
     setFormDraft(null);
     setError(null);
-    updateFormsRouteSearch({
-      formId: undefined,
-      q: undefined,
-      source: undefined,
-      state: undefined,
-      destination: undefined,
-      readiness: undefined,
-      status: undefined,
-      submissionQ: undefined,
-    });
 
-    void createBlankStandaloneForm();
+    void createBlankStandaloneForm().then((created) => {
+      handledQuickCreateRef.current = created ? requestKey : '';
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId, isFormsBusy, isPermissionMatrixPending, routeSearch.quickCreate]);
+  }, [activeSiteId, canCreateForms, isFormMutationBusy, isLoading, isPermissionMatrixPending, routeSearch.quickCreate]);
 
   useEffect(() => {
     if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
@@ -3706,6 +3736,11 @@ function FormsRoute() {
         data-testid="forms-command-center"
         data-quick-create-prepared={String(preparedQuickCreate === 'blank')}
         data-quick-create-target={preparedQuickCreate || undefined}
+        data-quick-create-route={routeSearch.quickCreate || undefined}
+        data-quick-create-handled={handledQuickCreateRef.current || undefined}
+        data-can-create-forms={String(canCreateForms)}
+        data-form-mutation-busy={String(isFormMutationBusy)}
+        data-forms-error={error || undefined}
       >
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -3728,7 +3763,7 @@ function FormsRoute() {
               <Button
                 variant="primary"
                 onClick={() => void createBlankStandaloneForm()}
-                disabled={isFormsBusy || !canCreateForms}
+                disabled={Boolean(formsCreateDisabledReason)}
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
@@ -3765,7 +3800,7 @@ function FormsRoute() {
               </Button>
               <Button
                 onClick={() => void loadForms()}
-                disabled={isFormsBusy || !canViewForms}
+                disabled={isFormMutationBusy || !canViewForms}
                 title={formsViewDisabledReason || undefined}
                 aria-describedby={formsViewActionStatusId}
                 iconStart={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />}
@@ -3959,7 +3994,7 @@ function FormsRoute() {
                 size="sm"
                 variant="primary"
                 onClick={() => void createFormFromTemplate(REGISTRATION_FORM_TEMPLATE)}
-                disabled={isFormsBusy || !canCreateForms}
+                disabled={Boolean(formsCreateDisabledReason)}
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<FileInput className="size-4" />}
@@ -4715,7 +4750,7 @@ function FormsRoute() {
               <Button
                 variant="primary"
                 onClick={() => void createBlankStandaloneForm()}
-                disabled={isFormsBusy || !canCreateForms}
+                disabled={Boolean(formsCreateDisabledReason)}
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}
@@ -4954,7 +4989,7 @@ function FormsRoute() {
                       size="sm"
                       variant="primary"
                       onClick={() => void createFormFromTemplate(template)}
-                      disabled={isFormsBusy || !canCreateForms || collectionBackedTemplateUnavailable}
+                      disabled={Boolean(formsCreateDisabledReason) || collectionBackedTemplateUnavailable}
                       title={createTemplateDisabledReason || createTemplateTitle}
                       aria-describedby={formsCreateActionStatusId}
                       iconStart={<FileInput className="size-4" />}
@@ -5054,7 +5089,7 @@ function FormsRoute() {
               <Button
                 variant="primary"
                 onClick={() => void createBlankStandaloneForm()}
-                disabled={isFormsBusy || !canCreateForms}
+                disabled={Boolean(formsCreateDisabledReason)}
                 title={formsCreateDisabledReason || undefined}
                 aria-describedby={formsCreateActionStatusId}
                 iconStart={<Plus className="size-4" />}

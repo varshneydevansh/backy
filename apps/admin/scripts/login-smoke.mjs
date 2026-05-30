@@ -446,7 +446,7 @@ const assertAuthRecoverySource = () => {
   assert(
     sidebarSource.includes('collapseLocked?: boolean') &&
       sidebarModelSource.includes('id: string;') &&
-      sidebarSource.includes("import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
+      sidebarSource.includes("import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
       sidebarSource.includes("import { useStore } from '@/stores/mockStore';") &&
       sidebarSource.includes('const selectedSiteId = getSiteSelectionFromSearch(sites)') &&
       sidebarSource.includes('sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0]') &&
@@ -454,16 +454,17 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
       sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
-      sidebarSource.includes("location.pathname.startsWith('/newsletter')") &&
-      sidebarSource.includes("navigate({ to: '/newsletter', search: { siteId: resolvedSiteId } });") &&
-      sidebarSource.includes("location.pathname.startsWith('/users')") &&
-      sidebarSource.includes("navigate({ to: '/users', search: { siteId: resolvedSiteId } });") &&
-      sidebarSource.includes("location.pathname.startsWith('/help')") &&
-      sidebarSource.includes("navigate({ to: '/help', search: { siteId: resolvedSiteId } });") &&
-      sidebarSource.includes("location.pathname.startsWith('/settings')") &&
+      sidebarSource.includes('const target = getSiteSwitchTarget({') &&
+      sidebarSource.includes("case 'newsletter':") &&
+      sidebarSource.includes("navigate({ to: '/newsletter', search: { siteId: target.siteId } });") &&
+      sidebarSource.includes("case 'users':") &&
+      sidebarSource.includes("navigate({ to: '/users', search: { siteId: target.siteId } });") &&
+      sidebarSource.includes("case 'help':") &&
+      sidebarSource.includes("navigate({ to: '/help', search: { siteId: target.siteId } });") &&
+      sidebarSource.includes("case 'settings':") &&
       sidebarSource.includes("navigate({") &&
       sidebarSource.includes("to: '/settings'") &&
-      sidebarSource.includes("siteId: resolvedSiteId") &&
+      sidebarSource.includes("siteId: target.siteId") &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher`}') &&
       sidebarSource.includes('data-site-switcher-mode={collapsed ?') &&
       sidebarSource.includes('aria-label="Switch active site"') &&
@@ -626,6 +627,18 @@ const assertAuthRecoverySource = () => {
 
   assert(
     headerSource.includes('aria-label="Open admin navigation"') &&
+      headerSource.includes("import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
+      headerSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
+      headerSource.includes('const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId') &&
+      headerSource.includes('const activeSiteStatus = activeSite?.status ||') &&
+      headerSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
+      headerSource.includes('const target = getSiteSwitchTarget({') &&
+      headerSource.includes("const siteSwitchStatusId = 'header-site-switcher-status';") &&
+      headerSource.includes('data-testid="header-site-switcher-status"') &&
+      headerSource.includes('data-testid="header-site-switcher-shell"') &&
+      headerSource.includes('data-testid="header-site-switcher"') &&
+      headerSource.includes('data-active-site-id={activeSiteId}') &&
+      headerSource.includes('onChange={(event) => switchActiveSite(event.target.value)}') &&
       headerSource.includes('aria-controls="admin-mobile-sidebar-navigation"') &&
       headerSource.includes("const mobileNavigationStatusId = 'header-mobile-navigation-status';") &&
       headerSource.includes('data-testid="header-mobile-navigation-status"') &&
@@ -3698,6 +3711,7 @@ const assertSidebarQuickCreateInteraction = async (client) => {
   const formClick = await evaluate(client, `(() => {
     const form = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
     if (!(form instanceof HTMLAnchorElement)) return { ok: false, reason: 'new-form-missing' };
+    if (!form.href.includes('quickCreate=blank')) return { ok: false, reason: 'new-form-href-missing-intent', href: form.href };
     form.click();
     return { ok: true, href: form.href };
   })()`);
@@ -3734,6 +3748,11 @@ const assertSidebarQuickCreateInteraction = async (client) => {
         saveButtonState: saveButton?.getAttribute('data-action-state') || '',
         commandCenterPrepared: commandCenter?.getAttribute('data-quick-create-prepared') || '',
         commandCenterTarget: commandCenter?.getAttribute('data-quick-create-target') || '',
+        commandCenterRoute: commandCenter?.getAttribute('data-quick-create-route') || '',
+        commandCenterHandled: commandCenter?.getAttribute('data-quick-create-handled') || '',
+        commandCenterCanCreate: commandCenter?.getAttribute('data-can-create-forms') || '',
+        commandCenterMutationBusy: commandCenter?.getAttribute('data-form-mutation-busy') || '',
+        commandCenterError: commandCenter?.getAttribute('data-forms-error') || '',
         body: body.slice(0, 900),
       };
     })()`,

@@ -25,6 +25,7 @@ import {
   CircleSlash,
   RefreshCw,
   ShieldAlert,
+  Globe2,
   X,
 } from 'lucide-react';
 import { cn, getRelativeTime } from '@/lib/utils';
@@ -33,7 +34,7 @@ import {
   useCurrentAdminPermissionMatrix,
   type AdminNavigationArea,
 } from '@/lib/adminNavigationAccess';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
@@ -130,6 +131,9 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const activeSiteName = activeSite?.name || activeSiteId;
+  const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId;
+  const activeSiteStatus = activeSite?.status || 'draft';
   const activeSiteRouteId = useMemo(
     () => activeSite?.id || activeSiteId,
     [activeSite?.id, activeSiteId],
@@ -212,6 +216,91 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     signOut();
     setUserMenuOpen(false);
     navigate({ to: '/login' });
+  };
+
+  const switchActiveSite = (nextSiteId: string) => {
+    const target = getSiteSwitchTarget({
+      pathname: routerState.location.pathname,
+      search: routerState.location.search as Record<string, unknown>,
+      requestedSiteId: nextSiteId,
+      sites,
+    });
+
+    setSearchOpen(false);
+    setSearchQuery('');
+    setNotificationsOpen(false);
+    setUserMenuOpen(false);
+
+    switch (target.type) {
+      case 'siteDetail':
+        navigate({ to: '/sites/$siteId', params: { siteId: target.siteId } });
+        return;
+      case 'sites':
+        navigate({ to: '/sites', search: { siteId: target.siteId } });
+        return;
+      case 'pagesNew':
+        navigate({ to: '/pages/new', search: { siteId: target.siteId } });
+        return;
+      case 'pages':
+        navigate({ to: '/pages', search: { siteId: target.siteId } });
+        return;
+      case 'blogNew':
+        navigate({ to: '/blog/new', search: { siteId: target.siteId } });
+        return;
+      case 'blog':
+        navigate({ to: '/blog', search: { siteId: target.siteId } });
+        return;
+      case 'media':
+        navigate({ to: '/media', search: { siteId: target.siteId } });
+        return;
+      case 'collections':
+        navigate({ to: '/collections', search: { siteId: target.siteId } });
+        return;
+      case 'reusableSections':
+        navigate({ to: '/reusable-sections', search: { siteId: target.siteId } });
+        return;
+      case 'products':
+        navigate({ to: '/products', search: { siteId: target.siteId } });
+        return;
+      case 'orders':
+        navigate({ to: '/orders', search: { siteId: target.siteId } });
+        return;
+      case 'forms':
+        navigate({ to: '/forms', search: { siteId: target.siteId } });
+        return;
+      case 'newsletter':
+        navigate({ to: '/newsletter', search: { siteId: target.siteId } });
+        return;
+      case 'contacts':
+        navigate({ to: '/contacts', search: { siteId: target.siteId } });
+        return;
+      case 'comments':
+        navigate({ to: '/comments', search: { siteId: target.siteId } });
+        return;
+      case 'teams':
+        navigate({ to: '/teams', search: { siteId: target.siteId } });
+        return;
+      case 'users':
+        navigate({ to: '/users', search: { siteId: target.siteId } });
+        return;
+      case 'help':
+        navigate({ to: '/help', search: { siteId: target.siteId } });
+        return;
+      case 'settings':
+        navigate({
+          to: '/settings',
+          search: {
+            siteId: target.siteId,
+            ...(target.tab ? { tab: target.tab } : {}),
+          },
+        });
+        return;
+      case 'dashboard':
+        navigate({ to: '/', search: { siteId: target.siteId } });
+        return;
+      default:
+        return;
+    }
   };
 
   const navigateToTool = (to: StaticToolRoute) => {
@@ -540,6 +629,8 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
   const accountActionStatus = user
     ? `Profile available. Settings available. Sign out available for ${accountDisplayName}.`
     : 'Profile available. Settings available. Sign out unavailable: No signed-in admin session.';
+  const siteSwitchStatusId = 'header-site-switcher-status';
+  const siteSwitchStatus = `${activeSiteName} is active. Switch site from this control without signing out.`;
 
   const loadGlobalSearch = useCallback(async () => {
     const loadKey = searchLoadKey;
@@ -948,9 +1039,9 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
   }, [openGlobalSearch]);
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6">
+    <header className="flex h-16 items-center justify-between gap-3 border-b border-border bg-card px-4 lg:px-6">
       {/* Left Section */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-3">
         <span id={mobileNavigationStatusId} className="sr-only" data-testid="header-mobile-navigation-status">
           {mobileNavigationStatus}
         </span>
@@ -969,13 +1060,67 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
           <Menu className="w-5 h-5" />
         </button>
 
-        <h1 className="text-lg font-semibold hidden sm:block">
+        <h1 className="hidden shrink-0 text-lg font-semibold sm:block">
           {pageTitle}
         </h1>
+        {sites.length > 0 && (
+          <div
+            className="hidden min-w-0 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 shadow-sm lg:flex"
+            data-testid="header-site-switcher-shell"
+            data-active-site-id={activeSiteId}
+            data-active-site-name={activeSiteName}
+            data-active-site-meta={activeSiteMeta}
+            data-active-site-status={activeSiteStatus}
+          >
+            <span
+              className={cn(
+                'flex size-7 shrink-0 items-center justify-center rounded-md',
+                activeSiteStatus === 'published'
+                  ? 'bg-success/10 text-success'
+                  : 'bg-muted text-muted-foreground',
+              )}
+              aria-hidden="true"
+            >
+              <Globe2 className="size-3.5" />
+            </span>
+            <div className="min-w-0">
+              <label htmlFor="header-site-switcher" className="block text-[10px] font-semibold uppercase leading-3 tracking-wide text-muted-foreground">
+                Site
+              </label>
+              <span id={siteSwitchStatusId} className="sr-only" data-testid="header-site-switcher-status">
+                {siteSwitchStatus}
+              </span>
+              <div className="relative">
+                <select
+                  id="header-site-switcher"
+                  value={activeSiteId}
+                  onChange={(event) => switchActiveSite(event.target.value)}
+                  aria-describedby={siteSwitchStatusId}
+                  className="h-8 w-48 appearance-none truncate bg-transparent pr-6 text-sm font-semibold text-foreground outline-none hover:text-primary focus:text-primary xl:w-56"
+                  data-testid="header-site-switcher"
+                  data-action-state="ready"
+                  data-action-status={siteSwitchStatus}
+                >
+                  {sites.map((site) => {
+                    const optionSiteId = site.publicSiteId || site.id;
+                    const optionMeta = site.customDomain || site.slug || optionSiteId;
+
+                    return (
+                      <option key={site.id} value={optionSiteId}>
+                        {site.name} / {optionMeta}
+                      </option>
+                    );
+                  })}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {/* Search */}
         <button
           type="button"

@@ -25,7 +25,14 @@ import {
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 
+interface TeamsSearch {
+  siteId?: string;
+}
+
 export const Route = createFileRoute('/teams')({
+  validateSearch: (search: Record<string, unknown>): TeamsSearch => ({
+    siteId: typeof search.siteId === 'string' && search.siteId.trim() ? search.siteId.trim() : undefined,
+  }),
   component: TeamsPage,
 });
 

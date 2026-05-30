@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
@@ -71,23 +71,6 @@ interface SidebarRailTooltip {
   area: AdminNavigationArea;
   top: number;
 }
-
-type SidebarSettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'commerce' | 'notifications' | 'security';
-
-const SIDEBAR_SETTINGS_TAB_IDS = new Set<SidebarSettingsTab>([
-  'general',
-  'appearance',
-  'seo',
-  'delivery',
-  'infrastructure',
-  'commerce',
-  'notifications',
-  'security',
-]);
-
-const isSidebarSettingsTab = (value: unknown): value is SidebarSettingsTab => (
-  typeof value === 'string' && SIDEBAR_SETTINGS_TAB_IDS.has(value as SidebarSettingsTab)
-);
 
 // ============================================
 // COMPONENT
@@ -329,110 +312,85 @@ export function Sidebar({
   };
   const hideRailTooltip = () => setRailTooltip(null);
   const switchActiveSite = (nextSiteId: string) => {
-    const nextSite = sites.find((site) => siteMatchesIdentifier(site, nextSiteId));
-    const resolvedSiteId = nextSite?.publicSiteId || nextSite?.id || nextSiteId;
+    const target = getSiteSwitchTarget({
+      pathname: location.pathname,
+      search: location.search as Record<string, unknown>,
+      requestedSiteId: nextSiteId,
+      sites,
+    });
 
     onNavigate?.();
 
-    if (location.pathname.startsWith('/sites/') && nextSite?.id) {
-      navigate({ to: '/sites/$siteId', params: { siteId: nextSite.id } });
-      return;
+    switch (target.type) {
+      case 'siteDetail':
+        navigate({ to: '/sites/$siteId', params: { siteId: target.siteId } });
+        return;
+      case 'sites':
+        navigate({ to: '/sites', search: { siteId: target.siteId } });
+        return;
+      case 'pagesNew':
+        navigate({ to: '/pages/new', search: { siteId: target.siteId } });
+        return;
+      case 'pages':
+        navigate({ to: '/pages', search: { siteId: target.siteId } });
+        return;
+      case 'blogNew':
+        navigate({ to: '/blog/new', search: { siteId: target.siteId } });
+        return;
+      case 'blog':
+        navigate({ to: '/blog', search: { siteId: target.siteId } });
+        return;
+      case 'media':
+        navigate({ to: '/media', search: { siteId: target.siteId } });
+        return;
+      case 'collections':
+        navigate({ to: '/collections', search: { siteId: target.siteId } });
+        return;
+      case 'reusableSections':
+        navigate({ to: '/reusable-sections', search: { siteId: target.siteId } });
+        return;
+      case 'products':
+        navigate({ to: '/products', search: { siteId: target.siteId } });
+        return;
+      case 'orders':
+        navigate({ to: '/orders', search: { siteId: target.siteId } });
+        return;
+      case 'forms':
+        navigate({ to: '/forms', search: { siteId: target.siteId } });
+        return;
+      case 'newsletter':
+        navigate({ to: '/newsletter', search: { siteId: target.siteId } });
+        return;
+      case 'contacts':
+        navigate({ to: '/contacts', search: { siteId: target.siteId } });
+        return;
+      case 'comments':
+        navigate({ to: '/comments', search: { siteId: target.siteId } });
+        return;
+      case 'teams':
+        navigate({ to: '/teams', search: { siteId: target.siteId } });
+        return;
+      case 'users':
+        navigate({ to: '/users', search: { siteId: target.siteId } });
+        return;
+      case 'help':
+        navigate({ to: '/help', search: { siteId: target.siteId } });
+        return;
+      case 'settings':
+        navigate({
+          to: '/settings',
+          search: {
+            siteId: target.siteId,
+            ...(target.tab ? { tab: target.tab } : {}),
+          },
+        });
+        return;
+      case 'dashboard':
+        navigate({ to: '/', search: { siteId: target.siteId } });
+        return;
+      default:
+        return;
     }
-
-    if (location.pathname.startsWith('/pages/new')) {
-      navigate({ to: '/pages/new', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/pages')) {
-      navigate({ to: '/pages', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/blog/new')) {
-      navigate({ to: '/blog/new', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/blog')) {
-      navigate({ to: '/blog', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/media')) {
-      navigate({ to: '/media', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/collections')) {
-      navigate({ to: '/collections', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/reusable-sections')) {
-      navigate({ to: '/reusable-sections', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/products')) {
-      navigate({ to: '/products', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/orders')) {
-      navigate({ to: '/orders', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/forms')) {
-      navigate({ to: '/forms', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/newsletter')) {
-      navigate({ to: '/newsletter', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/contacts')) {
-      navigate({ to: '/contacts', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/comments')) {
-      navigate({ to: '/comments', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/teams')) {
-      navigate({ to: '/teams' });
-      return;
-    }
-
-    if (location.pathname.startsWith('/users')) {
-      navigate({ to: '/users', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/help')) {
-      navigate({ to: '/help', search: { siteId: resolvedSiteId } });
-      return;
-    }
-
-    if (location.pathname.startsWith('/settings')) {
-      const currentSearch = location.search as Record<string, unknown>;
-      const currentTab = isSidebarSettingsTab(currentSearch.tab) ? currentSearch.tab : undefined;
-      navigate({
-        to: '/settings',
-        search: {
-          siteId: resolvedSiteId,
-          ...(currentTab ? { tab: currentTab } : {}),
-        },
-      });
-      return;
-    }
-
-    navigate({ to: '/', search: { siteId: resolvedSiteId } });
   };
 
   useEffect(() => {
@@ -539,7 +497,7 @@ export function Sidebar({
                 Backy
               </Link>
               <label
-                className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground"
+                className="mt-1 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
               >
                 <span
@@ -553,7 +511,7 @@ export function Sidebar({
                 <select
                   value={activeSiteId}
                   onChange={(event) => switchActiveSite(event.target.value)}
-                  className="min-w-0 flex-1 appearance-none bg-transparent text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus:text-foreground"
+                  className="h-7 min-w-0 flex-1 appearance-none bg-transparent text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus:text-foreground"
                   data-testid={`${testIdPrefix}-site-switcher`}
                   aria-label="Switch active site"
                 >

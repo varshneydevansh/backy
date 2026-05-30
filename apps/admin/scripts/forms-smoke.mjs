@@ -173,7 +173,8 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("const canDeleteForms = isFormsPermissionAllowed('forms.delete');") &&
       source.includes("const canViewCollections = isFormsPermissionAllowed('collections.view');") &&
       source.includes("const canExportActivity = isFormsPermissionAllowed('activity.export');") &&
-      source.includes('const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);') &&
+      source.includes('const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);') &&
+      source.includes('const isFormsBusy = isLoading || isFormMutationBusy;') &&
       !source.includes('const canViewForms = !isPermissionMatrixPending') &&
       !source.includes('const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;') &&
       source.includes('data-testid="forms-permission-state"') &&
@@ -235,12 +236,16 @@ const assertFormsPersistenceCertificationSource = () => {
   );
   {
     const quickCreateEffectStart = source.indexOf("if (routeSearch.quickCreate !== 'blank')");
-    const quickCreateEffectEnd = source.indexOf('}, [activeSiteId, isFormsBusy, isPermissionMatrixPending, routeSearch.quickCreate]);', quickCreateEffectStart);
+    const quickCreateEffectEnd = source.indexOf('}, [activeSiteId, canCreateForms, isFormMutationBusy, isLoading, isPermissionMatrixPending, routeSearch.quickCreate]);', quickCreateEffectStart);
     const quickCreateEffectBlock = quickCreateEffectStart >= 0
       ? source.slice(quickCreateEffectStart, quickCreateEffectEnd >= 0 ? quickCreateEffectEnd : quickCreateEffectStart + 2200)
       : '';
     assert(
-      quickCreateEffectBlock.includes('void createBlankStandaloneForm();') &&
+      quickCreateEffectBlock.includes('const pendingRequestKey = `pending:${requestKey}`;') &&
+        quickCreateEffectBlock.includes('isPermissionMatrixPending || isLoading || isFormMutationBusy') &&
+        quickCreateEffectBlock.includes('handledQuickCreateRef.current = pendingRequestKey;') &&
+        quickCreateEffectBlock.includes('void createBlankStandaloneForm().then((created) => {') &&
+        quickCreateEffectBlock.includes("handledQuickCreateRef.current = created ? requestKey : '';") &&
         quickCreateEffectBlock.includes('setSelectedFormId(null);') &&
         quickCreateEffectBlock.includes('setFormDraft(null);') &&
         !quickCreateEffectBlock.includes('New blank form creation is ready') &&
