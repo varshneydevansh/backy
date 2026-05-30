@@ -2997,14 +2997,6 @@ export type GeneratedBackyOpenApiFormSubmission = {
 
 export type GeneratedBackyOpenApiFormSubmissionRequest = {
   values?: Record<string, unknown>;
-  contactShareOverride?: {
-    enabled?: boolean;
-    nameField?: string;
-    emailField?: string;
-    phoneField?: string;
-    notesField?: string;
-    dedupeByEmail?: boolean;
-  };
   fields?: Record<string, unknown>;
   data?: Record<string, unknown>;
   submission?: Record<string, unknown>;
