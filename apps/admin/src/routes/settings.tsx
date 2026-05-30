@@ -4306,7 +4306,7 @@ function SettingsPage() {
       )}
 
       <div
-        className="sticky top-2 z-10 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
+        className="sticky top-16 z-30 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
         aria-describedby={settingsWorkbarActionStatusId}
         aria-label="Settings sticky workbar"
         data-action-state={settingsSaveDisabledReason ? 'blocked' : 'ready'}
@@ -4408,7 +4408,7 @@ function SettingsPage() {
         </nav>
       </div>
 
-      <div id="settings-command-center" className="scroll-mt-24" data-testid="settings-command-center">
+      <div id="settings-command-center" className="scroll-mt-40" data-testid="settings-command-center">
         <Panel>
           <PanelHeader
             title="Settings command center"
@@ -4934,7 +4934,7 @@ function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div id="settings-tabs" className="scroll-mt-24">
+      <div id="settings-tabs" className="scroll-mt-40">
         <SegmentedTabs
           items={TABS}
           value={activeTab}
@@ -4945,7 +4945,7 @@ function SettingsPage() {
       </div>
 
       {/* Tab Content */}
-      <Panel id="settings-tab-content" className="scroll-mt-24" role="tabpanel">
+      <Panel id="settings-tab-content" className="scroll-mt-40" role="tabpanel">
         <PanelContent className="pt-5">
         <fieldset
           disabled={activeTab === 'security'

@@ -500,8 +500,12 @@ const assertSettingsSourceContracts = () => {
   );
   assert(
     /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-save"/.test(settingsRoute) &&
-      /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-section-nav"/.test(settingsRoute),
-    'Settings workbar must keep tab navigation and save controls reachable while the page scrolls',
+      /data-testid="settings-sticky-workbar"[\s\S]{0,7000}data-testid="settings-sticky-section-nav"/.test(settingsRoute) &&
+      settingsRoute.includes('className="sticky top-16 z-30 -mx-4 rounded-none border-y border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:rounded-xl sm:border"') &&
+      settingsRoute.includes('<div id="settings-command-center" className="scroll-mt-40"') &&
+      settingsRoute.includes('<div id="settings-tabs" className="scroll-mt-40"') &&
+      settingsRoute.includes('<Panel id="settings-tab-content" className="scroll-mt-40" role="tabpanel">'),
+    'Settings workbar must keep tab navigation and save controls reachable below the app header while section jumps leave enough scroll margin.',
   );
   assert(
     settingsRoute.includes('className="relative z-[130] flex flex-wrap items-center gap-2"') &&

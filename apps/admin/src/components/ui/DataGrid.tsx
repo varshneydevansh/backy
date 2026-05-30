@@ -17,6 +17,7 @@ interface DataGridProps<T> {
     emptyState?: React.ReactNode;
     interactionDisabled?: boolean;
     tableMinWidth?: string;
+    stickyActionColumn?: boolean;
 
     // Sorting
     sortConfig?: { key: keyof T; direction: 'asc' | 'desc' };
@@ -42,6 +43,7 @@ export function DataGrid<T extends { id: string }>({
     emptyState,
     interactionDisabled = false,
     tableMinWidth,
+    stickyActionColumn = true,
     sortConfig,
     onSort,
     currentPage = 1,
@@ -217,6 +219,7 @@ export function DataGrid<T extends { id: string }>({
                                     const columnLabel = getColumnLabel(col);
                                     const columnHeaderId = getColumnHeaderId(col);
                                     const isActionColumn = columnKey === 'actions';
+                                    const shouldStickActionColumn = stickyActionColumn && isActionColumn;
                                     const isSorted = sortConfig?.key === col.key;
                                     const activeDirection = isSorted ? sortConfig?.direction ?? 'asc' : null;
                                     const canSortColumn = Boolean(onSort) && !interactionDisabled;
@@ -254,14 +257,15 @@ export function DataGrid<T extends { id: string }>({
                                         aria-label={columnLabel}
                                         className={cn(
                                             'min-w-0 break-words px-4 py-3 align-top [overflow-wrap:anywhere]',
-                                            isActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]',
+                                            shouldStickActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]',
                                             isActionColumn && 'border-l border-border/80',
                                             col.className,
                                             col.headerClassName,
                                         )}
                                         data-column-key={columnKey}
                                         data-column-label={columnLabel}
-                                        data-sticky-column={isActionColumn ? 'right-actions' : undefined}
+                                        data-sticky-column={shouldStickActionColumn ? 'right-actions' : undefined}
+                                        data-action-column-sticky={isActionColumn ? (stickyActionColumn ? 'true' : 'false') : undefined}
                                     >
                                         {col.sortable ? (
                                             <button
@@ -327,6 +331,7 @@ export function DataGrid<T extends { id: string }>({
                                         const columnKey = getColumnKey(col);
                                         const columnLabel = getColumnLabel(col);
                                         const isActionColumn = columnKey === 'actions';
+                                        const shouldStickActionColumn = stickyActionColumn && isActionColumn;
                                         const usesVisibleOverflow = col.overflowMode === 'visible' || isActionColumn;
                                         const cellContent = col.render ? col.render(item) : String(item[col.key as keyof T]);
 
@@ -337,7 +342,7 @@ export function DataGrid<T extends { id: string }>({
                                                 className={cn(
                                                     'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
                                                     usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden',
-                                                    isActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
+                                                    shouldStickActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
                                                     isActionColumn && 'border-l border-border/80',
                                                     col.className,
                                                     col.cellClassName,
@@ -347,7 +352,8 @@ export function DataGrid<T extends { id: string }>({
                                                 data-column-label={columnLabel}
                                                 data-cell-overflow-policy={usesVisibleOverflow ? 'visible-and-wrapped' : 'clip-and-wrap'}
                                                 data-cell-paint-containment={usesVisibleOverflow ? 'none' : 'cell'}
-                                                data-sticky-column={isActionColumn ? 'right-actions' : undefined}
+                                                data-sticky-column={shouldStickActionColumn ? 'right-actions' : undefined}
+                                                data-action-column-sticky={isActionColumn ? (stickyActionColumn ? 'true' : 'false') : undefined}
                                             >
                                                 <div
                                                     className={cn(

@@ -1830,6 +1830,9 @@ const assertUserDetailActionStatusContracts = async (client) => {
 
     const isDetailStillBusy =
       state.command.statusText.includes('User detail is busy while Backy loads or saves this account.') ||
+      state.sessions.statusText.includes('Admin sessions are loading.') ||
+      state.mfa.statusText.includes('MFA settings are already loading.') ||
+      state.mfa.statusText.includes('MFA settings are still loading.') ||
       state.commandCenterActionNames.some((action) => /Loading user|Saving/i.test(action.text));
     if (isDetailStillBusy) {
       if (attempt === 99) {

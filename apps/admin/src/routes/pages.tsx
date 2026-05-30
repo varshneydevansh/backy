@@ -4120,6 +4120,7 @@ function PagesListView() {
           columns={columns}
           data={data}
           tableMinWidth="2300px"
+          stickyActionColumn={false}
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
           sortConfig={sortConfig}
