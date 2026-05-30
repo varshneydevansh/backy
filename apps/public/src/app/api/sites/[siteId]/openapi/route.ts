@@ -4743,7 +4743,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               parameters: [
                 queryParameter("status", {
                   type: "string",
-                  enum: ["all", "subscribed", "unsubscribed"],
+                  enum: ["all", "subscribed", "unsubscribed", "pending", "bounced", "complained"],
                 }),
                 queryParameter("formId"),
                 queryParameter("q"),
@@ -12333,6 +12333,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 contactStatus: {
                   type: "string",
                   enum: ["new", "contacted", "qualified", "archived"],
+                },
+                newsletterStatus: {
+                  type: "string",
+                  enum: ["subscribed", "unsubscribed", "pending", "bounced", "complained"],
+                  description:
+                    "Full newsletter lifecycle state for delivery workers. subscriptionStatus remains the simplified audience membership state.",
                 },
                 subscriptionStatus: {
                   type: "string",

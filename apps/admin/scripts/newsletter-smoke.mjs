@@ -71,8 +71,11 @@ assert(helpSource.includes("route: '/newsletter'") && helpSource.includes('Open 
 assert(helpSource.includes("id: 'publish-reports-newsletter'") && helpSource.includes('provider-safe draft metadata') && helpSource.includes('SPF/DKIM/DMARC'), 'Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.');
 assert(routeTreeSource.includes("Route as NewsletterRouteImport") && routeTreeSource.includes("'/newsletter': typeof NewsletterRoute"), 'Generated route tree must include /newsletter.');
 assert(adminContentApiSource.includes('newsletterSubscriptionStatus?: AdminContact') && adminContentApiSource.includes('newsletterUnsubscribedAt?: string | null'), 'Admin content API contact updates must accept newsletter subscription lifecycle fields.');
+assert(adminContentApiSource.includes("newsletterStatus?: NonNullable<Contact['newsletterSubscriptionStatus']>"), 'Admin content API newsletter subscriber records must expose the full provider lifecycle status.');
 assert(adminContentApiSource.includes('export async function saveNewsletterSubscriber') && adminContentApiSource.includes('/newsletter/subscribers'), 'Admin content API must expose a private newsletter subscriber save helper.');
 assert(publicNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && publicNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Public newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
 assert(adminNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && adminNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Admin newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
+assert(adminNewsletterSubscribersRouteSource.includes("const NEWSLETTER_OPERATIONAL_STATUSES: NewsletterOperationalStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];"), 'Admin newsletter subscribers API must preserve full provider lifecycle filter states.');
+assert(adminNewsletterSubscribersRouteSource.includes('newsletterOperationalStatusFromContact(contact) === input.status'), 'Admin newsletter subscribers API must filter bounced, complained, and pending lifecycle states directly.');
 
 console.log('Newsletter source smoke passed.');

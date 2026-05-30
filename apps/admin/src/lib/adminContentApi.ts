@@ -3745,6 +3745,7 @@ export interface NewsletterSubscriberRecord {
   formId: string;
   formTitle?: string | null;
   contactStatus: ContactStatus;
+  newsletterStatus?: NonNullable<Contact['newsletterSubscriptionStatus']>;
   subscriptionStatus: 'subscribed' | 'unsubscribed';
   topics?: string | null;
   source?: string | null;

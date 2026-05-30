@@ -5,6 +5,7 @@ export const NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION = 'backy.newsletter-subscribe
 export const NEWSLETTER_SUBSCRIBE_SCHEMA_VERSION = 'backy.newsletter-subscribe.v1';
 
 export type NewsletterSubscriptionStatus = Extract<CoreNewsletterSubscriptionStatus, 'subscribed' | 'unsubscribed'>;
+export type NewsletterOperationalStatus = CoreNewsletterSubscriptionStatus;
 
 type NewsletterSourceInput = {
   existingSourceValues?: Record<string, unknown>;
@@ -38,6 +39,21 @@ const booleanValue = (value: unknown): boolean | undefined => {
 const readRecordString = (record: Record<string, unknown>, key: string): string => (
   textValue(record[key])
 );
+
+const NEWSLETTER_OPERATIONAL_STATUSES = new Set<NewsletterOperationalStatus>([
+  'subscribed',
+  'unsubscribed',
+  'pending',
+  'bounced',
+  'complained',
+]);
+
+const toNewsletterOperationalStatus = (value: unknown): NewsletterOperationalStatus | null => {
+  const normalized = textValue(value).toLowerCase();
+  return NEWSLETTER_OPERATIONAL_STATUSES.has(normalized as NewsletterOperationalStatus)
+    ? normalized as NewsletterOperationalStatus
+    : null;
+};
 
 export const isNewsletterForm = (form: FormDefinition): boolean => {
   const settings = isRecord(form.settings) ? form.settings : {};
@@ -78,15 +94,9 @@ export const readContactSourceValue = (contact: Contact, key: string): string =>
   return formatSourceValue(exact ?? matched?.[1]);
 };
 
-export const newsletterStatusFromContact = (contact: Contact): NewsletterSubscriptionStatus => {
-  if (contact.newsletterSubscriptionStatus === 'unsubscribed') return 'unsubscribed';
-  if (contact.newsletterSubscriptionStatus === 'subscribed') return 'subscribed';
-  if (
-    contact.newsletterSubscriptionStatus === 'bounced'
-    || contact.newsletterSubscriptionStatus === 'complained'
-  ) {
-    return 'unsubscribed';
-  }
+export const newsletterOperationalStatusFromContact = (contact: Contact): NewsletterOperationalStatus => {
+  const storedStatus = toNewsletterOperationalStatus(contact.newsletterSubscriptionStatus);
+  if (storedStatus) return storedStatus;
 
   const source = isRecord(contact.sourceValues) ? contact.sourceValues : {};
   const newsletter = isRecord(source.newsletter) ? source.newsletter : {};
@@ -98,16 +108,25 @@ export const newsletterStatusFromContact = (contact: Contact): NewsletterSubscri
   ].find(Boolean)?.toLowerCase();
 
   if (
-    contact.status === 'archived'
-    || rawStatus === 'unsubscribed'
+    rawStatus === 'unsubscribed'
     || rawStatus === 'opted-out'
     || rawStatus === 'opted_out'
     || rawStatus === 'archived'
   ) {
     return 'unsubscribed';
   }
+  const sourceStatus = toNewsletterOperationalStatus(rawStatus);
+  if (sourceStatus) return sourceStatus;
+  if (contact.status === 'archived') return 'unsubscribed';
 
   return 'subscribed';
+};
+
+export const newsletterStatusFromContact = (contact: Contact): NewsletterSubscriptionStatus => {
+  const status = newsletterOperationalStatusFromContact(contact);
+  return status === 'unsubscribed' || status === 'bounced' || status === 'complained'
+    ? 'unsubscribed'
+    : 'subscribed';
 };
 
 export const isNewsletterContact = (contact: Contact, form?: FormDefinition): boolean => {
@@ -205,6 +224,7 @@ export const buildNewsletterSubscriberPayload = (
   form: FormDefinition,
   options: { includeSourceValues?: boolean } = {},
 ) => {
+  const newsletterStatus = newsletterOperationalStatusFromContact(contact);
   const status = newsletterStatusFromContact(contact);
   const source = isRecord(contact.sourceValues) ? contact.sourceValues : {};
   const newsletter = isRecord(source.newsletter) ? source.newsletter : {};
@@ -216,6 +236,7 @@ export const buildNewsletterSubscriberPayload = (
     formId: form.id,
     formTitle: form.title || form.name,
     contactStatus: contact.status,
+    newsletterStatus,
     subscriptionStatus: status,
     topics: contact.newsletterTopics || readContactSourceValue(contact, 'topics') || textValue(newsletter.topics) || null,
     source: contact.newsletterSource || readContactSourceValue(contact, 'signup_source') || textValue(newsletter.source) || null,
@@ -232,11 +253,26 @@ export const buildNewsletterSubscriberPayload = (
 export const buildNewsletterSummary = (contacts: Contact[]) => {
   const subscribed = contacts.filter((contact) => newsletterStatusFromContact(contact) === 'subscribed');
   const unsubscribed = contacts.filter((contact) => newsletterStatusFromContact(contact) === 'unsubscribed');
+  const byNewsletterStatus = contacts.reduce<Record<NewsletterOperationalStatus, number>>((summary, contact) => {
+    const status = newsletterOperationalStatusFromContact(contact);
+    summary[status] += 1;
+    return summary;
+  }, {
+    subscribed: 0,
+    unsubscribed: 0,
+    pending: 0,
+    bounced: 0,
+    complained: 0,
+  });
 
   return {
     total: contacts.length,
     subscribed: subscribed.length,
     unsubscribed: unsubscribed.length,
+    pending: byNewsletterStatus.pending,
+    bounced: byNewsletterStatus.bounced,
+    complained: byNewsletterStatus.complained,
+    byNewsletterStatus,
     activeContacts: contacts.filter((contact) => contact.status !== 'archived').length,
     archivedContacts: contacts.filter((contact) => contact.status === 'archived').length,
   };

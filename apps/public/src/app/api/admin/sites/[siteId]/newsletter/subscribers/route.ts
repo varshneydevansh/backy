@@ -11,7 +11,9 @@ import {
   buildNewsletterSummary,
   isNewsletterContact,
   isNewsletterForm,
+  newsletterOperationalStatusFromContact,
   newsletterStatusFromContact,
+  type NewsletterOperationalStatus,
   type NewsletterSubscriptionStatus,
 } from '@/lib/newsletterSubscribers';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -41,6 +43,7 @@ type NewsletterSubscriberBody = {
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
 const CONTACT_STATUSES: Contact['status'][] = ['new', 'contacted', 'qualified', 'archived'];
+const NEWSLETTER_OPERATIONAL_STATUSES: NewsletterOperationalStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -79,8 +82,15 @@ const parseOffset = (value: string | null): { value: number; invalid?: string } 
   return { value: Number.parseInt(value, 10) };
 };
 
-const parseNewsletterStatus = (value: unknown): NewsletterSubscriptionStatus | 'all' => (
-  value === 'subscribed' || value === 'unsubscribed' ? value : 'all'
+const parseNewsletterStatusFilter = (value: unknown): NewsletterOperationalStatus | 'all' => {
+  const normalized = textValue(value).toLowerCase();
+  return NEWSLETTER_OPERATIONAL_STATUSES.includes(normalized as NewsletterOperationalStatus)
+    ? normalized as NewsletterOperationalStatus
+    : 'all';
+};
+
+const parseNewsletterWriteStatus = (value: unknown): NewsletterSubscriptionStatus => (
+  value === 'unsubscribed' ? 'unsubscribed' : 'subscribed'
 );
 
 const parseContactStatus = (value: unknown, subscriptionStatus: NewsletterSubscriptionStatus): Contact['status'] => {
@@ -114,7 +124,7 @@ const filterSubscribers = (
   contacts: Contact[],
   forms: FormDefinition[],
   input: {
-    status: NewsletterSubscriptionStatus | 'all';
+    status: NewsletterOperationalStatus | 'all';
     search?: string;
   },
 ) => {
@@ -122,7 +132,13 @@ const filterSubscribers = (
   const normalizedSearch = input.search?.trim().toLowerCase() || '';
   return contacts
     .filter((contact) => isNewsletterContact(contact, formById.get(contact.formId)))
-    .filter((contact) => (input.status === 'all' ? true : newsletterStatusFromContact(contact) === input.status))
+    .filter((contact) => {
+      if (input.status === 'all') return true;
+      if (input.status === 'subscribed' || input.status === 'unsubscribed') {
+        return newsletterStatusFromContact(contact) === input.status;
+      }
+      return newsletterOperationalStatusFromContact(contact) === input.status;
+    })
     .filter((contact) => {
       if (!normalizedSearch) return true;
       return [
@@ -151,7 +167,7 @@ const newsletterResponse = (
   site: { id: string; slug?: string; name?: string },
   forms: FormDefinition[],
   contacts: Contact[],
-  input: { limit: number; offset: number; status: NewsletterSubscriptionStatus | 'all'; search?: string },
+  input: { limit: number; offset: number; status: NewsletterOperationalStatus | 'all'; search?: string },
 ) => {
   const filtered = filterSubscribers(contacts, forms, { status: input.status, search: input.search });
   const paged = paginate(filtered, input.limit, input.offset);
@@ -252,7 +268,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (limitFilter.invalid) return errorResponse(400, 'INVALID_NEWSLETTER_LIMIT', 'Invalid newsletter subscriber limit. Use an integer from 1 to 100.', requestId);
     const offsetFilter = parseOffset(searchParams.get('offset'));
     if (offsetFilter.invalid) return errorResponse(400, 'INVALID_NEWSLETTER_OFFSET', 'Invalid newsletter subscriber offset. Use a non-negative integer.', requestId);
-    const status = parseNewsletterStatus(searchParams.get('status') || 'all');
+    const status = parseNewsletterStatusFilter(searchParams.get('status') || 'all');
     const formId = textValue(searchParams.get('formId'));
     const search = textValue(searchParams.get('q'));
 
@@ -303,7 +319,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const source = textValue(readNewsletterBodyField(body, 'source')) || textValue(readNewsletterBodyField(body, 'signup_source')) || 'admin-newsletter-api';
     const consent = booleanValue(readNewsletterBodyField(body, 'consent'));
     const consentText = textValue(readNewsletterBodyField(body, 'consentText'));
-    const subscriptionStatus = parseNewsletterStatus(readNewsletterBodyField(body, 'status')) === 'unsubscribed' ? 'unsubscribed' : 'subscribed';
+    const subscriptionStatus = parseNewsletterWriteStatus(readNewsletterBodyField(body, 'status'));
     const contactStatus = parseContactStatus(readNewsletterBodyField(body, 'contactStatus'), subscriptionStatus);
     const formId = textValue(readNewsletterBodyField(body, 'formId'));
     const now = new Date().toISOString();
