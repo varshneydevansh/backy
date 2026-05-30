@@ -27,14 +27,14 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Checkpoint expectation:** steadily close release UX/editor gaps, keep commits logical, and keep the release doctor green.
 - **Time budget:** unlimited until user stop
 - **Average batch time so far:** not enough data
-- **Batches remaining:** 3 of 5
+- **Batches remaining:** 2 of 5
 
 ## Stop Gate
 
-- **Planned batches remaining:** 3
+- **Planned batches remaining:** 2
 - **Stop allowed right now:** no
-- **Why:** The user asked to keep pursuing Backy completion and custom frontend/newsletter handoff hardening remains.
-- **Next required action:** Start Batch 3: Custom Frontend And Newsletter Handoff Readiness.
+- **Why:** The user asked to keep pursuing Backy completion and release certification/Vercel readiness remains.
+- **Next required action:** Start Batch 4: Release Certification And Vercel Readiness.
 
 ## Effort Standard
 
@@ -89,11 +89,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Status:** In progress
 
-**Active batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
+**Active batch:** Batch 4: Release Certification And Vercel Readiness
 
-**What was just finished:** Batch 2 completed: marquee selection re-anchors from the original pointer when the canvas rect settles, Mac/editor zoom remains canvas-scoped, component-library drag previews no longer keep the sticky rail preview active, and layers/library/source smokes are green.
+**What was just finished:** Batch 3 completed: Help/Site/Newsletter/Editor handoff surfaces now make the canonical `/agent-handoff`, manifest, OpenAPI, component property contract, newsletter subscriber management, and provider-safe sync routes more directly copyable and site-scoped.
 
-**Single next action:** Inspect Help, Site detail, editor Composition handoff, manifest/OpenAPI/custom-frontend handoff, and newsletter subscriber management for copyable AI/frontend-agent guidance gaps.
+**Single next action:** Start release certification readiness by running the default release doctor, inspecting provider artifact admission docs/scripts, and checking secret/push-protection posture before any Vercel topology edits.
 
 ## Active Compute
 
@@ -101,26 +101,26 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 
 ## Next Exact Batch
 
-**Batch:** 3: Custom Frontend And Newsletter Handoff Readiness
+**Batch:** 4: Release Certification And Vercel Readiness
 
 **Scope:**
-- Ensure Help, Site Detail, and Editor composition handoff clearly show where AI/frontend agents read Backy APIs.
-- Confirm every component/element remains API-addressable through manifest/OpenAPI/SDK/render payloads with properties, bindings, design tokens, fonts, media, animations, and editable maps preserved.
-- Make newsletter subscriber management and provider-safe sync/export handoff discoverable for publishing/journalism workflows.
+- Keep `npm run doctor:release-certification` green in default no-artifact mode.
+- Keep provider artifact admission commands documented and machine-readable for Settings and Commerce.
+- Confirm git history no longer contains the previously blocked Stripe sentinel commits and push protection stays clean.
+- Keep Vercel protected deployment topology documented for Backy admin/public and custom frontend deployments.
 
 **Acceptance criteria:**
-- Help/site/newsletter smokes cover copyable handoff blocks and site-scoped URLs.
-- Generated SDK contract type checks pass when public contract changes.
-- Handoff docs do not expose secrets or admin-only payloads in public endpoints.
+- Release certification doctor passes.
+- Secret scans/contract smokes avoid raw provider-looking keys.
+- Vercel deployment docs identify backend/admin topology, frontend deployment separation, and domain/subdomain routing expectations.
 - `npm run typecheck --workspace @backy-cms/admin` passes.
 - `git diff --check` passes.
 
 **Known files to inspect first:**
-- `AGENTS.md`
-- `specs/custom-frontend-agent-handoff.md`
+- `scripts/backy-release-certification-doctor*.mjs`
+- `docs/release/`
 - `specs/backy-api-contracts.md`
-- `apps/admin/src/routes/help.tsx`
-- `apps/admin/src/routes/sites.$siteId.tsx`
-- `apps/admin/src/routes/newsletter.tsx`
-- `apps/admin/src/components/editor/CompositionHandoffPanel.tsx`
-- `apps/admin/scripts/help-smoke.mjs`
+- `specs/page-completion-audit/backy-page-surface-audit.md`
+- `apps/admin/src/routes/settings.tsx`
+- `apps/admin/src/routes/products.tsx`
+- Vercel/deployment docs or config files found by `rg -n "Vercel|deployment|protected|domain|subdomain|release certification|provider certification"`.

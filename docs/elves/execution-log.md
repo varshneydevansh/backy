@@ -4,14 +4,74 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 00:57 IST
+- **Last updated:** 2026-05-31 01:28 IST
 - **Current phase:** In progress
-- **Active batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
-- **Last completed batch:** Batch 2: Canvas Editor Interaction Fidelity
-- **Next exact batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
+- **Active batch:** Batch 4: Release Certification And Vercel Readiness
+- **Last completed batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
+- **Next exact batch:** Batch 4: Release Certification And Vercel Readiness
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 01:28 IST
+
+**Batch:** 3: Custom Frontend And Newsletter Handoff Readiness
+**Contract status:** all criteria met for local/admin handoff readiness
+
+**Timing:**
+- Implement: 16m | Validate: 13m | Review/subagent: 6m | Total: 31m
+- Session elapsed: 96m | Budget remaining: open-ended
+
+**What changed:**
+- `apps/admin/src/routes/newsletter.tsx`: Newsletter API handoff now visibly exposes the site-scoped custom frontend agent start URLs: `/agent-handoff`, manifest, OpenAPI, render, resolve, plus provider-safe `audience=sendable` and contact-sync URLs. The copied newsletter handoff now includes a `customFrontendAgent` block pointing back to the canonical Backy site handoff contract.
+- `apps/admin/src/routes/sites.$siteId.tsx`: Site Frontend handoff now surfaces the component API schema and `componentApiContract.componentTypeContracts` property-map pointer in the visible quick-read grid.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: Editor Composition handoff now exposes the same component contract schema and `componentTypeContracts` pointer in both data attributes and visible compact copy.
+- `apps/admin/scripts/newsletter-smoke.mjs`, `apps/admin/scripts/site-detail-smoke.mjs`, `apps/admin/scripts/editor-drag-smoke.mjs`: focused source/render guards now assert the new copyable, site-scoped handoff metadata.
+- `specs/custom-frontend-agent-handoff.md`: clarified that the Newsletter workspace handoff includes the canonical `/agent-handoff`, manifest, and OpenAPI start points.
+
+**Commands run:**
+- `npm run test:newsletter --workspace @backy-cms/admin` -> PASS.
+- `npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `BACKY_SITE_DETAIL_SOURCE_ONLY=1 npm run test:site-detail --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin` -> FAIL once because Chrome DevTools did not start on default port `9396`; rerun with `BACKY_HELP_CDP_PORT=9496` -> PASS.
+
+**Test results:**
+- Typecheck: PASS.
+- Source guards: PASS for Help, Site Detail, Newsletter, and Editor handoff contracts.
+- Rendered smokes: PASS for Help handoff copy/site-scoped URL behavior on rerun.
+- Process cleanup: PASS, no stray help/editor/site/newsletter smoke or Chrome CDP processes remained after validation.
+
+**Review findings:**
+- [Medium] Newsletter handoff exposed provider-safe sync URLs in copied JSON but not as first-class visible UI snippets. Resolved by adding visible send-ready and contact-sync rows.
+- [Medium] Component/property contract discoverability was implicit in JSON. Resolved by surfacing `backy.canvas-component-api-contract.v1` and `componentApiContract.componentTypeContracts` in Site Detail and Editor handoff quick-read surfaces.
+- [Low] The requested `CompositionHandoffPanel.tsx` path does not exist; the Composition handoff remains inline in `CanvasEditor.tsx`. No shim added because this batch improved the active surface and smoke coverage directly.
+
+**Decisions made:**
+- Did not change public API shape or generated SDK contracts. The patch improves admin handoff discoverability only, so SDK contract type checks were not required for this batch.
+- Kept delivery provider secrets out of handoff payloads. Newsletter and issue handoffs expose endpoint templates, sync policy, and boundaries only.
+
+**Docs:**
+- Impacted: `docs/elves/survival-guide.md`, `docs/elves/execution-log.md`, `docs/elves/learnings.md`, `.elves-session.json`, `specs/custom-frontend-agent-handoff.md`.
+- Updated: custom frontend/newsletter handoff spec and Elves run-state files.
+- Promoted: visible handoff surfaces should name the canonical read path and component property-map pointer, not rely only on copied JSON.
+
+**Regression attestation:**
+- Cumulative diff: batch code commit changed 7 product/spec/smoke files.
+- Files outside batch scope: none.
+- Shared surfaces modified: editor handoff quick-read only; no canvas geometry, renderer, public API, or persistence behavior changed.
+- Consumers verified: newsletter smoke, help smoke, site-detail source smoke, editor source smoke, rendered Help smoke, admin typecheck, diff check.
+- Residual risk: Site Detail full rendered smoke was not rerun because source guard covers the handoff additions and full route smoke is heavier; run it before release if Site Detail rendering changes again.
+- Confidence: HIGH for handoff discoverability and no-secret boundary because changes are additive, site-scoped, and guarded.
+
+**Commit:** `19071d60`
+**Rollback tag:** `elves/pre-batch-3`
+
+**Next:**
+1. Start Batch 4 by running `npm run doctor:release-certification`.
+2. Inspect release/provider/Vercel docs and scripts for secret-safe artifact admission and deployment topology clarity.
 
 ## 2026-05-31 00:57 IST
 

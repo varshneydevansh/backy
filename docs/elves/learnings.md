@@ -7,6 +7,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-30] Backy admin UI should follow `DESIGN.md`: dense operational control-room UI, shared primitives first, no marketing-dashboard drift.
 - [2026-05-30] Custom frontend agents must start from `AGENTS.md` read order: public agent handoff, manifest, OpenAPI, frontend design contract, templates, newsletter, and render verification.
 - [2026-05-30] The four remaining audit partials are external live Settings/Commerce provider certification artifacts, not missing local editor/content-model work.
+- [2026-05-31] Copyable handoff UI should show the canonical agent read path and property-map pointer visibly, not only inside JSON: `/agent-handoff`, manifest, OpenAPI, and `componentApiContract.componentTypeContracts` are the fastest way for frontend agents to align with Backy.
 
 ## Validation and Tooling
 
@@ -23,6 +24,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 ## Product and Domain Invariants
 
 - [2026-05-30] Backy owns newsletter subscriber management and provider-safe handoff, but actual outbound email delivery/mailbox hosting remains provider-backed for now.
+- [2026-05-31] Newsletter handoff should make provider-safe sync URLs visible beside capture URLs: `audience=sendable` and contact-sync route templates are operator-facing workflow surfaces, not just hidden payload fields.
 - [2026-05-30] Every page/blog/product/form/custom frontend path must preserve design tokens, fonts, colors, media assets, animations, interactions, responsive overrides, editable maps, and API-visible properties.
 
 ## Known Traps
