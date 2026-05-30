@@ -3751,6 +3751,7 @@ export interface NewsletterSubscriberRecord {
   source?: string | null;
   consent?: boolean | null;
   consentText?: string | null;
+  sendReady?: boolean;
   subscribedAt?: string | null;
   unsubscribedAt?: string | null;
   createdAt: string;

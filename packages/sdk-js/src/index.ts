@@ -8849,6 +8849,7 @@ export interface BackyNewsletterSubscriber {
   source?: string | null;
   consent?: boolean | null;
   consentText?: string | null;
+  sendReady?: boolean;
   subscribedAt?: string;
   unsubscribedAt?: string | null;
   createdAt: string;
@@ -8917,6 +8918,7 @@ export interface BackyAdminNewsletterSubscriberListOptions
   extends BackyListOptions,
     BackyLiveManagementRequestOptions {
   status?: BackyNewsletterSubscriptionStatus | "all" | string;
+  audience?: "all" | "sendable" | "held" | string;
   formId?: string;
   q?: string;
 }
@@ -18493,6 +18495,7 @@ export class BackyClient {
       splitLiveManagementRequestOptions(options);
     const query = normalizeListQuery(rest as BackyListOptions & {
       status?: string;
+      audience?: string;
       formId?: string;
       q?: string;
     });

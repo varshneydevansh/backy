@@ -3117,6 +3117,7 @@ export type GeneratedBackyOpenApiNewsletterSubscriber = {
   source?: string | null;
   consent?: boolean | null;
   consentText?: string | null;
+  sendReady?: boolean;
   subscribedAt?: string;
   unsubscribedAt?: string | null;
   createdAt: string;

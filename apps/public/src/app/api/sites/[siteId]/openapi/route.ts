@@ -1343,6 +1343,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     embedBlock: `/api/admin/sites/${siteId}/forms/{formId}/embed-block`,
     analytics: `/api/admin/sites/${siteId}/forms/analytics`,
     newsletterSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
+    newsletterSendableSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
     contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
     contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
     consentRetention: `/api/admin/sites/${siteId}/forms/consent-retention`,
@@ -4744,6 +4745,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 queryParameter("status", {
                   type: "string",
                   enum: ["all", "subscribed", "unsubscribed", "pending", "bounced", "complained"],
+                }),
+                queryParameter("audience", {
+                  type: "string",
+                  enum: ["all", "sendable", "held"],
+                  description:
+                    "Use sendable for delivery-worker sync; it excludes pending, bounced, complained, unsubscribed, and archived contacts.",
                 }),
                 queryParameter("formId"),
                 queryParameter("q"),
@@ -12422,6 +12429,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 source: { type: ["string", "null"] },
                 consent: { type: ["boolean", "null"] },
                 consentText: { type: ["string", "null"] },
+                sendReady: {
+                  type: "boolean",
+                  description:
+                    "True only when the contact is active and newsletterStatus is subscribed; delivery workers should use audience=sendable.",
+                },
                 subscribedAt: { type: "string" },
                 unsubscribedAt: { type: ["string", "null"] },
                 createdAt: { type: "string", format: "date-time" },

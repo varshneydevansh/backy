@@ -37,7 +37,7 @@ assert(routeSource.includes('newsletterUnsubscribedAt: now'), 'Newsletter unsubs
 assert(routeSource.includes('newsletterSubscribedAt: contact.newsletterSubscribedAt || now'), 'Newsletter subscribe lifecycle must preserve or create a subscribe timestamp.');
 assert(routeSource.includes('buildNewsletterLifecycleSourceValues('), 'Newsletter lifecycle actions must keep sourceValues newsletter metadata in sync.');
 assert(routeSource.includes('subscriptionStatus: status'), 'Newsletter sourceValues must expose machine-readable subscriptionStatus.');
-assert(routeSource.includes("contact.status === 'qualified' || !isSubscriberSubscribed(contact)"), 'Newsletter ready action must not target unsubscribed subscribers.');
+assert(routeSource.includes("contact.status === 'qualified' || !isSubscriberSendReady(contact)"), 'Newsletter ready action must not target held or unsubscribed subscribers.');
 assert(routeSource.includes("settings: {\n    backyIntent: 'newsletter'"), 'Created newsletter forms must carry a machine-readable newsletter intent.');
 assert(routeSource.includes("fields: [\n    { key: 'email'"), 'Created newsletter forms must include an email field.');
 assert(routeSource.includes("key: 'topics'"), 'Created newsletter forms must include topic preference capture.');
@@ -46,6 +46,10 @@ assert(routeSource.includes("key: 'signup_source'"), 'Created newsletter forms m
 assert(routeSource.includes('supportedPayloadShapes') && routeSource.includes('Backy form values payload'), 'Newsletter handoff must document flat and Backy form-values payload shapes.');
 assert(routeSource.includes('providerBoundary') && routeSource.includes('external-delivery-required'), 'Newsletter handoff must keep outbound delivery behind an external-provider boundary.');
 assert(routeSource.includes('mailbox delivery') && routeSource.includes('SPF/DKIM/DMARC'), 'Newsletter delivery boundary must name deliverability responsibilities.');
+assert(routeSource.includes('sendableSubscribersUrl') && routeSource.includes('audience=sendable'), 'Newsletter handoff must expose a strict send-ready subscriber sync URL.');
+assert(routeSource.includes('sendReadySubscribers') && routeSource.includes('heldOrSuppressed'), 'Newsletter issue handoff must distinguish send-ready subscribers from held/suppressed contacts.');
+assert(routeSource.includes('function isSubscriberSendReady(contact: AdminContact): boolean'), 'Newsletter route must compute strict send-ready subscriber state.');
+assert(routeSource.includes("disabled={disabled || contact.status === 'qualified' || !isSubscriberSendReady(contact)}"), 'Newsletter ready action must only target send-ready subscribers.');
 assert(routeSource.includes('data-testid="newsletter-command-center"'), 'Newsletter page must expose a command-center test hook.');
 assert(routeSource.includes('data-testid="newsletter-subscriber-list"'), 'Newsletter page must expose a subscriber-list test hook.');
 assert(routeSource.includes('data-testid="newsletter-manual-subscriber"'), 'Newsletter page must expose a manual subscriber management form.');
@@ -80,5 +84,8 @@ assert(publicNewsletterSubscribersRouteSource.includes('readNewsletterBodyField'
 assert(adminNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && adminNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Admin newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
 assert(adminNewsletterSubscribersRouteSource.includes("const NEWSLETTER_OPERATIONAL_STATUSES: NewsletterOperationalStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];"), 'Admin newsletter subscribers API must preserve full provider lifecycle filter states.');
 assert(adminNewsletterSubscribersRouteSource.includes('newsletterOperationalStatusFromContact(contact) === input.status'), 'Admin newsletter subscribers API must filter bounced, complained, and pending lifecycle states directly.');
+assert(adminNewsletterSubscribersRouteSource.includes("const NEWSLETTER_AUDIENCE_FILTERS = ['all', 'sendable', 'held'] as const;"), 'Admin newsletter subscribers API must expose strict sendable/held audience filters.');
+assert(adminNewsletterSubscribersRouteSource.includes('isNewsletterSubscriberSendable(contact)'), 'Admin newsletter subscribers API must filter send-ready contacts through canonical newsletter logic.');
+assert(adminNewsletterSubscribersRouteSource.includes("sendableSubscribers: `/api/admin/sites/${site.id}/newsletter/subscribers?audience=sendable`"), 'Admin newsletter subscribers API handoff must expose the send-ready delivery sync URL.');
 
 console.log('Newsletter source smoke passed.');

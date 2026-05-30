@@ -1939,10 +1939,12 @@ assert(
     manifestRoute.includes("adminWorkspace: `/newsletter?siteId=${siteId}`") &&
     manifestRoute.includes("schemaVersion: 'backy.newsletter-sync-boundary.v1'") &&
     manifestRoute.includes("newsletterPage: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`") &&
+    manifestRoute.includes("sendableSubscribersUrl: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`") &&
     manifestRoute.includes("subscribe: 'subscribeNewsletter'") &&
     manifestRoute.includes("syncContacts: 'syncFormContacts'") &&
     newsletterSubscribersLib.includes("NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION = 'backy.newsletter-subscribers.v1'") &&
     newsletterSubscribersLib.includes('export const buildNewsletterContactFields = ({') &&
+    newsletterSubscribersLib.includes('export const isNewsletterSubscriberSendable = (contact: Contact): boolean => (') &&
     newsletterSubscribersLib.includes('export const isNewsletterForm = (form: FormDefinition): boolean => {') &&
     publicNewsletterSubscribersRoute.includes('NEWSLETTER_CONSENT_REQUIRED') &&
     publicNewsletterSubscribersRoute.includes('buildNewsletterSourceValues({') &&
@@ -1958,6 +1960,8 @@ assert(
     openApiRoute.includes('NewsletterSubscribeValues') &&
     openApiRoute.includes('NewsletterUnsubscribeRequest') &&
     openApiRoute.includes('signup_source: { type: "string" }') &&
+    openApiRoute.includes('enum: ["all", "sendable", "held"]') &&
+    openApiRoute.includes('sendReady: {') &&
     openApiRoute.includes('"x-backy-forms-management"') &&
     openApiRoute.includes('FormsManagementPolicy') &&
     openApiRoute.includes('"backy.forms-management.v1"') &&
@@ -1978,6 +1982,7 @@ assert(
     sdkSource.includes('BackyNewsletterFormValuesSubscribeInput') &&
     sdkSource.includes('BackyNewsletterFormValuesUnsubscribeInput') &&
     sdkSource.includes('newsletterSubscribers(') &&
+    sdkSource.includes('audience?: "all" | "sendable" | "held" | string;') &&
     sdkSource.includes('upsertNewsletterSubscriber(') &&
     generatedSdkTypes.includes('newsletterRuntime?: {') &&
     generatedSdkTypes.includes('GeneratedBackyOpenApiNewsletterSubscribeRequest = GeneratedBackyOpenApiNewsletterSubscribeValues | {') &&

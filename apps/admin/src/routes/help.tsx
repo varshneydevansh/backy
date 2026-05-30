@@ -244,7 +244,7 @@ const HELP_TOPICS: HelpTopic[] = [
     details: [
       'The Newsletter workspace creates active signup forms with email, name, topic preference, consent, and source fields, then links you to a canvas newsletter page or blog composer.',
       'Subscriber records are still stored through Backy Contacts so status, notes, source values, consent evidence, saved lists, segments, CSV export, and private management APIs stay site-scoped.',
-      'The issue handoff combines recent published Blog reports, subscriber counts, and private sync route templates so a delivery worker can draft a provider campaign without reading secrets from the frontend.',
+      'The issue handoff combines recent published Blog reports, send-ready subscriber counts, and private audience=sendable sync route templates so a delivery worker can draft a provider campaign without reading secrets from the frontend.',
       'Backy should own the subscriber database and API handoff. Bulk outbound delivery, inbox hosting, bounce handling, and domain reputation should stay behind a real email provider until Backy has a dedicated mail service.',
     ],
     route: '/newsletter',
@@ -259,7 +259,7 @@ const HELP_TOPICS: HelpTopic[] = [
       'Backy can manage signup forms, subscribers, topics, segments, consent evidence, imports, exports, suppression status, and provider-safe sync routes.',
       'Actual mailbox hosting, bulk outbound sending, bounces, complaints, provider unsubscribe enforcement, SPF/DKIM/DMARC, and sender reputation need a real email provider until Backy has a dedicated mail service.',
       'Keep provider secrets in private settings or delivery workers, not in public manifests, canvas JSON, frontend bundles, or copied issue handoff.',
-      'Newsletter subscriber APIs expose subscriptionStatus for audience state and newsletterStatus for provider lifecycle states such as pending, bounced, and complained.',
+      'Newsletter subscriber APIs expose subscriptionStatus for audience state and newsletterStatus for provider lifecycle states such as pending, bounced, and complained, plus audience=sendable for delivery-worker sync.',
     ],
     route: '/newsletter',
     routeLabel: 'Open Newsletter',
@@ -272,7 +272,7 @@ const HELP_TOPICS: HelpTopic[] = [
     details: [
       'Write each report in Blog so slug, SEO, authoring history, categories, comments, and canvas design stay attached to the site.',
       'Use Newsletter to create a signup form, place it on a Backy canvas page or custom frontend, and collect consent, topic, and source values into Contacts.',
-      'When a report is ready, copy the issue handoff. It includes recent published posts, public render/resolve URLs, subscriber counts, sync routes, and provider-safe draft metadata.',
+      'When a report is ready, copy the issue handoff. It includes recent published posts, public render/resolve URLs, send-ready subscriber counts, sync routes, and provider-safe draft metadata.',
       'Use an email provider only for outbound sending, unsubscribe enforcement in delivered messages, bounces, complaints, and SPF/DKIM/DMARC.',
     ],
     route: '/newsletter',

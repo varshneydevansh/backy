@@ -3161,6 +3161,7 @@ const buildManifestNewsletterDiscovery = (
     endpoints: {
       publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`,
       adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
+      sendableSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
       forms: `/api/sites/${siteId}/forms`,
       contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
       contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
@@ -3204,6 +3205,7 @@ const buildManifestNewsletterDiscovery = (
     },
     syncPolicy: {
       schemaVersion: 'backy.newsletter-sync-boundary.v1',
+      sendableSubscribersUrl: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
       routeTemplate: `/api/admin/sites/${siteId}/forms/{formId}/contacts/sync`,
       payloadKind: 'contact-sync',
       targetBody: {

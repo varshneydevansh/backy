@@ -129,6 +129,10 @@ export const newsletterStatusFromContact = (contact: Contact): NewsletterSubscri
     : 'subscribed';
 };
 
+export const isNewsletterSubscriberSendable = (contact: Contact): boolean => (
+  contact.status !== 'archived' && newsletterOperationalStatusFromContact(contact) === 'subscribed'
+);
+
 export const isNewsletterContact = (contact: Contact, form?: FormDefinition): boolean => {
   const source = isRecord(contact.sourceValues) ? contact.sourceValues : {};
   return (
@@ -242,6 +246,7 @@ export const buildNewsletterSubscriberPayload = (
     source: contact.newsletterSource || readContactSourceValue(contact, 'signup_source') || textValue(newsletter.source) || null,
     consent: contact.newsletterConsent ?? booleanValue(source.consent) ?? booleanValue(newsletter.consent) ?? null,
     consentText: contact.newsletterConsentText || textValue(newsletter.consentText) || null,
+    sendReady: isNewsletterSubscriberSendable(contact),
     subscribedAt: contact.newsletterSubscribedAt || textValue(newsletter.subscribedAt) || contact.createdAt,
     unsubscribedAt: contact.newsletterUnsubscribedAt || textValue(newsletter.unsubscribedAt) || null,
     createdAt: contact.createdAt,
@@ -269,6 +274,8 @@ export const buildNewsletterSummary = (contacts: Contact[]) => {
     total: contacts.length,
     subscribed: subscribed.length,
     unsubscribed: unsubscribed.length,
+    sendReady: contacts.filter(isNewsletterSubscriberSendable).length,
+    held: contacts.filter((contact) => !isNewsletterSubscriberSendable(contact)).length,
     pending: byNewsletterStatus.pending,
     bounced: byNewsletterStatus.bounced,
     complained: byNewsletterStatus.complained,

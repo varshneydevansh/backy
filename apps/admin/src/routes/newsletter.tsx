@@ -551,8 +551,8 @@ function NewsletterRoute() {
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Metric label="Subscribers" value={String(metrics.total)} icon={<Mail className="size-4" />} />
-          <Metric label="Active" value={String(metrics.active)} icon={<CheckCircle2 className="size-4" />} />
-          <Metric label="Archived" value={String(metrics.archived)} icon={<Archive className="size-4" />} />
+          <Metric label="Send-ready" value={String(metrics.sendReady)} icon={<CheckCircle2 className="size-4" />} />
+          <Metric label="Held" value={String(metrics.held)} icon={<Archive className="size-4" />} />
           <Metric label="Signup forms" value={String(newsletterForms.length)} icon={<FileText className="size-4" />} />
         </div>
 
@@ -582,7 +582,7 @@ function NewsletterRoute() {
             <div className="mt-4 grid gap-2 md:grid-cols-3">
               <FlowStep index={1} title="Capture" detail="Public form definition and submission APIs collect email, topic, source, and consent." />
               <FlowStep index={2} title="Manage" detail="Contacts preserve subscriber identity, lifecycle status, and source values per site." />
-              <FlowStep index={3} title="Deliver" detail="Export or sync to an email provider after SPF, DKIM, DMARC, bounces, and unsubscribe are configured." />
+              <FlowStep index={3} title="Deliver" detail="Sync the send-ready audience to an email provider after SPF, DKIM, DMARC, bounces, and unsubscribe are configured." />
             </div>
             <form
               className="mt-4 rounded-lg border border-border bg-card p-3"
@@ -674,7 +674,7 @@ function NewsletterRoute() {
               Subscriber management is native. Actual mailbox delivery should use a provider because reputation, abuse controls, unsubscribe enforcement, and DNS records decide whether reports reach inboxes.
             </p>
             <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-5 text-muted-foreground">
-              {NEWSLETTER_SYNC_POLICY_VERSION}: no provider secrets in public manifests, canvas props, or frontend handoff payloads.
+              {NEWSLETTER_SYNC_POLICY_VERSION}: delivery workers should read <code className="font-mono">audience=sendable</code>; no provider secrets in public manifests, canvas props, or frontend handoff payloads.
             </div>
           </div>
         </div>
@@ -852,7 +852,7 @@ function NewsletterRoute() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <WorkflowCard title="Local reporting" detail="Write posts in Backy, keep the slug, SEO, categories, comments, and canvas design attached to the same site." />
           <WorkflowCard title="Subscriber proof" detail="Every public signup lands as a contact with source form, request id, consent values, topic preference, and lifecycle state." />
-          <WorkflowCard title="Provider handoff" detail="Use CSV or private Contacts APIs to sync subscribers to Buttondown, Mailchimp, Resend, SES, or another delivery system without exposing secrets." />
+          <WorkflowCard title="Provider handoff" detail="Use CSV or private audience=sendable APIs to sync confirmed active subscribers to Buttondown, Mailchimp, Resend, SES, or another delivery system without exposing secrets." />
         </div>
         <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.45fr)]" data-testid="newsletter-issue-handoff">
           <div className="rounded-lg border border-border bg-background p-4">
@@ -902,7 +902,7 @@ function NewsletterRoute() {
             <ul className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
               <li>Subscriber identity, topic, consent, and lifecycle state.</li>
               <li>Published post URLs, excerpts, and canvas-backed content metadata.</li>
-              <li>CSV/private API sync contracts for delivery workers.</li>
+              <li>CSV/private send-ready API sync contracts for delivery workers.</li>
             </ul>
             <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-5 text-muted-foreground">
               Use a delivery provider for SMTP/API sending, unsubscribe links in delivered email, bounces, complaints, and SPF/DKIM/DMARC.
@@ -973,6 +973,9 @@ function SubscriberRow({
   const topic = readSourceValue(contact, 'topics') || 'No topic';
   const source = readSourceValue(contact, 'signup_source') || readSourceValue(contact, 'source') || form.title || form.name;
   const subscriptionStatus = isSubscriberSubscribed(contact) ? 'Subscribed' : 'Unsubscribed';
+  const deliveryState = isSubscriberSendReady(contact)
+    ? 'Send-ready'
+    : contact.newsletterSubscriptionStatus || subscriptionStatus;
   return (
     <div className="grid min-w-[900px] grid-cols-[minmax(220px,1.1fr)_minmax(150px,0.6fr)_minmax(140px,0.5fr)_minmax(160px,0.6fr)_auto] items-start gap-0 px-4 py-3 text-sm">
       <div className="min-w-0 pr-3">
@@ -987,10 +990,10 @@ function SubscriberRow({
         <StatusBadge status={contact.status} />
         <div className={cn(
           'mt-1 text-xs font-medium',
-          isSubscriberSubscribed(contact) ? 'text-emerald-700' : 'text-muted-foreground',
+          isSubscriberSendReady(contact) ? 'text-emerald-700' : 'text-muted-foreground',
         )}
         >
-          {subscriptionStatus}
+          {deliveryState}
         </div>
       </div>
       <div className="pr-3 text-xs text-muted-foreground">
@@ -1021,7 +1024,7 @@ function SubscriberRow({
         <Button
           size="sm"
           variant="outline"
-          disabled={disabled || contact.status === 'qualified' || !isSubscriberSubscribed(contact)}
+          disabled={disabled || contact.status === 'qualified' || !isSubscriberSendReady(contact)}
           title={disabledReason}
           onClick={() => onStatusChange('qualified')}
           iconStart={<Send className="size-3.5" />}
@@ -1058,12 +1061,15 @@ function isNewsletterForm(form: FormDefinition): boolean {
 function buildNewsletterMetrics(subscribers: NewsletterSubscriber[]) {
   return subscribers.reduce((metrics, { contact }) => {
     const isSubscribed = isSubscriberSubscribed(contact);
+    const isSendReady = isSubscriberSendReady(contact);
     metrics.total += 1;
     if (!isSubscribed) metrics.archived += 1;
     else metrics.active += 1;
-    if (contact.status === 'qualified' && isSubscribed) metrics.ready += 1;
+    if (isSendReady) metrics.sendReady += 1;
+    else metrics.held += 1;
+    if (contact.status === 'qualified' && isSendReady) metrics.ready += 1;
     return metrics;
-  }, { total: 0, active: 0, archived: 0, ready: 0 });
+  }, { total: 0, active: 0, archived: 0, ready: 0, sendReady: 0, held: 0 });
 }
 
 function buildTopicRows(subscribers: NewsletterSubscriber[]) {
@@ -1168,6 +1174,7 @@ function buildNewsletterHandoff({
       newsletterSubscribersUrl: `${adminBaseUrl}/sites/${activeSiteId}/newsletter/subscribers`,
       contactSegmentsUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/contact-segments`,
       contactListsUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/contact-lists`,
+      sendableSubscribersUrl: `${adminBaseUrl}/sites/${activeSiteId}/newsletter/subscribers?audience=sendable`,
       syncUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/{formId}/contacts/sync`,
       consentRetentionUrl: `${adminBaseUrl}/sites/${activeSiteId}/forms/{formId}/contacts/consent-retention`,
       segmentSummary: contactSegments?.summary || null,
@@ -1213,10 +1220,12 @@ function buildNewsletterIssueHandoff({
   return {
     schemaVersion: NEWSLETTER_ISSUE_SCHEMA_VERSION,
     siteId: activeSiteId,
-    status: issuePosts.length > 0 && metrics.active > 0 ? 'ready-for-provider-draft' : 'needs-posts-or-subscribers',
+    status: issuePosts.length > 0 && metrics.sendReady > 0 ? 'ready-for-provider-draft' : 'needs-posts-or-send-ready-subscribers',
     audience: {
       totalSubscribers: metrics.total,
       activeSubscribers: metrics.active,
+      sendReadySubscribers: metrics.sendReady,
+      heldOrSuppressed: metrics.held,
       unsubscribedOrArchived: metrics.archived,
       signupForms: newsletterForms.length,
     },
@@ -1233,7 +1242,7 @@ function buildNewsletterIssueHandoff({
       ],
     },
     syncContract: {
-      subscriberListUrl: `/api/admin/sites/${activeSiteId}/newsletter/subscribers?status=subscribed&limit=100`,
+      subscriberListUrl: `/api/admin/sites/${activeSiteId}/newsletter/subscribers?audience=sendable&limit=100`,
       subscribeUrl: `/api/sites/${activeSiteId}/newsletter/subscribers`,
       unsubscribeUrl: `/api/sites/${activeSiteId}/newsletter/subscribers`,
       requiredAdminPermission: 'forms.export',
@@ -1254,6 +1263,10 @@ function buildPublicPostUrl(publicBaseUrl: string, siteId: string, post: BlogPos
 function sortPostsByPublishedDate(left: BlogPost, right: BlogPost): number {
   return (Date.parse(right.publishedAt || right.updatedAt || '') || 0)
     - (Date.parse(left.publishedAt || left.updatedAt || '') || 0);
+}
+
+function isSubscriberSendReady(contact: AdminContact): boolean {
+  return contact.status !== 'archived' && contact.newsletterSubscriptionStatus === 'subscribed';
 }
 
 function isSubscriberSubscribed(contact: AdminContact): boolean {

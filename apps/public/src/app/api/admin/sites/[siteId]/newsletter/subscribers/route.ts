@@ -9,6 +9,7 @@ import {
   buildNewsletterSourceValues,
   buildNewsletterSubscriberPayload,
   buildNewsletterSummary,
+  isNewsletterSubscriberSendable,
   isNewsletterContact,
   isNewsletterForm,
   newsletterOperationalStatusFromContact,
@@ -44,6 +45,9 @@ const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
 const CONTACT_STATUSES: Contact['status'][] = ['new', 'contacted', 'qualified', 'archived'];
 const NEWSLETTER_OPERATIONAL_STATUSES: NewsletterOperationalStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];
+const NEWSLETTER_AUDIENCE_FILTERS = ['all', 'sendable', 'held'] as const;
+
+type NewsletterAudienceFilter = typeof NEWSLETTER_AUDIENCE_FILTERS[number];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -89,6 +93,13 @@ const parseNewsletterStatusFilter = (value: unknown): NewsletterOperationalStatu
     : 'all';
 };
 
+const parseNewsletterAudienceFilter = (value: unknown): NewsletterAudienceFilter => {
+  const normalized = textValue(value).toLowerCase();
+  return NEWSLETTER_AUDIENCE_FILTERS.includes(normalized as NewsletterAudienceFilter)
+    ? normalized as NewsletterAudienceFilter
+    : 'all';
+};
+
 const parseNewsletterWriteStatus = (value: unknown): NewsletterSubscriptionStatus => (
   value === 'unsubscribed' ? 'unsubscribed' : 'subscribed'
 );
@@ -125,6 +136,7 @@ const filterSubscribers = (
   forms: FormDefinition[],
   input: {
     status: NewsletterOperationalStatus | 'all';
+    audience: NewsletterAudienceFilter;
     search?: string;
   },
 ) => {
@@ -138,6 +150,11 @@ const filterSubscribers = (
         return newsletterStatusFromContact(contact) === input.status;
       }
       return newsletterOperationalStatusFromContact(contact) === input.status;
+    })
+    .filter((contact) => {
+      if (input.audience === 'all') return true;
+      const sendable = isNewsletterSubscriberSendable(contact);
+      return input.audience === 'sendable' ? sendable : !sendable;
     })
     .filter((contact) => {
       if (!normalizedSearch) return true;
@@ -167,9 +184,19 @@ const newsletterResponse = (
   site: { id: string; slug?: string; name?: string },
   forms: FormDefinition[],
   contacts: Contact[],
-  input: { limit: number; offset: number; status: NewsletterOperationalStatus | 'all'; search?: string },
+  input: {
+    limit: number;
+    offset: number;
+    status: NewsletterOperationalStatus | 'all';
+    audience: NewsletterAudienceFilter;
+    search?: string;
+  },
 ) => {
-  const filtered = filterSubscribers(contacts, forms, { status: input.status, search: input.search });
+  const filtered = filterSubscribers(contacts, forms, {
+    status: input.status,
+    audience: input.audience,
+    search: input.search,
+  });
   const paged = paginate(filtered, input.limit, input.offset);
   const formById = new Map(forms.map((form) => [form.id, form]));
   const subscribers = paged.items.map((contact) => (
@@ -199,6 +226,7 @@ const newsletterResponse = (
         publicSubscribe: `/api/sites/${site.id}/newsletter/subscribers`,
         publicUnsubscribe: `/api/sites/${site.id}/newsletter/subscribers`,
         adminSubscribers: `/api/admin/sites/${site.id}/newsletter/subscribers`,
+        sendableSubscribers: `/api/admin/sites/${site.id}/newsletter/subscribers?audience=sendable`,
         deliveryBoundary: 'Backy stores subscribers and consent; email delivery, bounces, abuse controls, and DNS authentication stay provider-backed.',
       },
     },
@@ -269,6 +297,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const offsetFilter = parseOffset(searchParams.get('offset'));
     if (offsetFilter.invalid) return errorResponse(400, 'INVALID_NEWSLETTER_OFFSET', 'Invalid newsletter subscriber offset. Use a non-negative integer.', requestId);
     const status = parseNewsletterStatusFilter(searchParams.get('status') || 'all');
+    const audience = parseNewsletterAudienceFilter(searchParams.get('audience') || 'all');
     const formId = textValue(searchParams.get('formId'));
     const search = textValue(searchParams.get('q'));
 
@@ -282,6 +311,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         limit: limitFilter.value,
         offset: offsetFilter.value,
         status,
+        audience,
         search,
       });
     }
@@ -294,6 +324,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       limit: limitFilter.value,
       offset: offsetFilter.value,
       status,
+      audience,
       search,
     });
   } catch (error) {
