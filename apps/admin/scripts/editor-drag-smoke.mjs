@@ -1056,9 +1056,15 @@ const assertCanvasEditorShortcutSource = () => {
     layersPanelSource.includes('data-layer-readable-name="two-line"') &&
       layersPanelSource.includes('data-testid="editor-layer-readable-name"') &&
       layersPanelSource.includes('data-testid="editor-layer-readable-meta"') &&
+      layersPanelSource.includes('const getLayerReadableMeta = (element: CanvasElement): string =>') &&
+      layersPanelSource.includes('data-layer-nav-link-count={navLinkCount}') &&
+      layersPanelSource.includes('data-layer-link-href={linkHref}') &&
+      layersPanelSource.includes('data-layer-selectable-child-policy="expand-nav-container-select-link-children"') &&
+      layersPanelSource.includes("return `${element.type} · ${linkCount} link${linkCount === 1 ? '' : 's'} · ${binding}`") &&
+      layersPanelSource.includes("return `${element.type} · ${href}`") &&
       layersPanelSource.includes("flex: '1 0 100%'") &&
       layersPanelSource.includes('WebkitLineClamp: 2'),
-    'Editor layers panel must keep readable two-line labels and wrap row actions below the layer name in narrow panels',
+    'Editor layers panel must keep readable two-line labels, expose nav/link child metadata, and wrap row actions below the layer name in narrow panels',
   );
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');

@@ -219,6 +219,35 @@ const getLayerSearchText = (element: CanvasElement): string => (
     `${getLayerDisplayName(element)} ${element.type} ${element.id}`.toLowerCase()
 );
 
+const getStringProp = (props: CanvasElement['props'], key: string): string => {
+    const value = props?.[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : '';
+};
+
+const getNavigationItemCount = (element: CanvasElement): number => {
+    const childLinks = element.children?.filter((child) => child.type === 'link').length || 0;
+    if (childLinks > 0) {
+        return childLinks;
+    }
+
+    return Array.isArray(element.props.navItems) ? element.props.navItems.length : 0;
+};
+
+const getLayerReadableMeta = (element: CanvasElement): string => {
+    if (element.type === 'nav') {
+        const linkCount = getNavigationItemCount(element);
+        const binding = getStringProp(element.props, 'navigationBinding') || 'manual.navItems';
+        return `${element.type} · ${linkCount} link${linkCount === 1 ? '' : 's'} · ${binding}`;
+    }
+
+    if (element.type === 'link') {
+        const href = getStringProp(element.props, 'href') || '#';
+        return `${element.type} · ${href}`;
+    }
+
+    return `${element.type} · ${element.id}`;
+};
+
 const getLayerScopeCount = (
     scope: LayerScope,
     stats: LayerPanelStats,
@@ -321,6 +350,9 @@ function LayerItem({
     const [showActions, setShowActions] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
     const layerName = getLayerDisplayName(element);
+    const layerReadableMeta = getLayerReadableMeta(element);
+    const navLinkCount = element.type === 'nav' ? getNavigationItemCount(element) : undefined;
+    const linkHref = element.type === 'link' ? getStringProp(element.props, 'href') || '#' : undefined;
     const [draftLayerName, setDraftLayerName] = useState(layerName);
     const renameInputRef = useRef<HTMLInputElement | null>(null);
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
@@ -433,8 +465,14 @@ function LayerItem({
             data-layer-id={element.id}
             data-layer-name={layerName}
             data-layer-depth={depth}
+            data-layer-type={element.type}
+            data-layer-child-count={element.children?.length || 0}
+            data-layer-nav-link-count={navLinkCount}
+            data-layer-link-href={linkHref}
+            data-layer-readable-meta-value={layerReadableMeta}
             data-layer-selected={isSelected ? 'true' : 'false'}
             data-layer-readable-name="two-line"
+            data-layer-selectable-child-policy="expand-nav-container-select-link-children"
             data-action-status={layerRowActionStatus}
             data-action-state={getLayerActionState(disabledPanelReason, isSelected)}
             data-disabled-reason={disabledPanelReason || undefined}
@@ -610,18 +648,21 @@ function LayerItem({
                         </span>
                         <span
                             data-testid="editor-layer-readable-meta"
+                            title={layerReadableMeta}
                             style={{
-                                display: 'block',
+                                display: '-webkit-box',
                                 color: '#64748b',
                                 fontSize: '11px',
                                 lineHeight: '14px',
                                 marginTop: '1px',
                                 overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
+                                overflowWrap: 'anywhere',
+                                WebkitBoxOrient: 'vertical',
+                                WebkitLineClamp: 2,
+                                whiteSpace: 'normal',
                             }}
                         >
-                            {element.type} · {element.id}
+                            {layerReadableMeta}
                         </span>
                     </>
                 )}
