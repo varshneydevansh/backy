@@ -26,10 +26,12 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-30] Backy owns newsletter subscriber management and provider-safe handoff, but actual outbound email delivery/mailbox hosting remains provider-backed for now.
 - [2026-05-31] Newsletter handoff should make provider-safe sync URLs visible beside capture URLs: `audience=sendable` and contact-sync route templates are operator-facing workflow surfaces, not just hidden payload fields.
 - [2026-05-30] Every page/blog/product/form/custom frontend path must preserve design tokens, fonts, colors, media assets, animations, interactions, responsive overrides, editable maps, and API-visible properties.
+- [2026-05-31] Production Vercel runbooks must keep `backy-admin` as a protected Vite shell with only public/admin API base URLs; server-only admin keys, database URLs, provider secrets, and cron secrets belong on `backy-public`, never in `VITE_*` env.
 
 ## Known Traps
 
 - [2026-05-30] Previously blocked Stripe-looking secret sentinel commits are not valid names in the current local history, but push protection should still be treated as a release gate.
+- [2026-05-31] Provider certification artifact admission should reject broad token-shaped leaks such as bearer tokens, GitHub tokens, Vercel tokens, and JWT-looking strings in addition to payment-provider keys and forbidden sensitive field names.
 - [2026-05-30] `DataGrid` paint/layout containment can prevent page-level overflow while clipping inline `<details>` disclosures, focus rings, and dense row controls.
 
 ## Retired Learnings

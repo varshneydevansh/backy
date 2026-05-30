@@ -27,14 +27,14 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Checkpoint expectation:** steadily close release UX/editor gaps, keep commits logical, and keep the release doctor green.
 - **Time budget:** unlimited until user stop
 - **Average batch time so far:** not enough data
-- **Batches remaining:** 2 of 5
+- **Batches remaining:** 1 of 5
 
 ## Stop Gate
 
-- **Planned batches remaining:** 2
+- **Planned batches remaining:** 1
 - **Stop allowed right now:** no
-- **Why:** The user asked to keep pursuing Backy completion and release certification/Vercel readiness remains.
-- **Next required action:** Start Batch 4: Release Certification And Vercel Readiness.
+- **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
+- **Next required action:** Start Batch 5: Ongoing UX Scout And Polish.
 
 ## Effort Standard
 
@@ -89,11 +89,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Status:** In progress
 
-**Active batch:** Batch 4: Release Certification And Vercel Readiness
+**Active batch:** Batch 5: Ongoing UX Scout And Polish
 
-**What was just finished:** Batch 3 completed: Help/Site/Newsletter/Editor handoff surfaces now make the canonical `/agent-handoff`, manifest, OpenAPI, component property contract, newsletter subscriber management, and provider-safe sync routes more directly copyable and site-scoped.
+**What was just finished:** Batch 4 completed: release doctor remains green; provider artifact admission is verified as the only path from 41 Ready / 4 Partial to 45 Ready / 0 Partial; Vercel docs now separate protected admin, public Backy API/rendering, and custom frontend projects without client-exposed admin keys; the doctor rejects broader token-shaped artifact leaks.
 
-**Single next action:** Start release certification readiness by running the default release doctor, inspecting provider artifact admission docs/scripts, and checking secret/push-protection posture before any Vercel topology edits.
+**Single next action:** Start Batch 5 by scanning visible admin/editor UX defects and choose the next focused, testable polish slice that improves the Wix/Canva-like creation flow without destabilizing release certification.
 
 ## Active Compute
 
@@ -101,26 +101,27 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 
 ## Next Exact Batch
 
-**Batch:** 4: Release Certification And Vercel Readiness
+**Batch:** 5: Ongoing UX Scout And Polish
 
 **Scope:**
-- Keep `npm run doctor:release-certification` green in default no-artifact mode.
-- Keep provider artifact admission commands documented and machine-readable for Settings and Commerce.
-- Confirm git history no longer contains the previously blocked Stripe sentinel commits and push protection stays clean.
-- Keep Vercel protected deployment topology documented for Backy admin/public and custom frontend deployments.
+- Re-check the highest-friction admin/editor surfaces the user called out: canvas component drag/drop, component library preview clipping, layer/inspector affordances, responsive preview behavior, pages/users dense tables, settings action layering, site switching/domain/subdomain help, and newsletter/blog authoring flows.
+- Prefer small, root-cause fixes with existing Backy primitives and smoke coverage.
+- Keep custom frontend/APIability, design metadata persistence, and release doctor behavior intact.
+- Use rendered smokes when the defect is visual or interaction-based; use source guards for handoff/contract-only changes.
 
 **Acceptance criteria:**
-- Release certification doctor passes.
-- Secret scans/contract smokes avoid raw provider-looking keys.
-- Vercel deployment docs identify backend/admin topology, frontend deployment separation, and domain/subdomain routing expectations.
 - `npm run typecheck --workspace @backy-cms/admin` passes.
+- Relevant focused route/editor smoke passes.
 - `git diff --check` passes.
+- Changes are committed as a logical UX/polish slice and Elves docs are updated.
 
 **Known files to inspect first:**
-- `scripts/backy-release-certification-doctor*.mjs`
-- `docs/release/`
-- `specs/backy-api-contracts.md`
-- `specs/page-completion-audit/backy-page-surface-audit.md`
-- `apps/admin/src/routes/settings.tsx`
-- `apps/admin/src/routes/products.tsx`
-- Vercel/deployment docs or config files found by `rg -n "Vercel|deployment|protected|domain|subdomain|release certification|provider certification"`.
+- `apps/admin/src/components/editor/Canvas.tsx`
+- `apps/admin/src/components/editor/CanvasEditor.tsx`
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`
+- `apps/admin/src/components/editor/LayerPanel.tsx`
+- `apps/admin/src/routes/pages.tsx`
+- `apps/admin/src/routes/blog.tsx`
+- `apps/admin/src/routes/help.tsx`
+- `apps/admin/src/routes/sites.$siteId.tsx`
+- route smoke scripts under `apps/admin/scripts/`

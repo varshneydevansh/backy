@@ -4,14 +4,78 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 01:28 IST
+- **Last updated:** 2026-05-31 01:51 IST
 - **Current phase:** In progress
-- **Active batch:** Batch 4: Release Certification And Vercel Readiness
-- **Last completed batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
-- **Next exact batch:** Batch 4: Release Certification And Vercel Readiness
+- **Active batch:** Batch 5: Ongoing UX Scout And Polish
+- **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
+- **Next exact batch:** Batch 5: Ongoing UX Scout And Polish
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 01:51 IST
+
+**Batch:** 4: Release Certification And Vercel Readiness
+**Contract status:** all local criteria met; four audit partials remain external live-provider artifact gated
+
+**Timing:**
+- Implement: 8m | Validate: 13m | Review/subagent: 5m | Total: 26m
+- Session elapsed: 122m | Budget remaining: open-ended
+
+**What changed:**
+- `README.md`: removed the production instruction to configure `VITE_BACKY_ADMIN_API_KEY`; added a protected topology matrix for `backy-public`, `backy-admin`, and custom frontend Vercel projects; clarified current subdomain/custom-domain behavior and the host-based rendering hardening gate.
+- `SETUP.md`: clarified that server-only database/storage/provider/cron/admin secrets belong on `backy-public`, while the Vite admin shell receives only API base URLs and authenticates via session login/httpOnly cookie.
+- `scripts/backy-release-certification-doctor.mjs`: expanded raw-secret artifact detection to reject bearer tokens, GitHub token shapes, Vercel token shapes, and JWT-like values in certification artifacts.
+- `scripts/backy-release-certification-doctor-contract-smoke.mjs`: added runtime-built leak fixtures for those token classes without committing push-protection-looking secrets.
+- `scripts/vercel-release-config-smoke.mjs`: added assertions that the production Vercel runbook includes protected topology guidance and does not mention `VITE_BACKY_ADMIN_API_KEY`.
+
+**Commands run:**
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:release-certification-doctor-contract` -> PASS.
+- `npm run test:release-certification-preflight-contract` -> PASS.
+- `npm run doctor:release-certification` -> PASS, default audit still `41 Ready / 4 Partial / 0 Prototype / 0 Missing`; artifact-accepted audit remains `45 Ready / 0 Partial / 0 Prototype / 0 Missing`.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:partial-gate-preflights` -> PASS.
+- `rg -n "VITE_BACKY_ADMIN_API_KEY|ghp_[A-Za-z0-9_]{24,}|vercel_[A-Za-z0-9_-]{24,}|Bearer [A-Za-z0-9._~+/=-]{24,}|eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}" README.md SETUP.md scripts/backy-release-certification-doctor-contract-smoke.mjs scripts/backy-release-certification-doctor.mjs scripts/vercel-release-config-smoke.mjs` -> PASS for committed secret hygiene; only local-dev README env and smoke negative assertions mention `VITE_BACKY_ADMIN_API_KEY`.
+
+**Test results:**
+- Release doctor: PASS.
+- Provider partial aggregate preflights: PASS.
+- Vercel release config smoke: PASS.
+- Admin typecheck: PASS.
+- Diff check: PASS.
+
+**Review findings:**
+- [P1] Production Vercel docs suggested a client-exposed Vite admin key. Resolved by documenting cookie/session auth for production admin and adding a negative smoke assertion.
+- [P1] Protected deployment topology lacked an operator-ready matrix. Resolved with project/domain/env/forbidden-env guidance for public/admin/custom frontend deployments.
+- [P2] Artifact raw-secret detection was narrow. Resolved by expanding token-shaped leak detection and contract fixtures.
+- [P3] Custom-domain routing wording could imply direct host-based rendering is already complete. Resolved by clarifying the current `BACKY_SITE_ID` custom frontend path and the remaining host-based rendering hardening gate.
+
+**Decisions made:**
+- Did not fake or synthesize live provider artifacts. The four partials remain legitimately external until fresh redacted Settings and Commerce artifacts pass admission.
+- Kept local development README `VITE_BACKY_ADMIN_API_KEY=dev-admin-key-change-me` unchanged because it is dev-only and already bypassed in browser production flows.
+- Did not deploy to Vercel in this batch; this was the release-readiness/doc/secret-safety hardening slice.
+
+**Docs:**
+- Impacted: `README.md`, `SETUP.md`, `docs/elves/survival-guide.md`, `docs/elves/execution-log.md`, `docs/elves/learnings.md`, `.elves-session.json`.
+- Updated: deployment docs, release smokes, doctor contracts, and Elves run-state files.
+- Promoted: production Vercel runbooks must never put admin keys in Vite/client env; provider artifact admission should reject broad token-shaped leaks, not only payment-provider keys.
+
+**Regression attestation:**
+- Cumulative diff: batch code commit changed 5 release/doc/smoke files.
+- Files outside batch scope: none.
+- Shared surfaces modified: release doctor raw-secret regex and Vercel config smoke only; no admin UI, public renderer, or API behavior changed.
+- Consumers verified: release doctor contract, release preflight contract, full partial-gate preflights, Vercel release config smoke, admin typecheck, diff check.
+- Residual risk: actual live Settings/Commerce provider artifacts still require configured external credentials and CI/runtime secrets before the audit can move from 41/4 to 45/0.
+- Confidence: HIGH for local release readiness and secret-safe topology docs.
+
+**Commit:** `ba7346b4`
+**Rollback tag:** `elves/pre-batch-4`
+
+**Next:**
+1. Start Batch 5 by scanning the next visible UX/editor defect and picking a narrow polish slice.
+2. Prioritize fixes that improve canvas/blog/page creation flow while preserving release doctor and handoff contracts.
 
 ## 2026-05-31 01:28 IST
 
