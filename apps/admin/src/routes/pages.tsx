@@ -2016,7 +2016,6 @@ function PagesListView() {
       key: 'siteId',
       label: 'Delivery',
       width: '460px',
-      overflowMode: 'visible',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);

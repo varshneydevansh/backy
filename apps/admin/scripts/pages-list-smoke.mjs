@@ -239,18 +239,30 @@ const assertPagesListSourceContract = () => {
       source.includes('aria-label={`Refresh delivery health for ${pageTitle}`}'),
     'Pages delivery health row refresh controls must name the page they refresh.',
   );
+  const deliveryColumnStart = source.indexOf("key: 'siteId'");
+  const deliveryColumnEnd = source.indexOf("key: 'lastUpdated'", deliveryColumnStart);
+  const deliveryColumnBlock = deliveryColumnStart >= 0 && deliveryColumnEnd > deliveryColumnStart
+    ? source.slice(deliveryColumnStart, deliveryColumnEnd)
+    : '';
+  const actionColumnStart = source.indexOf("key: 'actions'", deliveryColumnEnd);
+  const actionColumnEnd = source.indexOf('];', actionColumnStart);
+  const actionColumnBlock = actionColumnStart >= 0 && actionColumnEnd > actionColumnStart
+    ? source.slice(actionColumnStart, actionColumnEnd)
+    : '';
   assert(
     source.includes('tableMinWidth="2300px"') &&
       source.includes("width: '460px'") &&
       source.includes("width: '220px'") &&
-      source.includes("overflowMode: 'visible'") &&
+      deliveryColumnBlock &&
+      !deliveryColumnBlock.includes("overflowMode: 'visible'") &&
+      actionColumnBlock.includes("overflowMode: 'visible'") &&
       source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
       source.includes('data-testid={`pages-delivery-health-details-${pageId}`}') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('Health details') &&
       source.includes('Recent probes'),
-    'Pages table must reserve enough width for delivery/status columns and collapse delivery health diagnostics plus probe history to prevent row overlap.',
+    'Pages table must reserve enough width while clipping delivery diagnostics inside their column and allowing only the action rail to opt into visible overflow.',
   );
   assert(
     source.includes('const createPageLinkDisabled = !canEditPages') &&
@@ -3436,7 +3448,7 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
   assert(
     state.cells.every((cell) => (
-      ['siteId', 'actions'].includes(cell.key)
+      cell.key === 'actions'
         ? cell.overflowPolicy === 'visible-and-wrapped' && cell.paintContainment === 'none' && cell.contentPolicy === 'visible-wrapped-content' && cell.descendantPolicy === 'visible'
         : cell.overflowPolicy === 'clip-and-wrap' && cell.paintContainment === 'cell' && cell.contentPolicy === 'constrained-wrapped-content' && cell.descendantPolicy === 'paint-contained'
     )),
