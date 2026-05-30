@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const read = (relativePath) => fs.readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
+const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const PORT = Number(process.env.BACKY_HELP_CDP_PORT || 9396);
+const RENDERED_SMOKE = process.env.BACKY_HELP_RENDERED_SMOKE === '1';
+const HELP_SMOKE_SITE_ID = process.env.BACKY_HELP_SMOKE_SITE_ID || 'site-help-rendered-smoke';
+const SCREENSHOT_PATH = process.env.BACKY_HELP_SCREENSHOT || path.join(os.tmpdir(), 'backy-help-smoke.png');
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -10,94 +21,566 @@ const assert = (condition, message) => {
   }
 };
 
-const helpSource = read('../src/routes/help.tsx');
-const sidebarModelSource = read('../src/components/layout/sidebarModel.ts');
-const headerModelSource = read('../src/components/layout/headerModel.ts');
-const headerSource = read('../src/components/layout/Header.tsx');
-const routeTreeSource = read('../src/routeTree.gen.ts');
-const newsletterSmokeSource = read('newsletter-smoke.mjs');
+const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+    resolve(true);
+    return;
+  }
 
-const requiredTopicIds = [
-  'switch-sites',
-  'subdomains',
-  'canvas-basics',
-  'canvas-zoom-selection',
-  'navigation-shared-chrome',
-  'apiable-elements',
-  'custom-frontend-agent-start',
-  'frontend-design-state',
-  'newsletter-subscribers',
-  'newsletter-mail-boundary',
-  'provider-certification-partials',
-];
+  const timeout = setTimeout(() => {
+    childProcess.off('exit', onExit);
+    resolve(false);
+  }, timeoutMs);
 
-assert(
-  requiredTopicIds.every((topicId) => helpSource.includes(`id: '${topicId}'`)),
-  `Help route is missing required topics: ${requiredTopicIds.filter((topicId) => !helpSource.includes(`id: '${topicId}'`)).join(', ')}`,
+  const onExit = () => {
+    clearTimeout(timeout);
+    resolve(true);
+  };
+
+  childProcess.once('exit', onExit);
+});
+
+const fetchJson = async (endpoint) => {
+  const response = await fetch(`http://127.0.0.1:${PORT}${endpoint}`);
+  if (!response.ok) {
+    throw new Error(`${endpoint} returned ${response.status}`);
+  }
+  return response.json();
+};
+
+const isUsablePageTarget = (target) => {
+  if (!target || target.type !== 'page' || !target.webSocketDebuggerUrl) return false;
+  const url = target.url || '';
+  return !(
+    url.startsWith('chrome://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('chrome-error://') ||
+    url.startsWith('chrome-extension://')
+  );
+};
+
+const getTargetScore = (target) => {
+  const url = target.url || '';
+  if (url.startsWith(ADMIN_BASE_URL)) return 0;
+  if (url === 'about:blank') return 1;
+  if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return 2;
+  if (url.startsWith('http://') || url.startsWith('https://')) return 3;
+  return 4;
+};
+
+const selectUsablePageTarget = (targets) => (
+  [...targets]
+    .filter(isUsablePageTarget)
+    .sort((left, right) => getTargetScore(left) - getTargetScore(right))[0]
 );
 
-assert(
-  helpSource.includes('GET /api/sites/:siteId/agent-handoff') &&
-    helpSource.includes('GET /api/sites/:siteId/manifest') &&
-    helpSource.includes('GET /api/sites/:siteId/openapi') &&
-    helpSource.includes('GET /api/sites/:siteId/render?path=/...') &&
-    helpSource.includes('GET /api/sites/:siteId/resolve?path=/...') &&
-    helpSource.includes('specs/custom-frontend-agent-handoff.md') &&
-    helpSource.includes('backy.canvas-component-api-contract.v1') &&
-    helpSource.includes('starterValueForSite(item.value, activeSiteId)') &&
-    helpSource.includes('buildAgentCopyBrief(activeSiteId)') &&
-    helpSource.includes('navigator.clipboard?.writeText(text)') &&
-    helpSource.includes('data-testid="help-copy-agent-brief"') &&
-    helpSource.includes('data-testid={`help-copy-agent-starter-${item.id}`}') &&
-    helpSource.includes('data-target-site-id={activeSiteId}') &&
-    helpSource.includes('data-testid="help-agent-starter-grid"') &&
-    helpSource.includes('data-testid="help-agent-human-guide"'),
-  'Help route must expose canonical custom frontend agent endpoints, schema, copy controls, site-scoped values, and human guide.',
-);
+const waitForCdp = async () => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      const pages = await fetchJson('/json/list');
+      const page = selectUsablePageTarget(pages);
+      if (page) {
+        return page;
+      }
+    } catch {
+      await sleep(100);
+    }
+  }
 
-assert(
-  helpSource.includes('SITE_SCOPED_HELP_ROUTES') &&
-    helpSource.includes('search={getTopicRouteSearch(topic.route)}') &&
-    helpSource.includes('const routeSearch = Route.useSearch()') &&
-    helpSource.includes("const activeSiteId = routeSearch.siteId || 'site-demo'"),
-  'Help route links and copyable endpoint values must preserve the active site context.',
-);
+  throw new Error(`Chrome DevTools did not start on port ${PORT}`);
+};
 
-assert(
-  helpSource.includes('Canvas zoom should change the work surface, not the whole browser page.') &&
-    helpSource.includes('marquee selection should start from the pointer position') &&
-    helpSource.includes('Navigation is not one opaque text block') &&
-    helpSource.includes('Root sections, headers, footers, and nav bars participate in root-section flow'),
-  'Help route must document critical Wix-like canvas controls, selection behavior, navigation child links, and shared chrome flow.',
-);
+const connectCdp = (webSocketDebuggerUrl) => {
+  const socket = new WebSocket(webSocketDebuggerUrl);
+  let id = 0;
+  const pending = new Map();
 
-assert(
-  helpSource.includes('Actual mailbox hosting, bulk outbound sending, bounces, complaints, provider unsubscribe enforcement, SPF/DKIM/DMARC') &&
-    helpSource.includes('subscriptionStatus for audience state and newsletterStatus for provider lifecycle states') &&
-    newsletterSmokeSource.includes('Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.'),
-  'Help route must document the newsletter management and mail-provider boundary.',
-);
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
 
-assert(
-  helpSource.includes('The remaining Partial rows are live provider certification evidence') &&
-    helpSource.includes('Settings, Settings admin APIs, Products, and Orders as Partial') &&
-    helpSource.includes('no raw secrets') &&
-    helpSource.includes('release-doctor acceptance'),
-  'Help route must explain the current four Partial provider-certification rows without implying missing local editor/API models.',
-);
+    if (message.id && pending.has(message.id)) {
+      const request = pending.get(message.id);
+      pending.delete(message.id);
 
-assert(
-  sidebarModelSource.includes("{ id: 'help', label: 'Help', to: '/help'") &&
-    sidebarModelSource.includes("'/help'") &&
-    headerModelSource.includes("'/help': 'help'") &&
-    headerModelSource.includes("if (path.startsWith('/help')) return 'Help';") &&
-    headerSource.includes("{ id: 'tool:help'") &&
-    routeTreeSource.includes("path: '/help'"),
-  'Help route must remain wired into sidebar, header search, header title, and generated route tree.',
-);
+      if (message.error) {
+        request.reject(new Error(JSON.stringify(message.error)));
+      } else {
+        request.resolve(message.result);
+      }
+    }
+  });
 
-console.log(JSON.stringify({
-  ok: true,
-  guard: 'help-source',
-  requiredTopics: requiredTopicIds.length,
-}));
+  const opened = new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true });
+    socket.addEventListener('error', reject, { once: true });
+  });
+
+  return {
+    opened,
+    close: () => socket.close(),
+    send: (method, params = {}) => {
+      const messageId = id += 1;
+      socket.send(JSON.stringify({ id: messageId, method, params }));
+      return new Promise((resolve, reject) => {
+        pending.set(messageId, { resolve, reject });
+      });
+    },
+  };
+};
+
+const evaluate = async (client, expression) => {
+  const result = await client.send('Runtime.evaluate', {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`Runtime evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+  }
+
+  return result.result.value;
+};
+
+const waitForHttp = async (url, description) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      const response = await fetch(url, { method: 'GET' });
+      if (response.ok || response.status < 500) {
+        return true;
+      }
+    } catch {
+      await sleep(250);
+    }
+  }
+
+  throw new Error(`${description} is not reachable at ${url}. Start the admin dev server with npm run dev:smoke:admin --workspace @backy-cms/admin.`);
+};
+
+const navigate = async (client, url, readyExpression, description) => {
+  await client.send('Page.navigate', { url });
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const state = await evaluate(client, readyExpression);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 119) {
+      throw new Error(`${description} did not become ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(250);
+  }
+
+  return null;
+};
+
+const launchChrome = () => {
+  assert(fs.existsSync(CHROME_BIN), `Chrome binary not found at ${CHROME_BIN}. Set CHROME_BIN to override.`);
+
+  const userDataDir = path.join(os.tmpdir(), `backy-help-smoke-${Date.now()}`);
+  const childProcess = spawn(CHROME_BIN, [
+    '--headless=new',
+    `--remote-debugging-port=${PORT}`,
+    `--user-data-dir=${userDataDir}`,
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--window-size=1440,1000',
+    'about:blank',
+  ], { stdio: 'ignore' });
+
+  return { childProcess, userDataDir };
+};
+
+const cleanupChrome = async ({ client, childProcess, userDataDir }) => {
+  if (client) {
+    try {
+      await client.send('Browser.close');
+    } catch {
+      // Chrome may already be closed.
+    }
+    client.close();
+  }
+
+  if (childProcess && !(await waitForExit(childProcess))) {
+    childProcess.kill('SIGTERM');
+    if (!(await waitForExit(childProcess, 1000))) {
+      childProcess.kill('SIGKILL');
+    }
+  }
+
+  if (userDataDir) {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+};
+
+const captureScreenshot = async (client) => {
+  fs.mkdirSync(path.dirname(SCREENSHOT_PATH), { recursive: true });
+  const screenshot = await client.send('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: false,
+  });
+  fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.data, 'base64'));
+  return SCREENSHOT_PATH;
+};
+
+const authAndClipboardBootstrapScript = () => {
+  const now = new Date();
+  const session = {
+    token: `help-rendered-smoke-${Date.now()}`,
+    issuedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+    authMode: 'local-demo',
+  };
+  const user = {
+    id: 'user-admin',
+    email: 'admin@backy.io',
+    fullName: 'Admin User',
+    role: 'owner',
+  };
+  const persistedAuth = JSON.stringify({
+    state: {
+      user,
+      session,
+    },
+    version: 0,
+  });
+  const sessionResponse = JSON.stringify({
+    success: true,
+    data: {
+      user,
+      session,
+    },
+  });
+
+  return `
+(() => {
+  const persistedAuth = ${JSON.stringify(persistedAuth)};
+  const sessionResponse = ${JSON.stringify(sessionResponse)};
+
+  try {
+    window.localStorage.setItem('backy-auth-storage', persistedAuth);
+  } catch {}
+
+  try {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.__backyHelpSmokeClipboard = String(text || '');
+        },
+      },
+    });
+  } catch {
+    navigator.clipboard = {
+      writeText: async (text) => {
+        window.__backyHelpSmokeClipboard = String(text || '');
+      },
+    };
+  }
+
+  const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+  if (nativeFetch && !window.__backyHelpSmokeFetchWrapped) {
+    window.__backyHelpSmokeFetchWrapped = true;
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input?.url || '';
+      if (String(url).includes('/api/admin/auth/session')) {
+        return Promise.resolve(new Response(sessionResponse, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  }
+})();
+`;
+};
+
+const setInputValue = (testId, value) => `
+(() => {
+  const input = document.querySelector('[data-testid="${testId}"]');
+  if (!(input instanceof HTMLInputElement)) {
+    return { ok: false, reason: 'input-missing' };
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  descriptor?.set?.call(input, ${JSON.stringify(value)});
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return { ok: true, value: input.value };
+})()
+`;
+
+const clickElement = (testId) => `
+(() => {
+  const element = document.querySelector('[data-testid="${testId}"]');
+  if (!(element instanceof HTMLElement)) {
+    return { ok: false, reason: 'element-missing' };
+  }
+  element.click();
+  return { ok: true };
+})()
+`;
+
+const waitForRenderedState = async (client, expression, description) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const state = await evaluate(client, expression);
+    if (state.ready) {
+      return state;
+    }
+    if (attempt === 79) {
+      throw new Error(`${description} did not become ready: ${JSON.stringify(state)}`);
+    }
+    await sleep(100);
+  }
+
+  return null;
+};
+
+const assertHelpSourceContracts = () => {
+  const helpSource = read('../src/routes/help.tsx');
+  const sidebarModelSource = read('../src/components/layout/sidebarModel.ts');
+  const headerModelSource = read('../src/components/layout/headerModel.ts');
+  const headerSource = read('../src/components/layout/Header.tsx');
+  const routeTreeSource = read('../src/routeTree.gen.ts');
+  const newsletterSmokeSource = read('newsletter-smoke.mjs');
+
+  const requiredTopicIds = [
+    'switch-sites',
+    'subdomains',
+    'canvas-basics',
+    'canvas-zoom-selection',
+    'navigation-shared-chrome',
+    'apiable-elements',
+    'custom-frontend-agent-start',
+    'frontend-design-state',
+    'newsletter-subscribers',
+    'newsletter-mail-boundary',
+    'provider-certification-partials',
+  ];
+
+  assert(
+    requiredTopicIds.every((topicId) => helpSource.includes(`id: '${topicId}'`)),
+    `Help route is missing required topics: ${requiredTopicIds.filter((topicId) => !helpSource.includes(`id: '${topicId}'`)).join(', ')}`,
+  );
+
+  assert(
+    helpSource.includes('GET /api/sites/:siteId/agent-handoff') &&
+      helpSource.includes('GET /api/sites/:siteId/manifest') &&
+      helpSource.includes('GET /api/sites/:siteId/openapi') &&
+      helpSource.includes('GET /api/sites/:siteId/render?path=/...') &&
+      helpSource.includes('GET /api/sites/:siteId/resolve?path=/...') &&
+      helpSource.includes('specs/custom-frontend-agent-handoff.md') &&
+      helpSource.includes('backy.canvas-component-api-contract.v1') &&
+      helpSource.includes('starterValueForSite(item.value, activeSiteId)') &&
+      helpSource.includes('buildAgentCopyBrief(activeSiteId)') &&
+      helpSource.includes('navigator.clipboard?.writeText(text)') &&
+      helpSource.includes('data-testid="help-copy-agent-brief"') &&
+      helpSource.includes('data-testid={`help-copy-agent-starter-${item.id}`}') &&
+      helpSource.includes('data-target-site-id={activeSiteId}') &&
+      helpSource.includes('data-testid="help-agent-starter-grid"') &&
+      helpSource.includes('data-testid="help-agent-human-guide"'),
+    'Help route must expose canonical custom frontend agent endpoints, schema, copy controls, site-scoped values, and human guide.',
+  );
+
+  assert(
+    helpSource.includes('SITE_SCOPED_HELP_ROUTES') &&
+      helpSource.includes('search={getTopicRouteSearch(topic.route)}') &&
+      helpSource.includes('const routeSearch = Route.useSearch()') &&
+      helpSource.includes("const activeSiteId = routeSearch.siteId || 'site-demo'"),
+    'Help route links and copyable endpoint values must preserve the active site context.',
+  );
+
+  assert(
+    helpSource.includes('Canvas zoom should change the work surface, not the whole browser page.') &&
+      helpSource.includes('marquee selection should start from the pointer position') &&
+      helpSource.includes('Navigation is not one opaque text block') &&
+      helpSource.includes('Root sections, headers, footers, and nav bars participate in root-section flow'),
+    'Help route must document critical Wix-like canvas controls, selection behavior, navigation child links, and shared chrome flow.',
+  );
+
+  assert(
+    helpSource.includes('Actual mailbox hosting, bulk outbound sending, bounces, complaints, provider unsubscribe enforcement, SPF/DKIM/DMARC') &&
+      helpSource.includes('subscriptionStatus for audience state and newsletterStatus for provider lifecycle states') &&
+      newsletterSmokeSource.includes('Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.'),
+    'Help route must document the newsletter management and mail-provider boundary.',
+  );
+
+  assert(
+    helpSource.includes('The remaining Partial rows are live provider certification evidence') &&
+      helpSource.includes('Settings, Settings admin APIs, Products, and Orders as Partial') &&
+      helpSource.includes('no raw secrets') &&
+      helpSource.includes('release-doctor acceptance'),
+    'Help route must explain the current four Partial provider-certification rows without implying missing local editor/API models.',
+  );
+
+  assert(
+    sidebarModelSource.includes("{ id: 'help', label: 'Help', to: '/help'") &&
+      sidebarModelSource.includes("'/help'") &&
+      headerModelSource.includes("'/help': 'help'") &&
+      headerModelSource.includes("if (path.startsWith('/help')) return 'Help';") &&
+      headerSource.includes("{ id: 'tool:help'") &&
+      routeTreeSource.includes("path: '/help'"),
+    'Help route must remain wired into sidebar, header search, header title, and generated route tree.',
+  );
+
+  return {
+    requiredTopics: requiredTopicIds.length,
+  };
+};
+
+const runRenderedHelpSmoke = async () => {
+  await waitForHttp(`${ADMIN_BASE_URL}/help?siteId=${encodeURIComponent(HELP_SMOKE_SITE_ID)}`, 'Admin Help route');
+
+  let client;
+  let childProcess;
+  let userDataDir;
+
+  try {
+    ({ childProcess, userDataDir } = launchChrome());
+    const target = await waitForCdp();
+    client = connectCdp(target.webSocketDebuggerUrl);
+    await client.opened;
+    await client.send('Runtime.enable');
+    await client.send('Page.enable');
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: authAndClipboardBootstrapScript(),
+    });
+
+    const initial = await navigate(
+      client,
+      `${ADMIN_BASE_URL}/help?siteId=${encodeURIComponent(HELP_SMOKE_SITE_ID)}`,
+      `(() => {
+        const grid = document.querySelector('[data-testid="help-agent-starter-grid"]');
+        const body = document.body?.innerText || '';
+        return {
+          ready: window.location.pathname === '/help' &&
+            window.location.search.includes(${JSON.stringify(`siteId=${HELP_SMOKE_SITE_ID}`)}) &&
+            grid?.getAttribute('data-target-site-id') === ${JSON.stringify(HELP_SMOKE_SITE_ID)} &&
+            body.includes('Where frontend agents should start') &&
+            body.includes('Canvas content is API-readable'),
+          path: window.location.pathname,
+          search: window.location.search,
+          targetSiteId: grid?.getAttribute('data-target-site-id') || '',
+          body: body.slice(0, 800),
+          hasFrameworkOverlay: Boolean(document.querySelector('vite-error-overlay, nextjs-portal')),
+        };
+      })()`,
+      'Help rendered route',
+    );
+    assert(!initial.hasFrameworkOverlay, 'Help route rendered with a framework error overlay.');
+
+    const endpointState = await evaluate(client, `(() => {
+      const grid = document.querySelector('[data-testid="help-agent-starter-grid"]');
+      const text = grid?.textContent || '';
+      const link = document.querySelector('[data-testid="help-topic-custom-frontend-agent-start-route"]');
+      return {
+        targetSiteId: grid?.getAttribute('data-target-site-id') || '',
+        text,
+        linkHref: link instanceof HTMLAnchorElement ? link.href : '',
+      };
+    })()`);
+    assert(endpointState.targetSiteId === HELP_SMOKE_SITE_ID, `Rendered starter grid used wrong site id: ${JSON.stringify(endpointState)}`);
+    for (const expected of [
+      `/api/sites/${HELP_SMOKE_SITE_ID}/agent-handoff`,
+      `/api/sites/${HELP_SMOKE_SITE_ID}/manifest`,
+      `/api/sites/${HELP_SMOKE_SITE_ID}/openapi`,
+      `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/...`,
+      `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/...`,
+    ]) {
+      assert(endpointState.text.includes(expected), `Rendered Help starter endpoints are missing ${expected}`);
+    }
+    assert(
+      endpointState.linkHref.includes('/sites') && endpointState.linkHref.includes(`siteId=${encodeURIComponent(HELP_SMOKE_SITE_ID)}`),
+      `Help topic route did not preserve siteId: ${JSON.stringify(endpointState)}`,
+    );
+
+    await evaluate(client, clickElement('help-copy-agent-brief'));
+    const copiedBrief = await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-agent-brief"]');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          String(window.__backyHelpSmokeClipboard || '').includes('/api/sites/${HELP_SMOKE_SITE_ID}/agent-handoff'),
+        actionState: button?.getAttribute('data-action-state') || '',
+        buttonText: button?.textContent || '',
+        clipboard: String(window.__backyHelpSmokeClipboard || '').slice(0, 500),
+      };
+    })()`, 'Help copy brief action');
+    assert(copiedBrief.buttonText.includes('Copied'), `Help copy brief did not expose copied UI state: ${JSON.stringify(copiedBrief)}`);
+
+    await evaluate(client, clickElement('help-copy-agent-starter-agent-handoff'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-agent-starter-agent-handoff"]');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          String(window.__backyHelpSmokeClipboard || '') === 'GET /api/sites/${HELP_SMOKE_SITE_ID}/agent-handoff',
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard: String(window.__backyHelpSmokeClipboard || ''),
+      };
+    })()`, 'Help copy agent-handoff starter action');
+
+    const newsletterInput = await evaluate(client, setInputValue('help-search', 'newsletter'));
+    assert(newsletterInput.ok, `Help search input could not be updated: ${JSON.stringify(newsletterInput)}`);
+    const newsletterSearch = await waitForRenderedState(client, `(() => {
+      const visibleTopics = Array.from(document.querySelectorAll('[data-testid^="help-topic-"]'))
+        .filter((node) => node instanceof HTMLElement && node.matches('article'))
+        .map((node) => node.getAttribute('data-testid') || '');
+      return {
+        ready: visibleTopics.length > 0 &&
+          visibleTopics.length < 11 &&
+          visibleTopics.includes('help-topic-newsletter-subscribers') &&
+          document.body?.innerText?.includes('newsletterStatus'),
+        visibleTopics,
+        countText: document.querySelector('[data-testid="help-command-center"]')?.textContent?.match(/\\d+ topics? found/)?.[0] || '',
+      };
+    })()`, 'Help newsletter search filter');
+
+    const clearedInput = await evaluate(client, setInputValue('help-search', ''));
+    assert(clearedInput.ok, `Help search input could not be cleared: ${JSON.stringify(clearedInput)}`);
+    await evaluate(client, clickElement('help-category-api'));
+    const apiCategory = await waitForRenderedState(client, `(() => {
+      const topics = Array.from(document.querySelectorAll('[data-help-category]'));
+      const categories = topics.map((node) => node.getAttribute('data-help-category') || '');
+      const route = document.querySelector('[data-testid="help-topic-custom-frontend-agent-start-route"]');
+      return {
+        ready: topics.length > 0 &&
+          categories.every((category) => category === 'api') &&
+          route instanceof HTMLAnchorElement &&
+          route.href.includes('/sites') &&
+          route.href.includes('siteId=${encodeURIComponent(HELP_SMOKE_SITE_ID)}'),
+        topicCount: topics.length,
+        categories,
+        routeHref: route instanceof HTMLAnchorElement ? route.href : '',
+      };
+    })()`, 'Help API category filter');
+
+    const screenshotPath = await captureScreenshot(client);
+
+    return {
+      guard: 'help-rendered',
+      siteId: HELP_SMOKE_SITE_ID,
+      newsletterTopics: newsletterSearch.visibleTopics.length,
+      apiTopics: apiCategory.topicCount,
+      screenshotPath,
+    };
+  } finally {
+    await cleanupChrome({ client, childProcess, userDataDir });
+  }
+};
+
+const sourceResult = assertHelpSourceContracts();
+
+if (!RENDERED_SMOKE) {
+  console.log(JSON.stringify({
+    ok: true,
+    guard: 'help-source',
+    requiredTopics: sourceResult.requiredTopics,
+  }));
+} else {
+  const renderedResult = await runRenderedHelpSmoke();
+  console.log(JSON.stringify({
+    ok: true,
+    ...renderedResult,
+    requiredTopics: sourceResult.requiredTopics,
+  }));
+}
