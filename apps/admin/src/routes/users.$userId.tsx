@@ -1413,19 +1413,17 @@ function EditUserPage() {
                 >
                   {isLoading ? 'Saving...' : isLoadingUser ? 'Loading user...' : 'Save changes'}
                 </Button>
-                {hasUnsavedChanges && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetForm}
-                    disabled={isUserDetailBusy || !canManageUsers}
-                    title={userDetailResetActionDisabledReason || undefined}
-                    {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
-                    data-testid="user-detail-command-reset"
-                  >
-                    Reset changes
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                  disabled={Boolean(userDetailResetActionDisabledReason)}
+                  title={userDetailResetActionDisabledReason || undefined}
+                  {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
+                  data-testid="user-detail-command-reset"
+                >
+                  Reset changes
+                </Button>
               </div>
               <details
                 className="group relative self-start xl:self-end"
@@ -2665,19 +2663,17 @@ function EditUserPage() {
             >
               Cancel
             </button>
-            {hasUnsavedChanges && (
-              <button
-                type="button"
-                onClick={resetForm}
-                disabled={isUserDetailBusy || !canManageUsers}
-                title={userDetailResetActionDisabledReason || undefined}
-                {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
-                data-testid="user-detail-footer-reset"
-                className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Reset changes
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={resetForm}
+              disabled={Boolean(userDetailResetActionDisabledReason)}
+              title={userDetailResetActionDisabledReason || undefined}
+              {...userDetailActionMetadata(userDetailCommandActionStatusId, userDetailCommandActionStatus, userDetailResetActionDisabledReason)}
+              data-testid="user-detail-footer-reset"
+              className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Reset changes
+            </button>
           </div>
         </aside>
         </div>

@@ -378,6 +378,8 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       detailSource.includes('data-testid="user-detail-command-copy-manifest"') &&
       detailSource.includes('data-testid="user-detail-command-download-json"') &&
       detailSource.includes('data-testid="user-detail-command-save"') &&
+      detailSource.includes('data-testid="user-detail-command-reset"') &&
+      detailSource.includes('data-testid="user-detail-footer-reset"') &&
       detailSource.includes('data-testid="user-detail-api-copy-url"') &&
       detailSource.includes('data-testid="user-detail-activity-refresh"') &&
       detailSource.includes('data-testid="user-detail-sessions-refresh"') &&
@@ -394,15 +396,17 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       ? detailSource.slice(commandCenterBlockStart, commandCenterBlockEnd >= 0 ? commandCenterBlockEnd : commandCenterBlockStart + 3800)
       : '';
     const saveIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-save"');
+    const resetIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-reset"');
     const moreActionsIndex = commandCenterBlock.indexOf('data-testid="user-detail-more-actions"');
     const copyIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-copy-manifest"');
     const downloadIndex = commandCenterBlock.indexOf('data-testid="user-detail-command-download-json"');
     assert(
       saveIndex >= 0 &&
-        moreActionsIndex > saveIndex &&
+        resetIndex > saveIndex &&
+        moreActionsIndex > resetIndex &&
         copyIndex > moreActionsIndex &&
         downloadIndex > moreActionsIndex,
-      'User detail command center must keep Save changes first and move manifest/JSON handoff behind More actions.',
+      'User detail command center must keep Save changes and Reset changes first, then move manifest/JSON handoff behind More actions.',
     );
   }
 };
@@ -537,6 +541,31 @@ const updateSettings = async (input) => {
     body: JSON.stringify(input),
   });
   return payload.data?.settings || payload.settings;
+};
+
+const ensureUsersSmokeSeatCapacity = async (minimumFreeSeats) => {
+  const settings = await getSettings();
+  const users = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSeatLimit = Number(originalCommerce.seatLimit || 0);
+  const requiredSeatLimit = users.length + minimumFreeSeats;
+
+  if (currentSeatLimit >= requiredSeatLimit) {
+    return null;
+  }
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        seatLimit: requiredSeatLimit,
+      },
+    },
+  });
+
+  return originalIntegrations;
 };
 
 const listUsersPage = async (params = {}) => {
@@ -1699,11 +1728,13 @@ const assertUserDetailActionStatusContracts = async (client) => {
         testId: node.getAttribute('data-testid') || '',
       })).filter((node) => node.text);
       const saveNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-save');
+      const resetNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-reset');
       const moreActionsNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-more-actions');
       const copyNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-copy-manifest');
       const downloadNodeIndex = commandCenterActionNames.findIndex((node) => node.testId === 'user-detail-command-download-json');
       const commandHierarchyReady = saveNodeIndex >= 0 &&
-        moreActionsNodeIndex > saveNodeIndex &&
+        resetNodeIndex > saveNodeIndex &&
+        moreActionsNodeIndex > resetNodeIndex &&
         copyNodeIndex > moreActionsNodeIndex &&
         downloadNodeIndex > moreActionsNodeIndex;
       const api = readGroup('[data-testid="user-detail-api"]', '[data-testid="user-detail-api-action-status"]');
@@ -1736,8 +1767,10 @@ const assertUserDetailActionStatusContracts = async (client) => {
         commandCopy: readControl('[data-testid="user-detail-command-copy-manifest"]'),
         commandDownload: readControl('[data-testid="user-detail-command-download-json"]'),
         commandSave: readControl('[data-testid="user-detail-command-save"]'),
+        commandReset: readControl('[data-testid="user-detail-command-reset"]'),
         footerSave: readControl('[data-testid="user-detail-footer-save"]'),
         footerCancel: readControl('[data-testid="user-detail-footer-cancel"]'),
+        footerReset: readControl('[data-testid="user-detail-footer-reset"]'),
         moreActions: readControl('[data-testid="user-detail-more-actions"]'),
         api,
         apiCopyUrl: readControl('[data-testid="user-detail-api-copy-url"]'),
@@ -1773,6 +1806,8 @@ const assertUserDetailActionStatusContracts = async (client) => {
       state.activity.present &&
       state.sessions.present &&
       state.commandCopy.present &&
+      state.commandReset.present &&
+      state.footerReset.present &&
       state.apiCopyUrl.present &&
       state.activityRefresh.present &&
       state.sessionsRefresh.present &&
@@ -1830,10 +1865,16 @@ const assertUserDetailActionStatusContracts = async (client) => {
       state.commandSave.describedBy === state.command.statusId &&
       state.commandSave.state === 'blocked' &&
       state.commandSave.reason.includes('No account changes') &&
+      state.commandReset.describedBy === state.command.statusId &&
+      state.commandReset.state === 'blocked' &&
+      state.commandReset.reason.includes('No unsaved account edits') &&
       state.footerSave.describedBy === state.command.statusId &&
       state.footerSave.state === 'blocked' &&
       state.footerCancel.describedBy === state.command.statusId &&
-      state.footerCancel.state === 'ready';
+      state.footerCancel.state === 'ready' &&
+      state.footerReset.describedBy === state.command.statusId &&
+      state.footerReset.state === 'blocked' &&
+      state.footerReset.reason.includes('No unsaved account edits');
     const apiContracts =
       state.api.statusText.includes('Copy API URL available.') &&
       state.api.statusText.includes('Copy API manifest available.') &&
@@ -3223,14 +3264,38 @@ const waitForUsersDataGridLayoutState = async (client, label) => {
         const content = cell.querySelector('[data-testid="admin-data-grid-cell-content"]');
         const cellRect = cell.getBoundingClientRect();
         const contentRect = content?.getBoundingClientRect();
+        const overflowingDescendants = content
+          ? Array.from(content.querySelectorAll('*'))
+              .filter((node) => node instanceof HTMLElement || node instanceof SVGElement)
+              .filter((node) => {
+                if (node.classList?.contains('sr-only')) return false;
+                const style = window.getComputedStyle(node);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = node.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0 && (
+                  rect.left < cellRect.left - 1 ||
+                  rect.right > cellRect.right + 1 ||
+                  rect.top < cellRect.top - 1 ||
+                  rect.bottom > cellRect.bottom + 1
+                );
+              })
+              .map((node) => ({
+                tag: node.tagName,
+                text: (node.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+              }))
+          : [];
         return {
           key: cell.getAttribute('data-column-key') || '',
           dataLabel: cell.getAttribute('data-column-label') || '',
           overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
+          paintContainment: cell.getAttribute('data-cell-paint-containment') || '',
           contentPolicy: content?.getAttribute('data-cell-content-policy') || '',
+          descendantPolicy: content?.getAttribute('data-cell-descendant-overflow-policy') || '',
           cellWidth: Math.round(cellRect.width),
           contentWidth: Math.round(contentRect?.width || 0),
           contentFitsCell: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
+          overflowingDescendantCount: overflowingDescendants.length,
+          overflowingDescendants,
           contentText: (content?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 180),
         };
       });
@@ -3279,7 +3344,14 @@ const assertUsersDataGridLayout = async (client) => {
   assert(state.pageContained, `Users DataGrid must not create whole-page horizontal overflow: ${JSON.stringify(state)}`);
   assert(state.headerCount === state.cellCount, `Users DataGrid first row cells must match headers: ${JSON.stringify(state)}`);
   assert(
-    state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap' && cell.contentPolicy === 'constrained-wrapped-content' && cell.contentFitsCell),
+    state.cells.every((cell) => (
+      cell.overflowPolicy === 'clip-and-wrap' &&
+      cell.paintContainment === 'cell' &&
+      cell.contentPolicy === 'constrained-wrapped-content' &&
+      cell.descendantPolicy === 'paint-contained' &&
+      cell.contentFitsCell &&
+      cell.overflowingDescendantCount === 0
+    )),
     `Users DataGrid cells must keep rendered content inside each owning column: ${JSON.stringify(state.cells)}`,
   );
   assert(
@@ -3602,6 +3674,7 @@ const main = async () => {
   let bulkUserId;
   let importedUserId;
   let previewInviteUserId;
+  let originalSmokeSeatIntegrations;
   const suffix = Date.now().toString(36);
   const fullName = `Users Smoke ${suffix}`;
   const email = `users-smoke-${suffix}@example.com`;
@@ -3615,6 +3688,7 @@ const main = async () => {
 
   try {
     await loginAdminApi();
+    originalSmokeSeatIntegrations = await ensureUsersSmokeSeatCapacity(8);
     await updateUser('user-admin', { role: 'owner', status: 'active' });
     await assertUsersApiRequiresAuth();
     await assertUserPermissionOverridesAreEnforced();
@@ -3864,6 +3938,9 @@ const main = async () => {
     }
     if (previewInviteUserId) {
       await deleteUser(previewInviteUserId).catch(() => undefined);
+    }
+    if (originalSmokeSeatIntegrations) {
+      await updateSettings({ integrations: originalSmokeSeatIntegrations }).catch(() => undefined);
     }
   }
 };

@@ -333,14 +333,21 @@ export function DataGrid<T extends { id: string }>({
                                                     col.className,
                                                     col.cellClassName,
                                                 )}
+                                                style={{ contain: 'paint' }}
                                                 data-column-key={columnKey}
                                                 data-column-label={columnLabel}
                                                 data-cell-overflow-policy="clip-and-wrap"
+                                                data-cell-paint-containment="cell"
                                             >
                                                 <div
-                                                    className="min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere]"
+                                                    className="isolate min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere] [&_a]:break-words [&_a]:[overflow-wrap:anywhere] [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]"
+                                                    style={{
+                                                        contain: 'layout paint',
+                                                        maxInlineSize: '100%',
+                                                    }}
                                                     data-testid="admin-data-grid-cell-content"
                                                     data-cell-content-policy="constrained-wrapped-content"
+                                                    data-cell-descendant-overflow-policy="paint-contained"
                                                 >
                                                     {cellContent}
                                                 </div>

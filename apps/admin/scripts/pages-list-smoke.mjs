@@ -3291,12 +3291,36 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         const content = cell.querySelector('[data-testid="admin-data-grid-cell-content"]');
         const cellRect = cell.getBoundingClientRect();
         const contentRect = content?.getBoundingClientRect();
+        const overflowingDescendants = content
+          ? Array.from(content.querySelectorAll('*'))
+              .filter((node) => node instanceof HTMLElement || node instanceof SVGElement)
+              .filter((node) => {
+                if (node.classList?.contains('sr-only')) return false;
+                const style = window.getComputedStyle(node);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                const rect = node.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0 && (
+                  rect.left < cellRect.left - 1 ||
+                  rect.right > cellRect.right + 1 ||
+                  rect.top < cellRect.top - 1 ||
+                  rect.bottom > cellRect.bottom + 1
+                );
+              })
+              .map((node) => ({
+                tag: node.tagName,
+                text: (node.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+              }))
+          : [];
         return {
           key: cell.getAttribute('data-column-key') || '',
           dataLabel: cell.getAttribute('data-column-label') || '',
           overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
+          paintContainment: cell.getAttribute('data-cell-paint-containment') || '',
           contentPolicy: content?.getAttribute('data-cell-content-policy') || '',
+          descendantPolicy: content?.getAttribute('data-cell-descendant-overflow-policy') || '',
           contentFitsCell: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
+          overflowingDescendantCount: overflowingDescendants.length,
+          overflowingDescendants,
           headers: headerId,
           headerExists: Boolean(header),
           headerKey: header?.getAttribute('data-column-key') || '',
@@ -3311,10 +3335,32 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
             const content = cell.querySelector('[data-testid="admin-data-grid-cell-content"]');
             const cellRect = cell.getBoundingClientRect();
             const contentRect = content?.getBoundingClientRect();
+            const overflowingDescendants = content
+              ? Array.from(content.querySelectorAll('*'))
+                  .filter((node) => node instanceof HTMLElement || node instanceof SVGElement)
+                  .filter((node) => {
+                    if (node.classList?.contains('sr-only')) return false;
+                    const style = window.getComputedStyle(node);
+                    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                    const rect = node.getBoundingClientRect();
+                    return rect.width > 0 && rect.height > 0 && (
+                      rect.left < cellRect.left - 1 ||
+                      rect.right > cellRect.right + 1 ||
+                      rect.top < cellRect.top - 1 ||
+                      rect.bottom > cellRect.bottom + 1
+                    );
+                  })
+                  .map((node) => ({
+                    tag: node.tagName,
+                    text: (node.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+                  }))
+              : [];
             return {
               rowIndex,
               key: cell.getAttribute('data-column-key') || '',
               fits: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
+              overflowingDescendantCount: overflowingDescendants.length,
+              overflowingDescendants,
             };
           })
       ));
@@ -3335,8 +3381,8 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         columnWidths,
         headerCount: headers.length,
         cellCount: cells.length,
-        allVisibleCellsFit: allRowCells.every((cell) => cell.fits),
-        overflowingVisibleCells: allRowCells.filter((cell) => !cell.fits).slice(0, 8),
+        allVisibleCellsFit: allRowCells.every((cell) => cell.fits && cell.overflowingDescendantCount === 0),
+        overflowingVisibleCells: allRowCells.filter((cell) => !cell.fits || cell.overflowingDescendantCount > 0).slice(0, 8),
         headers,
         cells,
         body: document.body?.innerText?.slice(0, 1200) || '',
@@ -3366,9 +3412,11 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.headers.every((header) => header.id && header.scope === 'col' && header.ariaLabel && header.dataLabel), `Every DataGrid header must have id, scope, aria label, and data label: ${JSON.stringify(state.headers)}`);
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
   assert(state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap'), `Every dense DataGrid body cell must clip and wrap content instead of painting into neighboring columns: ${JSON.stringify(state.cells)}`);
+  assert(state.cells.every((cell) => cell.paintContainment === 'cell'), `Every dense DataGrid body cell must paint-contain descendants: ${JSON.stringify(state.cells)}`);
   assert(state.cells.every((cell) => cell.contentPolicy === 'constrained-wrapped-content'), `Every dense DataGrid body cell must constrain rendered children inside the cell: ${JSON.stringify(state.cells)}`);
-  assert(state.cells.every((cell) => cell.contentFitsCell), `Every dense DataGrid body cell wrapper must stay within its owning cell: ${JSON.stringify(state.cells)}`);
-  assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);
+  assert(state.cells.every((cell) => cell.descendantPolicy === 'paint-contained'), `Every dense DataGrid cell content wrapper must declare descendant paint containment: ${JSON.stringify(state.cells)}`);
+  assert(state.cells.every((cell) => cell.contentFitsCell && cell.overflowingDescendantCount === 0), `Every dense DataGrid body cell wrapper and visible descendants must stay within its owning cell: ${JSON.stringify(state.cells)}`);
+  assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content and descendants inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);
   assert(
     state.requestedTableMinWidth === '2100px' &&
       state.columnWidthTotal >= 2069 &&

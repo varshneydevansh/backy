@@ -4984,7 +4984,7 @@ function PageDeliveryCell({
 }) {
   const labelByStatus: Record<PageDeliveryStatus, string> = {
     published: 'Published',
-    'preview-only': 'Preview',
+    'preview-only': 'Preview Only',
     scheduled: 'Scheduled',
     archived: 'Archived',
     blocked: 'Blocked',
