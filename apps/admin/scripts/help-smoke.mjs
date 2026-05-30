@@ -349,6 +349,7 @@ const assertHelpSourceContracts = () => {
   const requiredTopicIds = [
     'switch-sites',
     'subdomains',
+    'verified-domain-routing',
     'canvas-basics',
     'canvas-zoom-selection',
     'navigation-shared-chrome',
@@ -398,6 +399,14 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('Navigation is not one opaque text block') &&
       helpSource.includes('Root sections, headers, footers, and nav bars participate in root-section flow'),
     'Help route must document critical Wix-like canvas controls, selection behavior, navigation child links, and shared chrome flow.',
+  );
+
+  assert(
+    helpSource.includes('A saved custom domain is setup intent; verified DNS is what allows public discovery and hosted routing.') &&
+      helpSource.includes('site.settings.domainVerification.status to be verified for the exact host') &&
+      helpSource.includes('pass Host/domain context to resolve/render when routing depends on the browser host') &&
+      helpSource.includes('Use one Backy site per independent public subdomain'),
+    'Help route must explain verified custom-domain/subdomain routing before deploy.',
   );
 
   assert(

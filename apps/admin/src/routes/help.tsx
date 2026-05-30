@@ -93,6 +93,20 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Manage domains',
   },
   {
+    id: 'verified-domain-routing',
+    category: 'sites',
+    title: 'Verify domains before public routing',
+    summary: 'A saved custom domain is setup intent; verified DNS is what allows public discovery and hosted routing.',
+    details: [
+      'Public site discovery by domain and hosted host-to-site rendering require site.settings.domainVerification.status to be verified for the exact host.',
+      'Until a domain is verified, keep using the Backy managed preview, the site id, or the site slug while you finish DNS setup.',
+      'For Vercel custom frontends, attach the production domain to the frontend project, keep Backy as the API/content source, and pass the browser Host/domain context to resolve/render when locale or subdomain routing depends on the host.',
+      'Use one Backy site per independent public subdomain when blog.example.com, docs.example.com, shop.example.com, or a client subsite needs its own content, navigation, SEO, or design tokens.',
+    ],
+    route: '/sites',
+    routeLabel: 'Open domain setup',
+  },
+  {
     id: 'canvas-basics',
     category: 'editor',
     title: 'Build with the canvas editor',
@@ -365,10 +379,11 @@ const buildAgentCopyBrief = (siteId: string) => [
   `1. Read GET /api/sites/${siteId}/agent-handoff first.`,
   `2. Then read GET /api/sites/${siteId}/manifest and GET /api/sites/${siteId}/openapi before writing routes, UI, templates, or API clients.`,
   `3. Verify route output with GET /api/sites/${siteId}/resolve?path=/ and GET /api/sites/${siteId}/render?path=/...`,
-  '4. Preserve every Backy canvas element id/type/geometry/props/styles/responsive overrides/token refs/assets/animations/actions/dataBindings/bindingSlots/accessibility/metadata/children.',
-  '5. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
-  '6. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
-  '7. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
+  '4. For custom domains or subdomains, verify DNS in Backy before relying on domain discovery or hosted host-to-site routing; pass Host/domain context to resolve/render when routing depends on the browser host.',
+  '5. Preserve every Backy canvas element id/type/geometry/props/styles/responsive overrides/token refs/assets/animations/actions/dataBindings/bindingSlots/accessibility/metadata/children.',
+  '6. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
+  '7. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
+  '8. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
 ].join('\n');
 
 function HelpPage() {
