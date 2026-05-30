@@ -4,14 +4,73 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 00:14 IST
+- **Last updated:** 2026-05-31 00:57 IST
 - **Current phase:** In progress
-- **Active batch:** Batch 2: Canvas Editor Interaction Fidelity
-- **Last completed batch:** Batch 1: Admin Layout And Site Discoverability
-- **Next exact batch:** Batch 2: Canvas Editor Interaction Fidelity
+- **Active batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
+- **Last completed batch:** Batch 2: Canvas Editor Interaction Fidelity
+- **Next exact batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 00:57 IST
+
+**Batch:** 2: Canvas Editor Interaction Fidelity
+**Contract status:** core criteria met; full responsive mega-smoke attempted but stopped after no output for about 10 minutes
+
+**Timing:**
+- Implement: 18m | Validate: 24m plus one long stopped responsive attempt | Review: 8m | Total: 43m
+- Session elapsed: 65m | Budget remaining: open-ended
+
+**What changed:**
+- `apps/admin/src/components/editor/Canvas.tsx`: marquee selection now stores the original client pointer and reprojects that anchor against the current canvas rect during pointer moves. This prevents selection rectangles from drifting when the canvas scroll/rect settles between mouse-down and drag.
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`: component drags clear the sticky preview pane, mark the library as drag-active, force layout on the custom drag image before `setDragImage`, and keep the drag image rendered behind the page instead of offscreen so Chrome is less likely to fall back to a screenshot of the component rail.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: updated source/runtime guards for anchored marquee behavior and opaque component-library drag previews.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> FAIL before patch with marquee start drift; PASS after patch.
+- `BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS on rerun after an earlier CDP socket close.
+- `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_EDITOR_RESPONSIVE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> STOPPED after about 10 minutes with no output to clean up the stuck Chrome/CDP process. Source guards still cover responsive defaults/render bounds, and layers smoke covered layer-map behavior.
+
+**Test results:**
+- Typecheck: PASS.
+- Source guards: PASS for editor contracts, including nav binding/child-layer source coverage and component drag preview contract.
+- Rendered smokes: PASS for marquee origin, zoom/page-zoom stability, component library drag preview, and layers panel behavior.
+- Responsive mega-smoke: inconclusive due long no-output hang, no assertion failure captured.
+
+**Review findings:**
+- [Medium] Marquee start coordinates were stable only relative to the canvas rect at pointer-down. When the rect shifted before the first move/read, the overlay origin could drift. Resolved by storing the client anchor and reprojecting it.
+- [Low] Component drag preview used a custom drag image, but it was staged offscreen and the sticky preview pane stayed active during drag. Resolved by clearing drag preview state and staging the drag image in a rendered behind-page position before `setDragImage`.
+
+**Decisions made:**
+- Did not change zoom event routing because the zoom smoke proves canvas zoom changes while page zoom stays stable, including wheel, keyboard, legacy mousewheel, and gesture paths.
+- Did not patch layer/nav behavior because existing source guards and the rendered layers smoke passed.
+- Stopped the unbounded responsive smoke instead of leaving orphaned Chrome processes. Treat the long runtime as test-suite debt, not a product regression from this batch.
+
+**Docs:**
+- Impacted: `docs/elves/survival-guide.md`, `docs/elves/execution-log.md`, `docs/elves/learnings.md`, `.elves-session.json`.
+- Updated: these Elves run-state files.
+- Promoted: marquee anchor and component drag-image learnings.
+
+**Regression attestation:**
+- Cumulative diff: batch code commit changed 3 files with focused editor interaction edits and smoke assertions.
+- Files outside batch scope: none.
+- Shared surfaces modified: canvas pointer selection and component library drag handling only.
+- Consumers verified: editor source guards, marquee rendered smoke, zoom rendered smoke, component-library rendered smoke, layers rendered smoke, admin typecheck.
+- Residual risk: full responsive mega-smoke needs a bounded/partitioned mode; current source and rendered layer/zoom/marquee checks are green.
+- Confidence: HIGH for marquee/drag-preview fixes, MEDIUM for broader responsive parity because the mega-smoke did not complete in this run.
+
+**Commit:** `8229065c`
+**Rollback tag:** `elves/pre-batch-2`
+
+**Next:**
+1. Start Batch 3 by inspecting Help, Site Detail, editor Composition handoff, manifest/OpenAPI, and newsletter subscriber management.
+2. Add or tighten copyable handoff smoke coverage for custom frontend agents without exposing secrets.
 
 ## 2026-05-31 00:14 IST
 

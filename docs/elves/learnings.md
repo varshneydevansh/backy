@@ -17,6 +17,8 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 
 - [2026-05-30] For shared `DataGrid` changes, avoid global overflow or containment changes unless every dense table consumer is verified. Prefer opt-in visible overflow or route-local restructuring.
 - [2026-05-30] For editor changes, preserve public renderer parity and the custom frontend contract whenever canvas element props, navigation source/binding, or layer structure changes.
+- [2026-05-31] Marquee selection must store the original client pointer and reproject it against the current canvas rect during moves. Storing only the pointer-down canvas coordinate lets the visual origin drift when zoom/scroll settling changes the canvas rect.
+- [2026-05-31] Component-library drag previews should clear sticky preview state and stage the custom drag image as a rendered behind-page element before `setDragImage`; offscreen-only drag images can let Chrome fall back to rail screenshots.
 
 ## Product and Domain Invariants
 

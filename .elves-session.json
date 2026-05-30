@@ -9,10 +9,10 @@
   "execution_log_path": "docs/elves/execution-log.md",
   "pr_number": null,
   "continuation_guard": {
-    "remaining_batches": 4,
+    "remaining_batches": 3,
     "stop_allowed": false,
     "checkpoint_is_stop": false,
-    "next_required_action": "Start Batch 2: Canvas Editor Interaction Fidelity"
+    "next_required_action": "Start Batch 3: Custom Frontend And Newsletter Handoff Readiness"
   },
   "test_baseline": {
     "passed": null,
@@ -22,8 +22,8 @@
     "reason": "Focused batch gates will capture useful baseline after Elves setup commit."
   },
   "current_batch": {
-    "id": 2,
-    "name": "Canvas Editor Interaction Fidelity",
+    "id": 3,
+    "name": "Custom Frontend And Newsletter Handoff Readiness",
     "status": "in_progress"
   },
   "batches": [
@@ -39,19 +39,19 @@
     {
       "id": 2,
       "name": "Canvas Editor Interaction Fidelity",
-      "status": "in_progress",
-      "commit": null,
-      "rollback_tag": null,
+      "status": "complete",
+      "commit": "8229065c",
+      "rollback_tag": "elves/pre-batch-2",
       "started_at": "2026-05-30T18:44:00Z",
-      "completed_at": null
+      "completed_at": "2026-05-30T19:27:00Z"
     },
     {
       "id": 3,
       "name": "Custom Frontend And Newsletter Handoff Readiness",
-      "status": "pending",
+      "status": "in_progress",
       "commit": null,
       "rollback_tag": null,
-      "started_at": null,
+      "started_at": "2026-05-30T19:27:00Z",
       "completed_at": null
     },
     {

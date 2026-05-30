@@ -27,14 +27,14 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Checkpoint expectation:** steadily close release UX/editor gaps, keep commits logical, and keep the release doctor green.
 - **Time budget:** unlimited until user stop
 - **Average batch time so far:** not enough data
-- **Batches remaining:** 4 of 5
+- **Batches remaining:** 3 of 5
 
 ## Stop Gate
 
-- **Planned batches remaining:** 4
+- **Planned batches remaining:** 3
 - **Stop allowed right now:** no
-- **Why:** The user asked to keep pursuing Backy completion and editor/canvas hardening remains.
-- **Next required action:** Start Batch 2: Canvas Editor Interaction Fidelity.
+- **Why:** The user asked to keep pursuing Backy completion and custom frontend/newsletter handoff hardening remains.
+- **Next required action:** Start Batch 3: Custom Frontend And Newsletter Handoff Readiness.
 
 ## Effort Standard
 
@@ -89,11 +89,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Status:** In progress
 
-**Active batch:** Batch 2: Canvas Editor Interaction Fidelity
+**Active batch:** Batch 3: Custom Frontend And Newsletter Handoff Readiness
 
-**What was just finished:** Batch 1 completed: sidebar active-site management is explicit, Pages/Users rendered layout smokes pass, and Settings menu layering smoke is aligned with the in-flow z-30 workbar contract.
+**What was just finished:** Batch 2 completed: marquee selection re-anchors from the original pointer when the canvas rect settles, Mac/editor zoom remains canvas-scoped, component-library drag previews no longer keep the sticky rail preview active, and layers/library/source smokes are green.
 
-**Single next action:** Inspect canvas marquee, zoom, drag preview, layers/nav item selection, and responsive preview code paths before implementing the next smallest verified editor fix.
+**Single next action:** Inspect Help, Site detail, editor Composition handoff, manifest/OpenAPI/custom-frontend handoff, and newsletter subscriber management for copyable AI/frontend-agent guidance gaps.
 
 ## Active Compute
 
@@ -101,24 +101,26 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 
 ## Next Exact Batch
 
-**Batch:** 2: Canvas Editor Interaction Fidelity
+**Batch:** 3: Custom Frontend And Newsletter Handoff Readiness
 
 **Scope:**
-- Verify and harden marquee selection origin.
-- Verify in-canvas zoom behavior on Mac/browser gestures.
-- Fix component drag preview bleed from the palette into canvas if still reproducible.
-- Ensure layer map/nav child selection and responsive preview behavior are test-covered.
+- Ensure Help, Site Detail, and Editor composition handoff clearly show where AI/frontend agents read Backy APIs.
+- Confirm every component/element remains API-addressable through manifest/OpenAPI/SDK/render payloads with properties, bindings, design tokens, fonts, media, animations, and editable maps preserved.
+- Make newsletter subscriber management and provider-safe sync/export handoff discoverable for publishing/journalism workflows.
 
 **Acceptance criteria:**
-- Relevant editor source/render smokes cover the fixed behavior.
+- Help/site/newsletter smokes cover copyable handoff blocks and site-scoped URLs.
+- Generated SDK contract type checks pass when public contract changes.
+- Handoff docs do not expose secrets or admin-only payloads in public endpoints.
 - `npm run typecheck --workspace @backy-cms/admin` passes.
 - `git diff --check` passes.
 
 **Known files to inspect first:**
-- `apps/admin/src/components/editor/Canvas.tsx`
-- `apps/admin/src/components/editor/CanvasEditor.tsx`
-- `apps/admin/src/components/editor/ComponentLibrary.tsx`
-- `apps/admin/src/components/editor/LayersPanel.tsx`
-- `apps/admin/src/components/editor/PropertyPanel.tsx`
-- `apps/public/src/components/PageRenderer.tsx`
-- `apps/admin/scripts/editor-drag-smoke.mjs`
+- `AGENTS.md`
+- `specs/custom-frontend-agent-handoff.md`
+- `specs/backy-api-contracts.md`
+- `apps/admin/src/routes/help.tsx`
+- `apps/admin/src/routes/sites.$siteId.tsx`
+- `apps/admin/src/routes/newsletter.tsx`
+- `apps/admin/src/components/editor/CompositionHandoffPanel.tsx`
+- `apps/admin/scripts/help-smoke.mjs`
