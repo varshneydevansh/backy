@@ -5,9 +5,16 @@
   "type": "object",
   "additionalProperties": {
     "type": "object",
-    "additionalProperties": false,
+    "additionalProperties": true,
     "properties": {
+      "selector": { "type": "string", "minLength": 1 },
       "elementId": { "type": "string", "minLength": 1 },
+      "role": { "type": "string", "minLength": 1 },
+      "binding": { "type": "string", "minLength": 1 },
+      "fields": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 }
+      },
       "field": { "type": "string", "minLength": 1 },
       "targetPath": { "type": "string", "minLength": 1 },
       "token": { "type": "string" },

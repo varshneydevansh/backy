@@ -5166,7 +5166,11 @@ export type GeneratedBackyDataBindings = {
 };
 
 export type GeneratedBackyEditableMap = Record<string, {
+  selector?: string;
   elementId: string;
+  role?: string;
+  binding?: string;
+  fields?: Array<string>;
   field: string;
   targetPath?: string;
   token?: string;
@@ -5178,6 +5182,7 @@ export type GeneratedBackyEditableMap = Record<string, {
   collectionId?: string;
   recordId?: string;
   sourceField?: string;
+  [key: string]: unknown;
 }>;
 
 export type GeneratedBackyContentStatus = "draft" | "published" | "scheduled" | "archived";
@@ -5560,6 +5565,11 @@ export type GeneratedBackyPublicRenderPayloadEnvelope = {
       locale?: string;
       version?: string;
       elements: Array<GeneratedBackyContentElement>;
+      canvasSize?: {
+        width?: number;
+        height?: number;
+        [key: string]: unknown;
+      };
       customCSS?: string;
       customJS?: string;
       contentDocument?: GeneratedBackyPublicRenderPayloadContentDocument;

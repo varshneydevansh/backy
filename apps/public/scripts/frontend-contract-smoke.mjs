@@ -1547,9 +1547,14 @@ assert(
     publicBlogRoute.includes('animations: Array.isArray(metadata.animations) || isRecord(metadata.animations)') &&
     renderPayloadLib.includes('const jsonArrayOrRecordValue = (...values: unknown[]): JsonArrayOrObject | undefined => {') &&
     renderPayloadLib.includes('jsonArrayOrRecordValue(content.animations, contentDocument?.animations, metadata?.animations)') &&
+    renderPayloadLib.includes('const buildContentDesignEnvelope = (') &&
+    renderPayloadLib.includes('jsonArrayOrRecordValue(record.animations, contentDocument?.animations, documentMetadata.animations)') &&
     renderPayloadLib.includes('buildFrontendDesignEditableMapRecord(elements, explicitEditableMap)') &&
     renderPayloadLib.includes('const editableMap = buildEditableMap(elements, page.content.editableMap);') &&
+    renderPayloadLib.includes('const contentDesignEnvelope = buildContentDesignEnvelope(page.content, editableMap);') &&
+    renderPayloadLib.includes('const contentDesignEnvelope = buildContentDesignEnvelope(post.content, editableMap);') &&
     renderPayloadLib.includes('const contentEditableMap = input.editableMap && Object.keys(input.editableMap).length > 0') &&
+    renderPayloadLib.includes('canvasSize: input.canvasSize') &&
     renderPayloadLib.includes('editableMap: contentEditableMap') &&
     frontendDesignContractLib.includes('editableMap: cloneRecord(metadata.frontendDesignEditableMap)') &&
     publicReusableSectionsRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&

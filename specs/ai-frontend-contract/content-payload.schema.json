@@ -736,6 +736,14 @@
               "type": "array",
               "items": { "$ref": "#/$defs/element" }
             },
+            "canvasSize": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "width": { "type": "number" },
+                "height": { "type": "number" }
+              }
+            },
             "customCSS": { "type": "string" },
             "customJS": { "type": "string" },
             "contentDocument": {

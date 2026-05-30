@@ -1451,6 +1451,19 @@ try {
               { code: 'ar', label: 'Arabic', direction: 'rtl', pathPrefix: '/ar' },
             ],
           },
+          billingQuota: {
+            plan: 'enterprise',
+            limits: {
+              pages: 50,
+              mediaGb: 25,
+              bandwidthGb: 100,
+              forms: 20,
+              products: 100,
+              collections: 20,
+              teamMembers: 20,
+              customDomains: 10,
+            },
+          },
         },
       }),
     });
@@ -1471,6 +1484,7 @@ try {
     assert(update.json?.data?.settings?.siteSettings?.localization?.locales?.some((locale) => (
       locale.code === 'ar' && locale.pathPrefix === '/ar' && locale.direction === 'rtl'
     )), `${update.url} did not persist normalized RTL locale`);
+    assert(update.json?.data?.settings?.siteSettings?.billingQuota?.limits?.collections === 20, `${update.url} did not persist contract collection quota`);
     assert(update.json?.data?.settings?.effectiveSettings?.site?.localization?.localeStrategy === 'path-prefix', `${update.url} did not expose localization in effective site settings`);
     assert(update.json?.data?.settings?.siteSettings?.unknownPlatformSetting === undefined, `${update.url} persisted a non-allowlisted setting`);
 
@@ -2840,6 +2854,59 @@ try {
             },
           ],
           canvasSize: { width: 1200, height: 900 },
+          customCSS: ':root { --contract-page-canvas-accent: #0f766e; }',
+          customJS: 'window.__backyContractPageHydrated = true;',
+          themeTokenRefs: {
+            'colors.primary': 'site.theme.colors.primary',
+          },
+          assets: {
+            media: [
+              {
+                id: 'contract-page-asset',
+                type: 'image',
+                url: '/uploads/sites/contract/page-asset.jpg',
+                alt: 'Contract page asset',
+              },
+            ],
+          },
+          animations: {
+            heroIntro: {
+              type: 'fade',
+              durationMs: 220,
+            },
+          },
+          interactions: {
+            search: [
+              {
+                id: 'contract-page-search',
+                source: 'site.search',
+              },
+            ],
+          },
+          dataBindings: {
+            bindings: [
+              {
+                id: 'contract-page-title-binding',
+                elementId: 'contract-page-heading',
+                targetPath: 'props.content',
+                source: {
+                  kind: 'page',
+                  path: 'title',
+                },
+                mode: 'text',
+              },
+            ],
+          },
+          editableMap: {
+            'element.contract-page-heading.content': {
+              elementId: 'contract-page-heading',
+              field: 'props.content',
+              editable: true,
+              label: 'Page headline',
+              valueType: 'string',
+              scope: 'page',
+            },
+          },
         },
       }),
     });
@@ -3478,6 +3545,17 @@ try {
     assert(renderPayload.json?.data?.frontendDesign?.content?.templateId === 'contract-page-template', `${renderPayload.url} missing render page frontend design provenance`);
     assert(renderPayload.json?.data?.frontendDesign?.content?.chrome?.header?.component === 'ContractPageHeader', `${renderPayload.url} missing render page frontend design chrome`);
     assert(renderPayload.json?.data?.frontendDesign?.content?.tokens?.colors?.primary === '#2563eb', `${renderPayload.url} missing render page frontend design tokens`);
+    const renderedPageContent = renderPayload.json?.data?.content;
+    assert(renderedPageContent?.canvasSize?.width === 1200 && renderedPageContent?.canvasSize?.height === 900, `${renderPayload.url} missing render page canvas size`);
+    assert(renderedPageContent?.customCSS?.includes('--contract-page-canvas-accent'), `${renderPayload.url} missing render page custom CSS`);
+    assert(renderedPageContent?.customJS === 'window.__backyContractPageHydrated = true;', `${renderPayload.url} missing render page custom JS`);
+    assert(renderedPageContent?.themeTokenRefs?.['colors.primary'] === 'site.theme.colors.primary', `${renderPayload.url} missing render page theme token refs`);
+    assert(renderedPageContent?.assets?.media?.some((asset) => asset.id === 'contract-page-asset' && asset.type === 'image'), `${renderPayload.url} missing render page asset manifest`);
+    assert(renderedPageContent?.animations?.heroIntro?.durationMs === 220, `${renderPayload.url} missing render page animation map`);
+    assert(renderedPageContent?.interactions?.search?.some((item) => item.id === 'contract-page-search'), `${renderPayload.url} missing render page interaction manifest`);
+    assert(renderedPageContent?.dataBindings?.bindings?.some((binding) => binding.id === 'contract-page-title-binding'), `${renderPayload.url} missing render page data bindings`);
+    assert(renderedPageContent?.editableMap?.['element.contract-page-heading.content']?.field === 'props.content', `${renderPayload.url} missing render page editable map`);
+    assert(renderedPageContent?.contentDocument?.schemaVersion === 'backy.content.v1', `${renderPayload.url} missing render page content document`);
     assert(
       renderPayload.json?.data?.navigation?.primary?.some((item) => item.id === 'contract-nav-page' && item.pageId === createdPageId),
       `${renderPayload.url} missing configured render navigation manifest`,
@@ -4584,6 +4662,59 @@ try {
             },
           ],
           canvasSize: { width: 900, height: 720 },
+          customCSS: ':root { --contract-blog-canvas-accent: #7c3aed; }',
+          customJS: 'window.__backyContractBlogHydrated = true;',
+          themeTokenRefs: {
+            'fonts.heading': 'site.theme.fonts.heading',
+          },
+          assets: {
+            media: [
+              {
+                id: 'contract-blog-asset',
+                type: 'image',
+                url: '/uploads/sites/contract/blog-asset.jpg',
+                alt: 'Contract blog asset',
+              },
+            ],
+          },
+          animations: {
+            postHeroIntro: {
+              type: 'slide',
+              durationMs: 260,
+            },
+          },
+          interactions: {
+            comments: [
+              {
+                id: 'contract-blog-comments',
+                targetType: 'post',
+              },
+            ],
+          },
+          dataBindings: {
+            bindings: [
+              {
+                id: 'contract-blog-title-binding',
+                elementId: 'contract-blog-heading',
+                targetPath: 'props.content',
+                source: {
+                  kind: 'post',
+                  path: 'title',
+                },
+                mode: 'text',
+              },
+            ],
+          },
+          editableMap: {
+            'element.contract-blog-heading.content': {
+              elementId: 'contract-blog-heading',
+              field: 'props.content',
+              editable: true,
+              label: 'Post headline',
+              valueType: 'string',
+              scope: 'post',
+            },
+          },
         },
       }),
     });
@@ -5015,6 +5146,17 @@ try {
     assert(visibleScheduledPostRender.json?.data?.content?.id === createdPostId, `${visibleScheduledPostRender.url} returned wrong rendered post`);
     assert(visibleScheduledPostRender.json?.data?.frontendDesign?.content?.templateId === 'contract-blog-template', `${visibleScheduledPostRender.url} missing render blog frontend design provenance`);
     assert(visibleScheduledPostRender.json?.data?.frontendDesign?.content?.chrome?.header?.component === 'ContractBlogHeader', `${visibleScheduledPostRender.url} missing render blog frontend chrome`);
+    const visibleScheduledPostContent = visibleScheduledPostRender.json?.data?.content;
+    assert(visibleScheduledPostContent?.canvasSize?.width === 900 && visibleScheduledPostContent?.canvasSize?.height === 720, `${visibleScheduledPostRender.url} missing render blog canvas size`);
+    assert(visibleScheduledPostContent?.customCSS?.includes('--contract-blog-canvas-accent'), `${visibleScheduledPostRender.url} missing render blog custom CSS`);
+    assert(visibleScheduledPostContent?.customJS === 'window.__backyContractBlogHydrated = true;', `${visibleScheduledPostRender.url} missing render blog custom JS`);
+    assert(visibleScheduledPostContent?.themeTokenRefs?.['fonts.heading'] === 'site.theme.fonts.heading', `${visibleScheduledPostRender.url} missing render blog theme token refs`);
+    assert(visibleScheduledPostContent?.assets?.media?.some((asset) => asset.id === 'contract-blog-asset' && asset.type === 'image'), `${visibleScheduledPostRender.url} missing render blog asset manifest`);
+    assert(visibleScheduledPostContent?.animations?.postHeroIntro?.durationMs === 260, `${visibleScheduledPostRender.url} missing render blog animation map`);
+    assert(visibleScheduledPostContent?.interactions?.comments?.some((item) => item.id === 'contract-blog-comments'), `${visibleScheduledPostRender.url} missing render blog interaction manifest`);
+    assert(visibleScheduledPostContent?.dataBindings?.bindings?.some((binding) => binding.id === 'contract-blog-title-binding'), `${visibleScheduledPostRender.url} missing render blog data bindings`);
+    assert(visibleScheduledPostContent?.editableMap?.['element.contract-blog-heading.content']?.field === 'props.content', `${visibleScheduledPostRender.url} missing render blog editable map`);
+    assert(visibleScheduledPostContent?.contentDocument?.schemaVersion === 'backy.content.v1', `${visibleScheduledPostRender.url} missing render blog content document`);
 
     const update = await request(`/api/admin/sites/${createdSiteId}/blog/${createdPostId}`, {
       method: 'PATCH',

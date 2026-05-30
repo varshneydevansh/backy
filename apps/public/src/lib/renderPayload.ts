@@ -469,6 +469,7 @@ const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
     locale: document.locale,
     version: typeof document.version === 'string' ? document.version : input.version,
     elements: document.elements,
+    ...(input.includeContentDocument && input.canvasSize ? { canvasSize: input.canvasSize } : {}),
     ...(input.includeContentDocument && customCSS ? { customCSS } : {}),
     ...(input.includeContentDocument && customJS ? { customJS } : {}),
     ...(input.includeContentDocument && document.themeTokenRefs ? { themeTokenRefs: document.themeTokenRefs } : {}),
@@ -480,6 +481,50 @@ const buildCanonicalContentPayload = (input: CanonicalContentPayloadInput) => {
     editableMap: contentEditableMap,
     ...(input.includeContentDocument && document.metadata ? { metadata: document.metadata } : {}),
     ...(input.includeContentDocument ? { contentDocument: document } : {}),
+  };
+};
+
+const buildContentDesignEnvelope = (
+  content: unknown,
+  editableMap: JsonObject,
+): Partial<CanonicalContentPayloadInput> => {
+  const record = isRecord(content) ? content : {};
+  const contentDocument = cloneJsonObject(record.contentDocument);
+  const documentMetadata = isRecord(contentDocument?.metadata) ? contentDocument.metadata : {};
+  const metadata = jsonRecordValue(record.metadata, documentMetadata);
+  const canvasSize = jsonRecordValue(record.canvasSize, documentMetadata.canvasSize);
+  const customCSS = typeof record.customCSS === 'string'
+    ? record.customCSS
+    : typeof documentMetadata.customCSS === 'string'
+      ? documentMetadata.customCSS
+      : undefined;
+  const customJS = typeof record.customJS === 'string'
+    ? record.customJS
+    : typeof documentMetadata.customJS === 'string'
+      ? documentMetadata.customJS
+      : undefined;
+  const themeTokenRefs = stringRecordValue(record.themeTokenRefs, contentDocument?.themeTokenRefs, documentMetadata.themeTokenRefs);
+  const assets = jsonArrayOrRecordValue(record.assets, contentDocument?.assets, documentMetadata.assets);
+  const animations = jsonArrayOrRecordValue(record.animations, contentDocument?.animations, documentMetadata.animations);
+  const interactions = jsonArrayOrRecordValue(record.interactions, contentDocument?.interactions, documentMetadata.interactions);
+  const seo = jsonRecordValue(record.seo, contentDocument?.seo, documentMetadata.seo);
+  const dataBindings = jsonRecordValue(record.dataBindings, contentDocument?.dataBindings, documentMetadata.dataBindings);
+  const sourceEditableMap = jsonRecordValue(record.editableMap, contentDocument?.editableMap, documentMetadata.editableMap);
+  const resolvedEditableMap = Object.keys(editableMap).length > 0 ? editableMap : sourceEditableMap;
+
+  return {
+    ...(canvasSize ? { canvasSize } : {}),
+    ...(customCSS !== undefined ? { customCSS } : {}),
+    ...(customJS !== undefined ? { customJS } : {}),
+    ...(themeTokenRefs ? { themeTokenRefs } : {}),
+    ...(assets ? { assets } : {}),
+    ...(animations ? { animations } : {}),
+    ...(interactions ? { interactions } : {}),
+    ...(seo ? { seo } : {}),
+    ...(dataBindings ? { dataBindings } : {}),
+    ...(resolvedEditableMap ? { editableMap: resolvedEditableMap } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(contentDocument ? { contentDocument } : {}),
   };
 };
 
@@ -2501,6 +2546,7 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
   const navigation = sourceData.getSiteNavigation(site.id);
   const collectionDataset = isRecord(page.meta.collectionDataset) ? page.meta.collectionDataset : null;
   const editableMap = buildEditableMap(elements, page.content.editableMap);
+  const contentDesignEnvelope = buildContentDesignEnvelope(page.content, editableMap);
 
   return {
     success: true,
@@ -2533,7 +2579,8 @@ export function buildPublicRenderPayload(site: StoreSite, page: StorePage, optio
         locale,
         version: page.updatedAt,
         elements: payloadElements,
-        editableMap,
+        includeContentDocument: true,
+        ...contentDesignEnvelope,
       }),
       assets: {
         media: mediaPayload.media,
@@ -2887,6 +2934,7 @@ export function buildPublicBlogPostRenderPayload(
   const navigation = sourceData.getSiteNavigation(site.id);
   const postEditableMap = isRecord(post.content.editableMap) ? post.content.editableMap : undefined;
   const editableMap = buildEditableMap(resolvedElements, postEditableMap);
+  const contentDesignEnvelope = buildContentDesignEnvelope(post.content, editableMap);
 
   return {
     success: true,
@@ -2921,7 +2969,8 @@ export function buildPublicBlogPostRenderPayload(
         locale,
         version: post.updatedAt,
         elements: payloadElements,
-        editableMap,
+        includeContentDocument: true,
+        ...contentDesignEnvelope,
       }),
       assets: {
         media: mediaPayload.media,
