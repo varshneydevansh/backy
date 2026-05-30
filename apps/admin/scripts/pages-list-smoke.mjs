@@ -590,6 +590,9 @@ const assertSharedDataGridSourceContract = () => {
       source.includes('className="w-full table-fixed text-left text-sm"') &&
       source.includes('data-layout-policy="viewport-contained-wrapped-table"') &&
       source.includes("'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
+      source.includes("isActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]'") &&
+      source.includes("isActionColumn && 'sticky right-0 z-10 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30'") &&
+      source.includes("data-sticky-column={isActionColumn ? 'right-actions' : undefined}") &&
       source.includes('data-cell-overflow-policy="clip-and-wrap"') &&
       source.includes('data-testid="admin-data-grid-cell-content"') &&
       source.includes('data-cell-content-policy="constrained-wrapped-content"') &&
@@ -3268,6 +3271,10 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
       const grid = document.querySelector('[data-testid="admin-data-grid"]');
       const scroll = document.querySelector('[data-testid="admin-data-grid-scroll"]');
       const table = scroll?.querySelector('table');
+      if (scroll && scroll.scrollWidth > scroll.clientWidth + 2) {
+        scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+      }
+      const scrollRect = scroll?.getBoundingClientRect();
       const headerCells = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-head"] th'));
       const firstRow = document.querySelector('[data-testid="admin-data-grid-row"]');
       const rows = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-row"]'));
@@ -3282,6 +3289,7 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         scope: header.getAttribute('scope') || '',
         ariaLabel: header.getAttribute('aria-label') || '',
         dataLabel: header.getAttribute('data-column-label') || '',
+        stickyColumn: header.getAttribute('data-sticky-column') || '',
         text: header.textContent?.replace(/\\s+/g, ' ').trim() || '',
         ariaSort: header.getAttribute('aria-sort') || '',
       }));
@@ -3314,6 +3322,7 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         return {
           key: cell.getAttribute('data-column-key') || '',
           dataLabel: cell.getAttribute('data-column-label') || '',
+          stickyColumn: cell.getAttribute('data-sticky-column') || '',
           overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
           paintContainment: cell.getAttribute('data-cell-paint-containment') || '',
           contentPolicy: content?.getAttribute('data-cell-content-policy') || '',
@@ -3358,6 +3367,7 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
             return {
               rowIndex,
               key: cell.getAttribute('data-column-key') || '',
+              stickyColumn: cell.getAttribute('data-sticky-column') || '',
               fits: Boolean(contentRect && contentRect.left >= cellRect.left - 1 && contentRect.right <= cellRect.right + 1),
               overflowingDescendantCount: overflowingDescendants.length,
               overflowingDescendants,
@@ -3377,7 +3387,15 @@ const waitForPagesDataGridHeaderState = async (client, label) => {
         tableClientWidth: Math.round(table?.getBoundingClientRect().width || 0),
         scrollClientWidth: Math.round(scroll?.clientWidth || 0),
         scrollWidth: Math.round(scroll?.scrollWidth || 0),
+        scrollLeft: Math.round(scroll?.scrollLeft || 0),
         hasHorizontalScroll: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
+        stickyActionColumnAnchored: Boolean(scrollRect && allRowCells
+          .filter((cell) => cell.key === 'actions')
+          .every((cell) => {
+            const actionCell = rows[cell.rowIndex]?.querySelector('[data-column-key="actions"]');
+            const rect = actionCell?.getBoundingClientRect();
+            return rect && rect.left >= scrollRect.left - 1 && rect.right <= scrollRect.right + 1;
+          })),
         columnWidths,
         headerCount: headers.length,
         cellCount: cells.length,
@@ -3425,6 +3443,10 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
     `Pages DataGrid must render as a horizontally scrollable dense table using at least its summed column width instead of compressing columns: ${JSON.stringify(state)}`,
   );
   assert(
+    state.scrollLeft > 0 && state.stickyActionColumnAnchored,
+    `Pages DataGrid action column must stay anchored at the right edge after horizontal scroll: ${JSON.stringify(state)}`,
+  );
+  assert(
     state.columnWidths.some((column) => column.key === 'siteId' && column.width === '420px') &&
       state.columnWidths.some((column) => column.key === 'title' && column.width === '240px') &&
       state.columnWidths.some((column) => column.key === 'actions' && column.width === '168px'),
@@ -3439,9 +3461,11 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
 
   const actionsHeader = state.headers.find((header) => header.key === 'actions');
   assert(actionsHeader?.ariaLabel === 'Actions' && actionsHeader?.dataLabel === 'Actions' && actionsHeader?.text.includes('Actions'), `Blank action header must expose a screen-reader column name: ${JSON.stringify(actionsHeader)}`);
+  assert(actionsHeader?.stickyColumn === 'right-actions', `Actions header must remain sticky on the right edge to avoid dense-table collision: ${JSON.stringify(actionsHeader)}`);
 
   const actionsCell = state.cells.find((cell) => cell.key === 'actions');
   assert(actionsCell?.dataLabel === 'Actions' && actionsCell?.headerLabel === 'Actions', `Actions body cell must reference the named action header: ${JSON.stringify(actionsCell)}`);
+  assert(actionsCell?.stickyColumn === 'right-actions', `Actions body cell must stay sticky on the right edge with its own paint background: ${JSON.stringify(actionsCell)}`);
 
   return state;
 };

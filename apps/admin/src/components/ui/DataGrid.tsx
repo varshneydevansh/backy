@@ -216,6 +216,7 @@ export function DataGrid<T extends { id: string }>({
                                     const columnKey = getColumnKey(col);
                                     const columnLabel = getColumnLabel(col);
                                     const columnHeaderId = getColumnHeaderId(col);
+                                    const isActionColumn = columnKey === 'actions';
                                     const isSorted = sortConfig?.key === col.key;
                                     const activeDirection = isSorted ? sortConfig?.direction ?? 'asc' : null;
                                     const canSortColumn = Boolean(onSort) && !interactionDisabled;
@@ -253,11 +254,13 @@ export function DataGrid<T extends { id: string }>({
                                         aria-label={columnLabel}
                                         className={cn(
                                             'min-w-0 break-words px-4 py-3 align-top [overflow-wrap:anywhere]',
+                                            isActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]',
                                             col.className,
                                             col.headerClassName,
                                         )}
                                         data-column-key={columnKey}
                                         data-column-label={columnLabel}
+                                        data-sticky-column={isActionColumn ? 'right-actions' : undefined}
                                     >
                                         {col.sortable ? (
                                             <button
@@ -315,13 +318,14 @@ export function DataGrid<T extends { id: string }>({
                             {data.map((item) => (
                                 <tr
                                     key={item.id}
-                                    className="hover:bg-muted/30 transition-colors"
+                                    className="group hover:bg-muted/30 transition-colors"
                                     data-testid="admin-data-grid-row"
                                     data-row-id={item.id}
                                 >
                                     {columns.map((col) => {
                                         const columnKey = getColumnKey(col);
                                         const columnLabel = getColumnLabel(col);
+                                        const isActionColumn = columnKey === 'actions';
                                         const cellContent = col.render ? col.render(item) : String(item[col.key as keyof T]);
 
                                         return (
@@ -330,6 +334,7 @@ export function DataGrid<T extends { id: string }>({
                                                 headers={getColumnHeaderId(col)}
                                                 className={cn(
                                                     'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
+                                                    isActionColumn && 'sticky right-0 z-10 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
                                                     col.className,
                                                     col.cellClassName,
                                                 )}
@@ -338,6 +343,7 @@ export function DataGrid<T extends { id: string }>({
                                                 data-column-label={columnLabel}
                                                 data-cell-overflow-policy="clip-and-wrap"
                                                 data-cell-paint-containment="cell"
+                                                data-sticky-column={isActionColumn ? 'right-actions' : undefined}
                                             >
                                                 <div
                                                     className="isolate min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere] [&_a]:break-words [&_a]:[overflow-wrap:anywhere] [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]"

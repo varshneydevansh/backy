@@ -3253,6 +3253,10 @@ const waitForUsersDataGridLayoutState = async (client, label) => {
       const grid = document.querySelector('[data-testid="admin-data-grid"]');
       const scroll = document.querySelector('[data-testid="admin-data-grid-scroll"]');
       const table = scroll?.querySelector('table');
+      if (scroll && scroll.scrollWidth > scroll.clientWidth + 2) {
+        scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+      }
+      const scrollRect = scroll?.getBoundingClientRect();
       const headerCells = Array.from(document.querySelectorAll('[data-testid="admin-data-grid-head"] th'));
       const firstRow = document.querySelector('[data-testid="admin-data-grid-row"]');
       const bodyCells = firstRow ? Array.from(firstRow.children).filter((cell) => cell instanceof HTMLTableCellElement) : [];
@@ -3287,6 +3291,7 @@ const waitForUsersDataGridLayoutState = async (client, label) => {
         return {
           key: cell.getAttribute('data-column-key') || '',
           dataLabel: cell.getAttribute('data-column-label') || '',
+          stickyColumn: cell.getAttribute('data-sticky-column') || '',
           overflowPolicy: cell.getAttribute('data-cell-overflow-policy') || '',
           paintContainment: cell.getAttribute('data-cell-paint-containment') || '',
           contentPolicy: content?.getAttribute('data-cell-content-policy') || '',
@@ -3310,7 +3315,13 @@ const waitForUsersDataGridLayoutState = async (client, label) => {
         tableClientWidth: Math.round(table?.getBoundingClientRect().width || 0),
         scrollClientWidth: Math.round(scroll?.clientWidth || 0),
         scrollWidth: Math.round(scroll?.scrollWidth || 0),
+        scrollLeft: Math.round(scroll?.scrollLeft || 0),
         hasHorizontalScroll: Boolean(scroll && scroll.scrollWidth > scroll.clientWidth + 2),
+        stickyActionColumnAnchored: Boolean(scrollRect && firstRow && (() => {
+          const actionCell = firstRow.querySelector('[data-column-key="actions"]');
+          const rect = actionCell?.getBoundingClientRect();
+          return rect && rect.left >= scrollRect.left - 1 && rect.right <= scrollRect.right + 1;
+        })()),
         viewportWidth: window.innerWidth,
         documentScrollWidth: document.documentElement.scrollWidth,
         pageContained: document.documentElement.scrollWidth <= window.innerWidth + 8,
@@ -3341,6 +3352,7 @@ const assertUsersDataGridLayout = async (client) => {
   const state = await waitForUsersDataGridLayoutState(client, 'users directory table');
   assert(state.tableMinWidth === '1200px', `Users DataGrid must use the expanded dense-table width: ${JSON.stringify(state)}`);
   assert(state.hasHorizontalScroll, `Users DataGrid must scroll horizontally inside its own container instead of compressing controls: ${JSON.stringify(state)}`);
+  assert(state.scrollLeft > 0 && state.stickyActionColumnAnchored, `Users DataGrid action column must stay anchored at the right edge after horizontal scroll: ${JSON.stringify(state)}`);
   assert(state.pageContained, `Users DataGrid must not create whole-page horizontal overflow: ${JSON.stringify(state)}`);
   assert(state.headerCount === state.cellCount, `Users DataGrid first row cells must match headers: ${JSON.stringify(state)}`);
   assert(
@@ -3367,6 +3379,7 @@ const assertUsersDataGridLayout = async (client) => {
 
   const actionCell = state.cells.find((cell) => cell.key === 'actions');
   assert(actionCell?.contentFitsCell && actionCell.contentWidth <= actionCell.cellWidth + 1, `Users action cell must stay inside its column: ${JSON.stringify(actionCell)}`);
+  assert(actionCell?.stickyColumn === 'right-actions', `Users action cell must remain sticky on the right edge so row controls do not collide with status text: ${JSON.stringify(actionCell)}`);
 
   return state;
 };
