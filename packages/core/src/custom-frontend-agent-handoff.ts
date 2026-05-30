@@ -134,6 +134,7 @@ const COMPONENT_DEFAULT_SIZE_BY_TYPE: Record<string, { width: number; height: nu
   html: { width: 560, height: 320 },
   table: { width: 720, height: 360 },
   interactiveFigure: { width: 640, height: 420 },
+  codeBlock: { width: 640, height: 300 },
   codeComponent: { width: 640, height: 420 },
 };
 
@@ -187,6 +188,7 @@ const COMPONENT_DEFAULT_PROPS_BY_TYPE: Record<string, Record<string, unknown>> =
   html: { html: '<div>Custom HTML</div>', sandbox: 'allow-scripts', allowedHosts: [] },
   table: { html: '', rows: [['Header', 'Value']], columns: ['Header', 'Value'], caption: '' },
   interactiveFigure: { registryId: '', runtimeUrl: '', config: {}, datasetId: '', sandbox: 'allow-scripts allow-same-origin' },
+  codeBlock: { code: '', language: 'text', filename: '', caption: '', showLineNumbers: true, wrapLines: false, copyEnabled: true },
   codeComponent: { code: '', html: '', css: '', js: '', sandbox: 'allow-scripts', allowedHosts: [], config: {} },
 };
 
@@ -337,6 +339,7 @@ export const CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS = [
   componentTypeContract('html', 'custom-code', 'HTML block', ['props.html', 'props.sandbox', 'props.allowedHosts'], { supportsCustomCode: true }),
   componentTypeContract('table', 'custom-code', 'Table', ['props.html', 'props.rows', 'props.columns', 'props.caption']),
   componentTypeContract('interactiveFigure', 'interactive-components', 'Interactive figure', ['props.registryId', 'props.runtimeUrl', 'props.config', 'props.datasetId', 'props.sandbox'], { supportsCustomCode: true }),
+  componentTypeContract('codeBlock', 'custom-code', 'Code snippet', ['props.code', 'props.language', 'props.filename', 'props.caption', 'props.showLineNumbers', 'props.wrapLines', 'props.copyEnabled']),
   componentTypeContract('codeComponent', 'custom-code', 'Code component', ['props.code', 'props.html', 'props.css', 'props.js', 'props.sandbox', 'props.allowedHosts', 'props.config'], { supportsCustomCode: true }),
 ] as const;
 

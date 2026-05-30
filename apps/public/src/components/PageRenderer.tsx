@@ -59,6 +59,7 @@ export type KnownElementType =
   | 'quote'
   | 'comment'
   | 'interactiveFigure'
+  | 'codeBlock'
   | 'codeComponent';
 
 interface InteractiveFallback {
@@ -845,6 +846,7 @@ const normalizeRendererType = (value: string): KnownElementType => {
     'quote',
     'comment',
     'interactiveFigure',
+    'codeBlock',
     'codeComponent',
   ];
 
@@ -1507,6 +1509,14 @@ function parseNavigationItems(raw: unknown): Array<{ label: string; href: string
 function getNameClass(value: unknown): string {
   if (typeof value === 'string') {
     return value;
+  }
+
+  return '';
+}
+
+function getCodeText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.replace(/\r\n?/g, '\n');
   }
 
   return '';
@@ -2596,6 +2606,125 @@ function HtmlElement({ element }: ElementRendererProps) {
   const htmlContent = sanitizeHtmlMarkup(props.html) || sanitizeHtmlMarkup(props.content);
 
   return <div style={styles} dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+}
+
+function CodeBlockElement({ element }: ElementRendererProps) {
+  const { props, styles } = element;
+  const code = getCodeText(props.code) || getCodeText(props.content) || '';
+  const language = getNameClass(props.language).trim() || 'text';
+  const filename = getNameClass(props.filename).trim();
+  const caption = getNameClass(props.caption).trim();
+  const showLineNumbers = getBooleanWithFallback(props.showLineNumbers, true);
+  const wrapLines = getBooleanWithFallback(props.wrapLines, false);
+  const copyEnabled = getBooleanWithFallback(props.copyEnabled, true);
+  const lines = code.replace(/\n$/, '').split('\n');
+  const backgroundColor = getNameClass(props.backgroundColor) || '#0f172a';
+  const color = getNameClass(props.color) || '#e2e8f0';
+
+  return (
+    <figure
+      style={{
+        display: 'grid',
+        gridTemplateRows: 'auto minmax(0, 1fr) auto',
+        width: '100%',
+        height: '100%',
+        minHeight: '100%',
+        margin: 0,
+        overflow: 'hidden',
+        backgroundColor,
+        color,
+        border: `${getLength(props.borderWidth, '1px')} ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || '#1e293b'}`,
+        borderRadius: getLength(props.borderRadius, '8px'),
+        fontFamily: getNameClass(props.fontFamily) || 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+        ...styles,
+      }}
+      data-backy-code-block="true"
+      data-backy-code-language={language}
+      data-backy-code-filename={filename || undefined}
+      data-backy-code-line-numbers={showLineNumbers ? 'true' : 'false'}
+      data-backy-code-wrap={wrapLines ? 'true' : 'false'}
+      data-backy-code-copy={copyEnabled ? 'enabled' : 'disabled'}
+    >
+      <div style={{
+        minHeight: 34,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '8px 12px',
+        borderBottom: '1px solid rgba(148, 163, 184, 0.24)',
+        background: 'rgba(15, 23, 42, 0.55)',
+      }}>
+        <div style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 8 }}>
+          {filename && (
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700 }}>
+              {filename}
+            </span>
+          )}
+          <span style={{ borderRadius: 999, background: 'rgba(226, 232, 240, 0.12)', padding: '2px 7px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'rgba(226, 232, 240, 0.72)' }}>
+            {language}
+          </span>
+        </div>
+        {copyEnabled && (
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(code).catch(() => undefined)}
+            style={{
+              border: '1px solid rgba(226, 232, 240, 0.18)',
+              borderRadius: 6,
+              background: 'rgba(226, 232, 240, 0.08)',
+              color: 'inherit',
+              padding: '3px 8px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'copy',
+            }}
+            data-backy-code-copy-button="true"
+          >
+            Copy
+          </button>
+        )}
+      </div>
+      <pre
+        style={{
+          margin: 0,
+          minHeight: 0,
+          overflow: 'auto',
+          padding: showLineNumbers ? '12px 0' : '12px',
+          fontSize: getLength(props.fontSize, '13px'),
+          lineHeight: getLineHeight(props.lineHeight, 1.65),
+          whiteSpace: wrapLines ? 'pre-wrap' : 'pre',
+          tabSize: 2,
+        }}
+      >
+        {showLineNumbers ? (
+          <code>
+            {lines.map((line, index) => (
+              <span
+                key={`${element.id}-code-line-${index}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '3.25rem minmax(0, 1fr)',
+                  gap: 12,
+                  padding: '0 12px 0 0',
+                }}
+              >
+                <span style={{ userSelect: 'none', textAlign: 'right', color: 'rgba(148, 163, 184, 0.72)' }}>{index + 1}</span>
+                <span>{line || ' '}</span>
+              </span>
+            ))}
+          </code>
+        ) : (
+          <code>{code}</code>
+        )}
+      </pre>
+      {caption && (
+        <figcaption style={{ padding: '8px 12px', borderTop: '1px solid rgba(148, 163, 184, 0.24)', color: 'rgba(226, 232, 240, 0.72)', fontSize: 12 }}>
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  );
 }
 
 const clampInteractiveNumber = (value: unknown, fallback: number, min: number, max: number): number => {
@@ -5127,6 +5256,7 @@ const ELEMENT_RENDERERS: Record<
   quote: QuoteElement,
   comment: CommentThreadElement,
   interactiveFigure: InteractiveComponentElement,
+  codeBlock: CodeBlockElement,
   codeComponent: InteractiveComponentElement,
 };
 

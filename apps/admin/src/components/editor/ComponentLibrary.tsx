@@ -1132,6 +1132,33 @@ function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
         </div>
       );
 
+    case 'codeBlock':
+      return (
+        <div
+          className="grid h-20 w-40 overflow-hidden rounded border p-2 text-[9px] font-mono shadow-sm"
+          style={{
+            backgroundColor: getPreviewColor(props.backgroundColor, '#0f172a'),
+            color: getPreviewColor(props.color, '#e2e8f0'),
+            borderColor: getPreviewColor(props.borderColor, '#1e293b'),
+            borderRadius: getPreviewRadius(props.borderRadius, 8),
+          }}
+        >
+          <div className="mb-1 flex items-center justify-between gap-2 text-[8px] uppercase opacity-70">
+            <span className="truncate">{getPreviewContent(props.language, 'text')}</span>
+            <span className="truncate">{getPreviewContent(props.filename, 'code')}</span>
+          </div>
+          {[0, 1, 2, 3].map((line) => (
+            <div key={`code-block-preview-${line}`} className="mb-1 flex items-center gap-1.5 last:mb-0">
+              <span className="w-3 text-right opacity-40">{line + 1}</span>
+              <span
+                className="h-1.5 rounded bg-current opacity-60"
+                style={{ width: `${line === 2 ? 44 : 72 - line * 8}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      );
+
     case 'divider':
       return (
         <div className="w-40 border-t" style={{ borderColor: getPreviewColor(props.borderColor, '#94a3b8'), borderTopWidth: getPreviewContent(props.thickness, '2px') }} />

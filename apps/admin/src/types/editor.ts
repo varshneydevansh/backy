@@ -106,6 +106,7 @@ export type ElementType =
   | 'repeater' // For collection-backed repeaters
   | 'comment' // For comment/thread blocks
   | 'interactiveFigure' // For registry-backed interactive figures/visualizations
+  | 'codeBlock' // For static code snippets in technical docs/blogs
   | 'codeComponent'; // For sandboxed custom code components
 
 /** Base element interface */

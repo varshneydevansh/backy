@@ -34,6 +34,7 @@ export type ElementType =
     | 'spacer'
     | 'list'
     | 'quote'
+    | 'codeBlock'
     | 'embed'
     | 'form'
     | 'icon'

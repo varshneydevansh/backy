@@ -740,6 +740,10 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     return 'interactiveFigure';
   }
 
+  if (normalized === 'codeblock' || normalized === 'codesnippet') {
+    return 'codeBlock';
+  }
+
   if (normalized === 'codecomponent') {
     return 'codeComponent';
   }
@@ -777,6 +781,7 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'repeater',
     'comment',
     'interactiveFigure',
+    'codeBlock',
     'codeComponent',
   ];
 
@@ -2282,6 +2287,7 @@ function ContentProperties({
   const hasFormFieldContent = ['input', 'textarea', 'select', 'checkbox', 'radio'].includes(normalizedType);
   const hasFormContent = normalizedType === 'form';
   const hasCommentContent = normalizedType === 'comment';
+  const hasCodeBlockContent = normalizedType === 'codeBlock';
   const hasInteractiveContent = normalizedType === 'interactiveFigure' || normalizedType === 'codeComponent';
   const hasListContent = normalizedType === 'list';
   const fieldOptionsText = formatOptionValues(element.props.options);
@@ -2750,6 +2756,111 @@ function ContentProperties({
               )}
               placeholder="HTML preview"
             />
+          </div>
+        </div>
+      )}
+
+      {/* Code Snippet Properties */}
+      {hasCodeBlockContent && (
+        <div className="space-y-3" data-testid="editor-code-block-controls">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            Code snippets render as safe text in the editor and public frontend. Use code components only for sandboxed execution.
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Code
+            </label>
+            <textarea
+              value={typeof element.props.code === 'string' ? element.props.code : typeof element.props.content === 'string' ? element.props.content : ''}
+              onChange={(e) => onChange({ code: e.target.value })}
+              data-testid="editor-code-block-code"
+              rows={10}
+              spellCheck={false}
+              className={cn(
+                'w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs resize-y',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder={"export async function loader() {\n  return fetch('/api/sites/site-demo/render?path=/');\n}"}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Language
+              </label>
+              <input
+                type="text"
+                value={element.props.language || ''}
+                onChange={(e) => onChange({ language: e.target.value })}
+                data-testid="editor-code-block-language"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="typescript"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                Filename
+              </label>
+              <input
+                type="text"
+                value={element.props.filename || ''}
+                onChange={(e) => onChange({ filename: e.target.value })}
+                data-testid="editor-code-block-filename"
+                className={cn(
+                  'w-full px-2 py-1.5 text-sm rounded-md border bg-background font-mono',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="loader.ts"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Caption
+            </label>
+            <input
+              type="text"
+              value={element.props.caption || ''}
+              onChange={(e) => onChange({ caption: e.target.value })}
+              data-testid="editor-code-block-caption"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Optional caption"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 rounded-md border border-border bg-background p-2">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={parseBooleanSetting(element.props.showLineNumbers, true)}
+                onChange={(e) => onChange({ showLineNumbers: e.target.checked })}
+                data-testid="editor-code-block-line-numbers"
+              />
+              Show line numbers
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={parseBooleanSetting(element.props.wrapLines, false)}
+                onChange={(e) => onChange({ wrapLines: e.target.checked })}
+                data-testid="editor-code-block-wrap-lines"
+              />
+              Wrap long lines
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={parseBooleanSetting(element.props.copyEnabled, true)}
+                onChange={(e) => onChange({ copyEnabled: e.target.checked })}
+                data-testid="editor-code-block-copy-enabled"
+              />
+              Show copy action
+            </label>
           </div>
         </div>
       )}
@@ -6748,6 +6859,14 @@ const getTargetPathOptions = (elementType: CanvasElement['type']) => {
   if (normalizedElementType === 'html' || normalizedElementType === 'table') {
     return [
       { value: 'props.html', label: 'HTML content' },
+    ];
+  }
+  if (normalizedElementType === 'codeBlock') {
+    return [
+      { value: 'props.code', label: 'Code text' },
+      { value: 'props.language', label: 'Language' },
+      { value: 'props.filename', label: 'Filename' },
+      { value: 'props.caption', label: 'Caption' },
     ];
   }
   if (normalizedElementType === 'repeater') {

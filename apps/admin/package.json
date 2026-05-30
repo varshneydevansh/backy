@@ -28,7 +28,7 @@
     "test:editor-inspector": "BACKY_EDITOR_INSPECTOR_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-reusable-section": "BACKY_EDITOR_REUSABLE_SECTION_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-save-publish": "BACKY_EDITOR_SAVE_SMOKE=1 node scripts/editor-drag-smoke.mjs",
-    "test:editor-components": "for component in image icon video embed map input textarea select checkbox radio button repeater list divider columns nav spacer quote link form comment interactiveFigure codeComponent box heading data-binding; do BACKY_EDITOR_COMPONENT_SMOKE=$component node scripts/editor-drag-smoke.mjs; done",
+    "test:editor-components": "for component in image icon video embed map input textarea select checkbox radio button repeater list divider columns nav spacer quote link form comment interactiveFigure codeBlock codeComponent box heading data-binding; do BACKY_EDITOR_COMPONENT_SMOKE=$component node scripts/editor-drag-smoke.mjs; done",
     "test:editor-library": "BACKY_EDITOR_LIBRARY_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-primary-action-status": "BACKY_EDITOR_PRIMARY_ACTION_STATUS_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-command-palette": "BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 node scripts/editor-drag-smoke.mjs",

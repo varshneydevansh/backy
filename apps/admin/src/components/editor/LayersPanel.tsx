@@ -155,6 +155,7 @@ const LAYER_TYPE_ICONS: Record<string, LucideIcon> = {
     box: Box,
     button: MousePointerClick,
     checkbox: CheckSquare,
+    codeBlock: Code2,
     codeComponent: Code2,
     columns: Columns3,
     comment: MessageSquare,

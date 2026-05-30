@@ -1505,6 +1505,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   const contentMigrationSource = fs.readFileSync(new URL('../../../packages/core/src/content-migrations.ts', import.meta.url), 'utf8');
   const renderPayloadSource = fs.readFileSync(new URL('../../../apps/public/src/lib/renderPayload.ts', import.meta.url), 'utf8');
   const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
+  const customFrontendHandoffSource = fs.readFileSync(new URL('../../../packages/core/src/custom-frontend-agent-handoff.ts', import.meta.url), 'utf8');
   const contentPayloadSchema = fs.readFileSync(new URL('../../../specs/ai-frontend-contract/content-payload.schema.json', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
@@ -1622,6 +1623,28 @@ const assertComponentLibraryEmptyStateSource = () => {
     'Library item insertion must merge item defaults with caller overrides without wiping responsive, prop, style, binding-slot, or child defaults',
   );
   assert(catalogSource.includes('const cloneDefaultBindingSlots =') && catalogSource.includes('bindingSlots: cloneDefaultBindingSlots(child.bindingSlots)') && catalogSource.includes('bindingSlots: overrideBindingSlots') && catalogSource.includes(': cloneDefaultBindingSlots(item.defaultBindingSlots)'), 'Editor catalog must clone and merge binding-slot metadata for composed presets');
+  assert(
+    typeSource.includes("| 'codeBlock'") &&
+      catalogSource.includes("id: 'technical-code-snippet'") &&
+      catalogSource.includes("type: 'codeBlock'") &&
+      catalogSource.includes("language: 'typescript'") &&
+      catalogSource.includes('mobile: { width: 335, height: 320 }') &&
+      source.includes("case 'codeBlock':") &&
+      canvasSource.includes("case 'codeBlock':") &&
+      canvasSource.includes('data-backy-code-block') &&
+      canvasSource.includes('data-backy-code-copy') &&
+      propertyPanelSource.includes('hasCodeBlockContent') &&
+      propertyPanelSource.includes('data-testid="editor-code-block-code"') &&
+      propertyPanelSource.includes("normalizedElementType === 'codeBlock'") &&
+      pageRendererSource.includes('function CodeBlockElement') &&
+      pageRendererSource.includes('codeBlock: CodeBlockElement') &&
+      pageRendererSource.includes('data-backy-code-language') &&
+      customFrontendHandoffSource.includes("componentTypeContract('codeBlock'") &&
+      customFrontendHandoffSource.includes("'props.showLineNumbers'") &&
+      smokeSource.includes('smoke-code-block') &&
+      smokeSource.includes('assertPersistedCodeBlockBehavior'),
+    'Static code snippets must be cataloged, editable, rendered safely in editor/public, smoke-covered, and exposed through the custom-frontend component API contract',
+  );
   assert(propertyPanelSource.includes('function PresetBindingSlotsPanel') && propertyPanelSource.includes('data-testid="editor-data-binding-slots"') && propertyPanelSource.includes('applyBindingSlot') && propertyPanelSource.includes('bindingSlotFieldCandidates'), 'Editor Data panel must render preset binding slots and apply matching fields as real data bindings');
   assert(propertyPanelSource.includes('applyChildBindingSlots') && propertyPanelSource.includes('data-testid="editor-data-apply-child-binding-slots"') && propertyPanelSource.includes('VIRTUAL_COLLECTION_FIELD_PATHS'), 'Editor Data panel must apply descendant preset binding slots and support record URL/slug fields for composed sections');
   assert(propertyPanelSource.includes('const applyAllBindingSlots = () =>') && propertyPanelSource.includes('bindableSlotsForElement(nextElement, activeSlotCollection, collections)') && propertyPanelSource.includes('data-testid="editor-data-apply-all-binding-slots"'), 'Editor Data panel must bulk-apply matching root, descendant, and child binding slots from composed presets');
@@ -2702,6 +2725,26 @@ const createSmokePage = async () => {
                 fallbackRequired: true,
                 postMessageProtocol: 'backy.interactive-component.v1',
               },
+            },
+          },
+          {
+            id: 'smoke-code-block',
+            type: 'codeBlock',
+            x: 920,
+            y: 1080,
+            width: 320,
+            height: 260,
+            zIndex: 5,
+            props: {
+              code: "console.log('Initial Backy snippet');",
+              language: 'javascript',
+              filename: 'initial.js',
+              caption: 'Initial static code snippet',
+              showLineNumbers: true,
+              wrapLines: false,
+              copyEnabled: true,
+              backgroundColor: '#0f172a',
+              color: '#e2e8f0',
             },
           },
           {
@@ -24693,6 +24736,82 @@ const assertPersistedCommentBehavior = async (pageId) => {
   return props;
 };
 
+const CODE_BLOCK_BEHAVIOR_SPEC = {
+  code: "const report = await backy.api.render('/blog/local-report');\nconsole.log(report.title);",
+  language: 'typescript',
+  filename: 'local-report.ts',
+  caption: 'Smoke code snippet caption.',
+  showLineNumbers: false,
+  wrapLines: true,
+  copyEnabled: false,
+};
+
+const testCodeBlockBehaviorControls = async (client) => {
+  await selectLayerById(client, 'smoke-code-block');
+  await switchToPropertiesPanel(client);
+  await setFormControlByTestId(client, 'editor-code-block-code', CODE_BLOCK_BEHAVIOR_SPEC.code);
+  await setFormControlByTestId(client, 'editor-code-block-language', CODE_BLOCK_BEHAVIOR_SPEC.language);
+  await setFormControlByTestId(client, 'editor-code-block-filename', CODE_BLOCK_BEHAVIOR_SPEC.filename);
+  await setFormControlByTestId(client, 'editor-code-block-caption', CODE_BLOCK_BEHAVIOR_SPEC.caption);
+  await clickControlByTestId(client, 'editor-code-block-line-numbers');
+  await clickControlByTestId(client, 'editor-code-block-wrap-lines');
+  await clickControlByTestId(client, 'editor-code-block-copy-enabled');
+
+  const state = await evaluate(client, `(() => {
+    const value = (testId) => document.querySelector('[data-testid="' + testId + '"]')?.value || '';
+    const checked = (testId) => {
+      const control = document.querySelector('[data-testid="' + testId + '"]');
+      return control instanceof HTMLInputElement ? control.checked : null;
+    };
+    const node = document.querySelector('[data-testid="editor-canvas"] [data-element-id="smoke-code-block"]')
+      || document.querySelector('[data-element-id="smoke-code-block"]');
+    const codeBlock = node?.querySelector('[data-backy-code-block]');
+    return {
+      code: value('editor-code-block-code'),
+      language: value('editor-code-block-language'),
+      filename: value('editor-code-block-filename'),
+      caption: value('editor-code-block-caption'),
+      showLineNumbers: checked('editor-code-block-line-numbers'),
+      wrapLines: checked('editor-code-block-wrap-lines'),
+      copyEnabled: checked('editor-code-block-copy-enabled'),
+      previewText: node?.textContent || '',
+      languageAttr: codeBlock?.getAttribute('data-backy-code-language') || '',
+      copyAttr: codeBlock?.getAttribute('data-backy-code-copy') || '',
+      wrapAttr: codeBlock?.getAttribute('data-backy-code-wrap') || '',
+    };
+  })()`);
+
+  assert(state.code === CODE_BLOCK_BEHAVIOR_SPEC.code, `Code block code control mismatch: ${JSON.stringify(state)}`);
+  assert(state.language === CODE_BLOCK_BEHAVIOR_SPEC.language, `Code block language control mismatch: ${JSON.stringify(state)}`);
+  assert(state.filename === CODE_BLOCK_BEHAVIOR_SPEC.filename, `Code block filename control mismatch: ${JSON.stringify(state)}`);
+  assert(state.caption === CODE_BLOCK_BEHAVIOR_SPEC.caption, `Code block caption control mismatch: ${JSON.stringify(state)}`);
+  assert(state.showLineNumbers === CODE_BLOCK_BEHAVIOR_SPEC.showLineNumbers, `Code block line-number toggle mismatch: ${JSON.stringify(state)}`);
+  assert(state.wrapLines === CODE_BLOCK_BEHAVIOR_SPEC.wrapLines, `Code block wrap toggle mismatch: ${JSON.stringify(state)}`);
+  assert(state.copyEnabled === CODE_BLOCK_BEHAVIOR_SPEC.copyEnabled, `Code block copy toggle mismatch: ${JSON.stringify(state)}`);
+  assert(state.previewText.includes('local-report') && state.languageAttr === 'typescript', `Code block preview did not render saved code metadata: ${JSON.stringify(state)}`);
+  assert(state.copyAttr === 'disabled' && state.wrapAttr === 'true', `Code block preview metadata mismatch: ${JSON.stringify(state)}`);
+
+  return state;
+};
+
+const assertPersistedCodeBlockBehavior = async (pageId) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const elements = payload.data?.page?.content?.elements || [];
+  const codeBlock = findCanvasElement(elements, 'smoke-code-block');
+  const props = codeBlock?.props || {};
+
+  assert(codeBlock?.type === 'codeBlock', `Persisted smoke-code-block missing: ${JSON.stringify(codeBlock)}`);
+  assert(props.code === CODE_BLOCK_BEHAVIOR_SPEC.code, `Persisted code block code mismatch: ${JSON.stringify(props)}`);
+  assert(props.language === CODE_BLOCK_BEHAVIOR_SPEC.language, `Persisted code block language mismatch: ${JSON.stringify(props)}`);
+  assert(props.filename === CODE_BLOCK_BEHAVIOR_SPEC.filename, `Persisted code block filename mismatch: ${JSON.stringify(props)}`);
+  assert(props.caption === CODE_BLOCK_BEHAVIOR_SPEC.caption, `Persisted code block caption mismatch: ${JSON.stringify(props)}`);
+  assert(props.showLineNumbers === CODE_BLOCK_BEHAVIOR_SPEC.showLineNumbers, `Persisted code block line numbers mismatch: ${JSON.stringify(props)}`);
+  assert(props.wrapLines === CODE_BLOCK_BEHAVIOR_SPEC.wrapLines, `Persisted code block wrap mismatch: ${JSON.stringify(props)}`);
+  assert(props.copyEnabled === CODE_BLOCK_BEHAVIOR_SPEC.copyEnabled, `Persisted code block copy mismatch: ${JSON.stringify(props)}`);
+
+  return props;
+};
+
 const testInteractiveComponentControls = async (client, elementId, expectedType, nextValues) => {
   await selectLayerById(client, elementId);
   await switchToPropertiesPanel(client);
@@ -27653,6 +27772,11 @@ const main = async () => {
           'interactiveFigure',
           interactiveFigureComponentSmokeValues,
         ),
+      },
+      codeBlock: {
+        targetElementId: 'smoke-code-block',
+        test: () => testCodeBlockBehaviorControls(client),
+        assertPersisted: () => assertPersistedCodeBlockBehavior(tempPageId),
       },
       codeComponent: {
         targetElementId: 'smoke-code-component',
