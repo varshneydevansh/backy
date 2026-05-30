@@ -1252,7 +1252,10 @@ async function deleteFixture(siteId) {
   } finally {
     const deletedOwner = await requestWithNetworkRetry(
       `/api/admin/users/${owner.userId}`,
-      { method: 'DELETE' },
+      {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${owner.token}` },
+      },
       { label: 'cleanup owner delete' },
     ).catch((error) => ({ error }));
     assert(!deletedOwner?.error, `cleanup owner delete failed: ${deletedOwner?.error?.message || deletedOwner?.error}`);
