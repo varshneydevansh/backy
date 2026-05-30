@@ -118,16 +118,24 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Framework Preset: Vite
 - Build Command: `npm run build`
 - Output Directory: `dist`
-- Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`, and `VITE_BACKY_ADMIN_API_KEY`.
+- Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api` and `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`. Production admin auth uses session login plus the httpOnly `backy_admin_session` cookie against `backy-public`; do not put admin API keys in Vite/client environment variables.
 - SPA routing and baseline headers are tracked in `apps/admin/vercel.json`.
 
 ### Protected topology
 
-- Keep `backy-admin` private or access-controlled. It is the editor/admin shell and should call the protected `backy-public` admin APIs with an admin API key.
-- Keep `backy-public` public for rendering, discovery, forms, comments, newsletter signup, and custom frontend API reads. Admin writes still require sessions or admin API keys.
+- Keep `backy-admin` protected with Vercel Deployment Protection, team SSO, or an equivalent access-control layer. It is only the editor/admin shell; it must not receive server-only database, storage, provider, cron, or admin API keys.
+- Keep `backy-public` public for rendering, discovery, forms, comments, newsletter signup, and custom frontend API reads. Server-only admin APIs still require session cookies or admin API keys.
 - Run custom website frontends as separate Vercel projects when useful. Each frontend should set `BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `BACKY_SITE_ID=<site-id-or-slug>`, and optionally `BACKY_SITE_PUBLIC_HOST=<custom-host>`.
 - Subdomains such as `akriti.devanshvarshney.com`, `blog.devanshvarshney.com`, or `docs.devanshvarshney.com` are modeled as site custom domains. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
 - Frontend builders and AI agents should start with `GET /api/sites/:siteId/agent-handoff`, then read manifest, OpenAPI, render, and frontend-design before creating UI or templates. Do not copy Backy content into a frontend-local JSON source of truth.
+
+| Vercel project | Public status | Domains | Required env | Forbidden env |
+| --- | --- | --- | --- | --- |
+| `backy-public` | Public app with protected admin API routes | `content.<domain>` or the Backy API/rendering domain | `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, provider/storage secrets, `CRON_SECRET`, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and exact custom-frontend origins in CORS settings | Client-exposed copies of database, storage, provider, cron, or admin secrets |
+| `backy-admin` | Protected admin shell | `admin.<domain>` or private Vercel preview/production URL | `VITE_BACKY_PUBLIC_API_BASE_URL`, `VITE_BACKY_ADMIN_API_BASE_URL` | `BACKY_DATABASE_URL`, storage/provider secrets, `CRON_SECRET`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, and any `VITE_*` admin key |
+| Custom frontend | Public website/app | `www.<domain>`, `blog.<domain>`, `akriti.devanshvarshney.com`, or another site-specific domain | `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, optional `BACKY_SITE_PUBLIC_HOST` | Backy admin URLs, admin/session secrets, provider secrets, database URLs, or copied Backy content as a second source of truth |
+
+Backy-hosted routes in `apps/public` currently support `/sites/<site-slug>` paths and custom-domain lookup through the public site APIs. For separate custom frontend projects, resolve the site by `BACKY_SITE_ID` first, then use `BACKY_SITE_PUBLIC_HOST` only as metadata for canonical URLs, SEO, and domain ownership until host-based rendering is promoted through the production-hardening gate.
 
 Run `npm run test:vercel-release-config` before release to verify the checked-in Vercel topology and launch homepage links.
 

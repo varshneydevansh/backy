@@ -24,6 +24,12 @@ const rootPackage = readJson('../package.json');
 const publicHome = read('../apps/public/src/app/page.tsx');
 const publicNextConfig = read('../apps/public/next.config.js');
 const readme = read('../README.md');
+const vercelRunbookStart = readme.indexOf('## Vercel release runbook');
+const vercelRunbookEnd = readme.indexOf('---', vercelRunbookStart);
+const vercelReleaseRunbook = readme.slice(
+  vercelRunbookStart,
+  vercelRunbookEnd === -1 ? undefined : vercelRunbookEnd,
+);
 
 assert(hasCron(rootVercel), 'Root vercel.json must keep the commerce reconciliation cron for root-directory deployments.');
 assert(hasCron(publicVercel), 'apps/public/vercel.json must keep the commerce reconciliation cron for apps/public Vercel project roots.');
@@ -64,9 +70,17 @@ for (const snippet of [
   'BACKY_SITE_PUBLIC_HOST',
   'GET /api/sites/:siteId/agent-handoff',
   'akriti.devanshvarshney.com',
+  'Vercel Deployment Protection',
+  'httpOnly `backy_admin_session` cookie',
+  'Forbidden env',
 ]) {
   assert(readme.includes(snippet), `README release runbook is missing: ${snippet}`);
 }
+
+assert(
+  vercelRunbookStart !== -1 && !vercelReleaseRunbook.includes('VITE_BACKY_ADMIN_API_KEY'),
+  'README production Vercel runbook must not instruct operators to configure a client-exposed VITE_BACKY_ADMIN_API_KEY.',
+);
 
 assert(
   rootPackage.scripts?.['test:vercel-release-config'] === 'node scripts/vercel-release-config-smoke.mjs',

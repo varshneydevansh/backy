@@ -158,6 +158,13 @@ const settingsResults = {
   notification: { provider: 'resend', productionReady: true, webhookStatus: 'succeeded' },
   publicApiCors: { origin: 'https://app.example.test', preflightStatus: 204, getStatus: 200 },
 };
+const rawSecretLeakFixtures = [
+  'BACKY_SECRET_TEST_VALUE_releaseDoctorShouldReject123',
+  ['Bearer', `provider_${'A'.repeat(40)}`].join(' '),
+  ['ghp', 'B'.repeat(36)].join('_'),
+  ['vercel', 'C'.repeat(40)].join('_'),
+  [`eyJ${'D'.repeat(16)}`, 'E'.repeat(24), 'F'.repeat(24)].join('.'),
+];
 fs.writeFileSync(settingsArtifactPath, JSON.stringify({
   ok: true,
   contract: 'backy.settings-provider-certification.v1',
@@ -303,7 +310,7 @@ fs.writeFileSync(leakedSettingsArtifactPath, JSON.stringify({
   },
   results: {
     ...settingsResults,
-    leakedCredential: 'BACKY_SECRET_TEST_VALUE_releaseDoctorShouldReject123',
+    leakedCredentials: rawSecretLeakFixtures,
   },
 }, null, 2));
 const forbiddenFieldSettingsArtifactPayload = JSON.parse(fs.readFileSync(settingsArtifactPath, 'utf8'));

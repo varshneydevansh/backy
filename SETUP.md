@@ -173,7 +173,7 @@ Backy can be deployed as two Vercel apps:
 1. `backy-admin` from `apps/admin`
 2. `backy-public` from `apps/public`
 
-Shared storage and database keys must be set in both apps (or only on `backy-public` for read-only flows).
+Server-only storage, database, provider, cron, and admin API keys belong on `backy-public`. The `backy-admin` Vite app should only receive public API base URLs such as `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL`; production admin writes authenticate through session login and the httpOnly `backy_admin_session` cookie.
 
 The root `vercel.json` registers a daily scheduled reconciliation call:
 
@@ -195,5 +195,6 @@ Use `backy-public` as the API host and renderer host:
 
 1. Configure a custom domain on Vercel for `backy-public` (e.g. `content.your-domain.com`).
 2. Use `/api/sites`, `/api/sites/:siteId/pages`, `/api/sites/:siteId/blog/...`, and form/comment endpoints in your frontend.
-3. For custom customer domains, resolve domain-to-site mapping in your route layer before page render.
-4. Move from path-based site slug (`/sites/[subdomain]/...`) to host-based lookup as part of production hardening.
+3. For custom frontend Vercel projects, set `BACKY_PUBLIC_API_BASE_URL` plus `BACKY_SITE_ID` and resolve the Backy site before rendering.
+4. For custom customer domains, store the host in Backy site custom-domain metadata and expose it to frontends as `BACKY_SITE_PUBLIC_HOST` for canonical URLs, SEO, and ownership checks.
+5. Backy-hosted public routes currently support path-based site slugs (`/sites/[subdomain]/...`) and public API custom-domain lookup. Full host-based rendering in the `apps/public` route layer remains the production-hardening step before `www`, `blog`, or customer domains can point directly at `backy-public` without a custom frontend resolving the site first.

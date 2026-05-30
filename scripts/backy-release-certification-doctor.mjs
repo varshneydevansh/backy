@@ -19,7 +19,7 @@ const parsePositiveNumber = (name, fallback) => {
 };
 const providerArtifactMaxAgeHours = parsePositiveNumber('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_MAX_AGE_HOURS', 168);
 const providerArtifactFutureSkewMinutes = parsePositiveNumber('BACKY_PROVIDER_CERTIFICATION_ARTIFACT_FUTURE_SKEW_MINUTES', 15);
-const RAW_SECRET_VALUE_PATTERN = /(BACKY_SECRET_TEST_VALUE_[A-Za-z0-9]+|sk_live_[A-Za-z0-9]+|sk_test_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+)/i;
+const RAW_SECRET_VALUE_PATTERN = /(BACKY_SECRET_TEST_VALUE_[A-Za-z0-9]+|sk_live_[A-Za-z0-9]+|sk_test_[A-Za-z0-9]+|whsec_[A-Za-z0-9]+|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|xox[baprs]-[A-Za-z0-9-]+|\bBearer\s+[A-Za-z0-9._~+/=-]{24,}\b|\bgh[pousr]_[A-Za-z0-9_]{24,}\b|\bvercel_[A-Za-z0-9_-]{24,}\b|\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b)/i;
 const URL_WITH_CREDENTIALS_PATTERN = /\b(?:https?|postgres(?:ql)?):\/\/[^/\s:@]+:[^@\s/]+@/i;
 const FORBIDDEN_ARTIFACT_FIELD_NAMES = new Set([
   'adminkey',
