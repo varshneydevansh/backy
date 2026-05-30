@@ -1424,7 +1424,15 @@ const assertCanvasSelectionInfoSource = () => {
   assert(editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
   assert(editorSource.includes('data-editor-content-bounds="expanded"') && editorSource.includes('width: renderedCanvasSize.width') && editorSource.includes('height: renderedCanvasSize.height'), 'Editor edit surface must also expand to authored content bounds so resized root sections do not clip later layers.');
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
-  assert(editorSource.includes('const applyRootSectionFlow = (') && editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') && editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);'), 'Editor root sections, headers, footers, and nav bars must push following root layers when their height changes.');
+  assert(
+    editorSource.includes('const applyRootSectionFlow = (') &&
+      editorSource.includes('const applyRootSectionInsertionFlow = (') &&
+      editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') &&
+      editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
+      editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, newElements), newElements[0].id)') &&
+      editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id)'),
+    'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, or inserted from the component library.',
+  );
 };
 
 const assertInteractiveRegistryVersionPinningSource = () => {

@@ -1145,6 +1145,40 @@ const applyRootSectionFlow = (
   });
 };
 
+const applyRootSectionInsertionFlow = (
+  rootElements: CanvasElement[],
+  insertedElements: CanvasElement[],
+): CanvasElement[] => {
+  const insertedFlowElements = insertedElements
+    .filter(isRootSectionFlowElement)
+    .sort((left, right) => left.y - right.y);
+
+  if (insertedFlowElements.length === 0) {
+    return [...rootElements, ...insertedElements];
+  }
+
+  const shiftedRootElements = rootElements.map((element) => {
+    const deltaY = insertedFlowElements.reduce((delta, insertedElement) => {
+      if (element.y < insertedElement.y) {
+        return delta;
+      }
+
+      return delta + Math.max(0, Math.round(insertedElement.height));
+    }, 0);
+
+    if (deltaY === 0) {
+      return element;
+    }
+
+    return {
+      ...element,
+      y: Math.max(0, Math.round(element.y + deltaY)),
+    };
+  });
+
+  return [...shiftedRootElements, ...insertedElements];
+};
+
 const mapElementsById = (elements: CanvasElement[], map = new Map<string, CanvasElement>()) => {
   elements.forEach((element) => {
     map.set(element.id, element);
@@ -6027,7 +6061,7 @@ export function CanvasEditor({
         return;
       }
 
-      updateElementsWithHistory([...elements, ...newElements], newElements[0].id);
+      updateElementsWithHistory(applyRootSectionInsertionFlow(elements, newElements), newElements[0].id);
       setSelectedId(newElements[0].id);
       setSelectedIds([newElements[0].id]);
       setRightPanel('properties');
@@ -6054,7 +6088,7 @@ export function CanvasEditor({
       return;
     }
 
-    updateElementsWithHistory([...elements, newElement], newElement.id);
+    updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id);
     setSelectedId(newElement.id);
     setSelectedIds([newElement.id]);
     setRightPanel('properties');
