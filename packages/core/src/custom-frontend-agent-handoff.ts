@@ -112,6 +112,9 @@ const componentTypeContract = (
     supportsDataBinding?: boolean;
     supportsCustomCode?: boolean;
     bindingPaths?: readonly string[];
+    flowParticipation?: 'absolute-layer' | 'root-section-flow';
+    sharedSiteChrome?: boolean;
+    sharedChromeBindings?: readonly string[];
   } = {},
 ) => ({
   type,
@@ -127,6 +130,9 @@ const componentTypeContract = (
   supportsMediaAssets: Boolean(options.supportsMediaAssets),
   supportsDataBinding: options.supportsDataBinding !== false,
   supportsCustomCode: Boolean(options.supportsCustomCode),
+  flowParticipation: options.flowParticipation || 'absolute-layer',
+  sharedSiteChrome: Boolean(options.sharedSiteChrome),
+  sharedChromeBindings: options.sharedChromeBindings || [],
 });
 
 export const CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS = [
@@ -142,14 +148,14 @@ export const CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS = [
   componentTypeContract('icon', 'media', 'Icon', ['props.icon', 'props.name', 'props.color', 'props.size', 'props.strokeWidth']),
   componentTypeContract('map', 'media', 'Map', ['props.address', 'props.src', 'props.zoom', 'props.markerLabel', 'props.latitude', 'props.longitude']),
   componentTypeContract('container', 'layout', 'Container', ['props.layout', 'props.gap', 'props.padding', 'props.backgroundColor'], { supportsChildren: true }),
-  componentTypeContract('section', 'layout', 'Section', ['props.contentRole', 'props.layout', 'props.backgroundColor', 'props.padding', 'props.anchorId'], { supportsChildren: true }),
-  componentTypeContract('header', 'layout', 'Header', ['props.chromeRole', 'props.position', 'props.width', 'props.showBrand', 'props.navigationBinding'], { supportsChildren: true }),
-  componentTypeContract('footer', 'layout', 'Footer', ['props.chromeRole', 'props.width', 'props.showSocial', 'props.newsletterBinding'], { supportsChildren: true }),
+  componentTypeContract('section', 'layout', 'Section', ['props.contentRole', 'props.layout', 'props.backgroundColor', 'props.padding', 'props.anchorId'], { supportsChildren: true, flowParticipation: 'root-section-flow' }),
+  componentTypeContract('header', 'layout', 'Header', ['props.chromeRole', 'props.position', 'props.width', 'props.showBrand', 'props.navigationBinding'], { supportsChildren: true, flowParticipation: 'root-section-flow', sharedSiteChrome: true, sharedChromeBindings: ['props.chromeRole', 'props.navigationBinding', 'site.navigation.primary'] }),
+  componentTypeContract('footer', 'layout', 'Footer', ['props.chromeRole', 'props.width', 'props.showSocial', 'props.newsletterBinding'], { supportsChildren: true, flowParticipation: 'root-section-flow', sharedSiteChrome: true, sharedChromeBindings: ['props.chromeRole', 'props.newsletterBinding', 'site.footer', 'site.newsletter'] }),
   componentTypeContract('box', 'layout', 'Box', ['props.backgroundColor', 'props.borderRadius', 'props.borderColor', 'props.shadow'], { supportsChildren: true }),
   componentTypeContract('columns', 'layout', 'Columns', ['props.columns', 'props.gap', 'props.stackOnMobile', 'props.columnWidths'], { supportsChildren: true }),
   componentTypeContract('spacer', 'layout', 'Spacer', ['props.size', 'props.axis']),
   componentTypeContract('divider', 'layout', 'Divider', ['props.orientation', 'props.color', 'props.thickness', 'props.style']),
-  componentTypeContract('nav', 'navigation', 'Navigation', ['props.items', 'props.navigationSource', 'props.navigationBinding', 'props.direction', 'props.gap', 'props.ariaLabel']),
+  componentTypeContract('nav', 'navigation', 'Navigation', ['props.items', 'props.navigationSource', 'props.navigationBinding', 'props.direction', 'props.gap', 'props.ariaLabel'], { flowParticipation: 'root-section-flow', sharedSiteChrome: true, sharedChromeBindings: ['props.items', 'props.navigationSource', 'props.navigationBinding', 'props.chromeRole', 'site.navigation.primary', 'site.navigation.footer'] }),
   componentTypeContract('form', 'forms', 'Form', ['props.formId', 'props.schema', 'props.fields', 'props.submitLabel', 'props.successMessage', 'props.newsletterTopicIds'], { supportsChildren: true }),
   componentTypeContract('input', 'forms', 'Input field', ['props.name', 'props.label', 'props.type', 'props.placeholder', 'props.required', 'props.value']),
   componentTypeContract('textarea', 'forms', 'Textarea field', ['props.name', 'props.label', 'props.placeholder', 'props.required', 'props.rows', 'props.value']),
@@ -307,14 +313,45 @@ export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
     'Treat every canvas element as structured data keyed by id and type, not as a static screenshot.',
     'Preserve unknown props, styles, responsive overrides, data bindings, asset ids, and metadata during edits.',
     'Use editableMap and bindingSlots to connect custom frontend selectors or generated components back to Backy fields.',
+    'When editing root section/header/footer/nav geometry, preserve Backy root-section flow semantics so later root sections move by the resized element bottom delta instead of overlapping.',
+    'For header/footer/nav, prefer site navigation/chrome bindings over copying static menu labels so existing and newly created pages keep the shared site chrome.',
     'Create or update content through authenticated admin APIs when a user expects Backy to reopen the result in the canvas editor.',
   ],
   guarantees: [
     'Element props and styles are API-readable from render/content payloads.',
     'Nested children and reusable section composition are preserved as structured JSON.',
     'Responsive overrides and frontend design tokens survive page, post, product, form, collection, and reusable-section creation.',
+    'Root section, header, footer, and nav resize operations are documented as flow-aware so adjacent root sections can be repositioned predictably.',
+    'Navigation/header/footer chrome exposes shared binding paths so custom frontends can keep a consistent site menu across pages and subdomains.',
     'Custom frontends can inspect the handoff before generating UI and can keep Backy as the source of truth.',
   ],
+  layoutBehavior: {
+    schemaVersion: 'backy.canvas-layout-behavior.v1',
+    rootFlowElementTypes: ['section', 'header', 'footer', 'nav'],
+    absoluteLayerElementTypes: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS
+      .map((contract) => contract.type)
+      .filter((type) => !['section', 'header', 'footer', 'nav'].includes(type)),
+    resizeReflowPolicy: 'When exactly one root section/header/footer/nav changes y, height, or bottom edge, Backy moves later root elements at or after the previous bottom boundary by the same bottom-edge delta.',
+    sharedSiteChromeElementTypes: ['header', 'footer', 'nav'],
+    sharedSiteChromeBindings: [
+      {
+        type: 'header',
+        fields: ['props.chromeRole', 'props.navigationBinding', 'site.navigation.primary'],
+        policy: 'Use for shared site header/navigation that should stay consistent across existing and newly created pages.',
+      },
+      {
+        type: 'footer',
+        fields: ['props.chromeRole', 'props.newsletterBinding', 'site.footer', 'site.newsletter'],
+        policy: 'Use for shared footer/newsletter chrome instead of duplicating footer content into every page.',
+      },
+      {
+        type: 'nav',
+        fields: ['props.items', 'props.navigationSource', 'props.navigationBinding', 'props.chromeRole', 'site.navigation.primary', 'site.navigation.footer'],
+        policy: 'Use props.items for page-local menus and navigationBinding/navigationSource for site-wide menus.',
+      },
+    ],
+    agentWriteRule: 'Do not hard-code a global header/footer/menu into each page unless the user explicitly wants page-local chrome; use the advertised navigation/chrome bindings for shared site UI.',
+  },
   secretHandling: 'No provider keys, admin sessions, database URLs, private submission values, or private file tokens are exposed in public component API handoff fields.',
 });
 
@@ -326,6 +363,7 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
     `Then read /api/sites/${siteId}/manifest, /api/sites/${siteId}/openapi, and /api/sites/${siteId}/render?path=/... before writing UI, routes, templates, or editable content.`,
     'Every Backy canvas element is API-addressable: read and write id, type, geometry, props, styles, responsive overrides, tokenRefs, assetIds, animation, dataBindings, bindingSlots, accessibility, metadata, and children[].',
     'Use componentApiContract.componentTypeContracts as the per-element property map. Render from the advertised propPaths/stylePaths/responsivePaths/bindingPaths and write edits back to those same paths.',
+    'Use componentApiContract.layoutBehavior for section resize flow and shared header/footer/nav binding rules: root sections reflow by bottom-edge delta, while shared chrome should use site navigation/chrome bindings instead of copied static menus.',
     'Keep Backy as the source of truth. Preserve content.contentDocument, content.elements, content.canvas, custom CSS/JS, assets, animations, interactions, data bindings, editable maps, SEO, metadata, and meta.frontendDesign* when creating or editing.',
     'Use manifest.data.site.frontendDesign and the authenticated /api/admin/sites/:siteId/frontend-design contract for fonts, colors, spacing, motion, chrome, templates, and editable maps so future pages keep the same site design.',
     'For writes use authenticated /api/admin/sites/:siteId/* endpoints or the advertised contentCreation.adminEntryPoints. Public endpoints are for discovery, render, and visitor interactions only.',

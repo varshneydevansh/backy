@@ -174,10 +174,28 @@ export type GeneratedBackyOpenApiCustomFrontendComponentApiContract = {
     supportsMediaAssets?: boolean;
     supportsDataBinding?: boolean;
     supportsCustomCode?: boolean;
+    flowParticipation?: "absolute-layer" | "root-section-flow";
+    sharedSiteChrome?: boolean;
+    sharedChromeBindings?: Array<string>;
     [key: string]: unknown;
   }>;
   requiredAgentBehavior: Array<string>;
   guarantees: Array<string>;
+  layoutBehavior: {
+    schemaVersion: "backy.canvas-layout-behavior.v1";
+    rootFlowElementTypes: Array<string>;
+    absoluteLayerElementTypes: Array<string>;
+    resizeReflowPolicy: string;
+    sharedSiteChromeElementTypes: Array<string>;
+    sharedSiteChromeBindings: Array<{
+      type?: string;
+      fields?: Array<string>;
+      policy?: string;
+      [key: string]: unknown;
+    }>;
+    agentWriteRule: string;
+    [key: string]: unknown;
+  };
   secretHandling: string;
   [key: string]: unknown;
 };
@@ -5802,10 +5820,28 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       supportsMediaAssets?: boolean;
       supportsDataBinding?: boolean;
       supportsCustomCode?: boolean;
+      flowParticipation?: "absolute-layer" | "root-section-flow";
+      sharedSiteChrome?: boolean;
+      sharedChromeBindings?: Array<string>;
       [key: string]: unknown;
     }>;
     requiredAgentBehavior: Array<string>;
     guarantees: Array<string>;
+    layoutBehavior: {
+      schemaVersion: "backy.canvas-layout-behavior.v1";
+      rootFlowElementTypes: Array<string>;
+      absoluteLayerElementTypes: Array<string>;
+      resizeReflowPolicy: string;
+      sharedSiteChromeElementTypes: Array<string>;
+      sharedSiteChromeBindings: Array<{
+        type: string;
+        fields: Array<string>;
+        policy: string;
+        [key: string]: unknown;
+      }>;
+      agentWriteRule: string;
+      [key: string]: unknown;
+    };
     secretHandling: string;
     [key: string]: unknown;
   };

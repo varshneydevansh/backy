@@ -2046,6 +2046,26 @@ const assertComponentApiContractCoverage = (contract, label) => {
   }
 };
 assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract, 'manifest()');
+const assertComponentApiLayoutBehavior = (contract, label) => {
+  assert(contract?.layoutBehavior?.schemaVersion === 'backy.canvas-layout-behavior.v1', `${label} component API contract missing layout behavior schema`);
+  for (const type of ['section', 'header', 'footer', 'nav']) {
+    assert(contract.layoutBehavior.rootFlowElementTypes?.includes(type), `${label} component API layout behavior missing root flow type ${type}`);
+    const typeContract = contract.componentTypeContracts?.find?.((entry) => entry?.type === type);
+    assert(typeContract?.flowParticipation === 'root-section-flow', `${label} component API contract missing root-section-flow for ${type}`);
+  }
+  for (const type of ['header', 'footer', 'nav']) {
+    assert(contract.layoutBehavior.sharedSiteChromeElementTypes?.includes(type), `${label} component API layout behavior missing shared chrome type ${type}`);
+    const typeContract = contract.componentTypeContracts?.find?.((entry) => entry?.type === type);
+    assert(typeContract?.sharedSiteChrome === true, `${label} component API contract missing shared site chrome for ${type}`);
+  }
+  const footerBinding = contract.layoutBehavior.sharedSiteChromeBindings?.find?.((entry) => entry?.type === 'footer');
+  const navBinding = contract.layoutBehavior.sharedSiteChromeBindings?.find?.((entry) => entry?.type === 'nav');
+  assert(contract.layoutBehavior.resizeReflowPolicy?.includes('bottom-edge delta'), `${label} component API layout behavior missing resize flow policy`);
+  assert(contract.layoutBehavior.agentWriteRule?.includes('navigation/chrome bindings'), `${label} component API layout behavior missing shared chrome write rule`);
+  assert(footerBinding?.fields?.includes('site.newsletter'), `${label} component API layout behavior missing footer newsletter binding`);
+  assert(navBinding?.fields?.includes('site.navigation.primary'), `${label} component API layout behavior missing primary nav binding`);
+};
+assertComponentApiLayoutBehavior(customFrontendAgentHandoff.componentApiContract, 'manifest()');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
@@ -2070,6 +2090,7 @@ assert(agentHandoff.data.componentApiContract?.schemaVersion === 'backy.canvas-c
 assert(agentHandoff.data.componentApiContract?.readableFieldPaths?.includes('element.props'), 'customFrontendAgentHandoff() component API contract missing readable props path');
 assert(agentHandoff.data.componentApiContract?.elementAddressing?.nestedChildrenField === 'children', 'customFrontendAgentHandoff() component API contract missing child addressing');
 assertComponentApiContractCoverage(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
+assertComponentApiLayoutBehavior(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();

@@ -5957,6 +5957,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "componentTypeContracts",
                 "requiredAgentBehavior",
                 "guarantees",
+                "layoutBehavior",
                 "secretHandling",
               ],
               additionalProperties: true,
@@ -6059,6 +6060,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       supportsMediaAssets: { type: "boolean" },
                       supportsDataBinding: { type: "boolean" },
                       supportsCustomCode: { type: "boolean" },
+                      flowParticipation: {
+                        enum: ["absolute-layer", "root-section-flow"],
+                      },
+                      sharedSiteChrome: { type: "boolean" },
+                      sharedChromeBindings: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
                     },
                   },
                 },
@@ -6069,6 +6078,53 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 guarantees: {
                   type: "array",
                   items: { type: "string" },
+                },
+                layoutBehavior: {
+                  type: "object",
+                  required: [
+                    "schemaVersion",
+                    "rootFlowElementTypes",
+                    "absoluteLayerElementTypes",
+                    "resizeReflowPolicy",
+                    "sharedSiteChromeElementTypes",
+                    "sharedSiteChromeBindings",
+                    "agentWriteRule",
+                  ],
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: {
+                      const: "backy.canvas-layout-behavior.v1",
+                    },
+                    rootFlowElementTypes: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    absoluteLayerElementTypes: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    resizeReflowPolicy: { type: "string" },
+                    sharedSiteChromeElementTypes: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    sharedSiteChromeBindings: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: true,
+                        properties: {
+                          type: { type: "string" },
+                          fields: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          policy: { type: "string" },
+                        },
+                      },
+                    },
+                    agentWriteRule: { type: "string" },
+                  },
                 },
                 secretHandling: { type: "string" },
               },

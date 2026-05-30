@@ -89,6 +89,17 @@ const adminProductsPage = read('../../../apps/admin/src/routes/products.tsx');
 const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.tsx');
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
 const adminReusableSectionsSmoke = read('../../../apps/admin/scripts/reusable-sections-smoke.mjs');
+const adminCanvasEditorSource = read('../../../apps/admin/src/components/editor/CanvasEditor.tsx');
+
+const uniqueSorted = (values) => [...new Set(values)].sort();
+
+const missingFrom = (expected, actual) => expected.filter((value) => !actual.includes(value));
+
+const extractQuotedStringsFromBlock = (source, pattern, label) => {
+  const match = source.match(pattern);
+  assert(match?.[1], `Unable to extract ${label}`);
+  return uniqueSorted([...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]));
+};
 
 const requiredComponentApiFieldPaths = [
   'element.id',
@@ -183,6 +194,33 @@ const missingComponentApiCoreFamilies = requiredComponentApiFamilies.filter((fam
 const missingComponentApiSchemaFamilies = requiredComponentApiFamilies.filter((family) => !frontendManifestSchema.includes(`"const": "${family}"`));
 const missingComponentApiCoreTypes = requiredComponentApiTypes.filter((type) => !customFrontendAgentHandoffLib.includes(`'${type}'`));
 const missingComponentApiSchemaTypes = requiredComponentApiTypes.filter((type) => !frontendManifestSchema.includes(`"const": "${type}"`));
+const expectedComponentApiTypes = uniqueSorted(requiredComponentApiTypes);
+const componentApiContractTypes = uniqueSorted(
+  [...customFrontendAgentHandoffLib.matchAll(/componentTypeContract\('([^']+)'/g)].map((entry) => entry[1]),
+);
+const adminCanvasElementTypes = extractQuotedStringsFromBlock(
+  adminCanvasEditorSource,
+  /const KNOWN_CANVAS_ELEMENT_TYPES:[\s\S]*?=\s*\[([\s\S]*?)\];/,
+  'admin canvas known element types',
+);
+const publicRendererKnownTypes = extractQuotedStringsFromBlock(
+  pageRenderer,
+  /const knownTypes:\s*KnownElementType\[\]\s*=\s*\[([\s\S]*?)\];/,
+  'public renderer known element types',
+);
+const publicRendererMapBlock = pageRenderer.match(/const ELEMENT_RENDERERS:[\s\S]*?=\s*\{([\s\S]*?)\};/)?.[1] || '';
+assert(publicRendererMapBlock, 'Unable to extract public renderer element map');
+const publicRendererMappedTypes = uniqueSorted(
+  [...publicRendererMapBlock.matchAll(/^\s*([A-Za-z][\w]*)\s*:/gm)].map((entry) => entry[1]),
+);
+const missingComponentTypesFromContract = missingFrom(expectedComponentApiTypes, componentApiContractTypes);
+const missingComponentTypesFromAdminCanvas = missingFrom(expectedComponentApiTypes, adminCanvasElementTypes);
+const missingComponentTypesFromRendererKnownTypes = missingFrom(expectedComponentApiTypes, publicRendererKnownTypes);
+const missingComponentTypesFromRendererMap = missingFrom(expectedComponentApiTypes, publicRendererMappedTypes);
+const extraContractTypes = missingFrom(componentApiContractTypes, expectedComponentApiTypes);
+const extraAdminCanvasTypes = missingFrom(adminCanvasElementTypes, expectedComponentApiTypes);
+const extraRendererKnownTypes = missingFrom(publicRendererKnownTypes, expectedComponentApiTypes);
+const extraRendererMapTypes = missingFrom(publicRendererMappedTypes, expectedComponentApiTypes);
 assert(
   missingComponentApiCorePaths.length === 0 &&
     missingComponentApiSchemaPaths.length === 0 &&
@@ -191,13 +229,41 @@ assert(
     missingComponentApiSchemaFamilies.length === 0 &&
     missingComponentApiCoreTypes.length === 0 &&
     missingComponentApiSchemaTypes.length === 0 &&
+    missingComponentTypesFromContract.length === 0 &&
+    missingComponentTypesFromAdminCanvas.length === 0 &&
+    missingComponentTypesFromRendererKnownTypes.length === 0 &&
+    missingComponentTypesFromRendererMap.length === 0 &&
+    extraContractTypes.length === 0 &&
+    extraAdminCanvasTypes.length === 0 &&
+    extraRendererKnownTypes.length === 0 &&
+    extraRendererMapTypes.length === 0 &&
     customFrontendAgentHandoffLib.includes('CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
     customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    customFrontendAgentHandoffLib.includes('layoutBehavior') &&
+    customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.canvas-layout-behavior.v1'") &&
+    customFrontendAgentHandoffLib.includes("rootFlowElementTypes: ['section', 'header', 'footer', 'nav']") &&
+    customFrontendAgentHandoffLib.includes("flowParticipation: 'root-section-flow'") &&
+    customFrontendAgentHandoffLib.includes('sharedSiteChrome: true') &&
+    customFrontendAgentHandoffLib.includes('sharedSiteChromeBindings') &&
+    adminCanvasEditorSource.includes("const SECTION_FLOW_ELEMENT_TYPES = new Set<CanvasElement['type']>(['section', 'header', 'footer', 'nav'])") &&
+    adminCanvasEditorSource.includes('applyRootSectionFlow') &&
+    adminCanvasEditorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
     frontendManifestSchema.includes('"componentTypeContracts"') &&
+    frontendManifestSchema.includes('"layoutBehavior"') &&
+    frontendManifestSchema.includes('"backy.canvas-layout-behavior.v1"') &&
+    frontendManifestSchema.includes('"root-section-flow"') &&
+    frontendManifestSchema.includes('"sharedSiteChromeBindings"') &&
+    openApiRoute.includes('layoutBehavior') &&
+    openApiRoute.includes('backy.canvas-layout-behavior.v1') &&
     customFrontendAgentHandoffDocs.includes('`componentTypeContracts`') &&
+    customFrontendAgentHandoffDocs.includes('`layoutBehavior`') &&
+    customFrontendAgentHandoffDocs.includes('section/header/footer/nav') &&
     apiContracts.includes('componentTypeContracts') &&
+    apiContracts.includes('layoutBehavior') &&
+    apiContracts.includes('section/header/footer/nav') &&
     sdkSmoke.includes('const requiredComponentApiTypes = [') &&
     sdkSmoke.includes('const requiredComponentApiFieldPaths = [') &&
+    sdkSmoke.includes('assertComponentApiLayoutBehavior') &&
     sdkSmoke.includes('assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract') &&
     sdkSmoke.includes('assertComponentApiContractCoverage(agentHandoff.data.componentApiContract'),
   `Custom frontend component API coverage drifted: ${JSON.stringify({
@@ -208,6 +274,14 @@ assert(
     missingComponentApiSchemaFamilies,
     missingComponentApiCoreTypes,
     missingComponentApiSchemaTypes,
+    missingComponentTypesFromContract,
+    missingComponentTypesFromAdminCanvas,
+    missingComponentTypesFromRendererKnownTypes,
+    missingComponentTypesFromRendererMap,
+    extraContractTypes,
+    extraAdminCanvasTypes,
+    extraRendererKnownTypes,
+    extraRendererMapTypes,
   })}`,
 );
 const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
@@ -479,6 +553,10 @@ assert(
     generatedSdkTypes.includes('apiAlignment: {') &&
     generatedSdkTypes.includes('componentApiContract:') &&
     generatedSdkTypes.includes('componentTypeContracts') &&
+    generatedSdkTypes.includes('layoutBehavior') &&
+    generatedSdkTypes.includes('flowParticipation') &&
+    generatedSdkTypes.includes('sharedSiteChrome') &&
+    generatedSdkTypes.includes('sharedChromeBindings') &&
     generatedSdkTypes.includes('routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
     generatedSdkTypes.includes('"backy.custom-frontend-api-alignment.v1"') &&
     generatedSdkTypes.includes('"backy.custom-frontend-routing-handoff.v1"') &&

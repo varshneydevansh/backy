@@ -108,6 +108,8 @@ Use the contract's render pointers for public reads, admin write pointers for au
 
 `componentTypeContracts` is the per-element lookup table for generated frontends. It names the Backy element `type`, UI family, readable/writable `propPaths`, style paths, responsive override paths, and binding paths for headings, text, images, buttons, navigation, forms, repeaters, comments, embeds, interactive figures, and sandboxed code components. Treat this table as the source of truth when mapping Wix/Webflow-style components into Backy JSON: render from the advertised props, write edits back to the same paths, and preserve any unknown keys for forward compatibility.
 
+`layoutBehavior` describes how agents should preserve canvas layout semantics. Root section flow applies to section/header/footer/nav elements: when one root flow element is resized or moved, later root elements should move by the changed bottom-edge delta instead of overlapping. Header, footer, and nav contracts also expose `sharedSiteChrome`, `sharedChromeBindings`, and the site navigation/footer/newsletter paths that custom frontends should use for shared menus and chrome across existing pages, new pages, and subdomains.
+
 ## Editable design state rule
 
 When an agent creates or updates pages, blog posts, products, forms, collections, or reusable sections, it must preserve the full Backy design envelope. In practice that means keeping these fields when present:

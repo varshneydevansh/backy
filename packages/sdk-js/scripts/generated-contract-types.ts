@@ -8081,6 +8081,9 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        flowParticipation: "root-section-flow",
+        sharedSiteChrome: true,
+        sharedChromeBindings: ["props.items", "props.navigationBinding", "site.navigation.primary"],
       },
       {
         type: "form",
@@ -8144,6 +8147,31 @@ const customFrontendAgentHandoff = {
     ],
     requiredAgentBehavior: ["Preserve unknown props, styles, responsive overrides, bindings, assets, and metadata."],
     guarantees: ["Element props and styles are API-readable from render/content payloads."],
+    layoutBehavior: {
+      schemaVersion: "backy.canvas-layout-behavior.v1",
+      rootFlowElementTypes: ["section", "header", "footer", "nav"],
+      absoluteLayerElementTypes: ["heading", "text", "image", "button", "form", "repeater", "comment", "interactiveFigure", "codeComponent"],
+      resizeReflowPolicy: "Root flow sections move later root elements by the resized element bottom-edge delta.",
+      sharedSiteChromeElementTypes: ["header", "footer", "nav"],
+      sharedSiteChromeBindings: [
+        {
+          type: "header",
+          fields: ["props.chromeRole", "props.navigationBinding", "site.navigation.primary"],
+          policy: "Use for shared site header/navigation.",
+        },
+        {
+          type: "footer",
+          fields: ["props.chromeRole", "props.newsletterBinding", "site.footer", "site.newsletter"],
+          policy: "Use for shared footer/newsletter chrome.",
+        },
+        {
+          type: "nav",
+          fields: ["props.items", "props.navigationBinding", "site.navigation.primary"],
+          policy: "Use for shared site navigation menus.",
+        },
+      ],
+      agentWriteRule: "Use advertised navigation/chrome bindings for shared site UI.",
+    },
     secretHandling: "No provider keys, admin sessions, database URLs, or private file tokens are exposed.",
   },
   routing: {

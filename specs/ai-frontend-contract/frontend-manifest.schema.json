@@ -527,7 +527,13 @@
                   "supportsChildren": { "type": "boolean" },
                   "supportsMediaAssets": { "type": "boolean" },
                   "supportsDataBinding": { "type": "boolean" },
-                  "supportsCustomCode": { "type": "boolean" }
+                  "supportsCustomCode": { "type": "boolean" },
+                  "flowParticipation": { "enum": ["absolute-layer", "root-section-flow"] },
+                  "sharedSiteChrome": { "type": "boolean" },
+                  "sharedChromeBindings": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 }
+                  }
                 },
                 "required": ["type", "family", "label", "apiReadable", "apiWritable", "propPaths", "stylePaths", "responsivePaths", "bindingPaths"]
               },
@@ -575,9 +581,63 @@
               "type": "array",
               "items": { "type": "string", "minLength": 1 }
             },
+            "layoutBehavior": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.canvas-layout-behavior.v1" },
+                "rootFlowElementTypes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "allOf": [
+                    { "contains": { "const": "section" } },
+                    { "contains": { "const": "header" } },
+                    { "contains": { "const": "footer" } },
+                    { "contains": { "const": "nav" } }
+                  ]
+                },
+                "absoluteLayerElementTypes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "heading" }
+                },
+                "resizeReflowPolicy": { "type": "string", "minLength": 1 },
+                "sharedSiteChromeElementTypes": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "allOf": [
+                    { "contains": { "const": "header" } },
+                    { "contains": { "const": "footer" } },
+                    { "contains": { "const": "nav" } }
+                  ]
+                },
+                "sharedSiteChromeBindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "type": { "type": "string", "minLength": 1 },
+                      "fields": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 }
+                      },
+                      "policy": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["type", "fields", "policy"]
+                  },
+                  "contains": {
+                    "properties": { "type": { "const": "nav" } },
+                    "required": ["type"]
+                  }
+                },
+                "agentWriteRule": { "type": "string", "minLength": 1 }
+              },
+              "required": ["schemaVersion", "rootFlowElementTypes", "absoluteLayerElementTypes", "resizeReflowPolicy", "sharedSiteChromeElementTypes", "sharedSiteChromeBindings", "agentWriteRule"]
+            },
             "secretHandling": { "type": "string", "minLength": 1 }
           },
-          "required": ["schemaVersion", "everyComponentApiAddressable", "everyElementApiAddressable", "readPointers", "writePointers", "elementAddressing", "readableFieldPaths", "writableFieldPaths", "componentFamilies", "componentTypeContracts", "requiredAgentBehavior", "guarantees", "secretHandling"]
+          "required": ["schemaVersion", "everyComponentApiAddressable", "everyElementApiAddressable", "readPointers", "writePointers", "elementAddressing", "readableFieldPaths", "writableFieldPaths", "componentFamilies", "componentTypeContracts", "requiredAgentBehavior", "guarantees", "layoutBehavior", "secretHandling"]
         },
         "routing": {
           "type": "object",
