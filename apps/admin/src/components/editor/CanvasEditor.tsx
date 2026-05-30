@@ -2002,6 +2002,7 @@ export function CanvasEditor({
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
   const [isCanvasAutoFit, setIsCanvasAutoFit] = useState(true);
+  const isCanvasAutoFitRef = useRef(true);
   const [isCanvasPanMode, setIsCanvasPanMode] = useState(false);
   const [isCanvasSpacePanning, setIsCanvasSpacePanning] = useState(false);
   const [isCanvasPanning, setIsCanvasPanning] = useState(false);
@@ -2141,6 +2142,11 @@ export function CanvasEditor({
     return nextZoom;
   }, [clampCanvasZoom]);
 
+  const setCanvasAutoFitValue = useCallback((value: boolean) => {
+    isCanvasAutoFitRef.current = value;
+    setIsCanvasAutoFit(value);
+  }, []);
+
   const zoomCanvasAtPoint = useCallback((
     computeNextZoom: (currentZoom: number) => number,
     anchor?: { clientX: number; clientY: number },
@@ -2149,7 +2155,7 @@ export function CanvasEditor({
     const nextZoom = clampCanvasZoom(Number(computeNextZoom(currentZoom).toFixed(2)));
     const viewport = canvasViewportRef.current;
 
-    setIsCanvasAutoFit(false);
+    setCanvasAutoFitValue(false);
     if (!viewport || Math.abs(nextZoom - currentZoom) < 0.001) {
       setCanvasZoomValue(nextZoom);
       return;
@@ -2171,7 +2177,7 @@ export function CanvasEditor({
       viewport.scrollLeft = Math.max(0, nextScrollLeft);
       viewport.scrollTop = Math.max(0, nextScrollTop);
     });
-  }, [clampCanvasZoom, setCanvasZoomValue]);
+  }, [clampCanvasZoom, setCanvasAutoFitValue, setCanvasZoomValue]);
 
   const preventCanvasBrowserZoom = useCallback((event: Event) => {
     if (event.cancelable) {
@@ -2343,9 +2349,9 @@ export function CanvasEditor({
       return;
     }
 
-    setIsCanvasAutoFit(false);
+    setCanvasAutoFitValue(false);
     setCanvasZoomValue(parsed / 100);
-  }, [setCanvasZoomValue]);
+  }, [setCanvasAutoFitValue, setCanvasZoomValue]);
 
   const readCanvasWheelDeltaY = useCallback((event: Event) => {
     const wheelEvent = event as CanvasWheelZoomEvent;
@@ -2568,9 +2574,9 @@ export function CanvasEditor({
   }, [setCanvasZoomValue, size.height, size.width]);
 
   const handleFitCanvas = useCallback(() => {
-    setIsCanvasAutoFit(true);
+    setCanvasAutoFitValue(true);
     applyFitCanvas();
-  }, [applyFitCanvas]);
+  }, [applyFitCanvas, setCanvasAutoFitValue]);
 
   const handleToggleCanvasFocus = useCallback(() => {
     setIsCanvasFocusMode((current) => !current);
@@ -7010,15 +7016,17 @@ export function CanvasEditor({
       return;
     }
 
-    let frame = window.requestAnimationFrame(() => {
-      applyFitCanvas();
-    });
+    const runFitIfStillActive = () => {
+      if (isCanvasAutoFitRef.current) {
+        applyFitCanvas();
+      }
+    };
+
+    let frame = window.requestAnimationFrame(runFitIfStillActive);
 
     const scheduleFit = () => {
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => {
-        applyFitCanvas();
-      });
+      frame = window.requestAnimationFrame(runFitIfStillActive);
     };
 
     const resizeObserver = new ResizeObserver(scheduleFit);
