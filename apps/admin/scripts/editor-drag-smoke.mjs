@@ -774,7 +774,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-exits-focus-mode={isCanvasFocusMode ?') &&
       source.includes('Show components and exit focus mode (B)') &&
       source.includes('Show layers and exit focus mode (L)') &&
-      source.includes('Show inspector and exit focus mode (I)') &&
+      source.includes('Show inspector and exit focus mode: selected-layer properties and quick actions (I)') &&
       !source.includes('disabled={isCanvasFocusMode}'),
     'Editor canvas context bar must expose quick component, layers, inspector, and focus controls that exit focus mode instead of becoming dead buttons',
   );
@@ -835,6 +835,16 @@ const assertCanvasEditorShortcutSource = () => {
     'Editor shortcut smoke must exercise actionable no-selection inspector select, layers, and quick-add controls',
   );
   assert(source.includes('data-testid="editor-toggle-component-panel"') && source.includes('aria-keyshortcuts="B"') && source.includes('data-testid="editor-toggle-inspector-panel"') && source.includes('aria-keyshortcuts="I"'), 'Editor component and inspector panel toggles must expose keyboard shortcut metadata');
+  assert(
+    source.includes('Show inspector panel: selected-layer properties and quick actions (I)') &&
+      source.includes('Toggle inspector panel: selected-layer properties and quick actions (I)') &&
+      source.includes('data-panel-purpose="selected-layer-properties-actions"') &&
+      source.includes('Properties: edit selected-layer content, layout, style, data, and advanced controls') &&
+      source.includes('Layers: select, reorder, hide, lock, and inspect root or nested layers') &&
+      source.includes('data-panel-purpose="selected-layer-properties"') &&
+      source.includes('data-panel-purpose="layer-tree-navigation"'),
+    'Editor inspector and layer controls must expose clear purpose labels for users who do not know what Inspector does',
+  );
   assert(source.includes('data-testid="editor-toggle-layers-panel"') && source.includes('aria-keyshortcuts="L"') && source.includes('data-testid="editor-toggle-focus-mode"') && source.includes('aria-keyshortcuts="F"'), 'Editor layers and focus toggles must expose keyboard shortcut metadata');
   assert(
     smokeSource.includes("await pressKey(client, '-', { ctrlKey: true })") &&

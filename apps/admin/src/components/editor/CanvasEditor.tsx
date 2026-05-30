@@ -8524,12 +8524,13 @@ export function CanvasEditor({
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel (I)' : 'Show inspector panel (I)'}
-              aria-label={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel' : 'Show inspector panel'}
+              title={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel: selected-layer properties and quick actions (I)' : 'Show inspector panel: selected-layer properties and quick actions (I)'}
+              aria-label={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel for selected-layer properties and quick actions' : 'Show inspector panel for selected-layer properties and quick actions'}
               aria-pressed={showInspectorPanel && !isCanvasFocusMode}
               aria-keyshortcuts="I"
               data-testid="editor-toggle-inspector-panel"
               data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              data-panel-purpose="selected-layer-properties-actions"
               {...editorSecondaryToolbarCommandProps('toggle-inspector-panel')}
             >
               <PanelRight className="w-4 h-4" />
@@ -9136,12 +9137,13 @@ export function CanvasEditor({
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                     )}
-                    title={isCanvasFocusMode ? 'Show inspector and exit focus mode (I)' : 'Toggle inspector panel (I)'}
-                    aria-label={isCanvasFocusMode ? 'Show inspector and exit focus mode' : 'Toggle inspector panel'}
+                    title={isCanvasFocusMode ? 'Show inspector and exit focus mode: selected-layer properties and quick actions (I)' : 'Toggle inspector panel: selected-layer properties and quick actions (I)'}
+                    aria-label={isCanvasFocusMode ? 'Show inspector and exit focus mode for selected-layer properties and quick actions' : 'Toggle inspector panel for selected-layer properties and quick actions'}
                     aria-pressed={showInspectorPanel && !isCanvasFocusMode}
                     aria-keyshortcuts="I"
                     data-testid="editor-context-inspector"
                     data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+                    data-panel-purpose="selected-layer-properties-actions"
                     data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
                   >
                     <PanelRight className="h-4 w-4" />
@@ -9570,6 +9572,9 @@ export function CanvasEditor({
                     type="button"
                     onClick={() => setRightPanel('properties')}
                     data-testid="editor-tab-properties"
+                    title="Properties: edit selected-layer content, layout, style, data, and advanced controls"
+                    aria-label="Properties: edit selected-layer content, layout, style, data, and advanced controls"
+                    data-panel-purpose="selected-layer-properties"
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
                       rightPanel === 'properties'
@@ -9585,6 +9590,9 @@ export function CanvasEditor({
                     type="button"
                     onClick={() => setRightPanel('layers')}
                     data-testid="editor-tab-layers"
+                    title="Layers: select, reorder, hide, lock, and inspect root or nested layers"
+                    aria-label="Layers: select, reorder, hide, lock, and inspect root or nested layers"
+                    data-panel-purpose="layer-tree-navigation"
                     className={cn(
                       'flex items-center justify-center gap-2 rounded-md px-3 py-1.5 transition-colors',
                       rightPanel === 'layers'
