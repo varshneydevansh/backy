@@ -45,6 +45,7 @@ import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedT
 import { useAuthStore } from '@/stores/authStore';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getLocalBackendOrigin as getLocalDevBackendOrigin } from '@/lib/localBackendOrigin';
+import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import type { AdminSession } from '@/lib/adminAuthApi';
 import { useStore, type DeliveryMode, type Site } from '@/stores/mockStore';
 import {
@@ -107,12 +108,17 @@ const isSettingsPermissionAllowed = (
 
 interface SettingsSearch {
   tab?: SettingsTab;
+  siteId?: string;
 }
 
 const SETTINGS_TAB_IDS: SettingsTab[] = ['general', 'appearance', 'seo', 'delivery', 'infrastructure', 'commerce', 'notifications', 'security'];
 
 const isSettingsTab = (value: unknown): value is SettingsTab => (
   typeof value === 'string' && SETTINGS_TAB_IDS.includes(value as SettingsTab)
+);
+
+const normalizeSettingsSearchString = (value: unknown) => (
+  typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
 
 // ============================================
@@ -122,6 +128,7 @@ const isSettingsTab = (value: unknown): value is SettingsTab => (
 export const Route = createFileRoute('/settings')({
   validateSearch: (search: Record<string, unknown>): SettingsSearch => ({
     tab: isSettingsTab(search.tab) ? search.tab : undefined,
+    siteId: normalizeSettingsSearchString(search.siteId),
   }),
   component: SettingsPage,
 });
@@ -2235,7 +2242,7 @@ function SettingsPage() {
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentUser?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [siteSettingsSites, setSiteSettingsSites] = useState<Site[]>([]);
-  const [selectedSiteSettingsSiteId, setSelectedSiteSettingsSiteId] = useState('');
+  const [selectedSiteSettingsSiteId, setSelectedSiteSettingsSiteId] = useState(search.siteId || '');
   const [siteSettingsScope, setSiteSettingsScope] = useState<AdminSiteSettingsScope | null>(null);
   const [siteScopedSettingsDraft, setSiteScopedSettingsDraft] = useState<SiteScopedSettingsDraft>(() => createSiteScopedSettingsDraft());
   const [lastSavedSiteScopedSettingsDraft, setLastSavedSiteScopedSettingsDraft] = useState<SiteScopedSettingsDraft | null>(null);
@@ -2303,6 +2310,14 @@ function SettingsPage() {
       setActiveTab(search.tab);
     }
   }, [activeTab, search.tab]);
+
+  useEffect(() => {
+    const requestedSiteId = search.siteId;
+    if (!requestedSiteId || siteSettingsSites.length === 0) return;
+    const nextSite = siteSettingsSites.find((site) => siteMatchesIdentifier(site, requestedSiteId));
+    if (!nextSite || nextSite.id === selectedSiteSettingsSiteId) return;
+    setSelectedSiteSettingsSiteId(nextSite.id);
+  }, [search.siteId, selectedSiteSettingsSiteId, siteSettingsSites]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2435,7 +2450,13 @@ function SettingsPage() {
         const backendSites = await listSites();
         if (cancelled) return;
         setSiteSettingsSites(backendSites);
-        setSelectedSiteSettingsSiteId((current) => current || backendSites[0]?.id || '');
+        setSelectedSiteSettingsSiteId((current) => {
+          const requestedSiteId = search.siteId;
+          const requestedSite = requestedSiteId
+            ? backendSites.find((site) => siteMatchesIdentifier(site, requestedSiteId))
+            : null;
+          return requestedSite?.id || current || backendSites[0]?.id || '';
+        });
       } catch {
         if (!cancelled) {
           setSiteSettingsNotice('Unable to load sites for site-scoped settings.');
@@ -2448,7 +2469,7 @@ function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canViewSettings, canViewSiteSettings]);
+  }, [canViewSettings, canViewSiteSettings, search.siteId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4053,9 +4074,28 @@ function SettingsPage() {
   };
   const openSettingsTab = (tab: SettingsTab) => {
     setActiveTab(tab);
-    navigate({ to: '/settings', search: { tab }, replace: true });
+    navigate({
+      to: '/settings',
+      search: {
+        tab,
+        ...(selectedSiteSettingsSiteId ? { siteId: selectedSiteSettingsSiteId } : {}),
+      },
+      replace: true,
+    });
     window.requestAnimationFrame(() => {
       document.getElementById('settings-tab-content')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+  };
+
+  const handleSelectSiteSettingsSite = (siteId: string) => {
+    setSelectedSiteSettingsSiteId(siteId);
+    navigate({
+      to: '/settings',
+      search: {
+        tab: activeTab,
+        ...(siteId ? { siteId } : {}),
+      },
+      replace: true,
     });
   };
 
@@ -5030,7 +5070,7 @@ function SettingsPage() {
             disabled={isSiteSettingsLoading || isSiteSettingsSaving || !canConfigureSiteSettings}
             canView={canViewSiteSettings}
             permissionTitle={siteSettingsConfigurePermissionTitle}
-            onSelectSite={setSelectedSiteSettingsSiteId}
+            onSelectSite={handleSelectSiteSettingsSite}
             onChange={setSiteScopedSettingsDraft}
             onDiscard={handleDiscardSiteScopedSettings}
             onSave={() => void handleSaveSiteScopedSettings()}

@@ -454,6 +454,16 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
       sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
+      sidebarSource.includes("location.pathname.startsWith('/newsletter')") &&
+      sidebarSource.includes("navigate({ to: '/newsletter', search: { siteId: resolvedSiteId } });") &&
+      sidebarSource.includes("location.pathname.startsWith('/users')") &&
+      sidebarSource.includes("navigate({ to: '/users', search: { siteId: resolvedSiteId } });") &&
+      sidebarSource.includes("location.pathname.startsWith('/help')") &&
+      sidebarSource.includes("navigate({ to: '/help', search: { siteId: resolvedSiteId } });") &&
+      sidebarSource.includes("location.pathname.startsWith('/settings')") &&
+      sidebarSource.includes("navigate({") &&
+      sidebarSource.includes("to: '/settings'") &&
+      sidebarSource.includes("siteId: resolvedSiteId") &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher`}') &&
       sidebarSource.includes('data-site-switcher-mode={collapsed ?') &&
       sidebarSource.includes('aria-label="Switch active site"') &&
@@ -506,6 +516,7 @@ const assertAuthRecoverySource = () => {
       sidebarModelSource.includes("to: '/forms'") &&
       sidebarModelSource.includes("quickCreate: 'blank'") &&
       sidebarModelSource.includes("{ id: 'help', label: 'Help', to: '/help'") &&
+      sidebarModelSource.includes("'/settings'") &&
       navigationAccessSource.includes("help: 'pages.view'") &&
       headerModelSource.includes("'/help': 'help'") &&
       headerModelSource.includes("if (path.startsWith('/help')) return 'Help';") &&

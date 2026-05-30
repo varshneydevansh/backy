@@ -72,6 +72,23 @@ interface SidebarRailTooltip {
   top: number;
 }
 
+type SidebarSettingsTab = 'general' | 'appearance' | 'seo' | 'delivery' | 'infrastructure' | 'commerce' | 'notifications' | 'security';
+
+const SIDEBAR_SETTINGS_TAB_IDS = new Set<SidebarSettingsTab>([
+  'general',
+  'appearance',
+  'seo',
+  'delivery',
+  'infrastructure',
+  'commerce',
+  'notifications',
+  'security',
+]);
+
+const isSidebarSettingsTab = (value: unknown): value is SidebarSettingsTab => (
+  typeof value === 'string' && SIDEBAR_SETTINGS_TAB_IDS.has(value as SidebarSettingsTab)
+);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -372,6 +389,11 @@ export function Sidebar({
       return;
     }
 
+    if (location.pathname.startsWith('/newsletter')) {
+      navigate({ to: '/newsletter', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
     if (location.pathname.startsWith('/contacts')) {
       navigate({ to: '/contacts', search: { siteId: resolvedSiteId } });
       return;
@@ -379,6 +401,34 @@ export function Sidebar({
 
     if (location.pathname.startsWith('/comments')) {
       navigate({ to: '/comments', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/teams')) {
+      navigate({ to: '/teams' });
+      return;
+    }
+
+    if (location.pathname.startsWith('/users')) {
+      navigate({ to: '/users', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/help')) {
+      navigate({ to: '/help', search: { siteId: resolvedSiteId } });
+      return;
+    }
+
+    if (location.pathname.startsWith('/settings')) {
+      const currentSearch = location.search as Record<string, unknown>;
+      const currentTab = isSidebarSettingsTab(currentSearch.tab) ? currentSearch.tab : undefined;
+      navigate({
+        to: '/settings',
+        search: {
+          siteId: resolvedSiteId,
+          ...(currentTab ? { tab: currentTab } : {}),
+        },
+      });
       return;
     }
 

@@ -159,6 +159,7 @@ export const SITE_SCOPED_NAV_ROUTES = new Set([
   '/teams',
   '/users',
   '/help',
+  '/settings',
 ]);
 
 export const isNavRouteActive = (pathname: string, route: string) => (
