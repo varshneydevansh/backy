@@ -49,15 +49,6 @@ type FormRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositorie
 type WebhookEventKind = 'form-submission' | 'contact-shared' | 'contact-status';
 type NotificationDeliveryStatus = 'queued' | 'succeeded' | 'failed';
 
-interface ContactShareOverridePayload {
-  enabled?: boolean;
-  nameField?: string;
-  emailField?: string;
-  phoneField?: string;
-  notesField?: string;
-  dedupeByEmail?: boolean;
-}
-
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const CAPTCHA_TRANSPORT_KEYS = new Set([
   'captcha',
@@ -223,7 +214,6 @@ function parseRequestBody(raw: unknown) {
         ? (raw as { startedAt: string }).startedAt
         : undefined,
     captchaToken: parseCaptchaToken(rawRecord),
-    contactShareOverride: rawRecord.contactShareOverride,
   };
 }
 
@@ -263,53 +253,6 @@ const normalizeFrontendSubmissionValueKeys = (
 
     return acc;
   }, {});
-};
-
-const normalizeFrontendSubmissionFieldReference = (
-  form: Pick<FormDefinition, 'fields' | 'settings'>,
-  value: unknown,
-): string | undefined => {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const rawField = value.trim();
-  if (!rawField) {
-    return undefined;
-  }
-
-  const fieldKeys = new Set((form.fields || []).map((field) => field.key).filter(Boolean));
-  if (fieldKeys.has(rawField)) {
-    return rawField;
-  }
-
-  const frontendFieldKeyMap = frontendFormFieldKeyMapFromMetadata(form.settings) || {};
-  const mappedField =
-    frontendFieldKeyMap[rawField] ||
-    frontendFieldKeyMap[normalizeFrontendSubmissionAliasKey(rawField)];
-
-  return mappedField && fieldKeys.has(mappedField) ? mappedField : rawField;
-};
-
-const normalizeContactShareOverride = (
-  form: Pick<FormDefinition, 'fields' | 'settings'>,
-  value: unknown,
-): ContactShareOverridePayload | undefined => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  const override: ContactShareOverridePayload = {
-    enabled: typeof record.enabled === 'boolean' ? record.enabled : undefined,
-    nameField: normalizeFrontendSubmissionFieldReference(form, record.nameField),
-    emailField: normalizeFrontendSubmissionFieldReference(form, record.emailField),
-    phoneField: normalizeFrontendSubmissionFieldReference(form, record.phoneField),
-    notesField: normalizeFrontendSubmissionFieldReference(form, record.notesField),
-    dedupeByEmail: typeof record.dedupeByEmail === 'boolean' ? record.dedupeByEmail : undefined,
-  };
-
-  return Object.values(override).some((item) => item !== undefined) ? override : undefined;
 };
 
 function normalizeRequestId(value?: string): string {
@@ -632,17 +575,15 @@ const buildRepositoryContactShare = async (
   form: FormDefinition,
   values: Record<string, unknown>,
   submission: FormSubmission,
-  contactShareOverride?: ContactShareOverridePayload,
 ): Promise<Contact | null> => {
+  const formShareEnabled = form.contactShare?.enabled === true;
   const resolvedShare = {
-    enabled: contactShareOverride?.enabled !== undefined
-      ? contactShareOverride.enabled
-      : form.contactShare?.enabled ?? false,
-    nameField: contactShareOverride?.nameField || form.contactShare?.nameField,
-    emailField: contactShareOverride?.emailField || form.contactShare?.emailField,
-    phoneField: contactShareOverride?.phoneField || form.contactShare?.phoneField,
-    notesField: contactShareOverride?.notesField || form.contactShare?.notesField,
-    dedupeByEmail: contactShareOverride?.dedupeByEmail ?? form.contactShare?.dedupeByEmail,
+    enabled: formShareEnabled,
+    nameField: form.contactShare?.nameField,
+    emailField: form.contactShare?.emailField,
+    phoneField: form.contactShare?.phoneField,
+    notesField: form.contactShare?.notesField,
+    dedupeByEmail: form.contactShare?.dedupeByEmail,
   };
 
   if (!resolvedShare.enabled || submission.status === 'spam') {
@@ -1121,7 +1062,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values);
       const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues);
-      const contactShareOverride = normalizeContactShareOverride(form, parsed.contactShareOverride);
       const classification = validateAndClassifyFormSubmission(
         form,
         submissionValues,
@@ -1173,7 +1113,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       let contact: Contact | null = null;
       let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
       if (classification.status === 'approved') {
-        contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission, contactShareOverride);
+        contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission);
         collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
           repositories,
           site.id,
@@ -1273,7 +1213,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const frontendNormalizedValues = normalizeFrontendSubmissionValueKeys(form, parsed.values);
     const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues);
-    const contactShareOverride = normalizeContactShareOverride(form, parsed.contactShareOverride);
     const classification = validateAndClassifyFormSubmission(
       form,
       submissionValues,
@@ -1327,7 +1266,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         ipHash,
         sourceSubmissionId: submission.id,
-      }, contactShareOverride);
+      });
 
       collectionRecordResult = createCollectionRecordFromFormSubmission(
         site.id,

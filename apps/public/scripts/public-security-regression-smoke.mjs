@@ -3208,8 +3208,18 @@ assertIncludes(
 );
 assertIncludes(
   mediaAdminRoute,
-  "disabled={isMediaLibraryBusy || allVisibleSelected || !canBulkSelectMedia}",
-  "media select-visible control must be disabled without edit/delete permissions",
+  "const mediaBulkAddVisibleDisabledReason = mediaBulkBusyReason ||",
+  "media select-visible control must derive its disabled reason from busy/permission/selection state",
+);
+assertIncludes(
+  mediaAdminRoute,
+  "mediaBulkSelectPermissionReason ||",
+  "media select-visible control must include edit/delete permission failures in its disabled reason",
+);
+assertIncludes(
+  mediaAdminRoute,
+  "disabled={Boolean(mediaBulkAddVisibleDisabledReason)}",
+  "media select-visible control must be disabled when its permission-aware guard is blocked",
 );
 assertIncludes(
   mediaAdminRoute,
@@ -3456,8 +3466,9 @@ for (const needle of [
   "MEDIA_TRANSFORM_SCHEMA_VERSION = 'backy.media-transform.v1'",
   "publicMediaFilePath",
   "transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id))",
-  "response.headers.set('x-backy-contract-version', BACKY_PUBLIC_CONTRACT_VERSION)",
-  "response.headers.set('x-backy-schema-version', MEDIA_TRANSFORM_SCHEMA_VERSION)",
+  "'x-backy-contract-version': BACKY_PUBLIC_CONTRACT_VERSION",
+  "'x-backy-schema-version': MEDIA_TRANSFORM_SCHEMA_VERSION",
+  "Object.entries(commonHeaders).forEach(([key, value]) => {",
 ]) {
   assertIncludes(mediaTransformRoute, needle, "media transform route");
 }

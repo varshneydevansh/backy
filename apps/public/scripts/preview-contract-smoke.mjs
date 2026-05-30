@@ -36,7 +36,7 @@ async function loginAdminApi() {
     return adminSessionToken;
   }
 
-  const { response, json, url } = await request('/api/admin/auth/login', {
+  const login = (twoFactorCode) => request('/api/admin/auth/login', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -44,8 +44,19 @@ async function loginAdminApi() {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123',
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
+
+  let { response, json, url } = await login();
+  const smokeMfaCode = process.env.BACKY_PREVIEW_CONTRACT_MFA_CODE
+    || process.env.BACKY_ADMIN_CONTRACT_MFA_CODE
+    || process.env.BACKY_SETTINGS_SMOKE_MFA_CODE
+    || process.env.BACKY_ADMIN_MFA_CODE
+    || process.env.BACKY_ADMIN_2FA_CODE;
+  if (!response.ok && json?.error?.code === 'MFA_REQUIRED' && smokeMfaCode) {
+    ({ response, json, url } = await login(smokeMfaCode));
+  }
 
   assert(response.status === 200, `${url} expected admin login 200, got ${response.status}`);
   assert(json?.success === true && json?.data?.session?.token, `${url} missing admin session token`);

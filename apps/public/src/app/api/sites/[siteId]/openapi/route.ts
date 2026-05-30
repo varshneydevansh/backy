@@ -12210,20 +12210,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   description:
                     "Preferred field value map. Accepts canonical field keys or normalized frontendFieldKeyMap aliases.",
                 },
-                contactShareOverride: {
-                  type: "object",
-                  additionalProperties: false,
-                  description:
-                    "Optional contact-share mapping override. Accepts canonical field keys or normalized frontendFieldKeyMap aliases.",
-                  properties: {
-                    enabled: { type: "boolean" },
-                    nameField: { type: "string" },
-                    emailField: { type: "string" },
-                    phoneField: { type: "string" },
-                    notesField: { type: "string" },
-                    dedupeByEmail: { type: "boolean" },
-                  },
-                },
                 fields: {
                   type: "object",
                   additionalProperties: true,
