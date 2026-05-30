@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import { Link, createFileRoute } from '@tanstack/react-router';
 import {
   BookOpen,
+  CheckCircle2,
   Code2,
   Compass,
+  Copy,
   Database,
   Globe2,
   LayoutTemplate,
@@ -309,21 +311,25 @@ const HELP_TOPICS: HelpTopic[] = [
 
 const FRONTEND_AGENT_STARTERS = [
   {
+    id: 'agent-handoff',
     label: 'Agent handoff',
     value: 'GET /api/sites/:siteId/agent-handoff',
     detail: 'First read for frontend agents. Includes routing, API alignment, design state, and component contracts.',
   },
   {
+    id: 'manifest',
     label: 'Manifest',
     value: 'GET /api/sites/:siteId/manifest',
     detail: 'Discovery document for site metadata, modules, completion status, and handoff pointers.',
   },
   {
+    id: 'openapi',
     label: 'OpenAPI',
     value: 'GET /api/sites/:siteId/openapi',
     detail: 'Typed endpoint contract for SDKs, AI agents, and custom frontend implementation.',
   },
   {
+    id: 'render-resolve',
     label: 'Render and resolve',
     value: 'GET /api/sites/:siteId/render?path=/...  |  GET /api/sites/:siteId/resolve?path=/...',
     detail: 'Use render for page payloads and resolve for route decisions across root domains and subdomains.',
@@ -331,11 +337,48 @@ const FRONTEND_AGENT_STARTERS = [
 ];
 
 const categoryById = new Map(HELP_CATEGORIES.map((category) => [category.id, category]));
+const SITE_SCOPED_HELP_ROUTES = new Set<HelpRoute>([
+  '/',
+  '/sites',
+  '/sites/new',
+  '/pages',
+  '/blog',
+  '/media',
+  '/collections',
+  '/reusable-sections',
+  '/forms',
+  '/newsletter',
+  '/contacts',
+  '/products',
+  '/orders',
+  '/users',
+  '/settings',
+]);
+
+const starterValueForSite = (value: string, siteId: string) => (
+  value.split(':siteId').join(siteId)
+);
+
+const buildAgentCopyBrief = (siteId: string) => [
+  `Backy custom frontend start for site ${siteId}`,
+  '',
+  `1. Read GET /api/sites/${siteId}/agent-handoff first.`,
+  `2. Then read GET /api/sites/${siteId}/manifest and GET /api/sites/${siteId}/openapi before writing routes, UI, templates, or API clients.`,
+  `3. Verify route output with GET /api/sites/${siteId}/resolve?path=/ and GET /api/sites/${siteId}/render?path=/...`,
+  '4. Preserve every Backy canvas element id/type/geometry/props/styles/responsive overrides/token refs/assets/animations/actions/dataBindings/bindingSlots/accessibility/metadata/children.',
+  '5. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
+  '6. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
+  '7. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
+].join('\n');
 
 function HelpPage() {
+  const routeSearch = Route.useSearch();
   const [activeCategory, setActiveCategory] = useState<HelpCategoryId | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const activeSiteId = routeSearch.siteId || 'site-demo';
   const normalizedQuery = query.trim().toLowerCase();
+  const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
 
   const filteredTopics = useMemo(() => (
     HELP_TOPICS.filter((topic) => {
@@ -351,6 +394,21 @@ function HelpPage() {
       ].some((value) => value.toLowerCase().includes(normalizedQuery));
     })
   ), [activeCategory, normalizedQuery]);
+  const agentBrief = useMemo(() => buildAgentCopyBrief(activeSiteId), [activeSiteId]);
+  const copyHelpText = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => {
+        setCopiedKey((current) => current === key ? null : current);
+      }, 1600);
+    } catch {
+      setCopiedKey(null);
+    }
+  };
+  const getTopicRouteSearch = (route: HelpRoute) => (
+    SITE_SCOPED_HELP_ROUTES.has(route) ? activeSiteSearch : undefined
+  );
 
   return (
     <PageShell
@@ -480,7 +538,10 @@ function HelpPage() {
                       <div className="mt-4">
                         <Link
                           to={topic.route}
+                          search={getTopicRouteSearch(topic.route)}
                           className="inline-flex min-h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-xs font-semibold transition-colors hover:bg-accent focus-ring"
+                          data-testid={`help-topic-${topic.id}-route`}
+                          data-target-site-id={activeSiteId}
                         >
                           {topic.routeLabel}
                         </Link>
@@ -507,18 +568,55 @@ function HelpPage() {
           title="Where frontend agents should start"
           description="Copy the handoff from the site or editor before asking an AI agent to build a custom frontend."
           icon={<Code2 className="h-4 w-4" />}
+          action={(
+            <button
+              type="button"
+              onClick={() => void copyHelpText('agent-brief', agentBrief)}
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-semibold transition-colors hover:bg-accent focus-ring"
+              data-testid="help-copy-agent-brief"
+              data-target-site-id={activeSiteId}
+              data-action-state={copiedKey === 'agent-brief' ? 'copied' : 'ready'}
+            >
+              {copiedKey === 'agent-brief' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copiedKey === 'agent-brief' ? 'Copied' : 'Copy brief'}
+            </button>
+          )}
         />
         <PanelContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="help-agent-starter-grid">
-            {FRONTEND_AGENT_STARTERS.map((item) => (
-              <div key={item.label} className="rounded-lg border border-border bg-muted/25 p-3" data-testid={`help-agent-starter-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
-                <p className="text-sm font-semibold">{item.label}</p>
-                <code className="mt-2 block min-w-0 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
-                  {item.value}
-                </code>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
-              </div>
-            ))}
+          <div
+            className="mb-4 rounded-lg border border-border bg-muted/25 p-3 text-sm leading-6 text-muted-foreground"
+            data-testid="help-agent-brief-preview"
+            data-target-site-id={activeSiteId}
+          >
+            Use <span className="font-semibold text-foreground">{activeSiteId}</span> as the site id for the copied endpoints on this page.
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="help-agent-starter-grid" data-target-site-id={activeSiteId}>
+            {FRONTEND_AGENT_STARTERS.map((item) => {
+              const copied = copiedKey === item.id;
+              const starterValue = starterValueForSite(item.value, activeSiteId);
+
+              return (
+                <div key={item.id} className="rounded-lg border border-border bg-muted/25 p-3" data-testid={`help-agent-starter-${item.id}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">{item.label}</p>
+                    <button
+                      type="button"
+                      onClick={() => void copyHelpText(item.id, starterValue)}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-ring"
+                      aria-label={`Copy ${item.label} endpoint`}
+                      data-testid={`help-copy-agent-starter-${item.id}`}
+                      data-action-state={copied ? 'copied' : 'ready'}
+                    >
+                      {copied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                  <code className="mt-2 block min-w-0 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                    {starterValue}
+                  </code>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-3 text-sm leading-6 text-muted-foreground" data-testid="help-agent-human-guide">
             Human review guide: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">specs/custom-frontend-agent-handoff.md</code>. Require agents to preserve Backy ids, component props, responsive overrides, token refs, assets, animation metadata, data bindings, and newsletter sync boundaries.

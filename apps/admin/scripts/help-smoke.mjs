@@ -44,9 +44,23 @@ assert(
     helpSource.includes('GET /api/sites/:siteId/resolve?path=/...') &&
     helpSource.includes('specs/custom-frontend-agent-handoff.md') &&
     helpSource.includes('backy.canvas-component-api-contract.v1') &&
+    helpSource.includes('starterValueForSite(item.value, activeSiteId)') &&
+    helpSource.includes('buildAgentCopyBrief(activeSiteId)') &&
+    helpSource.includes('navigator.clipboard?.writeText(text)') &&
+    helpSource.includes('data-testid="help-copy-agent-brief"') &&
+    helpSource.includes('data-testid={`help-copy-agent-starter-${item.id}`}') &&
+    helpSource.includes('data-target-site-id={activeSiteId}') &&
     helpSource.includes('data-testid="help-agent-starter-grid"') &&
     helpSource.includes('data-testid="help-agent-human-guide"'),
-  'Help route must expose canonical custom frontend agent endpoints, schema, and human guide.',
+  'Help route must expose canonical custom frontend agent endpoints, schema, copy controls, site-scoped values, and human guide.',
+);
+
+assert(
+  helpSource.includes('SITE_SCOPED_HELP_ROUTES') &&
+    helpSource.includes('search={getTopicRouteSearch(topic.route)}') &&
+    helpSource.includes('const routeSearch = Route.useSearch()') &&
+    helpSource.includes("const activeSiteId = routeSearch.siteId || 'site-demo'"),
+  'Help route links and copyable endpoint values must preserve the active site context.',
 );
 
 assert(
