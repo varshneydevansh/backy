@@ -50,6 +50,8 @@ const assertSiteDetailSourceContract = () => {
       source.includes('const adminEntryPoints = buildCustomFrontendAgentAdminEntryPoints(siteIdParam);') &&
       source.includes('adminEntryPoints,') &&
       source.includes('siteCustomFrontendAgentHandoff.readOrder.map') &&
+      source.includes('siteCustomFrontendAgentHandoff.componentApiContract.schemaVersion') &&
+      source.includes('value="componentApiContract.componentTypeContracts"') &&
       source.includes('JSON.stringify(siteCustomFrontendAgentHandoff.routing, null, 2)') &&
       source.includes('siteCustomFrontendAgentHandoff.endpoints.agentHandoff') &&
       source.includes('...baseHandoff.apiAlignment') &&
@@ -1509,6 +1511,8 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.text.includes('backy.custom-frontend-routing-handoff.v1') &&
       layout.customFrontendAgentHandoff.text.includes('domain={host}') &&
       layout.customFrontendAgentHandoff.text.includes('Agent read order') &&
+      layout.customFrontendAgentHandoff.text.includes('Component contract') &&
+      layout.customFrontendAgentHandoff.text.includes('componentTypeContracts') &&
       layout.customFrontendAgentHandoff.text.includes('frontendDesignManagement') &&
       layout.customFrontendAgentHandoff.text.includes('Canvas-first API alignment') &&
       layout.customFrontendAgentHandoff.text.includes('site fonts, colors, chrome') &&

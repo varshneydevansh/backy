@@ -9722,6 +9722,8 @@ export function CanvasEditor({
                       data-agent-handoff-source={editorCompositionReadiness.agentHandoff.source}
                       data-agent-read-start={editorCompositionReadiness.agentHandoff.editorSurface.agentReadStart}
                       data-agent-api-alignment-schema={editorCompositionReadiness.agentHandoff.apiAlignment.schemaVersion}
+                      data-agent-component-contract-schema={editorCompositionReadiness.agentHandoff.componentApiContract.schemaVersion}
+                      data-agent-component-contract-pointer="componentApiContract.componentTypeContracts"
                       data-manifest-read-start={editorCompositionReadiness.agentHandoff.editorSurface.manifestReadStart}
                       data-openapi-read-start={editorCompositionReadiness.agentHandoff.editorSurface.openApiReadStart}
                       data-read-order={editorCompositionReadiness.agentHandoff.readOrder.map((step) => step.step).join(',')}
@@ -9761,6 +9763,9 @@ export function CanvasEditor({
                       </code>
                       <div className="mt-1 text-[11px] leading-4 text-slate-600">
                         {editorCompositionReadiness.agentHandoff.contentCreation.canvasFirst.editorOutcome}
+                      </div>
+                      <div className="mt-1 text-[11px] leading-4 text-slate-600" data-testid="editor-agent-component-contract">
+                        Component properties: {editorCompositionReadiness.agentHandoff.componentApiContract.schemaVersion} · componentTypeContracts
                       </div>
                     </div>
 	                  <div

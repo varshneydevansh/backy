@@ -1117,6 +1117,9 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-agent-handoff-site-style-sources={editorCompositionReadiness.agentHandoff.designState.siteStyleSources.join(\',\')}') &&
       source.includes('data-testid="editor-agent-handoff-brief"') &&
       source.includes('data-agent-handoff-source={editorCompositionReadiness.agentHandoff.source}') &&
+      source.includes('data-agent-component-contract-schema={editorCompositionReadiness.agentHandoff.componentApiContract.schemaVersion}') &&
+      source.includes('data-agent-component-contract-pointer="componentApiContract.componentTypeContracts"') &&
+      source.includes('data-testid="editor-agent-component-contract"') &&
       source.includes('data-testid="editor-copy-agent-handoff"') &&
       source.includes('data-testid="editor-agent-handoff-direct-endpoint"') &&
       source.includes('copyEditorAgentHandoff') &&
@@ -6439,6 +6442,7 @@ const readEditorCompositionReadiness = async (client, label) => {
     const metrics = document.querySelector('[data-testid="editor-composition-metrics"]');
     const designMetrics = document.querySelector('[data-testid="editor-composition-design-state-metrics"]');
     const handoffBrief = document.querySelector('[data-testid="editor-agent-handoff-brief"]');
+    const componentContract = document.querySelector('[data-testid="editor-agent-component-contract"]');
     const copyButton = document.querySelector('[data-testid="editor-copy-composition-plan"]');
     const copyAgentHandoffButton = document.querySelector('[data-testid="editor-copy-agent-handoff"]');
     const directEndpoint = document.querySelector('[data-testid="editor-agent-handoff-direct-endpoint"]');
@@ -6477,6 +6481,8 @@ const readEditorCompositionReadiness = async (client, label) => {
       handoffBriefSchema: handoffBrief?.getAttribute('data-agent-handoff-schema') || '',
       handoffBriefSource: handoffBrief?.getAttribute('data-agent-handoff-source') || '',
       handoffBriefApiAlignmentSchema: handoffBrief?.getAttribute('data-agent-api-alignment-schema') || '',
+      handoffBriefComponentContractSchema: handoffBrief?.getAttribute('data-agent-component-contract-schema') || '',
+      handoffBriefComponentContractPointer: handoffBrief?.getAttribute('data-agent-component-contract-pointer') || '',
       handoffBriefManifestReadStart: handoffBrief?.getAttribute('data-manifest-read-start') || '',
       handoffBriefOpenapiReadStart: handoffBrief?.getAttribute('data-openapi-read-start') || '',
       handoffBriefReadOrder: handoffBrief?.getAttribute('data-read-order') || '',
@@ -6485,6 +6491,7 @@ const readEditorCompositionReadiness = async (client, label) => {
       handoffBriefPreserveFields: handoffBrief?.getAttribute('data-agent-preserve-fields') || '',
       handoffBriefNoLocalForks: handoffBrief?.getAttribute('data-agent-no-local-forks') || '',
       handoffBriefText: handoffBrief?.textContent || '',
+      componentContractText: componentContract?.textContent || '',
       directEndpointText: directEndpoint?.textContent || '',
       copyAgentHandoffTitle: copyAgentHandoffButton?.getAttribute('title') || '',
       copyAgentHandoffLabel: copyAgentHandoffButton?.getAttribute('aria-label') || '',
@@ -6562,10 +6569,17 @@ const readEditorCompositionReadiness = async (client, label) => {
     state.handoffBriefSchema === state.agentHandoffSchema &&
       state.handoffBriefSource === state.agentHandoffSource &&
       state.handoffBriefApiAlignmentSchema === 'backy.custom-frontend-api-alignment.v1' &&
+      state.handoffBriefComponentContractSchema === 'backy.canvas-component-api-contract.v1' &&
+      state.handoffBriefComponentContractPointer === 'componentApiContract.componentTypeContracts' &&
       state.handoffBriefPreserveFields.includes('content.elements') &&
       state.handoffBriefPreserveFields.includes('content.editableMap') &&
       state.handoffBriefNoLocalForks === 'true',
     `Editor handoff brief API-alignment metadata mismatch during ${label}: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.componentContractText.includes('backy.canvas-component-api-contract.v1') &&
+      state.componentContractText.includes('componentTypeContracts'),
+    `Editor handoff component contract pointer missing during ${label}: ${JSON.stringify(state)}`,
   );
   assert(
     state.directEndpointText.trim() === state.agentHandoffReadStart &&

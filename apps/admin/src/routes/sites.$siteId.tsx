@@ -6463,6 +6463,14 @@ function EditSitePage() {
                   value={siteCustomFrontendAgentHandoff.endpoints.openapi}
                 />
                 <SiteHandoffEndpoint
+                  label="Component contract"
+                  value={siteCustomFrontendAgentHandoff.componentApiContract.schemaVersion}
+                />
+                <SiteHandoffEndpoint
+                  label="Property map"
+                  value="componentApiContract.componentTypeContracts"
+                />
+                <SiteHandoffEndpoint
                   label="Canvas clone field"
                   value={siteCustomFrontendAgentHandoff.contentCreation.customFrontendTemplateField}
                 />

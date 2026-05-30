@@ -25,6 +25,7 @@ assert(routeSource.includes("createFileRoute('/newsletter')"), 'Newsletter route
 assert(routeSource.includes("const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';"), 'Newsletter route must expose a versioned handoff schema.');
 assert(routeSource.includes("const NEWSLETTER_SYNC_POLICY_VERSION = 'backy.newsletter-sync-boundary.v1';"), 'Newsletter route must document the email-provider boundary.');
 assert(routeSource.includes("const NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.newsletter-issue-handoff.v1';"), 'Newsletter route must expose a versioned issue handoff schema.');
+assert(routeSource.includes("import { CUSTOM_FRONTEND_AGENT_HANDOFF_DOC, CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA } from '@backy-cms/core';"), 'Newsletter route must reuse the canonical custom frontend agent handoff constants.');
 assert(routeSource.includes('createForm('), 'Newsletter route must create a native Backy signup form.');
 assert(routeSource.includes('listFormContacts('), 'Newsletter route must read subscriber records from Contacts APIs.');
 assert(routeSource.includes('listBlogPosts(activeSiteId, { status: \'published\' })'), 'Newsletter route must read published posts for issue handoff drafts.');
@@ -44,9 +45,12 @@ assert(routeSource.includes("key: 'topics'"), 'Created newsletter forms must inc
 assert(routeSource.includes("key: 'consent'"), 'Created newsletter forms must include consent capture.');
 assert(routeSource.includes("key: 'signup_source'"), 'Created newsletter forms must include signup source capture.');
 assert(routeSource.includes('supportedPayloadShapes') && routeSource.includes('Backy form values payload'), 'Newsletter handoff must document flat and Backy form-values payload shapes.');
+assert(routeSource.includes('customFrontendAgent:') && routeSource.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA') && routeSource.includes('CUSTOM_FRONTEND_AGENT_HANDOFF_DOC'), 'Newsletter handoff must point frontend agents back to the canonical site handoff contract.');
+assert(routeSource.includes('readStart: `${publicBaseUrl}/api/sites/${activeSiteId}/agent-handoff`') && routeSource.includes('manifest: `${publicBaseUrl}/api/sites/${activeSiteId}/manifest`') && routeSource.includes('openapi: `${publicBaseUrl}/api/sites/${activeSiteId}/openapi`'), 'Newsletter handoff must include site-scoped agent-handoff, manifest, and OpenAPI URLs.');
 assert(routeSource.includes('providerBoundary') && routeSource.includes('external-delivery-required'), 'Newsletter handoff must keep outbound delivery behind an external-provider boundary.');
 assert(routeSource.includes('mailbox delivery') && routeSource.includes('SPF/DKIM/DMARC'), 'Newsletter delivery boundary must name deliverability responsibilities.');
 assert(routeSource.includes('sendableSubscribersUrl') && routeSource.includes('audience=sendable'), 'Newsletter handoff must expose a strict send-ready subscriber sync URL.');
+assert(routeSource.includes('const sendableSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=sendable`;') && routeSource.includes('const newsletterContactSyncUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/{formId}/contacts/sync`;'), 'Newsletter route must derive visible provider-safe sync URLs for the active site.');
 assert(routeSource.includes('sendReadySubscribers') && routeSource.includes('heldOrSuppressed'), 'Newsletter issue handoff must distinguish send-ready subscribers from held/suppressed contacts.');
 assert(routeSource.includes('function isSubscriberSendReady(contact: AdminContact): boolean'), 'Newsletter route must compute strict send-ready subscriber state.');
 assert(routeSource.includes("disabled={disabled || contact.status === 'qualified' || !isSubscriberSendReady(contact)}"), 'Newsletter ready action must only target send-ready subscribers.');
@@ -55,8 +59,13 @@ assert(routeSource.includes('data-testid="newsletter-subscriber-list"'), 'Newsle
 assert(routeSource.includes('data-testid="newsletter-manual-subscriber"'), 'Newsletter page must expose a manual subscriber management form.');
 assert(routeSource.includes('data-testid="newsletter-manual-consent"'), 'Newsletter manual subscriber form must require explicit consent evidence.');
 assert(routeSource.includes('data-testid="newsletter-api-handoff"'), 'Newsletter page must expose an API-handoff test hook.');
+assert(routeSource.includes('data-agent-handoff-url={agentHandoffUrl}') && routeSource.includes('data-manifest-url={manifestUrl}') && routeSource.includes('data-openapi-url={openApiUrl}'), 'Newsletter API handoff must expose site-scoped custom frontend agent URLs as machine-readable attributes.');
+assert(routeSource.includes('<ApiSnippet label="Agent read first" value={agentHandoffUrl} />') && routeSource.includes('<ApiSnippet label="Manifest" value={manifestUrl} />') && routeSource.includes('<ApiSnippet label="OpenAPI" value={openApiUrl} />'), 'Newsletter API handoff must visibly list the canonical frontend agent read order.');
+assert(routeSource.includes('<ApiSnippet label="Send-ready sync" value={sendableSubscribersUrl} />') && routeSource.includes('<ApiSnippet label="Contact sync" value={newsletterContactSyncUrl} />'), 'Newsletter API handoff must visibly list provider-safe send-ready and contact-sync URLs.');
+assert(routeSource.includes('data-testid="newsletter-copy-api-handoff"') && routeSource.includes('data-target-site-id={activeSiteId}'), 'Newsletter API handoff copy action must expose site-scoped copy metadata.');
 assert(routeSource.includes('data-testid="newsletter-issue-handoff"'), 'Newsletter page must expose a newsletter issue handoff section.');
 assert(routeSource.includes('data-testid="newsletter-copy-issue-handoff"'), 'Newsletter page must expose a copyable issue handoff action.');
+assert(routeSource.includes('data-issue-handoff-schema={NEWSLETTER_ISSUE_SCHEMA_VERSION}') && routeSource.includes('data-agent-handoff-url={agentHandoffUrl}'), 'Newsletter issue handoff must expose schema and canonical agent-handoff metadata.');
 assert(routeSource.includes('data-testid="newsletter-copy-handoff"'), 'Newsletter page must expose a copy-handoff action.');
 assert(routeSource.includes('data-testid="newsletter-export-csv"'), 'Newsletter page must expose a subscriber CSV export action.');
 assert(routeSource.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter page creation must land in focused Backy canvas mode.');

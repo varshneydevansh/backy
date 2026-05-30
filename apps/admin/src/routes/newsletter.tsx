@@ -38,6 +38,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { cn, formatDate } from '@/lib/utils';
+import { CUSTOM_FRONTEND_AGENT_HANDOFF_DOC, CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA } from '@backy-cms/core';
 
 interface NewsletterSearch {
   siteId?: string;
@@ -188,7 +189,14 @@ function NewsletterRoute() {
   ), [subscribers]);
   const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments`;
   const newsletterSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers`;
+  const sendableSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=sendable`;
+  const newsletterContactSyncUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/{formId}/contacts/sync`;
   const newsletterApiUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-lists`;
+  const agentHandoffUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/agent-handoff`;
+  const manifestUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/manifest`;
+  const openApiUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/openapi`;
+  const renderRootUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/render?path=/`;
+  const resolveRootUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/resolve?path=/`;
   const publicNewsletterSubscribersUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/newsletter/subscribers`;
   const newsletterPageRoute = `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter&templateSource=backy-canvas&focus=canvas`;
   const blogRoute = `/blog/new?siteId=${encodeURIComponent(activeSiteId)}&templateSource=backy-canvas&focus=canvas`;
@@ -773,12 +781,21 @@ function NewsletterRoute() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card p-4" data-testid="newsletter-api-handoff">
+          <section
+            className="rounded-lg border border-border bg-card p-4"
+            data-testid="newsletter-api-handoff"
+            data-target-site-id={activeSiteId}
+            data-agent-handoff-url={agentHandoffUrl}
+            data-manifest-url={manifestUrl}
+            data-openapi-url={openApiUrl}
+            data-newsletter-handoff-schema={NEWSLETTER_SCHEMA_VERSION}
+            data-newsletter-sync-schema={NEWSLETTER_SYNC_POLICY_VERSION}
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">API handoff</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Give this to a custom frontend or email-sync worker.
+                  Frontend agents should read the site contract first, then use the newsletter URLs for capture and provider-safe sync.
                 </p>
               </div>
               <Button
@@ -787,14 +804,23 @@ function NewsletterRoute() {
                 onClick={() => void copyNewsletterText(newsletterHandoffText, 'Newsletter handoff')}
                 disabled={actionBusy || !canViewNewsletter}
                 iconStart={<Copy className="size-3.5" />}
+                data-testid="newsletter-copy-api-handoff"
+                data-target-site-id={activeSiteId}
               >
                 Copy
               </Button>
             </div>
             <div className="mt-3 space-y-2">
+              <ApiSnippet label="Agent read first" value={agentHandoffUrl} />
+              <ApiSnippet label="Manifest" value={manifestUrl} />
+              <ApiSnippet label="OpenAPI" value={openApiUrl} />
+              <ApiSnippet label="Render root" value={renderRootUrl} />
+              <ApiSnippet label="Resolve root" value={resolveRootUrl} />
               <ApiSnippet label="Newsletter route" value={`/newsletter?siteId=${activeSiteId}`} />
               <ApiSnippet label="Public subscribe" value={publicNewsletterSubscribersUrl} />
               <ApiSnippet label="Admin subscribers" value={newsletterSubscribersUrl} />
+              <ApiSnippet label="Send-ready sync" value={sendableSubscribersUrl} />
+              <ApiSnippet label="Contact sync" value={newsletterContactSyncUrl} />
               <ApiSnippet label="Segments" value={contactSegmentsUrl} />
               <ApiSnippet label="Contact lists" value={newsletterApiUrl} />
               <ApiSnippet label="Canvas page" value={newsletterPageRoute} />
@@ -854,7 +880,13 @@ function NewsletterRoute() {
           <WorkflowCard title="Subscriber proof" detail="Every public signup lands as a contact with source form, request id, consent values, topic preference, and lifecycle state." />
           <WorkflowCard title="Provider handoff" detail="Use CSV or private audience=sendable APIs to sync confirmed active subscribers to Buttondown, Mailchimp, Resend, SES, or another delivery system without exposing secrets." />
         </div>
-        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.45fr)]" data-testid="newsletter-issue-handoff">
+        <div
+          className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.45fr)]"
+          data-testid="newsletter-issue-handoff"
+          data-target-site-id={activeSiteId}
+          data-agent-handoff-url={agentHandoffUrl}
+          data-issue-handoff-schema={NEWSLETTER_ISSUE_SCHEMA_VERSION}
+        >
           <div className="rounded-lg border border-border bg-background p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -870,6 +902,7 @@ function NewsletterRoute() {
                 disabled={actionBusy || !canViewNewsletter}
                 iconStart={<Copy className="size-3.5" />}
                 data-testid="newsletter-copy-issue-handoff"
+                data-target-site-id={activeSiteId}
               >
                 Copy issue kit
               </Button>
@@ -1105,6 +1138,16 @@ function buildNewsletterHandoff({
     schemaVersion: NEWSLETTER_SCHEMA_VERSION,
     siteId: activeSiteId,
     workspaceRoute: `/newsletter?siteId=${activeSiteId}`,
+    customFrontendAgent: {
+      schemaVersion: CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA,
+      docs: CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
+      readStart: `${publicBaseUrl}/api/sites/${activeSiteId}/agent-handoff`,
+      manifest: `${publicBaseUrl}/api/sites/${activeSiteId}/manifest`,
+      openapi: `${publicBaseUrl}/api/sites/${activeSiteId}/openapi`,
+      render: `${publicBaseUrl}/api/sites/${activeSiteId}/render?path=/...`,
+      resolve: `${publicBaseUrl}/api/sites/${activeSiteId}/resolve?path=/`,
+      rule: 'Read the site handoff, manifest, and OpenAPI before generating newsletter signup UI or provider-sync workers.',
+    },
     counts: {
       forms: forms.length,
       subscribers: subscribers.length,
