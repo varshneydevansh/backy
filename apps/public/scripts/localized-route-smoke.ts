@@ -60,7 +60,41 @@ assert.equal(normalizePublicRouteHost('https://www.fr.example.com:443/path'), 'f
 assert.equal(publicRouteHostMatchesSite({
   customDomain: 'example.com',
   settings: domainSettings,
+}, 'www.fr.example.com'), false);
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: domainSettings,
+}, 'www.fr.example.com', { allowUnverifiedCustomHosts: true }), true);
+const verifiedDomainSettings: Pick<SiteSettings, 'localization' | 'domainVerification'> = {
+  ...domainSettings,
+  domainVerification: {
+    status: 'verified',
+    method: 'dns-txt',
+    domain: 'fr.example.com',
+    token: 'safe-smoke-token',
+    txtHost: '_backy.fr.example.com',
+    txtValue: 'backy-domain-verification=safe-smoke-token',
+    cnameTarget: 'sites.backy.app',
+    requestedAt: '2026-05-30T00:00:00.000Z',
+    checkedAt: '2026-05-30T00:00:00.000Z',
+    verifiedAt: '2026-05-30T00:00:00.000Z',
+    lastError: null,
+  },
+};
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: verifiedDomainSettings,
 }, 'www.fr.example.com'), true);
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: {
+    ...domainSettings,
+    domainVerification: {
+      ...verifiedDomainSettings.domainVerification!,
+      domain: 'other.example.com',
+    },
+  },
+}, 'example.com'), false);
 assert.equal(publicRouteHostMatchesSite({
   customDomain: 'example.com',
   settings: domainSettings,

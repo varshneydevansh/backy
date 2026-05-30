@@ -13,6 +13,7 @@ import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { buildSiteNavigation } from '@/lib/navigation';
 import type { ResolvedRedirectRoute } from '@/lib/redirectRules';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { normalizePublicRouteHost, publicRouteHostMatchesSite } from '@/lib/publicRouteHost';
 import {
   canonicalPathForRepositoryPage,
   isRepositoryContentPubliclyReadable,
@@ -27,20 +28,6 @@ interface RouteParams {
 }
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-const normalizePublicRouteHost = (value: string | null | undefined): string | null => {
-  if (!value?.trim()) return null;
-  const host = value
-    .trim()
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
-    .split(/[/?#]/)[0]
-    .split('@')
-    .pop()
-    ?.split(':')[0]
-    .toLowerCase()
-    .replace(/^www\./, '');
-  return host || null;
-};
 
 const resolveRequestHost = (request: NextRequest, searchParams: URLSearchParams): string | null => (
   normalizePublicRouteHost(
@@ -71,8 +58,7 @@ const findRepositorySite = async (
   });
 
   return result.items.find((site) => (
-    normalizePublicRouteHost(site.customDomain || null) === normalizedDomain
-    || normalizePublicRouteHost(site.settings?.domainVerification?.domain || null) === normalizedDomain
+    publicRouteHostMatchesSite(site, normalizedDomain)
   )) || null;
 };
 

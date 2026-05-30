@@ -12,6 +12,7 @@ import type { Site } from '@backy-cms/core';
 import { getSites, type StoreSite } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { publicRouteHostMatchesSite } from '@/lib/publicRouteHost';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -79,13 +80,6 @@ const normalizeDomain = (value: string | null | undefined): string | null => {
     }
 };
 
-const domainsMatch = (left: string | null | undefined, right: string | null | undefined): boolean => {
-    const normalizedLeft = normalizeDomain(left);
-    const normalizedRight = normalizeDomain(right);
-
-    return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
-};
-
 const envNumber = (key: string, fallback: number): number => {
     const parsed = Number.parseInt(process.env[key] || '', 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -143,7 +137,7 @@ const findPublicSite = (sites: StoreSite[], identifier: string): StoreSite | und
         (site) =>
             normalizeIdentifier(site.id) === normalized ||
             normalizeIdentifier(site.slug) === normalized ||
-            domainsMatch(site.customDomain, identifier),
+            publicRouteHostMatchesSite(site, identifier),
     );
 };
 
@@ -190,8 +184,8 @@ const findPublicRepositorySite = async (
 
     return result.items.find((site) => (
         site.isPublished &&
-        site.customDomain &&
-        normalizeDomain(site.customDomain) === normalizedDomain
+        normalizedDomain &&
+        publicRouteHostMatchesSite(site, normalizedDomain)
     )) || null;
 };
 

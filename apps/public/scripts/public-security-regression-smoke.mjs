@@ -1750,6 +1750,33 @@ assertExcludes(
 const publicResolveRoute = read(
   "apps/public/src/app/api/sites/[siteId]/resolve/route.ts",
 );
+const publicSiteDiscoveryRoute = read("apps/public/src/app/api/sites/route.ts");
+const publicRouteHostSource = read("apps/public/src/lib/publicRouteHost.ts");
+assertIncludes(
+  publicRouteHostSource,
+  "verification?.status === 'verified'",
+  "public custom-domain host matching must require verified DNS state by default",
+);
+assertIncludes(
+  publicRouteHostSource,
+  "allowUnverifiedCustomHosts",
+  "public custom-domain host matching must keep an explicit source-guarded test/demo escape hatch",
+);
+assertIncludes(
+  publicRouteHostSource,
+  "hostsEqual(locale.domain, normalizedHost) && verified",
+  "public locale-domain host matching must not bypass domain verification",
+);
+assertIncludes(
+  publicSiteDiscoveryRoute,
+  "publicRouteHostMatchesSite(site, identifier)",
+  "public site discovery must not resolve custom domains without verified host matching",
+);
+assertIncludes(
+  publicSiteDiscoveryRoute,
+  "publicRouteHostMatchesSite(site, normalizedDomain)",
+  "repository site discovery must not resolve custom domains without verified host matching",
+);
 assertIncludes(
   publicResolveRoute,
   "resolveRepositorySiteRoute(repositories, site, path, { previewToken, host: routeHost })",
