@@ -255,6 +255,7 @@ export function DataGrid<T extends { id: string }>({
                                         className={cn(
                                             'min-w-0 break-words px-4 py-3 align-top [overflow-wrap:anywhere]',
                                             isActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]',
+                                            isActionColumn && 'border-l border-border/80',
                                             col.className,
                                             col.headerClassName,
                                         )}
@@ -337,6 +338,7 @@ export function DataGrid<T extends { id: string }>({
                                                     'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
                                                     usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden',
                                                     isActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
+                                                    isActionColumn && 'border-l border-border/80',
                                                     col.className,
                                                     col.cellClassName,
                                                 )}

@@ -4918,9 +4918,9 @@ function PageRevisionCell({
 
   return (
     <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-revisions-${page.id}`}>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-col items-start gap-1.5">
         <span className={cn(
-          'rounded-full px-2 py-0.5 text-xs font-semibold',
+          'inline-flex max-w-full rounded-full px-2 py-0.5 text-xs font-semibold',
           count > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
         )}
         >
@@ -4931,7 +4931,7 @@ function PageRevisionCell({
           params={{ pageId: page.id }}
           search={{ siteId: activeSiteId }}
           hash="page-editor-revisions"
-          className="text-xs font-medium text-primary hover:underline"
+          className="inline-flex max-w-full rounded-md border border-transparent px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:border-primary/20 hover:bg-primary/5"
         >
           Open history
         </Link>
