@@ -209,8 +209,8 @@ const CONTACT_WORKFLOW_SURFACES = [
   {
     key: 'newsletterSignup',
     title: 'Newsletter signup',
-    detail: 'Capture subscribers through Backy Forms, then manage consent, segments, exports, and API handoff in Contacts.',
-    route: '/forms',
+    detail: 'Capture subscribers through Backy Forms, then manage consent, segments, exports, issue kits, and API handoff in Newsletter.',
+    route: '/newsletter',
   },
   {
     key: 'contactPage',
@@ -2167,6 +2167,11 @@ function ContactsRoute() {
       return;
     }
 
+    if (surface.route === '/newsletter') {
+      navigate({ to: '/newsletter', search: activeSiteSearch });
+      return;
+    }
+
     if (surface.route === '/users') {
       openUsersWorkspace();
       return;
@@ -2177,16 +2182,16 @@ function ContactsRoute() {
   const contactWorkflowSurfaceDisabled = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
     if (isContactsBusy) return true;
     if (surface.route === '/pages/new') return !canEditPages;
-    if (surface.route === '/forms') return !canViewForms;
+    if (surface.route === '/forms' || surface.route === '/newsletter') return !canViewForms;
     if (surface.route === '/users') return !canViewUsers;
     return !canViewSettings;
   };
   const contactWorkflowSurfaceTitle = (surface: typeof CONTACT_WORKFLOW_SURFACES[number]) => {
     if (isContactsBusy) return contactViewDisabledReason;
     if (surface.route === '/pages/new' && !canEditPages) return pagesEditPermissionTitle;
-    if (surface.route === '/forms' && !canViewForms) return viewPermissionTitle;
+    if ((surface.route === '/forms' || surface.route === '/newsletter') && !canViewForms) return viewPermissionTitle;
     if (surface.route === '/users' && !canViewUsers) return usersViewPermissionTitle;
-    if (surface.route !== '/pages/new' && surface.route !== '/forms' && surface.route !== '/users' && !canViewSettings) return settingsViewPermissionTitle;
+    if (surface.route !== '/pages/new' && surface.route !== '/forms' && surface.route !== '/newsletter' && surface.route !== '/users' && !canViewSettings) return settingsViewPermissionTitle;
     return undefined;
   };
   const selectContactsSite = (nextSiteId: string) => {

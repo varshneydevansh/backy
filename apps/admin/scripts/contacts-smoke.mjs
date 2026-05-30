@@ -162,11 +162,15 @@ const assertContactsEmptyStatesUseSharedComponent = () => {
       source.includes('data-action-target={surface.key}') &&
       source.includes('data-action-route={surface.route}') &&
       source.includes('data-disabled-reason={contactWorkflowSurfaceTitle(surface) || undefined}') &&
+      source.includes("key: 'newsletterSignup'") &&
+      source.includes("route: '/newsletter'") &&
+      source.includes("navigate({ to: '/newsletter', search: activeSiteSearch });") &&
+      source.includes("surface.route === '/forms' || surface.route === '/newsletter'") &&
       source.includes('data-testid="contacts-promotion-users-button"') &&
       source.includes('data-testid="contacts-promotion-registration-page-button"') &&
       source.includes('data-action="contacts.copy.memberCaptureHandoff"') &&
       source.includes('data-testid="contacts-member-capture-handoff-copy-button"'),
-    'Contacts workflow, promotion, and member-capture actions must expose stable action contracts and target routes.',
+    'Contacts workflow, promotion, and member-capture actions must expose stable action contracts and route newsletter signup into the dedicated Newsletter workspace.',
   );
   assert(
     source.includes("const contactsCreateActionStatusId = 'contacts-create-action-status';") &&
