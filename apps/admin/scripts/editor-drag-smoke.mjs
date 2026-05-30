@@ -1509,6 +1509,7 @@ const assertComponentLibraryEmptyStateSource = () => {
   const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
   const customFrontendHandoffSource = fs.readFileSync(new URL('../../../packages/core/src/custom-frontend-agent-handoff.ts', import.meta.url), 'utf8');
   const contentPayloadSchema = fs.readFileSync(new URL('../../../specs/ai-frontend-contract/content-payload.schema.json', import.meta.url), 'utf8');
+  const backyStoreSource = fs.readFileSync(new URL('../../../apps/public/src/lib/backyStore.ts', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Editor component library must use the shared EmptyState component');
   assert(source.includes('title="No components match this view"'), 'Editor component library empty search state must keep the shared title visible');
   assert(
@@ -1732,7 +1733,27 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(catalogSource.includes("id: 'hero-section'") && catalogSource.includes('tablet: { width: 768, height: 620 }') && catalogSource.includes('mobile: { width: 375, height: 700 }') && catalogSource.includes('mobile: { x: 20, y: 420, width: 335, height: 230 }') && catalogSource.includes('mobile: { x: 16, y: 16, width: 303, height: 132 }'), 'Hero section preset must include root, media frame, and nested media responsive geometry');
   assert(catalogSource.includes("id: 'feature-grid-section'") && catalogSource.includes('tablet: { width: 768, height: 650 }') && catalogSource.includes('mobile: { width: 375, height: 850 }') && catalogSource.includes('y: 270 + index * 180') && catalogSource.includes('mobile: { x: 18, y: 68, width: 295, height: 66, props: { fontSize: 13 } }'), 'Feature grid preset must include root, card, and nested text responsive geometry');
   assert(catalogSource.includes("id: 'lead-capture-form'") && catalogSource.includes('tablet: { width: 400, height: 440 }') && catalogSource.includes('mobile: { width: 335, height: 455 }') && catalogSource.includes('mobile: { x: 18, y: 226, width: 299, height: 108 }') && catalogSource.includes('mobile: { x: 18, y: 360, width: 180, height: 48 }'), 'Lead capture form preset must include root and child field responsive geometry');
+  assert(
+    catalogSource.includes("id: 'newsletter-signup-form'") &&
+      catalogSource.includes("backyIntent: 'newsletter'") &&
+      catalogSource.includes("schemaVersion: 'backy.newsletter-form.v1'") &&
+      catalogSource.includes("source: 'component-library'") &&
+      catalogSource.includes("newsletterTopicIds: ['investigations', 'local-reports', 'policy-updates', 'weekly-digest']") &&
+      catalogSource.includes("contactShareEmailField: 'email'") &&
+      catalogSource.includes("consentField: 'consent'") &&
+      catalogSource.includes("name: 'consent'") &&
+      catalogSource.includes('mobile: { width: 335, height: 585 }') &&
+      catalogSource.includes('mobile: { x: 18, y: 506, width: 180, height: 48 }'),
+    'Newsletter signup form preset must carry newsletter intent, consent, contact-share, topic, and responsive geometry metadata.',
+  );
   assert(catalogSource.includes("id: 'member-registration-form'") && catalogSource.includes('tablet: { width: 400, height: 570 }') && catalogSource.includes('mobile: { width: 335, height: 625 }') && catalogSource.includes('mobile: { x: 18, y: 394, width: 299, height: 70 }') && catalogSource.includes('mobile: { x: 18, y: 505, width: 190, height: 50 }'), 'Member registration form preset must include root, consent, and submit responsive geometry');
+  assert(
+    backyStoreSource.includes('function normalizeCanvasFormSettings') &&
+      backyStoreSource.includes('function normalizeCanvasFormConsentSettings') &&
+      backyStoreSource.includes('settings: normalizeCanvasFormSettings(props.settings)') &&
+      backyStoreSource.includes('consentSettings: normalizeCanvasFormConsentSettings(props.consentSettings)'),
+    'Canvas-derived forms must preserve structured settings and consent metadata for newsletter/API handoff.',
+  );
   assert(catalogSource.includes("type: 'embed'") && catalogSource.includes('tablet: { width: 380, height: 280 }') && catalogSource.includes('mobile: { width: 335, height: 260 }'), 'Embed block preset must include tablet/mobile responsive geometry');
   assert(catalogSource.includes("type: 'html'") && catalogSource.includes('tablet: { width: 340, height: 180 }') && catalogSource.includes('mobile: { width: 335, height: 190 }'), 'HTML block preset must include tablet/mobile responsive geometry');
   assert(catalogSource.includes("type: 'table'") && catalogSource.includes('tablet: { width: 380, height: 240 }') && catalogSource.includes('mobile: { width: 335, height: 260 }'), 'Table block preset must include tablet/mobile responsive geometry');

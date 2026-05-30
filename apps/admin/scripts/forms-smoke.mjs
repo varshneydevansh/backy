@@ -494,8 +494,12 @@ const assertFormsPersistenceCertificationSource = () => {
       publicStoreSource.includes('const rawContactShare: FormDefinition["contactShare"]') &&
       publicStoreSource.includes('const rawCollectionTarget: FormDefinition["collectionTarget"]') &&
       publicStoreSource.includes('contactShare: normalizeCanvasContactShare(rawContactShare, fields)') &&
-      publicStoreSource.includes('collectionTarget: normalizeCanvasCollectionTarget(rawCollectionTarget, fields)'),
-    'Canvas-derived forms must normalize contact-share and collection-write routing against collected form fields',
+      publicStoreSource.includes('collectionTarget: normalizeCanvasCollectionTarget(rawCollectionTarget, fields)') &&
+      publicStoreSource.includes('function normalizeCanvasFormSettings') &&
+      publicStoreSource.includes('function normalizeCanvasFormConsentSettings') &&
+      publicStoreSource.includes('settings: normalizeCanvasFormSettings(props.settings)') &&
+      publicStoreSource.includes('consentSettings: normalizeCanvasFormConsentSettings(props.consentSettings)'),
+    'Canvas-derived forms must normalize contact-share and collection-write routing against collected form fields and preserve structured form metadata',
   );
   assert(
     publicStoreSource.includes('normalizeCanvasFormField') &&

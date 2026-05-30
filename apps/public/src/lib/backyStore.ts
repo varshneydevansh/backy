@@ -4355,6 +4355,38 @@ function normalizeCanvasCollectionTarget(
   };
 }
 
+function normalizeCanvasFormSettings(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const cloned = clone(value as Record<string, unknown>);
+  return Object.keys(cloned).length > 0 ? cloned : undefined;
+}
+
+function normalizeCanvasFormConsentSettings(value: unknown): FormDefinition["consentSettings"] {
+  const record = normalizeCanvasFormSettings(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const settings: NonNullable<FormDefinition["consentSettings"]> = {};
+  const policyLabel = sanitizeString(record.policyLabel);
+  const retentionDays = parseNumberValue(record.retentionDays);
+  const deleteAfterDays = parseNumberValue(record.deleteAfterDays);
+  const requestEmail = sanitizeString(record.requestEmail);
+
+  if (policyLabel) settings.policyLabel = policyLabel;
+  if (retentionDays && retentionDays > 0) settings.retentionDays = Math.floor(retentionDays);
+  if (deleteAfterDays && deleteAfterDays > 0) settings.deleteAfterDays = Math.floor(deleteAfterDays);
+  if (requestEmail) settings.requestEmail = requestEmail;
+  if (Object.prototype.hasOwnProperty.call(record, "exportIncludesIp")) {
+    settings.exportIncludesIp = parseBooleanInput(record.exportIncludesIp, false);
+  }
+
+  return Object.keys(settings).length > 0 ? settings : undefined;
+}
+
 function buildFormDefinitionFromCanvas(
   formElement: CanvasElement,
   context: {
@@ -4460,6 +4492,8 @@ function buildFormDefinitionFromCanvas(
     moderationMode,
     contactShare: normalizeCanvasContactShare(rawContactShare, fields),
     collectionTarget: normalizeCanvasCollectionTarget(rawCollectionTarget, fields),
+    consentSettings: normalizeCanvasFormConsentSettings(props.consentSettings),
+    settings: normalizeCanvasFormSettings(props.settings),
     createdBy: "admin",
     updatedBy: "admin",
     createdAt: nowIso,

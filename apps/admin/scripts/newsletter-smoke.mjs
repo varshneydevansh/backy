@@ -11,6 +11,7 @@ const assert = (condition, message) => {
 };
 
 const routeSource = read('../src/routes/newsletter.tsx');
+const pagesNewSource = read('../src/routes/pages.new.tsx');
 const adminContentApiSource = read('../src/lib/adminContentApi.ts');
 const sidebarSource = read('../src/components/layout/sidebarModel.ts');
 const headerModelSource = read('../src/components/layout/headerModel.ts');
@@ -59,6 +60,8 @@ assert(routeSource.includes("navigate({ to: '/blog/new', search: { siteId: activ
 assert(routeSource.includes('Manually added in Backy Newsletter workspace after explicit reader consent.'), 'Manual subscriber adds must persist an explicit consent note.');
 assert(routeSource.includes('provider API keys') && routeSource.includes('SMTP credentials') && routeSource.includes('bounce webhook secrets'), 'Newsletter issue handoff must keep provider secrets outside Backy/content payloads.');
 assert(routeSource.includes('overflow-x-auto') && routeSource.includes('min-w-[900px]'), 'Newsletter subscriber table must avoid admin-table text overlap on narrow screens.');
+assert(pagesNewSource.includes("id: 'newsletter-signup-form'") && pagesNewSource.includes("backyIntent: 'newsletter'") && pagesNewSource.includes("schemaVersion: 'backy.newsletter-form.v1'"), 'Generated newsletter page canvas must mark its signup form with machine-readable newsletter metadata.');
+assert(pagesNewSource.includes("consentField: 'consent'") && pagesNewSource.includes("name: 'consent'") && pagesNewSource.includes("sourceField: 'signup_source'"), 'Generated newsletter page canvas must use canonical consent and signup-source fields for subscriber management.');
 
 assert(sidebarSource.includes("{ id: 'newsletter', label: 'Newsletter', to: '/newsletter'"), 'Sidebar must expose Newsletter in the Audience section.');
 assert(sidebarSource.includes("'/newsletter'"), 'Sidebar site-scoped routes must preserve siteId on Newsletter navigation.');
