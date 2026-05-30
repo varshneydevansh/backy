@@ -671,6 +671,7 @@ export function ComponentLibrary({
       data-component-library-view-mode-storage={VIEW_MODE_STORAGE_KEY}
       data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
       data-component-drag-active={draggingItemKey ? 'true' : 'false'}
+      data-component-preview-hidden-while-dragging="true"
       aria-describedby={componentLibraryActionStatusId}
       data-action-status={componentLibraryActionStatus}
     >
@@ -1027,7 +1028,7 @@ export function ComponentLibrary({
         )}
       </div>
 
-      {previewItem && (
+      {componentPreviewVisible && previewItem && (
         <ComponentPreviewPane item={previewItem} />
       )}
     </div>

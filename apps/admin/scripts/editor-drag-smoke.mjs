@@ -1601,6 +1601,8 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('const componentPreviewVisible = Boolean(previewItem) && !draggingItemKey;') &&
       source.includes("componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3'") &&
       source.includes("data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}") &&
+      source.includes('data-component-preview-hidden-while-dragging="true"') &&
+      source.includes('{componentPreviewVisible && previewItem && (') &&
       source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
       source.includes('data-component-preview-placement="sticky-footer"') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
@@ -1637,6 +1639,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('const dragImageRef = useRef<HTMLElement | null>(null);') &&
       source.includes('const [draggingItemKey, setDraggingItemKey] = useState<string | null>(null);') &&
       source.includes("data-component-drag-active={draggingItemKey ? 'true' : 'false'}") &&
+      source.includes('data-component-preview-hidden-while-dragging="true"') &&
       source.includes('setPreviewItemKey(null);') &&
       source.includes('setDraggingItemKey(getLibraryItemKey(item));') &&
       source.includes('void dragImage.offsetWidth;') &&
