@@ -1003,7 +1003,7 @@ function UsersListView() {
       key: 'fullName',
       label: 'Person',
       sortable: true,
-      width: '340px',
+      width: '380px',
       render: (user) => (
         <button
           type="button"
@@ -1046,7 +1046,7 @@ function UsersListView() {
       key: 'role',
       label: 'Role',
       sortable: true,
-      width: '190px',
+      width: '210px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1074,7 +1074,7 @@ function UsersListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      width: '190px',
+      width: '210px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1100,7 +1100,7 @@ function UsersListView() {
       key: 'lastActive',
       label: 'Activity',
       sortable: true,
-      width: '220px',
+      width: '240px',
       render: (user) => (
         <span className="block min-w-0 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={user.lastActive}>{user.lastActive}</span>
       ),
@@ -1108,7 +1108,8 @@ function UsersListView() {
     {
       key: 'actions',
       label: '',
-      width: '112px',
+      width: '132px',
+      overflowMode: 'visible',
       render: (user) => {
         const userActionStatusId = `users-actions-status-${user.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
         const rowBusyReason = isUsersBusy
@@ -2348,11 +2349,11 @@ function UsersListView() {
             </div>
           </div>
 
-          <div id="users-directory" className="scroll-mt-24">
+          <div id="users-directory" className="mt-4 scroll-mt-24">
             <DataGrid
               columns={columns}
               data={data}
-              tableMinWidth="1200px"
+              tableMinWidth="1320px"
               loading={isLoading}
               interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}

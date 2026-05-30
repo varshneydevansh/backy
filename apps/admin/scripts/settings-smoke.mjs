@@ -506,17 +506,17 @@ const assertSettingsSourceContracts = () => {
   assert(
     settingsRoute.includes('className="relative z-[130] flex flex-wrap items-center gap-2"') &&
       settingsRoute.includes('data-stack-layer="settings-header-actions-above-workbar"') &&
-      settingsRoute.includes('className="group relative z-[140] transition-[margin] [&[open]]:mb-32"') &&
+      settingsRoute.includes('className="group relative z-[140] w-full max-w-[18rem] sm:w-auto"') &&
       settingsRoute.includes('data-stack-layer="settings-header-more-actions-above-workbar"') &&
-      settingsRoute.includes('data-open-reserves-workbar-gap="true"') &&
+      settingsRoute.includes('data-open-reserves-workbar-gap="in-flow"') &&
       settingsRoute.includes('data-stack-layer="settings-header-secondary-menu-above-workbar"') &&
       settingsRoute.includes('data-stack-layer="settings-workbar-under-header-actions"') &&
-      settingsRoute.includes('absolute right-0 top-full z-[150]') &&
+      settingsRoute.includes('className="mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"') &&
       settingsRoute.includes('min-w-52 max-w-[calc(100vw-2rem)]') &&
       settingsRoute.includes('data-testid="settings-header-secondary-action-menu"') &&
       settingsSmokeSource.includes('const assertSettingsHeaderActionMenuLayer = async (client) =>') &&
       settingsSmokeSource.includes('state.topElementWithinMenu') &&
-      settingsSmokeSource.includes('state.detailsReservesWorkbarGap') &&
+      settingsSmokeSource.includes("state.detailsReservesWorkbarGap === 'in-flow'") &&
       settingsSmokeSource.includes('!state.overlapsWorkbar'),
     'Settings header More actions menu must reserve space and stack above the sticky workbar instead of hiding behind the active-section banner.',
   );
@@ -1667,7 +1667,7 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       topTestId,
       topElementWithinMenu: Boolean(topElement && menu?.contains(topElement)),
       overlapsWorkbar,
-      detailsReservesWorkbarGap: details?.getAttribute('data-open-reserves-workbar-gap') === 'true',
+      detailsReservesWorkbarGap: details?.getAttribute('data-open-reserves-workbar-gap') || '',
       detailsMarginBottom: details ? Number.parseFloat(getComputedStyle(details).marginBottom) || 0 : 0,
     };
   })()`);
@@ -1685,11 +1685,11 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       state.detailsLayer === 'settings-header-more-actions-above-workbar' &&
       state.menuLayer === 'settings-header-secondary-menu-above-workbar' &&
       state.workbarLayer === 'settings-workbar-under-header-actions' &&
-      state.menuPosition === 'absolute' &&
-      state.menuZIndex === '150' &&
+      state.menuPosition === 'static' &&
+      state.menuZIndex === 'auto' &&
       state.workbarZIndex === '10' &&
-      state.detailsReservesWorkbarGap &&
-      state.detailsMarginBottom >= 120 &&
+      state.detailsReservesWorkbarGap === 'in-flow' &&
+      state.detailsMarginBottom === 0 &&
       !state.overlapsWorkbar &&
       state.menuBottom < state.workbarTop &&
       state.menuRight <= state.viewportWidth + 1 &&

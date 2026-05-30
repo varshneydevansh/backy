@@ -4181,10 +4181,10 @@ function SettingsPage() {
             </Button>
           )}
           <details
-            className="group relative z-[140] transition-[margin] [&[open]]:mb-32"
+            className="group relative z-[140] w-full max-w-[18rem] sm:w-auto"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
             data-stack-layer="settings-header-more-actions-above-workbar"
-            data-open-reserves-workbar-gap="true"
+            data-open-reserves-workbar-gap="in-flow"
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
             data-target-settings-tab={activeTab}
@@ -4192,7 +4192,7 @@ function SettingsPage() {
             data-default-collapsed="true"
           >
             <summary
-              className="inline-flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring [&::-webkit-details-marker]:hidden"
+              className="inline-flex min-h-11 w-full cursor-pointer list-none items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-accent focus-ring sm:w-auto [&::-webkit-details-marker]:hidden"
               aria-label="More settings actions"
               aria-describedby={settingsHeaderSecondaryActionStatusId}
               data-testid="settings-header-more-actions"
@@ -4202,7 +4202,7 @@ function SettingsPage() {
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
             <div
-              className="absolute right-0 top-full z-[150] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
+              className="mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
               data-stack-layer="settings-header-secondary-menu-above-workbar"
               data-testid="settings-header-secondary-action-menu"
             >

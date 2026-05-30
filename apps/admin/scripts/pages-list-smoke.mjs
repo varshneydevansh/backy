@@ -240,9 +240,10 @@ const assertPagesListSourceContract = () => {
     'Pages delivery health row refresh controls must name the page they refresh.',
   );
   assert(
-    source.includes('tableMinWidth="2100px"') &&
-      source.includes("width: '420px'") &&
-      source.includes("width: '168px'") &&
+    source.includes('tableMinWidth="2300px"') &&
+      source.includes("width: '460px'") &&
+      source.includes("width: '220px'") &&
+      source.includes("overflowMode: 'visible'") &&
       source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
       source.includes('data-testid={`pages-delivery-health-details-${pageId}`}') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
@@ -589,13 +590,15 @@ const assertSharedDataGridSourceContract = () => {
       source.includes('data-testid="admin-data-grid-scroll"') &&
       source.includes('className="w-full table-fixed text-left text-sm"') &&
       source.includes('data-layout-policy="viewport-contained-wrapped-table"') &&
-      source.includes("'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
+      source.includes("'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]'") &&
+      source.includes("const usesVisibleOverflow = col.overflowMode === 'visible' || isActionColumn;") &&
+      source.includes("usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden'") &&
       source.includes("isActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]'") &&
-      source.includes("isActionColumn && 'sticky right-0 z-10 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30'") &&
+      source.includes("isActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30'") &&
       source.includes("data-sticky-column={isActionColumn ? 'right-actions' : undefined}") &&
-      source.includes('data-cell-overflow-policy="clip-and-wrap"') &&
+      source.includes("data-cell-overflow-policy={usesVisibleOverflow ? 'visible-and-wrapped' : 'clip-and-wrap'}") &&
       source.includes('data-testid="admin-data-grid-cell-content"') &&
-      source.includes('data-cell-content-policy="constrained-wrapped-content"') &&
+      source.includes("data-cell-content-policy={usesVisibleOverflow ? 'visible-wrapped-content' : 'constrained-wrapped-content'}") &&
       source.includes('data-testid="admin-data-grid"') &&
       source.includes('data-testid="admin-data-grid-loading"') &&
       source.includes('data-testid="admin-data-grid-empty"') &&
@@ -607,6 +610,8 @@ const assertSharedDataGridSourceContract = () => {
   );
   assert(
     hookSource.includes('width?: string;') &&
+      hookSource.includes("overflowMode?: 'clipped' | 'visible';") &&
+      hookSource.includes('contentClassName?: string;') &&
       source.includes('tableMinWidth?: string;') &&
       source.includes('const parsePixelSize = (value: string | undefined): number => {') &&
       source.includes('const columnWidthTotal = Math.ceil(') &&
@@ -3429,15 +3434,19 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.headerCount === state.cellCount, `DataGrid first row cells must match column headers: ${JSON.stringify(state)}`);
   assert(state.headers.every((header) => header.id && header.scope === 'col' && header.ariaLabel && header.dataLabel), `Every DataGrid header must have id, scope, aria label, and data label: ${JSON.stringify(state.headers)}`);
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
-  assert(state.cells.every((cell) => cell.overflowPolicy === 'clip-and-wrap'), `Every dense DataGrid body cell must clip and wrap content instead of painting into neighboring columns: ${JSON.stringify(state.cells)}`);
-  assert(state.cells.every((cell) => cell.paintContainment === 'cell'), `Every dense DataGrid body cell must paint-contain descendants: ${JSON.stringify(state.cells)}`);
-  assert(state.cells.every((cell) => cell.contentPolicy === 'constrained-wrapped-content'), `Every dense DataGrid body cell must constrain rendered children inside the cell: ${JSON.stringify(state.cells)}`);
-  assert(state.cells.every((cell) => cell.descendantPolicy === 'paint-contained'), `Every dense DataGrid cell content wrapper must declare descendant paint containment: ${JSON.stringify(state.cells)}`);
+  assert(
+    state.cells.every((cell) => (
+      ['siteId', 'actions'].includes(cell.key)
+        ? cell.overflowPolicy === 'visible-and-wrapped' && cell.paintContainment === 'none' && cell.contentPolicy === 'visible-wrapped-content' && cell.descendantPolicy === 'visible'
+        : cell.overflowPolicy === 'clip-and-wrap' && cell.paintContainment === 'cell' && cell.contentPolicy === 'constrained-wrapped-content' && cell.descendantPolicy === 'paint-contained'
+    )),
+    `Dense DataGrid cells must clip by default while interaction-heavy cells opt into visible wrapped content: ${JSON.stringify(state.cells)}`,
+  );
   assert(state.cells.every((cell) => cell.contentFitsCell && cell.overflowingDescendantCount === 0), `Every dense DataGrid body cell wrapper and visible descendants must stay within its owning cell: ${JSON.stringify(state.cells)}`);
   assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content and descendants inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);
   assert(
-    state.requestedTableMinWidth === '2100px' &&
-      state.columnWidthTotal >= 2069 &&
+    state.requestedTableMinWidth === '2300px' &&
+      state.columnWidthTotal >= 2181 &&
       state.tableClientWidth >= state.columnWidthTotal &&
       state.hasHorizontalScroll,
     `Pages DataGrid must render as a horizontally scrollable dense table using at least its summed column width instead of compressing columns: ${JSON.stringify(state)}`,
@@ -3447,9 +3456,9 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
     `Pages DataGrid action column must stay anchored at the right edge after horizontal scroll: ${JSON.stringify(state)}`,
   );
   assert(
-    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '420px') &&
+    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '460px') &&
       state.columnWidths.some((column) => column.key === 'title' && column.width === '240px') &&
-      state.columnWidths.some((column) => column.key === 'actions' && column.width === '168px'),
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '220px'),
     `Pages DataGrid must render explicit column widths for dense delivery and action cells: ${JSON.stringify(state.columnWidths)}`,
   );
 

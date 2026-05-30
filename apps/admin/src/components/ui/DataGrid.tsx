@@ -326,6 +326,7 @@ export function DataGrid<T extends { id: string }>({
                                         const columnKey = getColumnKey(col);
                                         const columnLabel = getColumnLabel(col);
                                         const isActionColumn = columnKey === 'actions';
+                                        const usesVisibleOverflow = col.overflowMode === 'visible' || isActionColumn;
                                         const cellContent = col.render ? col.render(item) : String(item[col.key as keyof T]);
 
                                         return (
@@ -333,27 +334,34 @@ export function DataGrid<T extends { id: string }>({
                                                 key={columnKey}
                                                 headers={getColumnHeaderId(col)}
                                                 className={cn(
-                                                    'min-w-0 overflow-hidden whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
-                                                    isActionColumn && 'sticky right-0 z-10 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
+                                                    'min-w-0 whitespace-normal break-words px-4 py-4 align-top [overflow-wrap:anywhere]',
+                                                    usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden',
+                                                    isActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30',
                                                     col.className,
                                                     col.cellClassName,
                                                 )}
-                                                style={{ contain: 'paint' }}
+                                                style={usesVisibleOverflow ? undefined : { contain: 'paint' }}
                                                 data-column-key={columnKey}
                                                 data-column-label={columnLabel}
-                                                data-cell-overflow-policy="clip-and-wrap"
-                                                data-cell-paint-containment="cell"
+                                                data-cell-overflow-policy={usesVisibleOverflow ? 'visible-and-wrapped' : 'clip-and-wrap'}
+                                                data-cell-paint-containment={usesVisibleOverflow ? 'none' : 'cell'}
                                                 data-sticky-column={isActionColumn ? 'right-actions' : undefined}
                                             >
                                                 <div
-                                                    className="isolate min-w-0 max-w-full overflow-hidden whitespace-normal break-words [overflow-wrap:anywhere] [&_a]:break-words [&_a]:[overflow-wrap:anywhere] [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]"
-                                                    style={{
-                                                        contain: 'layout paint',
-                                                        maxInlineSize: '100%',
-                                                    }}
+                                                    className={cn(
+                                                        'isolate min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] [&_a]:break-words [&_a]:[overflow-wrap:anywhere] [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]',
+                                                        usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden',
+                                                        col.contentClassName,
+                                                    )}
+                                                    style={usesVisibleOverflow
+                                                        ? { maxInlineSize: '100%' }
+                                                        : {
+                                                            contain: 'layout paint',
+                                                            maxInlineSize: '100%',
+                                                        }}
                                                     data-testid="admin-data-grid-cell-content"
-                                                    data-cell-content-policy="constrained-wrapped-content"
-                                                    data-cell-descendant-overflow-policy="paint-contained"
+                                                    data-cell-content-policy={usesVisibleOverflow ? 'visible-wrapped-content' : 'constrained-wrapped-content'}
+                                                    data-cell-descendant-overflow-policy={usesVisibleOverflow ? 'visible' : 'paint-contained'}
                                                 >
                                                     {cellContent}
                                                 </div>

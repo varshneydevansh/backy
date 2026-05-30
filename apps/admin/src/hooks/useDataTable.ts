@@ -16,9 +16,11 @@ export interface Column<T> {
     render?: (item: T) => React.ReactNode;
     sortable?: boolean;
     width?: string;
+    overflowMode?: 'clipped' | 'visible';
     className?: string;
     headerClassName?: string;
     cellClassName?: string;
+    contentClassName?: string;
 }
 
 interface UseDataTableProps<T> {
