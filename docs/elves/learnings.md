@@ -27,6 +27,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Custom frontend Help must expose `agent-handoff.componentApiContract.componentTypeContracts` and `componentApiContract.propertyMap` as copyable first-class pointers. “Read agent-handoff” is not specific enough for frontend AI agents.
 - [2026-05-31] The Blog editor should expose a provider-safe newsletter issue handoff directly on each report/post, not only inside the separate Newsletter workspace. The authoring workflow needs a visible path from report -> send-ready subscriber sync -> external mail provider boundary.
 - [2026-05-31] Navigation layer rows must distinguish selectable child link layers from props-only `navItems`. A nav row that only says “links” without edit mode, href labels, and an expand/select hint makes users think menu items are unavailable or broken.
+- [2026-05-31] The active-site switcher must look like a control, not passive workspace metadata. Keep a visible “Site” label and no-signout copy near the sidebar selector because users naturally look there before trying account/logout flows.
 
 ## Product and Domain Invariants
 

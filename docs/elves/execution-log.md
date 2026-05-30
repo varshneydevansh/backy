@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 04:47 IST
+- **Last updated:** 2026-05-31 05:01 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 05:01 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; site switching discoverability improved; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/layout/Sidebar.tsx`: the active-site selector now has a visible `Site` label, no-signout action copy, and source-visible discovery metadata so it reads as a real control instead of passive workspace text under the Backy logo.
+- `apps/admin/src/routes/help.tsx`: the Switch active site topic now tells users exactly where the selector is, that switching does not require logout, and that the adjacent Manage link opens the active site command center for readiness, domains, subdomains, and frontend handoff.
+- `apps/admin/scripts/login-smoke.mjs` and `apps/admin/scripts/help-smoke.mjs`: smokes now guard the visible Site switcher label, no-signout copy, and Help wording.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `npm run test:login --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: mobile/compact editor ergonomics, section reflow clarity, blog/newsletter authoring polish, custom frontend/APIability discoverability, or release deploy readiness.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 04:47 IST
 

@@ -458,6 +458,9 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-manage`}') &&
       sidebarSource.includes('data-target-site-id={activeSiteRouteId}') &&
       sidebarSource.includes('const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`') &&
+      sidebarSource.includes('const activeSiteSwitchStatus = `Switch active site without signing out. Currently ${activeSiteName}.`') &&
+      sidebarSource.includes('data-site-switcher-discovery="visible-site-select-no-signout"') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher-label`}') &&
       sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
       sidebarSource.includes('const target = getSiteSwitchTarget({') &&
       sidebarSource.includes("case 'newsletter':") &&
@@ -472,7 +475,7 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes("siteId: target.siteId") &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher`}') &&
       sidebarSource.includes('data-site-switcher-mode={collapsed ?') &&
-      sidebarSource.includes('aria-label="Switch active site"') &&
+      sidebarSource.includes('aria-label={activeSiteSwitchStatus}') &&
       sidebarSource.includes('to="/sites/$siteId"') &&
       sidebarSource.includes('params={{ siteId: activeSiteRouteId }}') &&
       sidebarSource.includes("navigationId = 'admin-sidebar-navigation'") &&
@@ -2554,6 +2557,8 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const quickCreateProduct = document.querySelector('[data-testid="admin-sidebar-quick-create-new-product"]');
       const quickCreateForm = document.querySelector('[data-testid="admin-sidebar-quick-create-new-form"]');
       const activeSite = document.querySelector('[data-testid="admin-sidebar-active-site"]');
+      const activeSiteSwitcher = document.querySelector('[data-testid="admin-sidebar-site-switcher"]');
+      const activeSiteSwitcherLabel = document.querySelector('[data-testid="admin-sidebar-site-switcher-label"]');
       const shellRect = shell?.getBoundingClientRect();
       const sidebarRect = sidebar?.getBoundingClientRect();
       const navRect = nav?.getBoundingClientRect();
@@ -2578,6 +2583,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const quickCreateSiteStatus = quickCreate?.getAttribute('data-target-site-status') || '';
       const quickCreatePermissionSource = quickCreate?.getAttribute('data-permission-source') || '';
       const quickCreatePermissionSyncState = quickCreate?.getAttribute('data-permission-sync-state') || '';
+      const activeSiteSwitchStatus = activeSite?.getAttribute('data-action-status') || '';
       const permissionSyncStateReady = [
         'synced',
         'syncing-role-defaults',
@@ -2621,6 +2627,13 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           Boolean(sectionToggle.getAttribute('data-section-status')) &&
           dashboardLink instanceof HTMLAnchorElement &&
           dashboardLink.getAttribute('data-action-state') === 'ready' &&
+          activeSite instanceof HTMLElement &&
+          activeSite.getAttribute('data-site-switcher-discovery') === 'visible-site-select-no-signout' &&
+          /Switch active site without signing out/.test(activeSiteSwitchStatus) &&
+          activeSiteSwitcher instanceof HTMLSelectElement &&
+          /Switch active site without signing out/.test(activeSiteSwitcher.getAttribute('aria-label') || '') &&
+          activeSiteSwitcherLabel instanceof HTMLElement &&
+          activeSiteSwitcherLabel.textContent?.trim() === 'Site' &&
           quickCreate instanceof HTMLElement &&
           quickCreateStatus instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === quickCreateStatus.id &&
@@ -2733,6 +2746,9 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         quickCreateSiteStatus,
         quickCreatePermissionSource,
         quickCreatePermissionSyncState,
+        activeSiteSwitchStatus,
+        activeSiteSwitcherLabel: activeSiteSwitcherLabel?.textContent?.trim() || '',
+        activeSiteSwitcherAria: activeSiteSwitcher?.getAttribute('aria-label') || '',
         quickCreateActionState: quickCreate?.getAttribute('data-action-state') || '',
         quickCreatePageHref: quickCreatePage instanceof HTMLAnchorElement ? quickCreatePage.href : '',
         quickCreatePageState: quickCreatePage?.getAttribute('data-action-state') || '',

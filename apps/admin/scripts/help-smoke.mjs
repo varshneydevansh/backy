@@ -392,7 +392,10 @@ const assertHelpSourceContracts = () => {
     helpSource.includes('SITE_SCOPED_HELP_ROUTES') &&
       helpSource.includes('search={getTopicRouteSearch(topic.route)}') &&
       helpSource.includes('const routeSearch = Route.useSearch()') &&
-      helpSource.includes("const activeSiteId = routeSearch.siteId || 'site-demo'"),
+      helpSource.includes("const activeSiteId = routeSearch.siteId || 'site-demo'") &&
+      helpSource.includes('Use the top-left Site selector in the sidebar. You do not need to sign out.') &&
+      helpSource.includes('The Site dropdown sits directly under the Backy logo in the left sidebar') &&
+      helpSource.includes('Use the Manage link beside Backy to open the active site command center'),
     'Help route links and copyable endpoint values must preserve the active site context.',
   );
 

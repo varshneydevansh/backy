@@ -259,6 +259,7 @@ export function Sidebar({
   const railTooltipId = `${navigationId}-rail-tooltip`;
   const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}. ${hiddenQuickCreateCount} hidden by role or permissions.`;
   const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`;
+  const activeSiteSwitchStatus = `Switch active site without signing out. Currently ${activeSiteName}.`;
   const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;
   const getRailDescribedBy = (baseId: string) => (
     collapsed ? `${baseId} ${railTooltipId}` : baseId
@@ -521,7 +522,8 @@ export function Sidebar({
               <div
                 className="mt-1 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
-                data-action-status={`Switch active site. ${activeSiteManageStatus}`}
+                data-site-switcher-discovery="visible-site-select-no-signout"
+                data-action-status={`${activeSiteSwitchStatus} ${activeSiteManageStatus}`}
               >
                 <span
                   className={cn(
@@ -530,13 +532,21 @@ export function Sidebar({
                   )}
                   aria-hidden="true"
                 />
-                <span className="sr-only">Switch active site</span>
+                <span
+                  className="shrink-0 text-[10px] font-semibold uppercase text-muted-foreground/80"
+                  data-testid={`${testIdPrefix}-site-switcher-label`}
+                  aria-hidden="true"
+                >
+                  Site
+                </span>
+                <span className="sr-only">{activeSiteSwitchStatus}</span>
                 <select
                   value={activeSiteId}
                   onChange={(event) => switchActiveSite(event.target.value)}
                   className="h-7 min-w-0 flex-1 appearance-none bg-transparent text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus:text-foreground"
                   data-testid={`${testIdPrefix}-site-switcher`}
-                  aria-label="Switch active site"
+                  aria-label={activeSiteSwitchStatus}
+                  title={activeSiteSwitchStatus}
                 >
                   {sites.map((site) => {
                     const optionSiteId = site.publicSiteId || site.id;
