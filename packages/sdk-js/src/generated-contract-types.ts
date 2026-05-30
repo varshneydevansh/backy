@@ -3082,6 +3082,7 @@ export type GeneratedBackyOpenApiNewsletterSubscriber = {
   formId: string;
   formTitle?: string;
   contactStatus: "new" | "contacted" | "qualified" | "archived";
+  newsletterStatus?: "subscribed" | "unsubscribed" | "pending" | "bounced" | "complained";
   subscriptionStatus: "subscribed" | "unsubscribed";
   topics?: string | null;
   source?: string | null;

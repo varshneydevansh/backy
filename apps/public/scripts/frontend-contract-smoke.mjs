@@ -90,6 +90,8 @@ const adminCollectionsPage = read('../../../apps/admin/src/routes/collections.ts
 const adminReusableSectionsPage = read('../../../apps/admin/src/routes/reusable-sections.tsx');
 const adminReusableSectionsSmoke = read('../../../apps/admin/scripts/reusable-sections-smoke.mjs');
 const adminCanvasEditorSource = read('../../../apps/admin/src/components/editor/CanvasEditor.tsx');
+const adminEditorTypes = read('../../../apps/admin/src/types/editor.ts');
+const adminEditorCatalog = read('../../../apps/admin/src/components/editor/editorCatalog.ts');
 
 const uniqueSorted = (values) => [...new Set(values)].sort();
 
@@ -100,6 +102,18 @@ const extractQuotedStringsFromBlock = (source, pattern, label) => {
   assert(match?.[1], `Unable to extract ${label}`);
   return uniqueSorted([...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]));
 };
+
+const extractEditorElementTypes = (source) => {
+  const match = source.match(/export type ElementType\s*=([\s\S]*?);/);
+  assert(match?.[1], 'Unable to extract admin editor ElementType union');
+  return uniqueSorted([...match[1].matchAll(/'([^']+)'/g)].map((entry) => entry[1]));
+};
+
+const extractCatalogElementTypes = (source, editorElementTypes) => uniqueSorted(
+  [...source.matchAll(/\btype:\s*'([^']+)'/g)]
+    .map((entry) => entry[1])
+    .filter((type) => editorElementTypes.includes(type)),
+);
 
 const requiredComponentApiFieldPaths = [
   'element.id',
@@ -184,6 +198,11 @@ const requiredComponentApiTypes = [
   'interactiveFigure',
   'codeComponent',
 ];
+const adminEditorElementTypes = extractEditorElementTypes(adminEditorTypes);
+const adminCatalogElementTypes = extractCatalogElementTypes(adminEditorCatalog, adminEditorElementTypes);
+const expectedComponentApiTypes = uniqueSorted(adminEditorElementTypes);
+const missingComponentTypesFromPublishedGuard = missingFrom(expectedComponentApiTypes, requiredComponentApiTypes);
+const extraPublishedGuardTypes = missingFrom(requiredComponentApiTypes, expectedComponentApiTypes);
 const missingComponentApiCorePaths = requiredComponentApiFieldPaths.filter((path) => !customFrontendAgentHandoffLib.includes(path));
 const missingComponentApiSchemaPaths = requiredComponentApiFieldPaths.filter((path) => !frontendManifestSchema.includes(`"const": "${path}"`));
 const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path) => {
@@ -192,9 +211,8 @@ const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path
 });
 const missingComponentApiCoreFamilies = requiredComponentApiFamilies.filter((family) => !customFrontendAgentHandoffLib.includes(`'${family}'`));
 const missingComponentApiSchemaFamilies = requiredComponentApiFamilies.filter((family) => !frontendManifestSchema.includes(`"const": "${family}"`));
-const missingComponentApiCoreTypes = requiredComponentApiTypes.filter((type) => !customFrontendAgentHandoffLib.includes(`'${type}'`));
-const missingComponentApiSchemaTypes = requiredComponentApiTypes.filter((type) => !frontendManifestSchema.includes(`"const": "${type}"`));
-const expectedComponentApiTypes = uniqueSorted(requiredComponentApiTypes);
+const missingComponentApiCoreTypes = expectedComponentApiTypes.filter((type) => !customFrontendAgentHandoffLib.includes(`'${type}'`));
+const missingComponentApiSchemaTypes = expectedComponentApiTypes.filter((type) => !frontendManifestSchema.includes(`"const": "${type}"`));
 const componentApiContractTypes = uniqueSorted(
   [...customFrontendAgentHandoffLib.matchAll(/componentTypeContract\('([^']+)'/g)].map((entry) => entry[1]),
 );
@@ -213,6 +231,7 @@ assert(publicRendererMapBlock, 'Unable to extract public renderer element map');
 const publicRendererMappedTypes = uniqueSorted(
   [...publicRendererMapBlock.matchAll(/^\s*([A-Za-z][\w]*)\s*:/gm)].map((entry) => entry[1]),
 );
+const missingCatalogTypesFromContract = missingFrom(adminCatalogElementTypes, componentApiContractTypes);
 const missingComponentTypesFromContract = missingFrom(expectedComponentApiTypes, componentApiContractTypes);
 const missingComponentTypesFromAdminCanvas = missingFrom(expectedComponentApiTypes, adminCanvasElementTypes);
 const missingComponentTypesFromRendererKnownTypes = missingFrom(expectedComponentApiTypes, publicRendererKnownTypes);
@@ -229,6 +248,9 @@ assert(
     missingComponentApiSchemaFamilies.length === 0 &&
     missingComponentApiCoreTypes.length === 0 &&
     missingComponentApiSchemaTypes.length === 0 &&
+    missingComponentTypesFromPublishedGuard.length === 0 &&
+    extraPublishedGuardTypes.length === 0 &&
+    missingCatalogTypesFromContract.length === 0 &&
     missingComponentTypesFromContract.length === 0 &&
     missingComponentTypesFromAdminCanvas.length === 0 &&
     missingComponentTypesFromRendererKnownTypes.length === 0 &&
@@ -274,6 +296,9 @@ assert(
     missingComponentApiSchemaFamilies,
     missingComponentApiCoreTypes,
     missingComponentApiSchemaTypes,
+    missingComponentTypesFromPublishedGuard,
+    extraPublishedGuardTypes,
+    missingCatalogTypesFromContract,
     missingComponentTypesFromContract,
     missingComponentTypesFromAdminCanvas,
     missingComponentTypesFromRendererKnownTypes,
