@@ -344,6 +344,7 @@ const assertHelpSourceContracts = () => {
   const headerSource = read('../src/components/layout/Header.tsx');
   const routeTreeSource = read('../src/routeTree.gen.ts');
   const newsletterSmokeSource = read('newsletter-smoke.mjs');
+  const adminPackageSource = read('../package.json');
 
   const requiredTopicIds = [
     'switch-sites',
@@ -422,6 +423,12 @@ const assertHelpSourceContracts = () => {
       headerSource.includes("{ id: 'tool:help'") &&
       routeTreeSource.includes("path: '/help'"),
     'Help route must remain wired into sidebar, header search, header title, and generated route tree.',
+  );
+
+  assert(
+    adminPackageSource.includes('"test:help-rendered": "BACKY_HELP_RENDERED_SMOKE=1 node scripts/help-smoke.mjs"') &&
+      adminPackageSource.includes('"test:smoke:site": "npm run test:sites && npm run test:site-detail && npm run test:frontend-design && npm run test:help && npm run test:help-rendered"'),
+    'Rendered Help handoff coverage must remain exposed as test:help-rendered and included in site smoke coverage.',
   );
 
   return {
