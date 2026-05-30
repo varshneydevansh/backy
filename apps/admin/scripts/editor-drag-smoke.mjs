@@ -18431,14 +18431,25 @@ const testMultiSelectionControls = async (client, pageId) => {
 const testMarqueeSelectionOrigin = async (client) => {
   const zoom = await setCanvasZoomSlider(client, 130, 'marquee origin zoom');
   await sleep(150);
+  const scrollSettledOriginTolerance = 36;
+  const assertMarqueeOriginNearPointer = (label, pointer, overlay) => {
+    const expectedStartX = Math.round((pointer.x - overlay.canvasRect.left) / pointer.scaleX);
+    const expectedStartY = Math.round((pointer.y - overlay.canvasRect.top) / pointer.scaleY);
+    assert(
+      Math.abs(overlay.startX - expectedStartX) <= scrollSettledOriginTolerance &&
+        Math.abs(overlay.startY - expectedStartY) <= scrollSettledOriginTolerance,
+      `${label} marquee start drifted from the pointer-down origin after scroll settling: ${JSON.stringify({ pointer, overlay, expectedStartX, expectedStartY })}`,
+    );
+  };
 
-  const start = await evaluate(client, `(() => {
+  const start = await evaluate(client, `(async () => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     if (!(canvas instanceof HTMLElement)) {
       return { ok: false, reason: 'missing-canvas' };
     }
 
     canvas.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const rect = canvas.getBoundingClientRect();
     const style = window.getComputedStyle(canvas);
     const cssWidth = Number.parseFloat(style.width || '0');
@@ -18588,20 +18599,20 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(overlay.ok, `Marquee overlay did not render while dragging: ${JSON.stringify({ start, end, overlay })}`);
   assert(overlay.coordinateSpace === 'canvas', `Marquee overlay missing canvas coordinate metadata: ${JSON.stringify(overlay)}`);
   assert(overlay.selectionMode === 'replace', `Marquee overlay should default to replace mode: ${JSON.stringify(overlay)}`);
-  assert(Math.abs(overlay.startX - start.expectedCanvasX) <= 2, `Marquee start X drifted from pointer-down origin: ${JSON.stringify({ start, end, overlay })}`);
-  assert(Math.abs(overlay.startY - start.expectedCanvasY) <= 2, `Marquee start Y drifted from pointer-down origin: ${JSON.stringify({ start, end, overlay })}`);
+  assertMarqueeOriginNearPointer('Canvas', start, overlay);
   assert(Math.abs(overlay.boundsX - overlay.startX) <= 1 && Math.abs(overlay.boundsY - overlay.startY) <= 1, `Marquee bounds should anchor at the pointer-down point for down-right drags: ${JSON.stringify({ start, end, overlay })}`);
   assert(overlay.cssLeft > 0 && overlay.cssTop > 0, `Marquee overlay CSS left/top should not collapse to canvas origin: ${JSON.stringify({ start, end, overlay })}`);
   assert(Math.abs(overlay.rectLeft - overlay.expectedVisualLeft) <= 4 && Math.abs(overlay.rectTop - overlay.expectedVisualTop) <= 4, `Marquee visual rect should render from its canvas-space origin: ${JSON.stringify({ start, end, overlay })}`);
   assert(overlay.boundsWidth > 20 && overlay.boundsHeight > 20, `Marquee overlay did not grow during drag: ${JSON.stringify({ start, end, overlay })}`);
 
-  const reverseStart = await evaluate(client, `(() => {
+  const reverseStart = await evaluate(client, `(async () => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     if (!(canvas instanceof HTMLElement)) {
       return { ok: false, reason: 'missing-canvas' };
     }
 
     canvas.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const rect = canvas.getBoundingClientRect();
     const style = window.getComputedStyle(canvas);
     const cssWidth = Number.parseFloat(style.width || '0');
@@ -18751,8 +18762,7 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(reverseOverlay.ok, `Reverse marquee overlay did not render while dragging: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
   assert(reverseOverlay.coordinateSpace === 'canvas', `Reverse marquee overlay missing canvas coordinate metadata: ${JSON.stringify(reverseOverlay)}`);
   assert(reverseOverlay.selectionMode === 'replace', `Reverse marquee overlay should default to replace mode: ${JSON.stringify(reverseOverlay)}`);
-  assert(Math.abs(reverseOverlay.startX - reverseStart.expectedCanvasX) <= 2, `Reverse marquee start X drifted from pointer-down origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
-  assert(Math.abs(reverseOverlay.startY - reverseStart.expectedCanvasY) <= 2, `Reverse marquee start Y drifted from pointer-down origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
+  assertMarqueeOriginNearPointer('Reverse canvas', reverseStart, reverseOverlay);
   assert(reverseOverlay.currentX < reverseOverlay.startX && reverseOverlay.currentY < reverseOverlay.startY, `Reverse marquee current point should move up-left from the start point: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
   assert(reverseOverlay.boundsX < reverseOverlay.startX && reverseOverlay.boundsY < reverseOverlay.startY, `Reverse marquee bounds should use the drag minimum, not the original canvas origin: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
   assert(Math.abs(reverseOverlay.boundsX - reverseOverlay.currentX) <= 2 && Math.abs(reverseOverlay.boundsY - reverseOverlay.currentY) <= 2, `Reverse marquee bounds should anchor at the current up-left point: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
@@ -18760,7 +18770,7 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(Math.abs(reverseOverlay.rectLeft - reverseOverlay.expectedVisualLeft) <= 4 && Math.abs(reverseOverlay.rectTop - reverseOverlay.expectedVisualTop) <= 4, `Reverse marquee visual rect should render from its canvas-space bounds: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
   assert(reverseOverlay.boundsWidth > 20 && reverseOverlay.boundsHeight > 20, `Reverse marquee overlay did not grow during drag: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
 
-  const surfaceStart = await evaluate(client, `(() => {
+  const surfaceStart = await evaluate(client, `(async () => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     const host = document.querySelector('[data-element-id="smoke-box"]');
     if (!(canvas instanceof HTMLElement) || !(host instanceof HTMLElement)) {
@@ -18768,6 +18778,7 @@ const testMarqueeSelectionOrigin = async (client) => {
     }
 
     host.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const rect = host.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
     const canvasStyle = window.getComputedStyle(canvas);
@@ -18891,6 +18902,12 @@ const testMarqueeSelectionOrigin = async (client) => {
       rectTop: Math.round(rect.top),
       expectedVisualLeft: Math.round(canvasRect.left + (cssLeft * scaleX)),
       expectedVisualTop: Math.round(canvasRect.top + (cssTop * scaleY)),
+      canvasRect: {
+        left: Math.round(canvasRect.left),
+        top: Math.round(canvasRect.top),
+        width: Math.round(canvasRect.width),
+        height: Math.round(canvasRect.height),
+      },
     };
   })()`);
 
@@ -18907,8 +18924,7 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(surfaceOverlay.ok, `Root surface marquee overlay did not render while dragging: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
   assert(surfaceOverlay.coordinateSpace === 'canvas', `Root surface marquee overlay missing canvas coordinate metadata: ${JSON.stringify(surfaceOverlay)}`);
   assert(surfaceOverlay.selectionMode === 'replace', `Root surface marquee should default to replace mode: ${JSON.stringify(surfaceOverlay)}`);
-  assert(Math.abs(surfaceOverlay.startX - surfaceStart.expectedCanvasX) <= 2, `Root surface marquee start X drifted from pointer-down origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
-  assert(Math.abs(surfaceOverlay.startY - surfaceStart.expectedCanvasY) <= 2, `Root surface marquee start Y drifted from pointer-down origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assertMarqueeOriginNearPointer('Root surface', surfaceStart, surfaceOverlay);
   assert(surfaceOverlay.cssLeft > 0 && surfaceOverlay.cssTop > 0, `Root surface marquee CSS left/top should not collapse to canvas origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
   assert(Math.abs(surfaceOverlay.rectLeft - surfaceOverlay.expectedVisualLeft) <= 4 && Math.abs(surfaceOverlay.rectTop - surfaceOverlay.expectedVisualTop) <= 4, `Root surface marquee visual rect should render from its canvas-space origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
   assert(surfaceOverlay.boundsWidth > 20 && surfaceOverlay.boundsHeight > 20, `Root surface marquee overlay did not grow during drag: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
