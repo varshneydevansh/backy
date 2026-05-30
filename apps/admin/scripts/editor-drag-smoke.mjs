@@ -1069,15 +1069,26 @@ const assertCanvasEditorShortcutSource = () => {
     layersPanelSource.includes('data-layer-readable-name="two-line"') &&
       layersPanelSource.includes('data-testid="editor-layer-readable-name"') &&
       layersPanelSource.includes('data-testid="editor-layer-readable-meta"') &&
+      layersPanelSource.includes('data-testid="editor-layer-nav-selection-hint"') &&
       layersPanelSource.includes('const getLayerReadableMeta = (element: CanvasElement): string =>') &&
+      layersPanelSource.includes('const normalizeNavigationItemRecords = (value: unknown): Array<{ label: string; href: string }> =>') &&
+      layersPanelSource.includes('const getNavigationLayerMode = (element: CanvasElement):') &&
+      layersPanelSource.includes('const getNavigationLayerHint = (element: CanvasElement): string =>') &&
       layersPanelSource.includes('data-layer-nav-link-count={navLinkCount}') &&
+      layersPanelSource.includes('data-layer-nav-child-link-count={navLinkChildCount}') &&
+      layersPanelSource.includes('data-layer-nav-edit-mode={navLayerMode}') &&
+      layersPanelSource.includes('data-layer-nav-item-labels={navItemLabels}') &&
       layersPanelSource.includes('data-layer-link-href={linkHref}') &&
-      layersPanelSource.includes('data-layer-selectable-child-policy="expand-nav-container-select-link-children"') &&
-      layersPanelSource.includes("return `${element.type} · ${linkCount} link${linkCount === 1 ? '' : 's'} · ${binding}`") &&
+      layersPanelSource.includes("const navSelectableChildPolicy = element.type === 'nav'") &&
+      layersPanelSource.includes('expand-nav-container-select-link-children') &&
+      layersPanelSource.includes('select-nav-open-inspector-to-sync-links') &&
+      layersPanelSource.includes("const mode = getNavigationLayerMode(element) === 'child-layers' ? 'selectable link layers' : 'editable links'") &&
       layersPanelSource.includes("return `${element.type} · ${href}`") &&
+      layersPanelSource.includes('getLayerReadableMeta(element)') &&
+      layersPanelSource.includes('navRecords.map((item) => `${item.label} ${item.href}`).join') &&
       layersPanelSource.includes("flex: '1 0 100%'") &&
       layersPanelSource.includes('WebkitLineClamp: 2'),
-    'Editor layers panel must keep readable two-line labels, expose nav/link child metadata, and wrap row actions below the layer name in narrow panels',
+    'Editor layers panel must keep readable two-line labels, expose nav/link child metadata, clarify nav child selection mode, and wrap row actions below the layer name in narrow panels',
   );
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
@@ -23605,6 +23616,7 @@ const testNavBehaviorControls = async (client) => {
     const rows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]'));
     const navIndex = rows.indexOf(navRow);
     const navDepth = Number(navRow.getAttribute('data-layer-depth') || 0);
+    const navHint = navRow.querySelector('[data-testid="editor-layer-nav-selection-hint"]');
     const childRows = [];
     for (let index = navIndex + 1; index < rows.length; index += 1) {
       const row = rows[index];
@@ -23654,6 +23666,16 @@ const testNavBehaviorControls = async (client) => {
       ok: true,
       navExpanded: navRow.getAttribute('aria-expanded') || '',
       navDepth,
+      navLayerMetadata: {
+        readableMeta: navRow.getAttribute('data-layer-readable-meta-value') || '',
+        navLinkCount: navRow.getAttribute('data-layer-nav-link-count') || '',
+        childLinkCount: navRow.getAttribute('data-layer-nav-child-link-count') || '',
+        editMode: navRow.getAttribute('data-layer-nav-edit-mode') || '',
+        itemLabels: navRow.getAttribute('data-layer-nav-item-labels') || '',
+        childPolicy: navRow.getAttribute('data-layer-selectable-child-policy') || '',
+        hintText: navHint?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        hintValue: navHint?.getAttribute('data-layer-nav-selection-hint') || '',
+      },
       childRows,
       selectedChildId: target.id,
       selectedRows,
@@ -23667,6 +23689,13 @@ const testNavBehaviorControls = async (client) => {
   assert(
     navChildLayerSelection?.ok &&
       navChildLayerSelection.navExpanded === 'true' &&
+      navChildLayerSelection.navLayerMetadata.readableMeta.includes('3 selectable link layers') &&
+      navChildLayerSelection.navLayerMetadata.navLinkCount === '3' &&
+      navChildLayerSelection.navLayerMetadata.childLinkCount === '3' &&
+      navChildLayerSelection.navLayerMetadata.editMode === 'child-layers' &&
+      navChildLayerSelection.navLayerMetadata.itemLabels.includes('Docs:/docs') &&
+      navChildLayerSelection.navLayerMetadata.childPolicy === 'expand-nav-container-select-link-children' &&
+      /Expand to select individual link layers/.test(navChildLayerSelection.navLayerMetadata.hintText) &&
       navChildLayerSelection.childRows.length === 3 &&
       navChildLayerSelection.childRows.every((row) => row.depth > navChildLayerSelection.navDepth) &&
       ['Docs', 'Pricing', 'Contact'].every((label) => navChildLayerSelection.childRows.some((row) => row.text.includes(label))) &&

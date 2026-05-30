@@ -215,29 +215,83 @@ const getLayerDisplayName = (element: CanvasElement): string => (
     || `${element.type}-${element.id.slice(0, 4)}`
 );
 
-const getLayerSearchText = (element: CanvasElement): string => (
-    `${getLayerDisplayName(element)} ${element.type} ${element.id}`.toLowerCase()
-);
-
 const getStringProp = (props: CanvasElement['props'], key: string): string => {
     const value = props?.[key];
     return typeof value === 'string' && value.trim() ? value.trim() : '';
 };
 
+const normalizeNavigationItemRecords = (value: unknown): Array<{ label: string; href: string }> => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((item, index) => {
+            if (typeof item === 'string') {
+                const label = item.trim() || `Item ${index + 1}`;
+                const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                return {
+                    label,
+                    href: label.toLowerCase() === 'home' ? '/' : `/${slug || index}`,
+                };
+            }
+
+            if (item && typeof item === 'object') {
+                const record = item as Record<string, unknown>;
+                const label = String(record.label || record.title || record.name || `Item ${index + 1}`).trim();
+                const href = String(record.href || record.url || '#').trim() || '#';
+                return label ? { label, href } : null;
+            }
+
+            return null;
+        })
+        .filter((item): item is { label: string; href: string } => Boolean(item));
+};
+
+const getNavigationLinkChildCount = (element: CanvasElement): number => (
+    element.children?.filter((child) => child.type === 'link').length || 0
+);
+
+const getNavigationItemRecords = (element: CanvasElement): Array<{ label: string; href: string }> => (
+    normalizeNavigationItemRecords(element.props.navItems)
+);
+
 const getNavigationItemCount = (element: CanvasElement): number => {
-    const childLinks = element.children?.filter((child) => child.type === 'link').length || 0;
+    const childLinks = getNavigationLinkChildCount(element);
     if (childLinks > 0) {
         return childLinks;
     }
 
-    return Array.isArray(element.props.navItems) ? element.props.navItems.length : 0;
+    return getNavigationItemRecords(element).length;
+};
+
+const getNavigationLayerMode = (element: CanvasElement): 'child-layers' | 'props-only' | 'empty' => {
+    if (getNavigationLinkChildCount(element) > 0) {
+        return 'child-layers';
+    }
+
+    return getNavigationItemRecords(element).length > 0 ? 'props-only' : 'empty';
+};
+
+const getNavigationLayerHint = (element: CanvasElement): string => {
+    const mode = getNavigationLayerMode(element);
+    if (mode === 'child-layers') {
+        return 'Expand to select individual link layers.';
+    }
+
+    if (mode === 'props-only') {
+        return 'Edit nav items in Inspector to sync selectable link layers.';
+    }
+
+    return 'Add nav items in Inspector.';
 };
 
 const getLayerReadableMeta = (element: CanvasElement): string => {
     if (element.type === 'nav') {
         const linkCount = getNavigationItemCount(element);
         const binding = getStringProp(element.props, 'navigationBinding') || 'manual.navItems';
-        return `${element.type} · ${linkCount} link${linkCount === 1 ? '' : 's'} · ${binding}`;
+        const mode = getNavigationLayerMode(element) === 'child-layers' ? 'selectable link layers' : 'editable links';
+        return `${element.type} · ${linkCount} ${mode} · ${binding}`;
     }
 
     if (element.type === 'link') {
@@ -246,6 +300,22 @@ const getLayerReadableMeta = (element: CanvasElement): string => {
     }
 
     return `${element.type} · ${element.id}`;
+};
+
+const getLayerSearchText = (element: CanvasElement): string => {
+    const navRecords = element.type === 'nav' ? getNavigationItemRecords(element) : [];
+    const navText = navRecords.map((item) => `${item.label} ${item.href}`).join(' ');
+    const linkText = element.type === 'link'
+        ? `${getStringProp(element.props, 'content')} ${getStringProp(element.props, 'href')}`
+        : '';
+    return [
+        getLayerDisplayName(element),
+        element.type,
+        element.id,
+        getLayerReadableMeta(element),
+        navText,
+        linkText,
+    ].join(' ').toLowerCase();
 };
 
 const getLayerScopeCount = (
@@ -352,6 +422,16 @@ function LayerItem({
     const layerName = getLayerDisplayName(element);
     const layerReadableMeta = getLayerReadableMeta(element);
     const navLinkCount = element.type === 'nav' ? getNavigationItemCount(element) : undefined;
+    const navLinkChildCount = element.type === 'nav' ? getNavigationLinkChildCount(element) : undefined;
+    const navItemRecords = element.type === 'nav' ? getNavigationItemRecords(element) : [];
+    const navLayerMode = element.type === 'nav' ? getNavigationLayerMode(element) : undefined;
+    const navLayerHint = element.type === 'nav' ? getNavigationLayerHint(element) : undefined;
+    const navItemLabels = navItemRecords.map((item) => `${item.label}:${item.href}`).join('|') || undefined;
+    const navSelectableChildPolicy = element.type === 'nav'
+        ? navLayerMode === 'child-layers'
+            ? 'expand-nav-container-select-link-children'
+            : 'select-nav-open-inspector-to-sync-links'
+        : undefined;
     const linkHref = element.type === 'link' ? getStringProp(element.props, 'href') || '#' : undefined;
     const [draftLayerName, setDraftLayerName] = useState(layerName);
     const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -468,11 +548,14 @@ function LayerItem({
             data-layer-type={element.type}
             data-layer-child-count={element.children?.length || 0}
             data-layer-nav-link-count={navLinkCount}
+            data-layer-nav-child-link-count={navLinkChildCount}
+            data-layer-nav-edit-mode={navLayerMode}
+            data-layer-nav-item-labels={navItemLabels}
             data-layer-link-href={linkHref}
             data-layer-readable-meta-value={layerReadableMeta}
             data-layer-selected={isSelected ? 'true' : 'false'}
             data-layer-readable-name="two-line"
-            data-layer-selectable-child-policy="expand-nav-container-select-link-children"
+            data-layer-selectable-child-policy={navSelectableChildPolicy}
             data-action-status={layerRowActionStatus}
             data-action-state={getLayerActionState(disabledPanelReason, isSelected)}
             data-disabled-reason={disabledPanelReason || undefined}
@@ -664,6 +747,31 @@ function LayerItem({
                         >
                             {layerReadableMeta}
                         </span>
+                        {navLayerHint ? (
+                            <span
+                                data-testid="editor-layer-nav-selection-hint"
+                                data-layer-nav-selection-hint={navLayerHint}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    marginTop: '5px',
+                                    borderRadius: '999px',
+                                    background: navLayerMode === 'child-layers' ? '#ecfdf5' : '#eff6ff',
+                                    color: navLayerMode === 'child-layers' ? '#047857' : '#1d4ed8',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    lineHeight: '14px',
+                                    maxWidth: '100%',
+                                    overflow: 'hidden',
+                                    padding: '2px 7px',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                }}
+                                title={navLayerHint}
+                            >
+                                {navLayerHint}
+                            </span>
+                        ) : null}
                     </>
                 )}
             </span>

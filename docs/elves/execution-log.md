@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 04:26 IST
+- **Last updated:** 2026-05-31 04:47 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 04:47 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; editor navigation layer-map discoverability improved; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/LayersPanel.tsx`: nav rows now distinguish selectable child link layers from props-only nav items. Layer rows expose nav child-link count, edit mode, label/href metadata, and a visible hint such as “Expand to select individual link layers” or “Edit nav items in Inspector to sync selectable link layers.”
+- `apps/admin/src/components/editor/LayersPanel.tsx`: layer search now indexes nav labels/hrefs plus readable nav/link metadata, so users can find `Docs`, `/pricing`, or a generated link row directly from the layer map.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: source and rendered nav component smoke now assert the layer-map nav metadata, child-link mode, href labels, child layer expansion, individual link selection, Inspector link editing, save, and reload.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_COMPONENT_SMOKE=nav npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: mobile/compact editor ergonomics, section reflow clarity, Help discoverability, site switching/domain management wording, or newsletter/blog authoring polish.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 04:26 IST
 
