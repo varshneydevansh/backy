@@ -55,6 +55,23 @@ let adminRequestApiKey = configuredAdminApiKey;
 let adminSessionToken = '';
 let cleanupOwnerSession = null;
 
+const SDK_SMOKE_SITE_BILLING_QUOTA = {
+  plan: 'business',
+  status: 'comped',
+  limits: {
+    pages: 20,
+    mediaGb: 2,
+    bandwidthGb: 25,
+    forms: 12,
+    products: 80,
+    collections: 12,
+    teamMembers: 5,
+    customDomains: 3,
+  },
+  lastAction: 'set-business',
+  notes: 'Temporary SDK smoke site quota so release verification is isolated from free-plan demo defaults.',
+};
+
 const assert = (condition, message) => {
   if (!condition) {
     throw new Error(message);
@@ -794,11 +811,16 @@ async function createSdkSmokeFixture() {
       slug: siteSlug,
       description: 'Temporary site for SDK write smoke.',
       status: 'published',
+      settings: {
+        billingQuota: SDK_SMOKE_SITE_BILLING_QUOTA,
+      },
     }),
   });
   assert(site.response.status === 201, `${site.url} expected site create 201, got ${site.response.status}`);
   const siteId = site.json?.data?.site?.id;
   assert(siteId, 'temporary SDK smoke site missing id');
+  const formQuota = Number(site.json?.data?.site?.settings?.billingQuota?.limits?.forms);
+  assert(formQuota >= SDK_SMOKE_SITE_BILLING_QUOTA.limits.forms, 'temporary SDK smoke site did not receive expanded form quota');
 
   const collection = await request(`/api/admin/sites/${siteId}/collections`, {
     method: 'POST',
