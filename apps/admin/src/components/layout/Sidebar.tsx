@@ -120,6 +120,10 @@ export function Sidebar({
   const activeSiteName = activeSite?.name || activeSiteId;
   const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId;
   const activeSiteStatus = activeSite?.status || 'draft';
+  const activeSiteRouteId = useMemo(
+    () => activeSite?.id || activeSiteId,
+    [activeSite?.id, activeSiteId],
+  );
   const activeSiteSearch = useMemo(() => (
     { siteId: activeSiteId }
   ), [activeSiteId]);
@@ -254,6 +258,7 @@ export function Sidebar({
   const quickCreateStatusId = `${navigationId}-quick-create-status`;
   const railTooltipId = `${navigationId}-rail-tooltip`;
   const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}. ${hiddenQuickCreateCount} hidden by role or permissions.`;
+  const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`;
   const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;
   const getRailDescribedBy = (baseId: string) => (
     collapsed ? `${baseId} ${railTooltipId}` : baseId
@@ -488,17 +493,35 @@ export function Sidebar({
           {/* Logo Text (hidden when collapsed) */}
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <Link
-                to="/"
-                search={getNavSearch('/')}
-                onClick={onNavigate}
-                className="block truncate text-[15px] font-semibold leading-5 text-foreground focus-ring"
-              >
-                Backy
-              </Link>
-              <label
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <Link
+                  to="/"
+                  search={getNavSearch('/')}
+                  onClick={onNavigate}
+                  className="block min-w-0 truncate text-[15px] font-semibold leading-5 text-foreground focus-ring"
+                >
+                  Backy
+                </Link>
+                <Link
+                  to="/sites/$siteId"
+                  params={{ siteId: activeSiteRouteId }}
+                  onClick={onNavigate}
+                  aria-label={activeSiteManageStatus}
+                  title={activeSiteManageStatus}
+                  className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-primary transition hover:bg-primary/10 focus-ring"
+                  data-testid={`${testIdPrefix}-active-site-manage`}
+                  data-target-site-id={activeSiteRouteId}
+                  data-active-site-id={activeSiteId}
+                  data-action-state="ready"
+                  data-action-status={activeSiteManageStatus}
+                >
+                  Manage
+                </Link>
+              </div>
+              <div
                 className="mt-1 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
+                data-action-status={`Switch active site. ${activeSiteManageStatus}`}
               >
                 <span
                   className={cn(
@@ -527,7 +550,7 @@ export function Sidebar({
                   })}
                 </select>
                 <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-              </label>
+              </div>
             </div>
           )}
         </div>

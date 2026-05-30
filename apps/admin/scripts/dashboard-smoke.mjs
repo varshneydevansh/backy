@@ -1214,6 +1214,7 @@ const assertDashboardSidebarNavigation = async (client) => {
       const activeOnlyButton = document.querySelector('[data-testid="admin-sidebar-collapse-inactive-sections"]');
       const expandAllButton = document.querySelector('[data-testid="admin-sidebar-expand-all-sections"]');
       const filterInput = document.querySelector('[data-testid="admin-sidebar-filter-input"]');
+      const activeSiteManage = document.querySelector('[data-testid="admin-sidebar-active-site-manage"]');
       return {
         ready: Boolean(sidebar) &&
           sidebar?.getAttribute('data-nav-ready') === 'true' &&
@@ -1254,6 +1255,11 @@ const assertDashboardSidebarNavigation = async (client) => {
         hasActiveOnlyButton: activeOnlyButton instanceof HTMLButtonElement,
         hasExpandAllButton: expandAllButton instanceof HTMLButtonElement,
         hasPagesLink: Boolean(document.querySelector('[data-testid="admin-sidebar-link-pages"]')),
+        hasActiveSiteManage: activeSiteManage instanceof HTMLAnchorElement,
+        activeSiteManageHref: activeSiteManage instanceof HTMLAnchorElement ? activeSiteManage.href : '',
+        activeSiteManageState: activeSiteManage?.getAttribute('data-action-state') || '',
+        activeSiteManageTarget: activeSiteManage?.getAttribute('data-target-site-id') || '',
+        activeSiteManageStatus: activeSiteManage?.getAttribute('data-action-status') || '',
         storage: localStorage.getItem('backy:admin-sidebar-section-state') || '',
       };
     })()`);
@@ -1292,6 +1298,14 @@ const assertDashboardSidebarNavigation = async (client) => {
       initial.renderedItemCount > 0 &&
       initial.densityActiveSection === initial.activeSection,
     `Dashboard sidebar density controls did not mirror grouped state: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    initial.hasActiveSiteManage &&
+      initial.activeSiteManageHref.includes('/sites/') &&
+      initial.activeSiteManageState === 'ready' &&
+      initial.activeSiteManageTarget &&
+      initial.activeSiteManageStatus.includes('without signing out'),
+    `Dashboard sidebar must expose a direct active-site management link: ${JSON.stringify(initial)}`,
   );
   assert(initial.workspaceExpanded === 'true', `Dashboard sidebar should keep the active workspace group open: ${JSON.stringify(initial)}`);
   assert(initial.contentExpanded === 'false' && initial.contentAriaExpanded === 'false', `Dashboard content group should start collapsed to reduce sidebar length: ${JSON.stringify(initial)}`);

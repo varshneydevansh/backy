@@ -452,7 +452,12 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0]') &&
       sidebarSource.includes("const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo'") &&
       sidebarSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
+      sidebarSource.includes('const activeSiteRouteId = useMemo(') &&
+      sidebarSource.includes('() => activeSite?.id || activeSiteId') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-manage`}') &&
+      sidebarSource.includes('data-target-site-id={activeSiteRouteId}') &&
+      sidebarSource.includes('const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`') &&
       sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
       sidebarSource.includes('const target = getSiteSwitchTarget({') &&
       sidebarSource.includes("case 'newsletter':") &&
@@ -468,6 +473,8 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher`}') &&
       sidebarSource.includes('data-site-switcher-mode={collapsed ?') &&
       sidebarSource.includes('aria-label="Switch active site"') &&
+      sidebarSource.includes('to="/sites/$siteId"') &&
+      sidebarSource.includes('params={{ siteId: activeSiteRouteId }}') &&
       sidebarSource.includes("navigationId = 'admin-sidebar-navigation'") &&
       sidebarSource.includes("testIdPrefix = 'admin-sidebar'") &&
       sidebarModelSource.includes("const SIDEBAR_SECTION_STORAGE_KEY = 'backy:admin-sidebar-section-state';") &&

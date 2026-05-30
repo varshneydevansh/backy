@@ -1691,7 +1691,7 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       state.workbarLayer === 'settings-workbar-under-header-actions' &&
       state.menuPosition === 'static' &&
       state.menuZIndex === 'auto' &&
-      state.workbarZIndex === '10' &&
+      state.workbarZIndex === '30' &&
       state.detailsReservesWorkbarGap === 'in-flow' &&
       state.detailsMarginBottom === 0 &&
       !state.overlapsWorkbar &&
