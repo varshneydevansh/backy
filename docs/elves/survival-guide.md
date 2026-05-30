@@ -27,14 +27,14 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Checkpoint expectation:** steadily close release UX/editor gaps, keep commits logical, and keep the release doctor green.
 - **Time budget:** unlimited until user stop
 - **Average batch time so far:** not enough data
-- **Batches remaining:** 5 of 5
+- **Batches remaining:** 4 of 5
 
 ## Stop Gate
 
-- **Planned batches remaining:** 5
+- **Planned batches remaining:** 4
 - **Stop allowed right now:** no
-- **Why:** The user asked to keep pursuing Backy completion and release hardening remains.
-- **Next required action:** Start Batch 1: Admin Layout And Site Discoverability.
+- **Why:** The user asked to keep pursuing Backy completion and editor/canvas hardening remains.
+- **Next required action:** Start Batch 2: Canvas Editor Interaction Fidelity.
 
 ## Effort Standard
 
@@ -89,11 +89,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Status:** In progress
 
-**Active batch:** Batch 1: Admin Layout And Site Discoverability
+**Active batch:** Batch 2: Canvas Editor Interaction Fidelity
 
-**What was just finished:** Elves run state was bootstrapped for the current Backy release parity goal.
+**What was just finished:** Batch 1 completed: sidebar active-site management is explicit, Pages/Users rendered layout smokes pass, and Settings menu layering smoke is aligned with the in-flow z-30 workbar contract.
 
-**Single next action:** Inspect `Sidebar`, `DataGrid`, `/pages`, `/users`, and `/settings` around the reported layout/discoverability defects, then implement the smallest verified fix.
+**Single next action:** Inspect canvas marquee, zoom, drag preview, layers/nav item selection, and responsive preview code paths before implementing the next smallest verified editor fix.
 
 ## Active Compute
 
@@ -101,25 +101,24 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 
 ## Next Exact Batch
 
-**Batch:** 1: Admin Layout And Site Discoverability
+**Batch:** 2: Canvas Editor Interaction Fidelity
 
 **Scope:**
-- Make sidebar active-site identity actionable for site management/switching.
-- Fix pages/users dense table clipping and overlap without globally weakening `DataGrid`.
-- Fix Settings `More actions` stacking so it cannot hide behind the Appearance/workbar area.
+- Verify and harden marquee selection origin.
+- Verify in-canvas zoom behavior on Mac/browser gestures.
+- Fix component drag preview bleed from the palette into canvas if still reproducible.
+- Ensure layer map/nav child selection and responsive preview behavior are test-covered.
 
 **Acceptance criteria:**
-- Relevant source/render smokes cover the fixed behavior.
+- Relevant editor source/render smokes cover the fixed behavior.
 - `npm run typecheck --workspace @backy-cms/admin` passes.
 - `git diff --check` passes.
 
 **Known files to inspect first:**
-- `apps/admin/src/components/layout/Sidebar.tsx`
-- `apps/admin/src/components/ui/DataGrid.tsx`
-- `apps/admin/src/hooks/useDataTable.ts`
-- `apps/admin/src/routes/pages.tsx`
-- `apps/admin/src/routes/users.tsx`
-- `apps/admin/src/routes/settings.tsx`
-- `apps/admin/scripts/pages-list-smoke.mjs`
-- `apps/admin/scripts/users-smoke.mjs`
-- `apps/admin/scripts/settings-smoke.mjs`
+- `apps/admin/src/components/editor/Canvas.tsx`
+- `apps/admin/src/components/editor/CanvasEditor.tsx`
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`
+- `apps/admin/src/components/editor/LayersPanel.tsx`
+- `apps/admin/src/components/editor/PropertyPanel.tsx`
+- `apps/public/src/components/PageRenderer.tsx`
+- `apps/admin/scripts/editor-drag-smoke.mjs`

@@ -9,10 +9,10 @@
   "execution_log_path": "docs/elves/execution-log.md",
   "pr_number": null,
   "continuation_guard": {
-    "remaining_batches": 5,
+    "remaining_batches": 4,
     "stop_allowed": false,
     "checkpoint_is_stop": false,
-    "next_required_action": "Start Batch 1: Admin Layout And Site Discoverability"
+    "next_required_action": "Start Batch 2: Canvas Editor Interaction Fidelity"
   },
   "test_baseline": {
     "passed": null,
@@ -22,27 +22,27 @@
     "reason": "Focused batch gates will capture useful baseline after Elves setup commit."
   },
   "current_batch": {
-    "id": 1,
-    "name": "Admin Layout And Site Discoverability",
+    "id": 2,
+    "name": "Canvas Editor Interaction Fidelity",
     "status": "in_progress"
   },
   "batches": [
     {
       "id": 1,
       "name": "Admin Layout And Site Discoverability",
-      "status": "in_progress",
-      "commit": null,
-      "rollback_tag": null,
+      "status": "complete",
+      "commit": "70521694",
+      "rollback_tag": "elves/pre-batch-1",
       "started_at": "2026-05-30T18:22:00Z",
-      "completed_at": null
+      "completed_at": "2026-05-30T18:44:00Z"
     },
     {
       "id": 2,
       "name": "Canvas Editor Interaction Fidelity",
-      "status": "pending",
+      "status": "in_progress",
       "commit": null,
       "rollback_tag": null,
-      "started_at": null,
+      "started_at": "2026-05-30T18:44:00Z",
       "completed_at": null
     },
     {
