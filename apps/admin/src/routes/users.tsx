@@ -1003,7 +1003,7 @@ function UsersListView() {
       key: 'fullName',
       label: 'Person',
       sortable: true,
-      width: '380px',
+      width: '420px',
       render: (user) => (
         <button
           type="button"
@@ -1026,17 +1026,17 @@ function UsersListView() {
             )} />
           </span>
           <span className="min-w-0 max-w-full flex-1 overflow-hidden">
-            <span className="flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground group-hover:text-primary">
-              <span className="min-w-0 max-w-full truncate" title={user.fullName}>{user.fullName}</span>
+            <span className="flex min-w-0 flex-wrap items-center gap-2 font-semibold leading-5 text-foreground group-hover:text-primary">
+              <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]" title={user.fullName}>{user.fullName}</span>
               {isCurrentUser(user) && (
                 <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   You
                 </span>
               )}
             </span>
-            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="mt-0.5 flex min-w-0 items-start gap-1.5 text-xs leading-4 text-muted-foreground">
               <Mail className="h-3 w-3 shrink-0" />
-              <span className="min-w-0 max-w-full truncate" title={user.email}>{user.email}</span>
+              <span className="min-w-0 max-w-full break-all" title={user.email}>{user.email}</span>
             </span>
           </span>
         </button>
@@ -1046,7 +1046,7 @@ function UsersListView() {
       key: 'role',
       label: 'Role',
       sortable: true,
-      width: '210px',
+      width: '230px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1074,7 +1074,7 @@ function UsersListView() {
       key: 'status',
       label: 'Status',
       sortable: true,
-      width: '210px',
+      width: '230px',
       render: (user) => (
         <div className="space-y-2">
           {isCurrentUser(user) && (
@@ -1100,7 +1100,7 @@ function UsersListView() {
       key: 'lastActive',
       label: 'Activity',
       sortable: true,
-      width: '240px',
+      width: '260px',
       render: (user) => (
         <span className="block min-w-0 break-words text-sm leading-5 text-muted-foreground [overflow-wrap:anywhere]" title={user.lastActive}>{user.lastActive}</span>
       ),
@@ -1108,7 +1108,7 @@ function UsersListView() {
     {
       key: 'actions',
       label: '',
-      width: '132px',
+      width: '160px',
       overflowMode: 'visible',
       render: (user) => {
         const userActionStatusId = `users-actions-status-${user.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -2353,7 +2353,7 @@ function UsersListView() {
             <DataGrid
               columns={columns}
               data={data}
-              tableMinWidth="1320px"
+              tableMinWidth="1480px"
               loading={isLoading}
               interactionDisabled={isUsersBusy}
               sortConfig={sortConfig}

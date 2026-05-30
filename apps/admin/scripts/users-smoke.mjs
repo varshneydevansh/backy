@@ -134,14 +134,14 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
     'Users command center secondary actions must expose ready/blocked action metadata for every overflow action.',
   );
   assert(
-    source.includes('tableMinWidth="1320px"') &&
-      source.includes("width: '380px'") &&
-      source.includes("width: '210px'") &&
-      source.includes("width: '132px'") &&
+    source.includes('tableMinWidth="1480px"') &&
+      source.includes("width: '420px'") &&
+      source.includes("width: '230px'") &&
+      source.includes("width: '160px'") &&
       source.includes('className="group flex w-full min-w-0 max-w-full items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60"') &&
       source.includes('className="min-w-0 max-w-full flex-1 overflow-hidden"') &&
-      source.includes('className="min-w-0 max-w-full truncate" title={user.fullName}') &&
-      source.includes('className="min-w-0 max-w-full truncate" title={user.email}') &&
+      source.includes('className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]" title={user.fullName}') &&
+      source.includes('className="min-w-0 max-w-full break-all" title={user.email}') &&
       source.includes('className="flex min-w-0 flex-wrap items-center justify-end gap-2"') &&
       source.includes('id="users-directory" className="mt-4 scroll-mt-24"') &&
       source.includes('title={user.fullName}') &&
@@ -3356,7 +3356,7 @@ const waitForUsersDataGridLayoutState = async (client, label) => {
 const assertUsersDataGridLayout = async (client) => {
   await navigateToUsers(client);
   const state = await waitForUsersDataGridLayoutState(client, 'users directory table');
-  assert(state.tableMinWidth === '1320px', `Users DataGrid must use the expanded dense-table width: ${JSON.stringify(state)}`);
+  assert(state.tableMinWidth === '1480px', `Users DataGrid must use the expanded dense-table width: ${JSON.stringify(state)}`);
   assert(state.hasHorizontalScroll, `Users DataGrid must scroll horizontally inside its own container instead of compressing controls: ${JSON.stringify(state)}`);
   assert(state.scrollLeft > 0 && state.stickyActionColumnAnchored, `Users DataGrid action column must stay anchored at the right edge after horizontal scroll: ${JSON.stringify(state)}`);
   assert(state.pageContained, `Users DataGrid must not create whole-page horizontal overflow: ${JSON.stringify(state)}`);
@@ -3380,10 +3380,10 @@ const assertUsersDataGridLayout = async (client) => {
     `Users DataGrid cells must keep rendered content inside each owning column while action controls opt into visible wrapped paint: ${JSON.stringify(state.cells)}`,
   );
   assert(
-    state.columnWidths.some((column) => column.key === 'fullName' && column.width === '380px') &&
-      state.columnWidths.some((column) => column.key === 'role' && column.width === '210px') &&
-      state.columnWidths.some((column) => column.key === 'status' && column.width === '210px') &&
-      state.columnWidths.some((column) => column.key === 'actions' && column.width === '132px'),
+    state.columnWidths.some((column) => column.key === 'fullName' && column.width === '420px') &&
+      state.columnWidths.some((column) => column.key === 'role' && column.width === '230px') &&
+      state.columnWidths.some((column) => column.key === 'status' && column.width === '230px') &&
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '160px'),
     `Users DataGrid must expose explicit person, role, status, and action widths: ${JSON.stringify(state.columnWidths)}`,
   );
 

@@ -1910,9 +1910,9 @@ function PagesListView() {
       key: 'title',
       label: 'Page Title',
       sortable: true,
-      width: '240px',
+      width: '280px',
       render: (page) => (
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             {page.isHomepage || page.slug === 'index' || page.slug === 'home' || page.slug === '' ? (
               <Home className="w-5 h-5 text-primary" />
@@ -1920,9 +1920,9 @@ function PagesListView() {
               <Layout className="w-5 h-5 text-primary" />
             )}
           </div>
-          <div className="min-w-0">
-            <div className="truncate font-medium text-foreground" title={page.title}>{page.title}</div>
-            <div className="truncate text-xs text-muted-foreground" title={pagePublicPath(page)}>{pagePublicPath(page)}</div>
+          <div className="min-w-0 max-w-full">
+            <div className="break-words font-medium leading-5 text-foreground [overflow-wrap:anywhere]" title={page.title}>{page.title}</div>
+            <div className="mt-0.5 break-words text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]" title={pagePublicPath(page)}>{pagePublicPath(page)}</div>
           </div>
         </div>
       )
@@ -1930,7 +1930,7 @@ function PagesListView() {
     {
       key: 'slug',
       label: 'Route',
-      width: '170px',
+      width: '220px',
       render: (page) => (
         <PageRouteCell
           page={page}
@@ -1941,7 +1941,7 @@ function PagesListView() {
     {
       key: 'template',
       label: 'Template',
-      width: '170px',
+      width: '220px',
       render: (page) => <PageTemplateCell page={page} />,
     },
     {
@@ -1963,7 +1963,7 @@ function PagesListView() {
     {
       key: 'parentId',
       label: 'Hierarchy',
-      width: '170px',
+      width: '210px',
       render: (page) => (
         <PageHierarchyCell
           page={page}
@@ -1975,7 +1975,7 @@ function PagesListView() {
     {
       key: 'meta',
       label: 'Health',
-      width: '150px',
+      width: '170px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const firstIssue = readiness?.checks.find((check) => check.status !== 'pass');
@@ -1985,9 +1985,9 @@ function PagesListView() {
               status={readiness.statusLabel}
               type={readiness.statusLabel === 'ready' ? 'success' : readiness.statusLabel === 'blocked' ? 'error' : 'warning'}
             />
-            <span className="text-xs text-muted-foreground">{readiness.score}% ready · {readiness.elementCount} elements</span>
+            <span className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">{readiness.score}% ready · {readiness.elementCount} elements</span>
             {firstIssue && (
-              <span className="max-w-64 truncate text-xs text-muted-foreground" title={firstIssue.message}>
+              <span className="max-w-full break-words text-xs text-muted-foreground [overflow-wrap:anywhere]" title={firstIssue.message}>
                 {firstIssue.message}
               </span>
             )}
@@ -2002,7 +2002,7 @@ function PagesListView() {
     {
       key: 'content',
       label: 'Revisions',
-      width: '220px',
+      width: '240px',
       render: (page) => (
         <PageRevisionCell
           page={page}
@@ -2015,7 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
-      width: '460px',
+      width: '560px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2044,13 +2044,13 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
-      width: '170px',
+      width: '190px',
       render: (page) => <span className="block min-w-0 break-words leading-5 text-muted-foreground [overflow-wrap:anywhere]">{formatDate(page.lastUpdated)}</span>
     },
     {
       key: 'actions',
       label: '',
-      width: '220px',
+      width: '260px',
       overflowMode: 'visible',
       render: (page) => {
         const readiness = readinessMap[page.id];
@@ -4119,7 +4119,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          tableMinWidth="2300px"
+          tableMinWidth="2580px"
           stickyActionColumn={false}
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
@@ -4829,7 +4829,7 @@ function PageHierarchyCell({ page, parentPage, childCount }: { page: Page; paren
             </span>
           )}
           {navigationLabel && (
-            <span className="max-w-40 truncate rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground" title={navigationLabel}>
+            <span className="max-w-full break-words rounded-full border border-border px-2 py-0.5 text-[11px] leading-4 text-muted-foreground [overflow-wrap:anywhere]" title={navigationLabel}>
               {navigationLabel}
             </span>
           )}
@@ -4857,7 +4857,7 @@ function PageTemplateCell({ page }: { page: Page }) {
         </span>
         <span className="min-w-0 break-words text-sm font-medium text-foreground [overflow-wrap:anywhere]">{template.label}</span>
       </div>
-      <p className="max-w-56 truncate text-xs text-muted-foreground" title={template.detail}>
+      <p className="max-w-full break-words text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]" title={template.detail}>
         {template.detail}
       </p>
     </div>
@@ -4876,7 +4876,7 @@ function PageRouteCell({ page, diagnostic }: { page: Page; diagnostic: PageRoute
   return (
     <div className="min-w-0 max-w-full space-y-1" data-testid={`pages-route-${page.id}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <code className="max-w-full truncate rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
+        <code className="inline-block max-w-full whitespace-normal break-all rounded-md bg-muted px-2 py-1 font-mono text-xs leading-5 text-foreground">
           {route.path}
         </code>
         <StatusBadge
@@ -4939,7 +4939,7 @@ function PageRevisionCell({
       </div>
       {latest ? (
         <div className="text-xs leading-5 text-muted-foreground">
-          <span className="block max-w-56 truncate" title={latest.note || 'Revision snapshot'}>
+          <span className="block max-w-full break-words [overflow-wrap:anywhere]" title={latest.note || 'Revision snapshot'}>
             {latest.note || 'Revision snapshot'}
           </span>
           <span className="block break-words [overflow-wrap:anywhere]">{formatDate(latest.createdAt)} · {latest.snapshotStatus}</span>
@@ -5040,7 +5040,7 @@ function PageDeliveryCell({
         <a href={resolveUrl} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
           Resolve
         </a>
-        <code className="max-w-48 truncate rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground" title={previewEndpoint}>
+        <code className="max-w-full whitespace-normal break-all rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] leading-4 text-muted-foreground" title={previewEndpoint}>
           preview POST
         </code>
       </div>

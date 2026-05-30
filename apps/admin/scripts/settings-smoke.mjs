@@ -515,11 +515,13 @@ const assertSettingsSourceContracts = () => {
       settingsRoute.includes('data-open-reserves-workbar-gap="in-flow"') &&
       settingsRoute.includes('data-stack-layer="settings-header-secondary-menu-above-workbar"') &&
       settingsRoute.includes('data-stack-layer="settings-workbar-under-header-actions"') &&
-      settingsRoute.includes('className="mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"') &&
+      settingsRoute.includes('className="relative z-[160] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"') &&
       settingsRoute.includes('min-w-52 max-w-[calc(100vw-2rem)]') &&
+      settingsRoute.includes('data-menu-lifted-above-tab-banner="true"') &&
       settingsRoute.includes('data-testid="settings-header-secondary-action-menu"') &&
       settingsSmokeSource.includes('const assertSettingsHeaderActionMenuLayer = async (client) =>') &&
       settingsSmokeSource.includes('state.topElementWithinMenu') &&
+      settingsSmokeSource.includes("state.menuLiftedAboveTabBanner === 'true'") &&
       settingsSmokeSource.includes("state.detailsReservesWorkbarGap === 'in-flow'") &&
       settingsSmokeSource.includes('!state.overlapsWorkbar'),
     'Settings header More actions menu must reserve space and stack above the sticky workbar instead of hiding behind the active-section banner.',
@@ -1664,6 +1666,7 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       menuZIndex: menu ? getComputedStyle(menu).zIndex : '',
       workbarZIndex: workbar ? getComputedStyle(workbar).zIndex : '',
       menuPosition: menu ? getComputedStyle(menu).position : '',
+      menuLiftedAboveTabBanner: menu?.getAttribute('data-menu-lifted-above-tab-banner') || '',
       menuRight: menuRect?.right || 0,
       menuBottom: menuRect?.bottom || 0,
       workbarTop: workbarRect?.top || 0,
@@ -1689,8 +1692,9 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       state.detailsLayer === 'settings-header-more-actions-above-workbar' &&
       state.menuLayer === 'settings-header-secondary-menu-above-workbar' &&
       state.workbarLayer === 'settings-workbar-under-header-actions' &&
-      state.menuPosition === 'static' &&
-      state.menuZIndex === 'auto' &&
+      state.menuPosition === 'relative' &&
+      state.menuZIndex === '160' &&
+      state.menuLiftedAboveTabBanner === 'true' &&
       state.workbarZIndex === '30' &&
       state.detailsReservesWorkbarGap === 'in-flow' &&
       state.detailsMarginBottom === 0 &&

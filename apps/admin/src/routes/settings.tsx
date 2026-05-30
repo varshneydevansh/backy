@@ -4202,8 +4202,9 @@ function SettingsPage() {
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
             <div
-              className="mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
+              className="relative z-[160] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
               data-stack-layer="settings-header-secondary-menu-above-workbar"
+              data-menu-lifted-above-tab-banner="true"
               data-testid="settings-header-secondary-action-menu"
             >
               <button
