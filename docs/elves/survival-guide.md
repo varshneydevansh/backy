@@ -91,9 +91,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Active batch:** Batch 5: Ongoing UX Scout And Polish
 
-**What was just finished:** Batch 4 completed: release doctor remains green; provider artifact admission is verified as the only path from 41 Ready / 4 Partial to 45 Ready / 0 Partial; Vercel docs now separate protected admin, public Backy API/rendering, and custom frontend projects without client-exposed admin keys; the doctor rejects broader token-shaped artifact leaks.
+**What was just finished:** Batch 5 has completed several pushed polish checkpoints while staying open-ended: component drag previews no longer leak the component rail into the canvas, Inspector/Layers affordances are clearer, Pages/Users/Settings dense layout overlap was reduced, and public custom-domain discovery/hosted resolution now requires verified DNS state by default.
 
-**Single next action:** Start Batch 5 by scanning visible admin/editor UX defects and choose the next focused, testable polish slice that improves the Wix/Canva-like creation flow without destabilizing release certification.
+**Single next action:** Continue Batch 5 by choosing the next focused, testable release polish slice across blog/newsletter authoring, Help discoverability, layer-map/mobile responsive editor behavior, or site/domain management wording.
 
 ## Active Compute
 
@@ -104,7 +104,7 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 **Batch:** 5: Ongoing UX Scout And Polish
 
 **Scope:**
-- Re-check the highest-friction admin/editor surfaces the user called out: canvas component drag/drop, component library preview clipping, layer/inspector affordances, responsive preview behavior, pages/users dense tables, settings action layering, site switching/domain/subdomain help, and newsletter/blog authoring flows.
+- Re-check the remaining highest-friction admin/editor surfaces the user called out: responsive preview behavior, layer-map/mobile behavior, site switching/domain/subdomain help, newsletter/blog authoring flows, shared chrome semantics, and custom frontend/APIability discoverability.
 - Prefer small, root-cause fixes with existing Backy primitives and smoke coverage.
 - Keep custom frontend/APIability, design metadata persistence, and release doctor behavior intact.
 - Use rendered smokes when the defect is visual or interaction-based; use source guards for handoff/contract-only changes.

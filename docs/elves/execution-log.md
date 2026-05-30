@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 01:51 IST
+- **Last updated:** 2026-05-31 03:08 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,51 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 03:08 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; focused UX/security slices completed and pushed; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`: component drag previews no longer keep the sticky component-preview pane active during a drag, preventing the component rail from appearing inside the canvas drag image.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: Inspector and Layers controls now expose clearer labels, tooltips, ARIA names, and stable purpose data attributes so users and agent smokes can understand what Inspector actually edits.
+- `apps/admin/src/routes/pages.tsx`, `apps/admin/src/routes/users.tsx`, and `apps/admin/src/routes/settings.tsx`: dense Pages/Users tables use wider explicit route-local column contracts and wrapping text where needed; Settings More actions is lifted above the active appearance banner.
+- `apps/public/src/lib/publicRouteHost.ts`, `apps/public/src/app/api/sites/route.ts`, and `apps/public/src/app/api/sites/[siteId]/resolve/route.ts`: public custom-domain and locale-domain matching now requires verified DNS state by default before site discovery or hosted route lookup accepts that host.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS for component drag/inspector source guards.
+- `BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS; current canvas marquee origin is anchored to the actual pointer, not the top-left corner.
+- `BACKY_PAGES_LIST_SOURCE_ONLY=1 npm run test:pages-list --workspace @backy-cms/admin` -> PASS.
+- `BACKY_USERS_SOURCE_ONLY=1 npm run test:users --workspace @backy-cms/admin` -> PASS.
+- `BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin` -> PASS.
+- `BACKY_PAGES_LIST_DATAGRID_HEADER_SMOKE=1 npm run test:pages-list --workspace @backy-cms/admin` -> PASS.
+- `BACKY_USERS_DATAGRID_LAYOUT_SMOKE=1 npm run test:users --workspace @backy-cms/admin` -> PASS.
+- `npm run test:localized-routes --workspace @backy/public` -> PASS.
+- `npm run test:public-security --workspace @backy/public` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS for admin slices.
+- `npm run typecheck --workspace @backy/public` -> PASS for public-domain slice.
+- `git diff --check` -> PASS before commits.
+
+**Review findings:**
+- [Medium] Public host matching accepted saved custom/locale domain strings without checking verification status. Resolved by centralizing host matching behind `publicRouteHostMatchesSite` with a strict verified-domain default and explicit test/demo escape hatch.
+- [Medium] Pages and Users route tables were relying on too-tight column widths for long operational copy. Resolved route-locally instead of changing `DataGrid` globally.
+- [Low] Inspector was technically functional but poorly named for the user. Resolved with selected-layer purpose labels and smoke-visible data attributes.
+
+**Decisions made:**
+- Kept the audit count honest: these product/security fixes do not convert the four external Settings/Commerce provider certification rows.
+- Kept custom frontend direct render/resolve APIs available by site id; the stricter change applies to public site discovery and hosted host-to-site matching.
+- Did not globally restyle the admin shell in this checkpoint; the recent user feedback says the current Backy editor direction is liked, so the work stayed on correctness and friction fixes.
+
+**Commits pushed:**
+- `41a78aae fix(editor): hide component preview during drags`
+- `18f6877c fix(editor): clarify inspector affordances`
+- `b056a40f fix(admin): reduce dense table overlap`
+- `30d47ca0 fix(public): require verified custom domains`
+
+**Next:**
+1. Continue Batch 5 on the next highest-friction creation surface: blog/newsletter authoring, Help discoverability, layer-map/mobile responsive editor behavior, or site/domain management wording.
+2. Keep each slice small, verified, committed, and pushed.
 
 ## 2026-05-31 01:51 IST
 
