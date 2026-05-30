@@ -430,14 +430,18 @@ function LayerItem({
             aria-expanded={hasChildren ? isExpanded : undefined}
             aria-describedby={layerActionStatusId}
             data-layer-id={element.id}
+            data-layer-name={layerName}
             data-layer-depth={depth}
             data-layer-selected={isSelected ? 'true' : 'false'}
+            data-layer-readable-name="two-line"
             data-action-status={layerRowActionStatus}
             data-action-state={getLayerActionState(disabledPanelReason, isSelected)}
             data-disabled-reason={disabledPanelReason || undefined}
+            title={`${layerName} (${element.type} layer)`}
             style={{
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
                 padding: '8px 12px',
                 paddingLeft: `${12 + depth * 16}px`,
                 gap: '8px',
@@ -544,11 +548,13 @@ function LayerItem({
             {/* Element name */}
             <span
                 style={{
-                    flex: 1,
+                    flex: '1 1 0',
+                    minWidth: 0,
                     fontSize: '13px',
+                    lineHeight: '18px',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    overflowWrap: 'anywhere',
+                    whiteSpace: 'normal',
                 }}
                 onDoubleClick={(e) => {
                     e.stopPropagation();
@@ -588,7 +594,35 @@ function LayerItem({
                         }}
                     />
                 ) : (
-                    layerName
+                    <>
+                        <span
+                            data-testid="editor-layer-readable-name"
+                            style={{
+                                display: '-webkit-box',
+                                overflow: 'hidden',
+                                WebkitBoxOrient: 'vertical',
+                                WebkitLineClamp: 2,
+                                fontWeight: isSelected ? 700 : 600,
+                            }}
+                        >
+                            {layerName}
+                        </span>
+                        <span
+                            data-testid="editor-layer-readable-meta"
+                            style={{
+                                display: 'block',
+                                color: '#64748b',
+                                fontSize: '11px',
+                                lineHeight: '14px',
+                                marginTop: '1px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {element.type} · {element.id}
+                        </span>
+                    </>
                 )}
             </span>
 
@@ -598,7 +632,10 @@ function LayerItem({
             </span>
             <div
                 style={{
-                    display: 'flex',
+                    display: showRowActions ? 'flex' : 'none',
+                    flex: '1 0 100%',
+                    justifyContent: 'flex-end',
+                    flexWrap: 'wrap',
                     gap: '4px',
                     opacity: showRowActions ? 1 : 0,
                     pointerEvents: showRowActions ? 'auto' : 'none',

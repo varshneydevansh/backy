@@ -1042,6 +1042,14 @@ const assertCanvasEditorShortcutSource = () => {
   );
   assert(layersPanelSource.includes('lastSelectedId') && layersPanelSource.includes('renderedLayerIds.slice(start, end + 1)') && layersPanelSource.includes('e.shiftKey'), 'Editor layers panel must support Shift range selection across rendered layer rows');
   assert(layersPanelSource.includes('const showRowActions = showActions || isSelected') && layersPanelSource.includes('data-layer-actions-visible'), 'Editor layers panel must keep row actions visible for selected layers');
+  assert(
+    layersPanelSource.includes('data-layer-readable-name="two-line"') &&
+      layersPanelSource.includes('data-testid="editor-layer-readable-name"') &&
+      layersPanelSource.includes('data-testid="editor-layer-readable-meta"') &&
+      layersPanelSource.includes("flex: '1 0 100%'") &&
+      layersPanelSource.includes('WebkitLineClamp: 2'),
+    'Editor layers panel must keep readable two-line labels and wrap row actions below the layer name in narrow panels',
+  );
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
   assert(layersPanelSource.includes('const handleKeyboardNavigate') && layersPanelSource.includes("key === 'ArrowUp'") && layersPanelSource.includes("key === 'Home'"), 'Editor layers panel must support keyboard navigation through rendered layer rows');
@@ -19530,6 +19538,45 @@ const testLayersPanelControls = async (client, pageId) => {
       unselectedRowActions.ariaHidden === 'true' &&
       unselectedRowActions.tabIndex === -1,
     `Hidden unselected layer row actions remained interactive: ${JSON.stringify(unselectedRowActions)}`,
+  );
+  const layerRowReadability = await evaluate(client, `(() => {
+    const rows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]'));
+    const readRow = (row) => {
+      const name = row.querySelector('[data-testid="editor-layer-readable-name"]');
+      const meta = row.querySelector('[data-testid="editor-layer-readable-meta"]');
+      const actions = row.querySelector('[data-layer-actions-visible]');
+      const nameStyle = name instanceof HTMLElement ? getComputedStyle(name) : null;
+      const actionsStyle = actions instanceof HTMLElement ? getComputedStyle(actions) : null;
+      return {
+        id: row.getAttribute('data-layer-id') || '',
+        layerName: row.getAttribute('data-layer-name') || '',
+        readableMode: row.getAttribute('data-layer-readable-name') || '',
+        nameText: name?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        metaText: meta?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        nameDisplay: nameStyle?.display || '',
+        nameLineClamp: nameStyle?.webkitLineClamp || '',
+        actionsVisible: actions?.getAttribute('data-layer-actions-visible') || '',
+        actionsFlexBasis: actionsStyle?.flexBasis || '',
+      };
+    };
+    return {
+      ok: rows.length > 0,
+      rows: rows.slice(0, 12).map(readRow),
+      selectedRows: rows.filter((row) => row.getAttribute('data-layer-selected') === 'true').map(readRow),
+    };
+  })()`);
+  assert(
+    layerRowReadability?.ok &&
+      layerRowReadability.rows.every((row) => (
+        row.readableMode === 'two-line' &&
+        row.layerName &&
+        row.nameText.includes(row.layerName) &&
+        row.metaText.includes(row.id) &&
+        row.nameLineClamp === '2'
+      )) &&
+      layerRowReadability.selectedRows.length >= 1 &&
+      layerRowReadability.selectedRows.every((row) => row.actionsVisible === 'true' && row.actionsFlexBasis === '100%'),
+    `Layer rows did not keep readable names with wrapped selected-row actions: ${JSON.stringify(layerRowReadability)}`,
   );
   const keyboardRowSelection = await evaluate(client, `(async () => {
     const tree = document.querySelector('[role="tree"][aria-label="Canvas layers"]');
