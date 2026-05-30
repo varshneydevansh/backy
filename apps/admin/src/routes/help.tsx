@@ -23,7 +23,7 @@ export const Route = createFileRoute('/help')({
 });
 
 type HelpCategoryId = 'start' | 'sites' | 'editor' | 'api' | 'content' | 'security';
-type HelpRoute = '/' | '/sites' | '/sites/new' | '/pages' | '/blog' | '/media' | '/collections' | '/reusable-sections' | '/forms' | '/newsletter' | '/contacts' | '/settings';
+type HelpRoute = '/' | '/sites' | '/sites/new' | '/pages' | '/blog' | '/media' | '/collections' | '/reusable-sections' | '/forms' | '/newsletter' | '/contacts' | '/products' | '/orders' | '/users' | '/settings';
 
 interface HelpTopic {
   id: string;
@@ -104,6 +104,34 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open Pages',
   },
   {
+    id: 'canvas-zoom-selection',
+    category: 'editor',
+    title: 'Zoom, pan, and select on the canvas',
+    summary: 'Canvas zoom should change the work surface, not the whole browser page.',
+    details: [
+      'Use the in-canvas zoom controls, keyboard zoom shortcuts, or supported trackpad/wheel zoom gestures while the editor is focused.',
+      'Use pan mode or hold Space to move around a large canvas without changing selected content.',
+      'Click-drag marquee selection should start from the pointer position inside the canvas coordinate space, then select every visible element inside the bounded rectangle.',
+      'For precise multi-select, use Layers to select siblings, children, hidden elements, and locked-state context before grouping or alignment.',
+    ],
+    route: '/pages',
+    routeLabel: 'Open canvas pages',
+  },
+  {
+    id: 'navigation-shared-chrome',
+    category: 'editor',
+    title: 'Edit navigation, headers, and footers',
+    summary: 'Navigation is not one opaque text block; items can be selected, linked, and bound to site navigation.',
+    details: [
+      'A navigation element stores raw navigation items plus selectable child link layers so each menu item can be inspected, linked, styled, and moved.',
+      'Site primary navigation and footer navigation can bind to shared site chrome so new pages reuse the same header/footer pattern.',
+      'Root sections, headers, footers, and nav bars participate in root-section flow so resizing one area pushes later page sections instead of covering them.',
+      'Save stable headers, footers, and repeated blocks as reusable sections when you need the same design across pages and posts.',
+    ],
+    route: '/reusable-sections',
+    routeLabel: 'Open Sections',
+  },
+  {
     id: 'global-design',
     category: 'editor',
     title: 'Reuse headers, footers, sections, and design style',
@@ -141,6 +169,20 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open editor pages',
   },
   {
+    id: 'custom-frontend-agent-start',
+    category: 'api',
+    title: 'Start a custom frontend or AI agent',
+    summary: 'The canonical machine-readable starting point is GET /api/sites/:siteId/agent-handoff.',
+    details: [
+      'Give frontend agents the site id and ask them to read GET /api/sites/:siteId/agent-handoff before writing UI code.',
+      'That handoff points to manifest, OpenAPI, render, resolve, routing, component API contracts, newsletter sync boundaries, and custom frontend design state.',
+      'Use /api/sites/:siteId/manifest for discovery, /api/sites/:siteId/openapi for typed endpoint contracts, /api/sites/:siteId/render?path=/... for render payloads, and /api/sites/:siteId/resolve?path=/... for route resolution.',
+      'The written agent guide lives at specs/custom-frontend-agent-handoff.md for humans and review checklists.',
+    ],
+    route: '/sites',
+    routeLabel: 'Open Sites',
+  },
+  {
     id: 'frontend-handoff',
     category: 'api',
     title: 'Copy frontend and AI handoff data',
@@ -153,6 +195,20 @@ const HELP_TOPICS: HelpTopic[] = [
     ],
     route: '/sites',
     routeLabel: 'Open handoff',
+  },
+  {
+    id: 'frontend-design-state',
+    category: 'api',
+    title: 'Preserve custom frontend design state',
+    summary: 'Backy stores design metadata so new pages can follow an imported or generated site style.',
+    details: [
+      'Frontend design templates preserve content documents, editable maps, theme token references, assets, interactions, SEO metadata, and provenance.',
+      'New pages, blog posts, products, forms, collections, and reusable sections can start from Backy canvas templates or a custom frontend design template.',
+      'The component API contract uses backy.canvas-component-api-contract.v1 and keeps every canvas element addressable by id, type, props, styles, responsive overrides, tokens, assets, animations, and data bindings.',
+      'Custom frontends should render from Backy data and keep their local code as a presentation layer, not a separate source of truth.',
+    ],
+    route: '/sites',
+    routeLabel: 'Open design handoff',
   },
   {
     id: 'media-files-fonts',
@@ -195,6 +251,20 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open Newsletter',
   },
   {
+    id: 'newsletter-mail-boundary',
+    category: 'content',
+    title: 'Understand newsletter delivery boundaries',
+    summary: 'Backy owns subscriber data and issue handoff; a mail provider should own outbound delivery for now.',
+    details: [
+      'Backy can manage signup forms, subscribers, topics, segments, consent evidence, imports, exports, suppression status, and provider-safe sync routes.',
+      'Actual mailbox hosting, bulk outbound sending, bounces, complaints, provider unsubscribe enforcement, SPF/DKIM/DMARC, and sender reputation need a real email provider until Backy has a dedicated mail service.',
+      'Keep provider secrets in private settings or delivery workers, not in public manifests, canvas JSON, frontend bundles, or copied issue handoff.',
+      'Newsletter subscriber APIs expose subscriptionStatus for audience state and newsletterStatus for provider lifecycle states such as pending, bounced, and complained.',
+    ],
+    route: '/newsletter',
+    routeLabel: 'Open Newsletter',
+  },
+  {
     id: 'publish-reports-newsletter',
     category: 'content',
     title: 'Publish reports and prepare newsletter issues',
@@ -220,6 +290,43 @@ const HELP_TOPICS: HelpTopic[] = [
     ],
     route: '/settings',
     routeLabel: 'Open Settings',
+  },
+  {
+    id: 'provider-certification-partials',
+    category: 'security',
+    title: 'Why some release rows can stay Partial',
+    summary: 'The remaining Partial rows are live provider certification evidence, not missing local editor or API models.',
+    details: [
+      'The current audit tracks Settings, Settings admin APIs, Products, and Orders as Partial until redacted live provider evidence artifacts are accepted.',
+      'Forms and SDK/Postgres readiness are already covered by disposable database gates; the remaining gate is external provider proof for Settings and Commerce paths.',
+      'Provider evidence artifacts must prove selected-site handoff, scenario coverage, freshness, no raw secrets, API readiness, and release-doctor acceptance.',
+      'Use Settings for the operator evidence packet and run the Settings/Commerce provider certification commands only with real provider credentials available outside public code.',
+    ],
+    route: '/settings',
+    routeLabel: 'Open Settings',
+  },
+];
+
+const FRONTEND_AGENT_STARTERS = [
+  {
+    label: 'Agent handoff',
+    value: 'GET /api/sites/:siteId/agent-handoff',
+    detail: 'First read for frontend agents. Includes routing, API alignment, design state, and component contracts.',
+  },
+  {
+    label: 'Manifest',
+    value: 'GET /api/sites/:siteId/manifest',
+    detail: 'Discovery document for site metadata, modules, completion status, and handoff pointers.',
+  },
+  {
+    label: 'OpenAPI',
+    value: 'GET /api/sites/:siteId/openapi',
+    detail: 'Typed endpoint contract for SDKs, AI agents, and custom frontend implementation.',
+  },
+  {
+    label: 'Render and resolve',
+    value: 'GET /api/sites/:siteId/render?path=/...  |  GET /api/sites/:siteId/resolve?path=/...',
+    detail: 'Use render for page payloads and resolve for route decisions across root domains and subdomains.',
   },
 ];
 
@@ -402,17 +509,19 @@ function HelpPage() {
           icon={<Code2 className="h-4 w-4" />}
         />
         <PanelContent>
-          <div className="grid gap-3 md:grid-cols-3">
-            {[
-              ['Site command center', 'Open Sites, choose the workspace, then copy API URL or handoff JSON.'],
-              ['Editor composition handoff', 'Open a page or post editor, then use Composition handoff in the right panel.'],
-              ['Content contract', 'Render frontends from structured elements, theme tokens, bindings, assets, responsive overrides, and animations.'],
-            ].map(([title, detail]) => (
-              <div key={title} className="rounded-lg bg-muted/35 p-3">
-                <p className="text-sm font-semibold">{title}</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">{detail}</p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="help-agent-starter-grid">
+            {FRONTEND_AGENT_STARTERS.map((item) => (
+              <div key={item.label} className="rounded-lg border border-border bg-muted/25 p-3" data-testid={`help-agent-starter-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+                <p className="text-sm font-semibold">{item.label}</p>
+                <code className="mt-2 block min-w-0 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                  {item.value}
+                </code>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.detail}</p>
               </div>
             ))}
+          </div>
+          <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-3 text-sm leading-6 text-muted-foreground" data-testid="help-agent-human-guide">
+            Human review guide: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">specs/custom-frontend-agent-handoff.md</code>. Require agents to preserve Backy ids, component props, responsive overrides, token refs, assets, animation metadata, data bindings, and newsletter sync boundaries.
           </div>
         </PanelContent>
       </Panel>
