@@ -18669,6 +18669,159 @@ const testMarqueeSelectionOrigin = async (client) => {
   assert(Math.abs(reverseOverlay.rectLeft - reverseOverlay.expectedVisualLeft) <= 4 && Math.abs(reverseOverlay.rectTop - reverseOverlay.expectedVisualTop) <= 4, `Reverse marquee visual rect should render from its canvas-space bounds: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
   assert(reverseOverlay.boundsWidth > 20 && reverseOverlay.boundsHeight > 20, `Reverse marquee overlay did not grow during drag: ${JSON.stringify({ reverseStart, reverseEnd, reverseOverlay })}`);
 
+  const surfaceStart = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const host = document.querySelector('[data-element-id="smoke-box"]');
+    if (!(canvas instanceof HTMLElement) || !(host instanceof HTMLElement)) {
+      return { ok: false, hasCanvas: Boolean(canvas), hasHost: Boolean(host) };
+    }
+
+    host.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
+    const rect = host.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasStyle = window.getComputedStyle(canvas);
+    const cssWidth = Number.parseFloat(canvasStyle.width || '0');
+    const cssHeight = Number.parseFloat(canvasStyle.height || '0');
+    const scaleX = cssWidth > 0 ? canvasRect.width / cssWidth : 1;
+    const scaleY = cssHeight > 0 ? canvasRect.height / cssHeight : 1;
+    const left = Math.max(rect.left + 14, 24);
+    const right = Math.min(rect.right - 14, window.innerWidth - 24);
+    const top = Math.max(rect.top + 14, 120);
+    const bottom = Math.min(rect.bottom - 14, window.innerHeight - 120);
+
+    for (let y = top; y <= bottom; y += 12) {
+      for (let x = left; x <= right; x += 12) {
+        const target = document.elementFromPoint(x, y);
+        if (!(target instanceof Element)) continue;
+        const hitElement = target.closest('[data-element-id]');
+        const hitHandle = target.closest('[data-role="canvas-move-handle"], [data-role="canvas-resize-handle"], button, input, select, textarea, a, [contenteditable="true"], [role="button"], [role="textbox"]');
+        if (hitElement === host && !hitHandle) {
+          return {
+            ok: true,
+            x: Math.round(x),
+            y: Math.round(y),
+            expectedCanvasX: Math.round((x - canvasRect.left) / scaleX),
+            expectedCanvasY: Math.round((y - canvasRect.top) / scaleY),
+            scaleX: Number(scaleX.toFixed(3)),
+            scaleY: Number(scaleY.toFixed(3)),
+            hostRect: {
+              left: Math.round(rect.left),
+              top: Math.round(rect.top),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+            canvasRect: {
+              left: Math.round(canvasRect.left),
+              top: Math.round(canvasRect.top),
+              width: Math.round(canvasRect.width),
+              height: Math.round(canvasRect.height),
+            },
+            hitTag: target.tagName,
+          };
+        }
+      }
+    }
+
+    return {
+      ok: false,
+      reason: 'no-root-surface-background-point',
+      hostRect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+      },
+    };
+  })()`);
+  assert(surfaceStart?.ok, `Unable to find root element background point for marquee surface smoke: ${JSON.stringify(surfaceStart)}`);
+
+  const surfaceEnd = {
+    x: Math.min(surfaceStart.x + 110, surfaceStart.canvasRect.left + surfaceStart.canvasRect.width - 18),
+    y: Math.min(surfaceStart.y + 86, surfaceStart.canvasRect.top + surfaceStart.canvasRect.height - 18),
+  };
+  assert(surfaceEnd.x > surfaceStart.x + 20 && surfaceEnd.y > surfaceStart.y + 20, `Root surface marquee smoke did not have room to drag: ${JSON.stringify({ surfaceStart, surfaceEnd })}`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: surfaceStart.x,
+    y: surfaceStart.y,
+    button: 'none',
+  });
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: surfaceStart.x,
+    y: surfaceStart.y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await sleep(80);
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: surfaceEnd.x,
+    y: surfaceEnd.y,
+    button: 'left',
+    buttons: 1,
+  });
+  await sleep(140);
+
+  const surfaceOverlay = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const marquee = document.querySelector('[data-testid="editor-marquee-selection"]');
+    if (!(canvas instanceof HTMLElement) || !(marquee instanceof HTMLElement)) {
+      return { ok: false, hasCanvas: Boolean(canvas), hasMarquee: Boolean(marquee) };
+    }
+
+    const rect = marquee.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const canvasStyle = window.getComputedStyle(canvas);
+    const cssCanvasWidth = Number.parseFloat(canvasStyle.width || '0');
+    const cssCanvasHeight = Number.parseFloat(canvasStyle.height || '0');
+    const scaleX = cssCanvasWidth > 0 ? canvasRect.width / cssCanvasWidth : 1;
+    const scaleY = cssCanvasHeight > 0 ? canvasRect.height / cssCanvasHeight : 1;
+    const style = window.getComputedStyle(marquee);
+    const cssLeft = Number.parseFloat(style.left || '0');
+    const cssTop = Number.parseFloat(style.top || '0');
+    return {
+      ok: true,
+      coordinateSpace: marquee.getAttribute('data-marquee-coordinate-space') || '',
+      selectionMode: marquee.getAttribute('data-selection-mode') || '',
+      startX: Number(marquee.getAttribute('data-marquee-start-x') || 0),
+      startY: Number(marquee.getAttribute('data-marquee-start-y') || 0),
+      currentX: Number(marquee.getAttribute('data-marquee-current-x') || 0),
+      currentY: Number(marquee.getAttribute('data-marquee-current-y') || 0),
+      boundsX: Number(marquee.getAttribute('data-marquee-bounds-x') || 0),
+      boundsY: Number(marquee.getAttribute('data-marquee-bounds-y') || 0),
+      boundsWidth: Number(marquee.getAttribute('data-marquee-bounds-width') || 0),
+      boundsHeight: Number(marquee.getAttribute('data-marquee-bounds-height') || 0),
+      cssLeft,
+      cssTop,
+      rectLeft: Math.round(rect.left),
+      rectTop: Math.round(rect.top),
+      expectedVisualLeft: Math.round(canvasRect.left + (cssLeft * scaleX)),
+      expectedVisualTop: Math.round(canvasRect.top + (cssTop * scaleY)),
+    };
+  })()`);
+
+  await client.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: surfaceEnd.x,
+    y: surfaceEnd.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await sleep(80);
+
+  assert(surfaceOverlay.ok, `Root surface marquee overlay did not render while dragging: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assert(surfaceOverlay.coordinateSpace === 'canvas', `Root surface marquee overlay missing canvas coordinate metadata: ${JSON.stringify(surfaceOverlay)}`);
+  assert(surfaceOverlay.selectionMode === 'replace', `Root surface marquee should default to replace mode: ${JSON.stringify(surfaceOverlay)}`);
+  assert(Math.abs(surfaceOverlay.startX - surfaceStart.expectedCanvasX) <= 2, `Root surface marquee start X drifted from pointer-down origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assert(Math.abs(surfaceOverlay.startY - surfaceStart.expectedCanvasY) <= 2, `Root surface marquee start Y drifted from pointer-down origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assert(surfaceOverlay.cssLeft > 0 && surfaceOverlay.cssTop > 0, `Root surface marquee CSS left/top should not collapse to canvas origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assert(Math.abs(surfaceOverlay.rectLeft - surfaceOverlay.expectedVisualLeft) <= 4 && Math.abs(surfaceOverlay.rectTop - surfaceOverlay.expectedVisualTop) <= 4, `Root surface marquee visual rect should render from its canvas-space origin: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+  assert(surfaceOverlay.boundsWidth > 20 && surfaceOverlay.boundsHeight > 20, `Root surface marquee overlay did not grow during drag: ${JSON.stringify({ surfaceStart, surfaceEnd, surfaceOverlay })}`);
+
   return {
     zoom,
     start,
@@ -18677,6 +18830,9 @@ const testMarqueeSelectionOrigin = async (client) => {
     reverseStart,
     reverseEnd,
     reverseOverlay,
+    surfaceStart,
+    surfaceEnd,
+    surfaceOverlay,
   };
 };
 

@@ -1648,6 +1648,8 @@ type CanvasInteractionInput = {
   pointerType?: string;
 };
 
+const ROOT_MARQUEE_SURFACE_TYPES = new Set(['section', 'header', 'footer', 'container', 'box']);
+
 const getPointerDetails = (event: React.PointerEvent | React.MouseEvent) => {
   if ('pointerId' in event && event.pointerId !== undefined) {
     if (event.pointerType === 'mouse') {
@@ -1970,6 +1972,36 @@ export function Canvas({
     };
   }, [getMeasuredCanvasScale, size.height, size.width]);
 
+  const startMarqueeSelection = useCallback((
+    event: React.PointerEvent<Element> | React.MouseEvent<Element>,
+    start: CanvasPoint,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (
+      'pointerId' in event &&
+      event.pointerId !== undefined &&
+      event.currentTarget instanceof HTMLElement
+    ) {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+
+    setEditingId(null);
+    clearActiveEditor();
+
+    const nextSelection: MarqueeSelection = {
+      ...getPointerDetails(event),
+      mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace',
+      startX: start.x,
+      startY: start.y,
+      currentX: start.x,
+      currentY: start.y,
+    };
+
+    marqueeSelectionRef.current = nextSelection;
+    setMarqueeSelection(nextSelection);
+  }, [clearActiveEditor]);
+
   const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (isPreview || disabled || event.button !== 0) {
       return;
@@ -1984,25 +2016,51 @@ export function Canvas({
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setEditingId(null);
-    clearActiveEditor();
+    startMarqueeSelection(event, start);
+  }, [disabled, getCanvasPoint, isPreview, startMarqueeSelection]);
 
-    const nextSelection: MarqueeSelection = {
-      inputType: 'pointer',
-      pointerId: event.pointerId,
-      mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace',
-      startX: start.x,
-      startY: start.y,
-      currentX: start.x,
-      currentY: start.y,
-    };
+  const shouldStartMarqueeFromElementSurface = useCallback((
+    target: EventTarget | null,
+    elementId: string,
+  ) => {
+    const targetElement = getTargetElement(target);
+    if (!targetElement) {
+      return false;
+    }
 
-    marqueeSelectionRef.current = nextSelection;
-    setMarqueeSelection(nextSelection);
-  }, [clearActiveEditor, disabled, getCanvasPoint, isPreview]);
+    if (
+      targetElement.closest(
+        [
+          '[data-role="canvas-move-handle"]',
+          '[data-role="canvas-resize-handle"]',
+          '[data-backy-text-editor]',
+          '[data-editor-shortcuts="disabled"]',
+          'button',
+          'input',
+          'select',
+          'textarea',
+          'a',
+          '[contenteditable="true"]',
+          '[role="button"]',
+          '[role="textbox"]',
+        ].join(', ')
+      )
+    ) {
+      return false;
+    }
+
+    const hitElement = targetElement.closest('[data-element-id]');
+    if (!(hitElement instanceof HTMLElement) || hitElement.dataset.elementId !== elementId) {
+      return false;
+    }
+
+    const entry = findElementEntry(elementsRef.current, elementId);
+    if (!entry || entry.parentId !== null) {
+      return false;
+    }
+
+    return ROOT_MARQUEE_SURFACE_TYPES.has(normalizeCanvasElementType(entry.element.type));
+  }, [getTargetElement]);
 
   /**
    * Start moving an element from pointer or mouse input.
@@ -2011,7 +2069,7 @@ export function Canvas({
     (e: React.PointerEvent | React.MouseEvent, elementId: string) => {
       if (isPreview || disabled) return;
       if ('button' in e && e.button !== 0) return;
-      if (dragStateRef.current || resizeStateRef.current) return;
+      if (dragStateRef.current || resizeStateRef.current || marqueeSelectionRef.current) return;
       if (isInteractiveHandle(e.target) || isInteractiveHandleAtPoint(e.clientX, e.clientY)) return;
 
       const eventTarget = getTargetElement(e.target);
@@ -2024,6 +2082,17 @@ export function Canvas({
 
       const clickedElement = findElementById(elements, elementId);
       if (!clickedElement) return;
+
+      const marqueeStart = getCanvasPoint(e.clientX, e.clientY);
+      if (
+        marqueeStart &&
+        !isCanvasElementLocked(clickedElement) &&
+        !selectedIds.includes(elementId) &&
+        shouldStartMarqueeFromElementSurface(e.target, elementId)
+      ) {
+        startMarqueeSelection(e, marqueeStart);
+        return;
+      }
 
       if (e.shiftKey || e.metaKey || e.ctrlKey) {
         e.preventDefault();
@@ -2099,7 +2168,7 @@ export function Canvas({
       setDragState(nextDragState);
       setResizeState(null);
     },
-    [disabled, elements, exitTextEditingForTransform, isInteractiveHandle, isInteractiveHandleAtPoint, isTextEditorInteraction, isPreview, onSelect, onToggleSelect, selectedIds, size.height, size.width]
+    [disabled, elements, exitTextEditingForTransform, getCanvasPoint, getTargetElement, isInteractiveHandle, isInteractiveHandleAtPoint, isTextEditorInteraction, isPreview, onSelect, onToggleSelect, selectedIds, shouldStartMarqueeFromElementSurface, size.height, size.width, startMarqueeSelection]
   );
 
   /**
@@ -2903,6 +2972,10 @@ export function Canvas({
             onDragStart={handleElementDragStart}
             onResizeStart={handleResizeStart}
             onClick={(e) => {
+              if (suppressCanvasClickRef.current) {
+                suppressCanvasClickRef.current = false;
+                return;
+              }
               e.stopPropagation();
               debugTextInteraction('element onClick', {
                 elementId: element.id,
