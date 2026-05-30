@@ -115,6 +115,198 @@ const extractCatalogElementTypes = (source, editorElementTypes) => uniqueSorted(
     .filter((type) => editorElementTypes.includes(type)),
 );
 
+const skipString = (source, startIndex) => {
+  const quote = source[startIndex];
+  let escaped = false;
+  for (let index = startIndex + 1; index < source.length; index += 1) {
+    const char = source[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === quote) return index;
+  }
+  return source.length - 1;
+};
+
+const skipComment = (source, startIndex) => {
+  if (source[startIndex + 1] === '/') {
+    const end = source.indexOf('\n', startIndex + 2);
+    return end === -1 ? source.length - 1 : end;
+  }
+  if (source[startIndex + 1] === '*') {
+    const end = source.indexOf('*/', startIndex + 2);
+    return end === -1 ? source.length - 1 : end + 1;
+  }
+  return startIndex;
+};
+
+const findMatchingDelimiter = (source, startIndex, open, close) => {
+  let depth = 0;
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"' || char === "'" || char === '`') {
+      index = skipString(source, index);
+      continue;
+    }
+    if (char === '/' && (source[index + 1] === '/' || source[index + 1] === '*')) {
+      index = skipComment(source, index);
+      continue;
+    }
+    if (char === open) depth += 1;
+    if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+};
+
+const splitTopLevelArguments = (source) => {
+  const args = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"' || char === "'" || char === '`') {
+      index = skipString(source, index);
+      continue;
+    }
+    if (char === '/' && (source[index + 1] === '/' || source[index + 1] === '*')) {
+      index = skipComment(source, index);
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') depth += 1;
+    if (char === ')' || char === ']' || char === '}') depth -= 1;
+    if (char === ',' && depth === 0) {
+      args.push(source.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  args.push(source.slice(start).trim());
+  return args;
+};
+
+const extractNamedArrayBlock = (source, name) => {
+  const nameIndex = source.indexOf(name);
+  assert(nameIndex !== -1, `Unable to find ${name}`);
+  const openIndex = source.indexOf('[', nameIndex);
+  assert(openIndex !== -1, `Unable to find ${name} array`);
+  const closeIndex = findMatchingDelimiter(source, openIndex, '[', ']');
+  assert(closeIndex !== -1, `Unable to close ${name} array`);
+  return source.slice(openIndex, closeIndex + 1);
+};
+
+const extractTopLevelObjectBlocks = (arrayBlock) => {
+  const blocks = [];
+  for (let index = 0; index < arrayBlock.length; index += 1) {
+    const char = arrayBlock[index];
+    if (char === '"' || char === "'" || char === '`') {
+      index = skipString(arrayBlock, index);
+      continue;
+    }
+    if (char === '/' && (arrayBlock[index + 1] === '/' || arrayBlock[index + 1] === '*')) {
+      index = skipComment(arrayBlock, index);
+      continue;
+    }
+    if (char !== '{') continue;
+    const closeIndex = findMatchingDelimiter(arrayBlock, index, '{', '}');
+    assert(closeIndex !== -1, 'Unable to close top-level object block');
+    blocks.push(arrayBlock.slice(index, closeIndex + 1));
+    index = closeIndex;
+  }
+  return blocks;
+};
+
+const extractTopLevelObjectKeys = (objectBlock) => {
+  const keys = [];
+  let depth = 0;
+  for (let index = 0; index < objectBlock.length; index += 1) {
+    const char = objectBlock[index];
+    if (char === '/' && (objectBlock[index + 1] === '/' || objectBlock[index + 1] === '*')) {
+      index = skipComment(objectBlock, index);
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (depth !== 1) {
+      if (char === '"' || char === "'" || char === '`') index = skipString(objectBlock, index);
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      const endIndex = skipString(objectBlock, index);
+      const key = objectBlock.slice(index + 1, endIndex);
+      let cursor = endIndex + 1;
+      while (/\s/u.test(objectBlock[cursor] || '')) cursor += 1;
+      if (objectBlock[cursor] === ':') keys.push(key);
+      index = endIndex;
+      continue;
+    }
+    if (/[A-Za-z_$]/u.test(char)) {
+      let cursor = index + 1;
+      while (/[A-Za-z0-9_$]/u.test(objectBlock[cursor] || '')) cursor += 1;
+      const key = objectBlock.slice(index, cursor);
+      let colonCursor = cursor;
+      while (/\s/u.test(objectBlock[colonCursor] || '')) colonCursor += 1;
+      if (objectBlock[colonCursor] === ':') keys.push(key);
+      index = cursor - 1;
+    }
+  }
+  return uniqueSorted(keys);
+};
+
+const extractCanvasCatalogDefaultPropsByType = (source, editorElementTypes) => {
+  const propsByType = {};
+  const libraryBlock = extractNamedArrayBlock(source, 'CANVAS_COMPONENT_LIBRARY');
+  for (const itemBlock of extractTopLevelObjectBlocks(libraryBlock)) {
+    const type = itemBlock.match(/\btype:\s*'([^']+)'/)?.[1];
+    if (!type || !editorElementTypes.includes(type)) continue;
+    const defaultPropsIndex = itemBlock.indexOf('defaultProps');
+    if (defaultPropsIndex === -1) continue;
+    const openIndex = itemBlock.indexOf('{', defaultPropsIndex);
+    assert(openIndex !== -1, `Unable to find defaultProps block for ${type}`);
+    const closeIndex = findMatchingDelimiter(itemBlock, openIndex, '{', '}');
+    assert(closeIndex !== -1, `Unable to read defaultProps for ${type}`);
+    propsByType[type] = uniqueSorted([
+      ...(propsByType[type] || []),
+      ...extractTopLevelObjectKeys(itemBlock.slice(openIndex, closeIndex + 1)),
+    ]);
+  }
+  return propsByType;
+};
+
+const extractComponentContractPropPathsByType = (source, callName) => {
+  const propsByType = {};
+  let searchIndex = 0;
+  while (searchIndex < source.length) {
+    const callIndex = source.indexOf(`${callName}(`, searchIndex);
+    if (callIndex === -1) break;
+    const openIndex = source.indexOf('(', callIndex);
+    const closeIndex = findMatchingDelimiter(source, openIndex, '(', ')');
+    assert(closeIndex !== -1, `Unable to parse ${callName} call`);
+    const args = splitTopLevelArguments(source.slice(openIndex + 1, closeIndex));
+    const type = args[0]?.match(/['"]([^'"]+)['"]/)?.[1];
+    if (type) {
+      propsByType[type] = uniqueSorted([
+        ...(propsByType[type] || []),
+        ...[...(args[3] || '').matchAll(/['"]props\.([^'"]+)['"]/g)].map((entry) => entry[1]),
+      ]);
+    }
+    searchIndex = closeIndex + 1;
+  }
+  return propsByType;
+};
+
 const requiredComponentApiFieldPaths = [
   'element.id',
   'element.type',
@@ -206,17 +398,35 @@ const missingComponentTypesFromPublishedGuard = missingFrom(expectedComponentApi
 const extraPublishedGuardTypes = missingFrom(requiredComponentApiTypes, expectedComponentApiTypes);
 const missingComponentApiCorePaths = requiredComponentApiFieldPaths.filter((path) => !customFrontendAgentHandoffLib.includes(path));
 const missingComponentApiSchemaPaths = requiredComponentApiFieldPaths.filter((path) => !frontendManifestSchema.includes(`"const": "${path}"`));
+const missingGeneratedSdkComponentApiFieldPaths = requiredComponentApiFieldPaths.filter((path) => !generatedSdkSmoke.includes(`"${path}"`));
 const missingComponentApiDocsPaths = requiredComponentApiFieldPaths.filter((path) => {
   const docPath = path.startsWith('element.') ? path.replace(/^element\./, '') : path;
   return !customFrontendAgentHandoffDocs.includes(`\`${docPath}\``);
 });
 const missingComponentApiCoreFamilies = requiredComponentApiFamilies.filter((family) => !customFrontendAgentHandoffLib.includes(`'${family}'`));
 const missingComponentApiSchemaFamilies = requiredComponentApiFamilies.filter((family) => !frontendManifestSchema.includes(`"const": "${family}"`));
+const missingGeneratedSdkComponentApiFamilies = requiredComponentApiFamilies.filter((family) => !generatedSdkSmoke.includes(`"${family}"`));
 const missingComponentApiCoreTypes = expectedComponentApiTypes.filter((type) => !customFrontendAgentHandoffLib.includes(`'${type}'`));
 const missingComponentApiSchemaTypes = expectedComponentApiTypes.filter((type) => !frontendManifestSchema.includes(`"const": "${type}"`));
 const componentApiContractTypes = uniqueSorted(
   [...customFrontendAgentHandoffLib.matchAll(/componentTypeContract\('([^']+)'/g)].map((entry) => entry[1]),
 );
+const catalogDefaultPropsByType = extractCanvasCatalogDefaultPropsByType(adminEditorCatalog, adminEditorElementTypes);
+const coreComponentPropPathsByType = extractComponentContractPropPathsByType(customFrontendAgentHandoffLib, 'componentTypeContract');
+const generatedSdkComponentPropPathsByType = extractComponentContractPropPathsByType(generatedSdkSmoke, 'componentTypeContractFixture');
+const generatedSdkComponentApiTypes = uniqueSorted(Object.keys(generatedSdkComponentPropPathsByType));
+const missingCatalogDefaultPropPathsFromContract = Object.entries(catalogDefaultPropsByType).flatMap(([type, propNames]) => (
+  propNames
+    .filter((propName) => !(coreComponentPropPathsByType[type] || []).includes(propName))
+    .map((propName) => `${type}.props.${propName}`)
+));
+const missingGeneratedSdkComponentApiTypes = missingFrom(expectedComponentApiTypes, generatedSdkComponentApiTypes);
+const extraGeneratedSdkComponentApiTypes = missingFrom(generatedSdkComponentApiTypes, expectedComponentApiTypes);
+const missingCatalogDefaultPropPathsFromGeneratedSdk = Object.entries(catalogDefaultPropsByType).flatMap(([type, propNames]) => (
+  propNames
+    .filter((propName) => !(generatedSdkComponentPropPathsByType[type] || []).includes(propName))
+    .map((propName) => `${type}.props.${propName}`)
+));
 const adminCanvasElementTypes = extractQuotedStringsFromBlock(
   adminCanvasEditorSource,
   /const KNOWN_CANVAS_ELEMENT_TYPES:[\s\S]*?=\s*\[([\s\S]*?)\];/,
@@ -244,9 +454,11 @@ const extraRendererMapTypes = missingFrom(publicRendererMappedTypes, expectedCom
 assert(
   missingComponentApiCorePaths.length === 0 &&
     missingComponentApiSchemaPaths.length === 0 &&
+    missingGeneratedSdkComponentApiFieldPaths.length === 0 &&
     missingComponentApiDocsPaths.length === 0 &&
     missingComponentApiCoreFamilies.length === 0 &&
     missingComponentApiSchemaFamilies.length === 0 &&
+    missingGeneratedSdkComponentApiFamilies.length === 0 &&
     missingComponentApiCoreTypes.length === 0 &&
     missingComponentApiSchemaTypes.length === 0 &&
     missingComponentTypesFromPublishedGuard.length === 0 &&
@@ -260,6 +472,10 @@ assert(
     extraAdminCanvasTypes.length === 0 &&
     extraRendererKnownTypes.length === 0 &&
     extraRendererMapTypes.length === 0 &&
+    missingCatalogDefaultPropPathsFromContract.length === 0 &&
+    missingGeneratedSdkComponentApiTypes.length === 0 &&
+    extraGeneratedSdkComponentApiTypes.length === 0 &&
+    missingCatalogDefaultPropPathsFromGeneratedSdk.length === 0 &&
     customFrontendAgentHandoffLib.includes('CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
     customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
     customFrontendAgentHandoffLib.includes('creationHints: buildComponentCreationHints') &&
@@ -301,9 +517,11 @@ assert(
   `Custom frontend component API coverage drifted: ${JSON.stringify({
     missingComponentApiCorePaths,
     missingComponentApiSchemaPaths,
+    missingGeneratedSdkComponentApiFieldPaths,
     missingComponentApiDocsPaths,
     missingComponentApiCoreFamilies,
     missingComponentApiSchemaFamilies,
+    missingGeneratedSdkComponentApiFamilies,
     missingComponentApiCoreTypes,
     missingComponentApiSchemaTypes,
     missingComponentTypesFromPublishedGuard,
@@ -317,6 +535,10 @@ assert(
     extraAdminCanvasTypes,
     extraRendererKnownTypes,
     extraRendererMapTypes,
+    missingCatalogDefaultPropPathsFromContract,
+    missingGeneratedSdkComponentApiTypes,
+    extraGeneratedSdkComponentApiTypes,
+    missingCatalogDefaultPropPathsFromGeneratedSdk,
   })}`,
 );
 const adminPropertyPanel = read('../../../apps/admin/src/components/editor/PropertyPanel.tsx');
