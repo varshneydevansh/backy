@@ -613,6 +613,9 @@ const assertSettingsSourceContracts = () => {
     'EXPECTED_COMPLETION_PARTIAL_ROWS',
     '/api/sites/demo/manifest',
     '/api/sites/demo/openapi',
+    'const listUsers = async () => {',
+    'temporarilyAllowSettingsSmokeSeatCapacity',
+    'await temporarilyAllowSettingsSmokeSeatCapacity(1);',
   ];
   const missingSmokeSnippets = requiredSmokeSnippets.filter((snippet) => !smokeSource.includes(snippet));
   assert(
@@ -857,6 +860,16 @@ const listSites = async () => {
   return payload.data?.sites || payload.sites || [];
 };
 
+const listUsers = async () => {
+  const payload = await requestApi('/api/admin/users?limit=1&offset=0');
+  const users = payload.data?.users || payload.users || [];
+  const pagination = payload.data?.pagination || payload.pagination || {};
+  return {
+    users,
+    total: Number.isFinite(Number(pagination.total)) ? Number(pagination.total) : users.length,
+  };
+};
+
 const temporarilyAllowSettingsSmokeSiteQuota = async (extraSites = 1) => {
   const settings = await readSettings();
   const sites = await listSites();
@@ -878,6 +891,34 @@ const temporarilyAllowSettingsSmokeSiteQuota = async (extraSites = 1) => {
           ...originalCommerce,
           siteLimit: requiredSiteLimit,
           overageMode: 'warn',
+        },
+      },
+    }),
+  });
+
+  return true;
+};
+
+const temporarilyAllowSettingsSmokeSeatCapacity = async (extraSeats = 1) => {
+  const settings = await readSettings();
+  const users = await listUsers();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSeatLimit = Number(originalCommerce.seatLimit || 0);
+  const requiredSeatLimit = users.total + extraSeats;
+
+  if (currentSeatLimit >= requiredSeatLimit) {
+    return false;
+  }
+
+  await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      integrations: {
+        ...originalIntegrations,
+        commerce: {
+          ...originalCommerce,
+          seatLimit: requiredSeatLimit,
         },
       },
     }),
@@ -4115,6 +4156,7 @@ const main = async () => {
 
   try {
     await temporarilyAllowSettingsSmokeSiteQuota(1);
+    await temporarilyAllowSettingsSmokeSeatCapacity(1);
     const siteScopeSite = await createSite({
       name: `Settings Scope ${suffix}`,
       slug: `settings-scope-${suffix}`,
