@@ -4141,9 +4141,10 @@ function SettingsPage() {
             </Button>
           )}
           <details
-            className="group relative z-[80]"
+            className="group relative z-[80] transition-[margin] [&[open]]:mb-32"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
             data-stack-layer="settings-header-more-actions-above-workbar"
+            data-open-reserves-workbar-gap="true"
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
             data-target-settings-tab={activeTab}
