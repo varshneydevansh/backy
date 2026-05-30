@@ -1467,6 +1467,9 @@ const assertCanvasSelectionInfoSource = () => {
       editorSource.includes('function applyRootSectionInsertionFlow(') &&
       editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') &&
       editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
+      editorSource.includes('const nextDisplayedElements = applyResponsiveOverridesToElements(result.elements, breakpoint);') &&
+      editorSource.includes('const flowedDisplayedElements = applyRootSectionFlow(previousDisplayedElements, nextDisplayedElements);') &&
+      editorSource.includes('return mergeDisplayedElementsIntoBreakpoint(result.elements, flowedDisplayedElements, breakpoint);') &&
       editorSource.includes('const insertedElements = nextRootElements.filter((element) => !previousById.has(element.id));') &&
       editorSource.includes('const insertedFlowElements = insertedElements.filter(isRootSectionFlowElement);') &&
       editorSource.includes('insertedFlowElements.length === changedFlowElements.length') &&

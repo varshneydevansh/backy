@@ -5725,7 +5725,10 @@ export function CanvasEditor({
           return currentElements;
         }
 
-        return result.elements;
+        const previousDisplayedElements = applyResponsiveOverridesToElements(currentElements, breakpoint);
+        const nextDisplayedElements = applyResponsiveOverridesToElements(result.elements, breakpoint);
+        const flowedDisplayedElements = applyRootSectionFlow(previousDisplayedElements, nextDisplayedElements);
+        return mergeDisplayedElementsIntoBreakpoint(result.elements, flowedDisplayedElements, breakpoint);
       }, selectedElementId);
     },
     [breakpoint, selectedId, updateElementsWithHistory]

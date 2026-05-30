@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 03:47 IST
+- **Last updated:** 2026-05-31 03:56 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 03:56 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Inspector section-flow parity improved; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: Inspector/property-panel geometry edits now route root section/header/footer/nav changes through the same `applyRootSectionFlow` path as canvas drag/resize interactions, then merge the shifted result back into the active breakpoint. Typed height/position edits now push following root sections consistently.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: root-section flow source guard now asserts the Inspector/property-panel path, not only direct canvas resize/drop paths.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another small release polish slice: blog/newsletter authoring, Help discoverability, layer-map/mobile editor behavior, site/domain management wording, or custom frontend/APIability discoverability.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 03:47 IST
 
