@@ -1117,7 +1117,22 @@ const applyRootSectionFlow = (
     );
   });
 
-  if (changedFlowElements.length !== 1) {
+  if (changedFlowElements.length > 1) {
+    const insertedElements = nextRootElements.filter((element) => !previousById.has(element.id));
+    const insertedFlowElements = insertedElements.filter(isRootSectionFlowElement);
+
+    if (insertedFlowElements.length === changedFlowElements.length) {
+      const insertedIds = new Set(insertedElements.map((element) => element.id));
+      return applyRootSectionInsertionFlow(
+        nextRootElements.filter((element) => !insertedIds.has(element.id)),
+        insertedElements,
+      );
+    }
+
+    return nextRootElements;
+  }
+
+  if (changedFlowElements.length === 0) {
     return nextRootElements;
   }
 
@@ -1145,10 +1160,10 @@ const applyRootSectionFlow = (
   });
 };
 
-const applyRootSectionInsertionFlow = (
+function applyRootSectionInsertionFlow(
   rootElements: CanvasElement[],
   insertedElements: CanvasElement[],
-): CanvasElement[] => {
+): CanvasElement[] {
   const insertedFlowElements = insertedElements
     .filter(isRootSectionFlowElement)
     .sort((left, right) => left.y - right.y);
@@ -1177,7 +1192,7 @@ const applyRootSectionInsertionFlow = (
   });
 
   return [...shiftedRootElements, ...insertedElements];
-};
+}
 
 const mapElementsById = (elements: CanvasElement[], map = new Map<string, CanvasElement>()) => {
   elements.forEach((element) => {

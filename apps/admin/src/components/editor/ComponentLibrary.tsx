@@ -11,7 +11,7 @@
  * @license MIT
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react';
 import {
   Type,
   Heading,
@@ -149,6 +149,77 @@ const getReusableSectionDuplicateCount = (item: ComponentLibraryItem): number =>
   const value = item.reusableContent?.metadata?.libraryDuplicateCount;
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 };
+
+const removeComponentLibraryDragImage = (element: HTMLElement | null) => {
+  element?.parentElement?.removeChild(element);
+};
+
+function createComponentLibraryDragImage(item: ComponentLibraryItem, isTileMode: boolean): HTMLElement | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const dragImage = document.createElement('div');
+  dragImage.dataset.backyComponentDragImage = 'opaque-single-item';
+  dragImage.setAttribute('aria-hidden', 'true');
+  dragImage.style.cssText = [
+    'position:fixed',
+    'top:-1000px',
+    'left:-1000px',
+    'z-index:2147483647',
+    `width:${isTileMode ? 228 : 260}px`,
+    'box-sizing:border-box',
+    'display:grid',
+    'grid-template-columns:48px 1fr',
+    'gap:10px',
+    'align-items:center',
+    'padding:10px',
+    'border:1px solid #bfdbfe',
+    'border-radius:8px',
+    'background:#ffffff',
+    'color:#0f172a',
+    'box-shadow:0 18px 42px rgba(15,23,42,0.24)',
+    'opacity:1',
+    'overflow:hidden',
+    'pointer-events:none',
+    'font:500 13px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+  ].join(';');
+
+  const preview = document.createElement('div');
+  preview.style.cssText = [
+    'height:44px',
+    'width:44px',
+    'border-radius:6px',
+    'border:1px solid #dbeafe',
+    'background:linear-gradient(135deg,#eff6ff,#ffffff)',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'color:#0369a1',
+    'font-weight:800',
+    'font-size:11px',
+    'text-transform:uppercase',
+    'letter-spacing:0',
+    'overflow:hidden',
+  ].join(';');
+  preview.textContent = item.type.slice(0, 3);
+
+  const text = document.createElement('div');
+  text.style.cssText = 'min-width:0;display:block;overflow:hidden';
+
+  const title = document.createElement('div');
+  title.textContent = item.name;
+  title.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;color:#0f172a';
+
+  const detail = document.createElement('div');
+  detail.textContent = item.description || getLibraryCategory(item);
+  detail.style.cssText = 'margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:16px;color:#64748b';
+
+  text.append(title, detail);
+  dragImage.append(preview, text);
+  document.body.appendChild(dragImage);
+  return dragImage;
+}
 
 // ============================================
 // COMPONENT
@@ -1344,11 +1415,29 @@ function LibraryItem({
       : '',
   ].filter(Boolean).join(' ');
   const describedBy = [actionStatusId, itemActionStatusId].filter(Boolean).join(' ') || undefined;
+  const dragImageRef = useRef<HTMLElement | null>(null);
+
+  const clearDragImage = () => {
+    removeComponentLibraryDragImage(dragImageRef.current);
+    dragImageRef.current = null;
+  };
+
+  useEffect(() => () => {
+    removeComponentLibraryDragImage(dragImageRef.current);
+    dragImageRef.current = null;
+  }, []);
 
   const handleDragStart = (e: DragEvent<HTMLDivElement>) => {
     if (disabled) {
       e.preventDefault();
       return;
+    }
+
+    clearDragImage();
+    const dragImage = createComponentLibraryDragImage(item, isTileMode);
+    if (dragImage) {
+      dragImageRef.current = dragImage;
+      e.dataTransfer.setDragImage(dragImage, 24, 24);
     }
 
     e.dataTransfer.setData('application/json', JSON.stringify(item));
@@ -1370,7 +1459,10 @@ function LibraryItem({
     <div
       draggable={!disabled}
       onDragStart={handleDragStart}
-      onDragEnd={() => onDragEnd?.()}
+      onDragEnd={() => {
+        clearDragImage();
+        onDragEnd?.();
+      }}
       onDoubleClick={() => {
         if (!disabled) onAddItem?.();
       }}
@@ -1400,7 +1492,7 @@ function LibraryItem({
       data-reusable-section-duplicate-count={reusableDuplicateCount || undefined}
       data-component-library-view-mode={viewMode}
       className={cn(
-        'group cursor-grab rounded-md border bg-white/75 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
+        'group cursor-grab rounded-md border bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
         isTileMode
           ? 'flex min-h-[9.25rem] flex-col gap-2 border-slate-200 p-2 shadow-sm hover:border-slate-300 hover:bg-white'
           : 'flex items-center gap-2 border-transparent p-1.5 hover:border-slate-200 hover:bg-slate-50',

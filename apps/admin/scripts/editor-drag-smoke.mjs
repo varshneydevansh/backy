@@ -1426,12 +1426,17 @@ const assertCanvasSelectionInfoSource = () => {
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
   assert(
     editorSource.includes('const applyRootSectionFlow = (') &&
-      editorSource.includes('const applyRootSectionInsertionFlow = (') &&
+      editorSource.includes('function applyRootSectionInsertionFlow(') &&
       editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') &&
       editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
+      editorSource.includes('const insertedElements = nextRootElements.filter((element) => !previousById.has(element.id));') &&
+      editorSource.includes('const insertedFlowElements = insertedElements.filter(isRootSectionFlowElement);') &&
+      editorSource.includes('insertedFlowElements.length === changedFlowElements.length') &&
+      editorSource.includes('const insertedIds = new Set(insertedElements.map((element) => element.id));') &&
+      editorSource.includes('return applyRootSectionInsertionFlow(') &&
       editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, newElements), newElements[0].id)') &&
       editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id)'),
-    'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, or inserted from the component library.',
+    'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, inserted singly, or inserted as multi-root reusable sections.',
   );
 };
 
@@ -1604,6 +1609,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid={`editor-component-item-action-status-${itemDomKey}`}') &&
       smokeSource.includes('savedReusableAction') &&
       smokeSource.includes('testComponentLibraryControls(client, tempReusableSectionId)') &&
+      smokeSource.includes("testComponentLibraryDragPreview(client, 'divider')") &&
       smokeSource.includes('testComponentLibraryListReachability') &&
       smokeSource.includes('shellModeToggle') &&
       smokeSource.includes('expandedCatalogMode') &&
@@ -1614,6 +1620,15 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
       source.includes("'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"),
     'Editor component library category filters must stay compact, primary-first, secondary-collapsed, keyboard-addable, visible, scroll-reachable, memoized with result counts, and action-status observable',
+  );
+  assert(
+    source.includes('function createComponentLibraryDragImage(') &&
+      source.includes("dragImage.dataset.backyComponentDragImage = 'opaque-single-item';") &&
+      source.includes('const dragImageRef = useRef<HTMLElement | null>(null);') &&
+      source.includes('e.dataTransfer.setDragImage(dragImage, 24, 24);') &&
+      source.includes('clearDragImage();') &&
+      !source.includes('bg-white/75'),
+    'Editor component-library drag preview must use an opaque custom drag image so the component rail cannot bleed through on canvas drops.',
   );
   assert(typeSource.includes("defaultResponsive?: CanvasElement['responsive']") && typeSource.includes("responsive?: CanvasElement['responsive']"), 'Editor component presets must type root and child responsive override defaults');
   assert(typeSource.includes('export interface ComponentBindingSlot') && typeSource.includes('bindingSlots?: ComponentBindingSlot[]') && typeSource.includes('defaultBindingSlots?: ComponentBindingSlot[]'), 'Editor component presets must type binding-slot metadata for root and child preset fields');
@@ -15550,6 +15565,106 @@ const readReusableSectionDeleteDialogState = async (client, label) => (
   })()`)
 );
 
+const testComponentLibraryDragPreview = async (client, itemId = 'divider') => {
+  const state = await evaluate(client, `(() => {
+    const item = document.querySelector('[data-component-library-item="${itemId}"]');
+    if (!(item instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-component-library-item',
+        availableItems: Array.from(document.querySelectorAll('[data-component-library-item]')).map((node) => node.getAttribute('data-component-library-item') || ''),
+      };
+    }
+
+    document.querySelectorAll('[data-backy-component-drag-image]').forEach((node) => node.remove());
+    const originalSetDragImage = DataTransfer.prototype.setDragImage;
+    let capturedDragImage = null;
+    DataTransfer.prototype.setDragImage = function setBackySmokeDragImage(element, x, y) {
+      const htmlElement = element instanceof HTMLElement ? element : null;
+      const styles = htmlElement ? getComputedStyle(htmlElement) : null;
+      capturedDragImage = {
+        exists: Boolean(htmlElement),
+        tagName: htmlElement?.tagName || '',
+        attr: htmlElement?.getAttribute('data-backy-component-drag-image') || '',
+        text: htmlElement?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        x,
+        y,
+        position: styles?.position || '',
+        backgroundColor: styles?.backgroundColor || '',
+        opacity: styles?.opacity || '',
+        pointerEvents: styles?.pointerEvents || '',
+        width: htmlElement ? Math.round(htmlElement.getBoundingClientRect().width) : 0,
+        height: htmlElement ? Math.round(htmlElement.getBoundingClientRect().height) : 0,
+      };
+      return originalSetDragImage.call(this, element, x, y);
+    };
+
+    try {
+      const dataTransfer = new DataTransfer();
+      const started = item.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+      const imagesDuring = Array.from(document.querySelectorAll('[data-backy-component-drag-image]')).map((node) => {
+        const htmlElement = node instanceof HTMLElement ? node : null;
+        const styles = htmlElement ? getComputedStyle(htmlElement) : null;
+        return {
+          attr: htmlElement?.getAttribute('data-backy-component-drag-image') || '',
+          text: htmlElement?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+          position: styles?.position || '',
+          backgroundColor: styles?.backgroundColor || '',
+          opacity: styles?.opacity || '',
+        };
+      });
+      const dataPayload = dataTransfer.getData('application/json');
+      let parsedPayload = null;
+      try {
+        parsedPayload = dataPayload ? JSON.parse(dataPayload) : null;
+      } catch {
+        parsedPayload = null;
+      }
+      const effectAllowed = dataTransfer.effectAllowed;
+      const ended = item.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
+      const imagesAfter = document.querySelectorAll('[data-backy-component-drag-image]').length;
+      return {
+        ok: true,
+        started,
+        ended,
+        capturedDragImage,
+        imagesDuring,
+        imagesAfter,
+        effectAllowed,
+        parsedPayloadType: parsedPayload?.type || '',
+        itemClass: item.className,
+      };
+    } finally {
+      DataTransfer.prototype.setDragImage = originalSetDragImage;
+      document.querySelectorAll('[data-backy-component-drag-image]').forEach((node) => node.remove());
+    }
+  })()`);
+
+  assert(state?.ok, `Component library drag preview smoke failed to start: ${JSON.stringify(state)}`);
+  assert(
+    state.started &&
+      state.ended &&
+      state.capturedDragImage?.exists &&
+      state.capturedDragImage.attr === 'opaque-single-item' &&
+      state.capturedDragImage.x === 24 &&
+      state.capturedDragImage.y === 24 &&
+      state.capturedDragImage.position === 'fixed' &&
+      state.capturedDragImage.opacity === '1' &&
+      state.capturedDragImage.pointerEvents === 'none' &&
+      state.capturedDragImage.width >= 220 &&
+      state.imagesDuring.length === 1 &&
+      state.imagesDuring[0].attr === 'opaque-single-item' &&
+      state.imagesDuring[0].backgroundColor === 'rgb(255, 255, 255)' &&
+      state.imagesAfter === 0 &&
+      ['copy', 'none'].includes(state.effectAllowed) &&
+      state.parsedPayloadType === itemId &&
+      !state.itemClass.includes('bg-white/75'),
+    `Component library drag preview must use one opaque drag image and clean it after drag end: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
 const readSavedReusableLibraryItemByName = async (client, label, sectionName) => (
   evaluate(client, `(() => {
     const sectionName = ${JSON.stringify(sectionName)};
@@ -15960,6 +16075,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       Number(initial.summary.savedHidden || 0) === Math.max(0, Number(initial.summary.savedTotal || 0) - Number(initial.summary.saved || 0)),
     `Saved reusable section dedupe metadata is inconsistent: ${JSON.stringify(initial.summary)}`,
   );
+  const dragPreview = await testComponentLibraryDragPreview(client, 'divider');
   assert(
     !initial.itemIds.some((itemId) => itemId.startsWith('reusable-section:')),
     `Essentials view should stay compact and leave saved reusable sections in Saved/All/search: ${JSON.stringify(initial)}`,
@@ -16332,6 +16448,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     layoutFiltered,
     allComponentsReachability,
     sectionsFiltered,
+    dragPreview,
     dividerPreview,
     imagePreview,
     clearedPreview,
