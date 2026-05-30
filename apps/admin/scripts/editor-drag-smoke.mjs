@@ -2173,19 +2173,48 @@ const listSitePages = async (siteId) => {
   return pages;
 };
 
-const temporarilyAllowEditorSmokePageQuota = async (extraPages = 4) => {
+const listSiteCollections = async (siteId) => {
+  const collections = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${encodeURIComponent(siteId)}/collections?limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.collections || payload.collections || [];
+    collections.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collections;
+};
+
+const temporarilyAllowEditorSmokeFixtureQuota = async (extraPages = 4, extraCollections = 3) => {
   const site = await getSite(SITE_ID);
   const originalSettings = site?.settings || {};
   const originalBillingQuota = originalSettings.billingQuota || {};
   const originalLimits = originalBillingQuota.limits || {};
-  const existingPages = await listSitePages(SITE_ID);
+  const [existingPages, existingCollections] = await Promise.all([
+    listSitePages(SITE_ID),
+    listSiteCollections(SITE_ID),
+  ]);
   const currentPageLimit = Number(originalLimits.pages || 0);
+  const currentCollectionLimit = Number(originalLimits.collections || 0);
   const nextPageLimit = Math.max(
     Number.isFinite(currentPageLimit) ? currentPageLimit : 0,
     existingPages.length + extraPages,
   );
+  const nextCollectionLimit = Math.max(
+    Number.isFinite(currentCollectionLimit) ? currentCollectionLimit : 0,
+    existingCollections.length + extraCollections,
+  );
 
-  if (nextPageLimit === currentPageLimit) {
+  if (nextPageLimit === currentPageLimit && nextCollectionLimit === currentCollectionLimit) {
     return null;
   }
 
@@ -2197,6 +2226,7 @@ const temporarilyAllowEditorSmokePageQuota = async (extraPages = 4) => {
         limits: {
           ...originalLimits,
           pages: nextPageLimit,
+          collections: nextCollectionLimit,
         },
       },
     },
@@ -2205,7 +2235,7 @@ const temporarilyAllowEditorSmokePageQuota = async (extraPages = 4) => {
   return originalSettings;
 };
 
-const restoreEditorSmokePageQuota = async (settings) => {
+const restoreEditorSmokeFixtureQuota = async (settings) => {
   if (!settings) return;
   await updateSite(SITE_ID, { settings });
 };
@@ -25891,12 +25921,12 @@ const main = async () => {
   let seededRevisionHistory = { revisions: [] };
   let resetPageEditPermission = false;
   let editorMediaSmokeSettings = null;
-  let editorSmokePageQuotaSettings = null;
+  let editorSmokeFixtureQuotaSettings = null;
 
   try {
     await loginAdminApi();
     if (!EDITOR_PATH) {
-      editorSmokePageQuotaSettings = await temporarilyAllowEditorSmokePageQuota();
+      editorSmokeFixtureQuotaSettings = await temporarilyAllowEditorSmokeFixtureQuota();
       tempPageId = await createSmokePage();
       editorPath = `/pages/${tempPageId}/edit`;
     }
@@ -28290,11 +28320,11 @@ const main = async () => {
     await deleteSmokeCollection(tempCollection?.id);
     await deleteSmokeCollection(tempCollection?.referenceCollectionId);
     await deleteSmokeCollection(tempCollection?.nestedReferenceCollectionId);
-    if (editorSmokePageQuotaSettings) {
+    if (editorSmokeFixtureQuotaSettings) {
       try {
-        await restoreEditorSmokePageQuota(editorSmokePageQuotaSettings);
+        await restoreEditorSmokeFixtureQuota(editorSmokeFixtureQuotaSettings);
       } catch (error) {
-        console.warn('Unable to restore editor smoke page quota:', error instanceof Error ? error.message : error);
+        console.warn('Unable to restore editor smoke fixture quota:', error instanceof Error ? error.message : error);
       }
     }
   }
