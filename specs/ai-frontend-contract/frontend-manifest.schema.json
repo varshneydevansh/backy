@@ -634,6 +634,7 @@
                 { "contains": { "properties": { "type": { "const": "html" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "table" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "interactiveFigure" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "codeBlock" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "codeComponent" } }, "required": ["type"] } }
               ]
             },

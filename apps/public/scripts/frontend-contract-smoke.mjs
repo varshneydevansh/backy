@@ -196,6 +196,7 @@ const requiredComponentApiTypes = [
   'html',
   'table',
   'interactiveFigure',
+  'codeBlock',
   'codeComponent',
 ];
 const adminEditorElementTypes = extractEditorElementTypes(adminEditorTypes);

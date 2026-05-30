@@ -2049,6 +2049,7 @@ const requiredComponentApiTypes = [
   'html',
   'table',
   'interactiveFigure',
+  'codeBlock',
   'codeComponent',
 ];
 const assertComponentApiContractCoverage = (contract, label) => {

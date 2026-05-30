@@ -145,6 +145,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'repeater',
   'comment',
   'interactiveFigure',
+  'codeBlock',
   'codeComponent',
 ];
 

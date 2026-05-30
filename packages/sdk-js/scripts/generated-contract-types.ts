@@ -8166,6 +8166,18 @@ const customFrontendAgentHandoff = {
         supportsCustomCode: true,
       },
       {
+        type: "codeBlock",
+        family: "custom-code",
+        label: "Code snippet",
+        apiReadable: true,
+        apiWritable: true,
+        propPaths: ["props.code", "props.language", "props.filename", "props.showLineNumbers", "props.wrapLines", "props.copyEnabled"],
+        stylePaths: ["styles.*"],
+        responsivePaths: ["responsive.mobile"],
+        bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("codeBlock", "Code snippet", { code: "", language: "text", filename: "", showLineNumbers: true }),
+      },
+      {
         type: "codeComponent",
         family: "custom-code",
         label: "Code component",
@@ -8184,7 +8196,7 @@ const customFrontendAgentHandoff = {
     layoutBehavior: {
       schemaVersion: "backy.canvas-layout-behavior.v1",
       rootFlowElementTypes: ["section", "header", "footer", "nav"],
-      absoluteLayerElementTypes: ["heading", "text", "image", "button", "form", "repeater", "comment", "interactiveFigure", "codeComponent"],
+      absoluteLayerElementTypes: ["heading", "text", "image", "button", "form", "repeater", "comment", "interactiveFigure", "codeBlock", "codeComponent"],
       resizeReflowPolicy: "Root flow sections move later root elements by the resized element bottom-edge delta.",
       sharedSiteChromeElementTypes: ["header", "footer", "nav"],
       sharedSiteChromeBindings: [
