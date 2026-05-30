@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 03:56 IST
+- **Last updated:** 2026-05-31 04:06 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 04:06 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; frontend-agent APIability discoverability improved; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/routes/help.tsx`: the frontend-agent Help panel now has a copyable Component contract starter pointing at `agent-handoff.componentApiContract.componentTypeContracts + componentApiContract.propertyMap`. The copy brief now explicitly tells agents that every canvas element is API-addressable by id, type, props, styles, responsive overrides, token refs, assets, actions, data bindings, binding slots, accessibility, metadata, and children.
+- `apps/admin/scripts/help-smoke.mjs`: Help source and rendered smoke contracts now assert the component API contract pointer and copy behavior.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: blog/newsletter authoring, layer-map/mobile editor behavior, or site/domain management wording.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 03:56 IST
 

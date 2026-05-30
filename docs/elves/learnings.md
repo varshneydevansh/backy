@@ -24,6 +24,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Navigation layers need visible child-link metadata in the layer map. Showing only `nav` or a generated id makes users think menu items are not separately selectable even when child link layers exist.
 - [2026-05-31] Editor preview mode must share the same canvas-scoped zoom interception as edit mode; otherwise Mac pinch/Cmd-scroll falls through to browser page zoom and makes preview feel detached from the canvas.
 - [2026-05-31] Root section flow must run for both direct canvas drags/resizes and Inspector/property-panel numeric edits. Users expect a typed section height change to push following sections the same way a drag resize does.
+- [2026-05-31] Custom frontend Help must expose `agent-handoff.componentApiContract.componentTypeContracts` and `componentApiContract.propertyMap` as copyable first-class pointers. “Read agent-handoff” is not specific enough for frontend AI agents.
 
 ## Product and Domain Invariants
 

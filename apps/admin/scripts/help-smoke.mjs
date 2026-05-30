@@ -372,6 +372,9 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('GET /api/sites/:siteId/openapi') &&
       helpSource.includes('GET /api/sites/:siteId/render?path=/...') &&
       helpSource.includes('GET /api/sites/:siteId/resolve?path=/...') &&
+      helpSource.includes("id: 'component-contract'") &&
+      helpSource.includes('agent-handoff.componentApiContract.componentTypeContracts + componentApiContract.propertyMap') &&
+      helpSource.includes('Every canvas element is API-addressable by id, type, props, styles, responsive overrides, token refs, assets, actions, data bindings, binding slots, accessibility, metadata, and children.') &&
       helpSource.includes('specs/custom-frontend-agent-handoff.md') &&
       helpSource.includes('backy.canvas-component-api-contract.v1') &&
       helpSource.includes('starterValueForSite(item.value, activeSiteId)') &&
@@ -507,6 +510,11 @@ const runRenderedHelpSmoke = async () => {
       assert(endpointState.text.includes(expected), `Rendered Help starter endpoints are missing ${expected}`);
     }
     assert(
+      endpointState.text.includes('agent-handoff.componentApiContract.componentTypeContracts') &&
+        endpointState.text.includes('componentApiContract.propertyMap'),
+      `Rendered Help starter grid is missing the component API contract pointer: ${JSON.stringify(endpointState)}`,
+    );
+    assert(
       endpointState.linkHref.includes('/sites') && endpointState.linkHref.includes(`siteId=${encodeURIComponent(HELP_SMOKE_SITE_ID)}`),
       `Help topic route did not preserve siteId: ${JSON.stringify(endpointState)}`,
     );
@@ -534,6 +542,17 @@ const runRenderedHelpSmoke = async () => {
         clipboard: String(window.__backyHelpSmokeClipboard || ''),
       };
     })()`, 'Help copy agent-handoff starter action');
+
+    await evaluate(client, clickElement('help-copy-agent-starter-component-contract'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-agent-starter-component-contract"]');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          String(window.__backyHelpSmokeClipboard || '') === 'agent-handoff.componentApiContract.componentTypeContracts + componentApiContract.propertyMap',
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard: String(window.__backyHelpSmokeClipboard || ''),
+      };
+    })()`, 'Help copy component-contract starter action');
 
     const newsletterInput = await evaluate(client, setInputValue('help-search', 'newsletter'));
     assert(newsletterInput.ok, `Help search input could not be updated: ${JSON.stringify(newsletterInput)}`);

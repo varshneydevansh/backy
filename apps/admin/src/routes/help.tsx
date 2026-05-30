@@ -343,6 +343,12 @@ const FRONTEND_AGENT_STARTERS = [
     detail: 'Typed endpoint contract for SDKs, AI agents, and custom frontend implementation.',
   },
   {
+    id: 'component-contract',
+    label: 'Component contract',
+    value: 'agent-handoff.componentApiContract.componentTypeContracts + componentApiContract.propertyMap',
+    detail: 'Exact map of every API-addressable canvas component type, prop group, responsive override, token, asset, action, data binding, and child policy.',
+  },
+  {
     id: 'render-resolve',
     label: 'Render and resolve',
     value: 'GET /api/sites/:siteId/render?path=/...  |  GET /api/sites/:siteId/resolve?path=/...',
@@ -378,12 +384,13 @@ const buildAgentCopyBrief = (siteId: string) => [
   '',
   `1. Read GET /api/sites/${siteId}/agent-handoff first.`,
   `2. Then read GET /api/sites/${siteId}/manifest and GET /api/sites/${siteId}/openapi before writing routes, UI, templates, or API clients.`,
-  `3. Verify route output with GET /api/sites/${siteId}/resolve?path=/ and GET /api/sites/${siteId}/render?path=/...`,
-  '4. For custom domains or subdomains, verify DNS in Backy before relying on domain discovery or hosted host-to-site routing; pass Host/domain context to resolve/render when routing depends on the browser host.',
-  '5. Preserve every Backy canvas element id/type/geometry/props/styles/responsive overrides/token refs/assets/animations/actions/dataBindings/bindingSlots/accessibility/metadata/children.',
-  '6. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
-  '7. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
-  '8. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
+  '3. Read agent-handoff.componentApiContract.componentTypeContracts and componentApiContract.propertyMap before mapping any UI component. Every canvas element is API-addressable by id, type, props, styles, responsive overrides, token refs, assets, actions, data bindings, binding slots, accessibility, metadata, and children.',
+  `4. Verify route output with GET /api/sites/${siteId}/resolve?path=/ and GET /api/sites/${siteId}/render?path=/...`,
+  '5. For custom domains or subdomains, verify DNS in Backy before relying on domain discovery or hosted host-to-site routing; pass Host/domain context to resolve/render when routing depends on the browser host.',
+  '6. Preserve every Backy canvas element id/type/geometry/props/styles/responsive overrides/token refs/assets/animations/actions/dataBindings/bindingSlots/accessibility/metadata/children.',
+  '7. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
+  '8. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
+  '9. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
 ].join('\n');
 
 function HelpPage() {
@@ -605,7 +612,7 @@ function HelpPage() {
           >
             Use <span className="font-semibold text-foreground">{activeSiteId}</span> as the site id for the copied endpoints on this page.
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="help-agent-starter-grid" data-target-site-id={activeSiteId}>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" data-testid="help-agent-starter-grid" data-target-site-id={activeSiteId}>
             {FRONTEND_AGENT_STARTERS.map((item) => {
               const copied = copiedKey === item.id;
               const starterValue = starterValueForSite(item.value, activeSiteId);
