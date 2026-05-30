@@ -524,6 +524,70 @@
                     "type": "array",
                     "items": { "type": "string", "minLength": 1 }
                   },
+                  "creationHints": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "defaultSize": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "width": { "type": "number", "minimum": 0 },
+                          "height": { "type": "number", "minimum": 0 }
+                        },
+                        "required": ["width", "height"]
+                      },
+                      "defaultProps": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "propsTemplate": {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      "minimalElement": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "id": { "type": "string", "minLength": 1 },
+                          "type": { "type": "string", "minLength": 1 },
+                          "name": { "type": "string", "minLength": 1 },
+                          "x": { "type": "number" },
+                          "y": { "type": "number" },
+                          "width": { "type": "number", "minimum": 0 },
+                          "height": { "type": "number", "minimum": 0 },
+                          "rotation": { "type": "number" },
+                          "zIndex": { "type": "number" },
+                          "visible": { "type": "boolean" },
+                          "locked": { "type": "boolean" },
+                          "props": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "styles": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "responsive": {
+                            "type": "object",
+                            "additionalProperties": true
+                          },
+                          "children": {
+                            "type": "array",
+                            "items": { "type": "object", "additionalProperties": true }
+                          }
+                        },
+                        "required": ["id", "type", "x", "y", "width", "height", "props", "styles", "responsive"]
+                      },
+                      "requiredFields": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1 },
+                        "contains": { "const": "props" }
+                      },
+                      "writeRule": { "type": "string", "minLength": 1 }
+                    },
+                    "required": ["defaultSize", "defaultProps", "propsTemplate", "minimalElement", "requiredFields", "writeRule"]
+                  },
                   "supportsChildren": { "type": "boolean" },
                   "supportsMediaAssets": { "type": "boolean" },
                   "supportsDataBinding": { "type": "boolean" },
@@ -535,7 +599,7 @@
                     "items": { "type": "string", "minLength": 1 }
                   }
                 },
-                "required": ["type", "family", "label", "apiReadable", "apiWritable", "propPaths", "stylePaths", "responsivePaths", "bindingPaths"]
+                "required": ["type", "family", "label", "apiReadable", "apiWritable", "propPaths", "stylePaths", "responsivePaths", "bindingPaths", "creationHints"]
               },
               "allOf": [
                 { "contains": { "properties": { "type": { "const": "heading" } }, "required": ["type"] } },

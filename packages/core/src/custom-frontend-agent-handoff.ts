@@ -101,6 +101,171 @@ const COMMON_COMPONENT_BINDING_PATHS = [
   'meta.frontendDesignEditableMap.*',
 ] as const;
 
+const COMPONENT_DEFAULT_SIZE_BY_TYPE: Record<string, { width: number; height: number }> = {
+  heading: { width: 560, height: 88 },
+  text: { width: 520, height: 72 },
+  paragraph: { width: 640, height: 120 },
+  quote: { width: 620, height: 140 },
+  list: { width: 480, height: 160 },
+  button: { width: 180, height: 52 },
+  link: { width: 220, height: 40 },
+  image: { width: 420, height: 280 },
+  video: { width: 520, height: 292 },
+  icon: { width: 64, height: 64 },
+  map: { width: 560, height: 320 },
+  container: { width: 720, height: 360 },
+  section: { width: 1200, height: 420 },
+  header: { width: 1200, height: 96 },
+  footer: { width: 1200, height: 260 },
+  box: { width: 360, height: 220 },
+  columns: { width: 900, height: 320 },
+  spacer: { width: 1200, height: 64 },
+  divider: { width: 640, height: 16 },
+  nav: { width: 430, height: 52 },
+  form: { width: 520, height: 520 },
+  input: { width: 360, height: 72 },
+  textarea: { width: 420, height: 140 },
+  select: { width: 360, height: 72 },
+  checkbox: { width: 360, height: 96 },
+  radio: { width: 360, height: 120 },
+  repeater: { width: 960, height: 420 },
+  comment: { width: 560, height: 380 },
+  embed: { width: 560, height: 320 },
+  html: { width: 560, height: 320 },
+  table: { width: 720, height: 360 },
+  interactiveFigure: { width: 640, height: 420 },
+  codeComponent: { width: 640, height: 420 },
+};
+
+const COMPONENT_DEFAULT_PROPS_BY_TYPE: Record<string, Record<string, unknown>> = {
+  heading: { content: 'Heading text', level: 2, fontSize: 56, fontWeight: 700, color: '#111827', lineHeight: 1.1 },
+  text: { content: 'Text block', fontSize: 18, fontWeight: 400, color: '#334155', lineHeight: 1.55, textAlign: 'left' },
+  paragraph: { content: 'Paragraph text', fontSize: 18, color: '#334155', lineHeight: 1.65, textAlign: 'left' },
+  quote: { content: 'Quote text', cite: '', fontSize: 24, color: '#111827', lineHeight: 1.45 },
+  list: { items: ['List item'], content: '', listType: 'unordered', fontSize: 18, color: '#334155', gap: 8 },
+  button: { content: 'Button', href: '/', target: '_self', rel: '', variant: 'primary', action: 'navigate', fileMediaId: '' },
+  link: { content: 'Link', href: '/', target: '_self', rel: '', download: false, fileMediaId: '' },
+  image: { src: '', mediaId: '', alt: '', objectFit: 'cover', focalPoint: { x: 0.5, y: 0.5 }, caption: '' },
+  video: { src: '', mediaId: '', poster: '', posterMediaId: '', controls: true, autoplay: false, loop: false },
+  icon: { icon: 'sparkles', name: 'Icon', color: '#111827', size: 32, strokeWidth: 2 },
+  map: { address: '', src: '', zoom: 12, markerLabel: '', latitude: null, longitude: null },
+  container: { layout: 'vertical', gap: 24, padding: 32, backgroundColor: 'transparent' },
+  section: { contentRole: 'section', layout: 'vertical', backgroundColor: '#ffffff', padding: 64, anchorId: '' },
+  header: { chromeRole: 'site-header', position: 'top', width: 'full', showBrand: true, navigationBinding: 'site.navigation.primary' },
+  footer: { chromeRole: 'site-footer', width: 'full', showSocial: true, newsletterBinding: 'site.newsletter' },
+  box: { backgroundColor: '#ffffff', borderRadius: 8, borderColor: '#d9e2ec', shadow: 'none' },
+  columns: { columns: 2, gap: 32, stackOnMobile: true, columnWidths: ['1fr', '1fr'] },
+  spacer: { size: 64, axis: 'vertical' },
+  divider: { orientation: 'horizontal', color: '#d9e2ec', thickness: 1, style: 'solid' },
+  nav: {
+    items: [
+      { label: 'Home', href: '/' },
+      { label: 'Blog', href: '/blog' },
+    ],
+    navigationSource: 'site',
+    navigationBinding: 'site.navigation.primary',
+    direction: 'horizontal',
+    gap: 24,
+    ariaLabel: 'Primary navigation',
+  },
+  form: {
+    formId: '',
+    schema: {},
+    fields: [{ name: 'email', label: 'Email', type: 'email', required: true }],
+    submitLabel: 'Submit',
+    successMessage: 'Thanks, your submission was received.',
+    newsletterTopicIds: [],
+  },
+  input: { name: 'field', label: 'Field', type: 'text', placeholder: '', required: false, value: '' },
+  textarea: { name: 'message', label: 'Message', placeholder: '', required: false, rows: 4, value: '' },
+  select: { name: 'option', label: 'Option', options: ['Option 1'], placeholder: 'Choose an option', required: false, value: '' },
+  checkbox: { name: 'choices', label: 'Choices', options: ['Option 1'], required: false, value: [] },
+  radio: { name: 'choice', label: 'Choice', options: ['Option 1'], required: false, value: '' },
+  repeater: { collectionId: '', datasetId: '', limit: 6, columns: 3, titleField: 'title', imageField: 'image', descriptionField: 'description' },
+  comment: { resourceType: 'page', resourceId: '', moderationMode: 'review', allowReplies: true, requireName: true, requireEmail: true },
+  embed: { src: '', html: '', allowedHosts: [], allow: '', sandbox: 'allow-scripts allow-same-origin', loading: 'lazy' },
+  html: { html: '<div>Custom HTML</div>', sandbox: 'allow-scripts', allowedHosts: [] },
+  table: { html: '', rows: [['Header', 'Value']], columns: ['Header', 'Value'], caption: '' },
+  interactiveFigure: { registryId: '', runtimeUrl: '', config: {}, datasetId: '', sandbox: 'allow-scripts allow-same-origin' },
+  codeComponent: { code: '', html: '', css: '', js: '', sandbox: 'allow-scripts', allowedHosts: [], config: {} },
+};
+
+const fallbackComponentPropValue = (propName: string): unknown => {
+  if (/(items|fields|options|newsletterTopicIds|allowedHosts|rows|columns|columnWidths)$/u.test(propName)) return [];
+  if (/(config|schema|focalPoint)$/u.test(propName)) return {};
+  if (/(required|controls|autoplay|loop|download|stackOnMobile|showBrand|showSocial|allowReplies|requireName|requireEmail)$/u.test(propName)) return false;
+  if (/(fontSize|fontWeight|lineHeight|gap|padding|zoom|size|strokeWidth|thickness|limit)$/u.test(propName)) return 0;
+  if (/(latitude|longitude)$/u.test(propName)) return null;
+  return '';
+};
+
+const buildComponentPropsTemplate = (
+  propPaths: readonly string[],
+  defaultProps: Record<string, unknown>,
+) => propPaths.reduce<Record<string, unknown>>((template, path) => {
+  const propName = path.match(/^props\.([^.[\]]+)/u)?.[1];
+  if (!propName) return template;
+  template[propName] = Object.prototype.hasOwnProperty.call(defaultProps, propName)
+    ? defaultProps[propName]
+    : fallbackComponentPropValue(propName);
+  return template;
+}, {});
+
+const buildComponentCreationHints = (
+  type: string,
+  label: string,
+  propPaths: readonly string[],
+  options: {
+    supportsChildren?: boolean;
+    flowParticipation?: 'absolute-layer' | 'root-section-flow';
+  } = {},
+) => {
+  const defaultSize = COMPONENT_DEFAULT_SIZE_BY_TYPE[type] || (
+    options.flowParticipation === 'root-section-flow'
+      ? { width: 1200, height: 320 }
+      : { width: 320, height: 160 }
+  );
+  const defaultProps = COMPONENT_DEFAULT_PROPS_BY_TYPE[type] || {};
+  const propsTemplate = buildComponentPropsTemplate(propPaths, defaultProps);
+  const requiredFields = ['id', 'type', 'x', 'y', 'width', 'height', 'props', 'styles', 'responsive'];
+  const minimalElement: Record<string, unknown> = {
+    id: `${type}-element`,
+    type,
+    name: label,
+    x: 0,
+    y: 0,
+    width: defaultSize.width,
+    height: defaultSize.height,
+    rotation: 0,
+    zIndex: 1,
+    visible: true,
+    locked: false,
+    props: propsTemplate,
+    styles: {},
+    responsive: {},
+    tokenRefs: {},
+    assetIds: [],
+    dataBindings: [],
+    bindingSlots: [],
+    accessibility: {},
+    metadata: {},
+  };
+
+  if (options.supportsChildren) {
+    minimalElement.children = [];
+    requiredFields.push('children');
+  }
+
+  return {
+    defaultSize,
+    defaultProps,
+    propsTemplate,
+    minimalElement,
+    requiredFields,
+    writeRule: 'Create with minimalElement, then only mutate fields advertised by propPaths, stylePaths, responsivePaths, bindingPaths, and stable element fields.',
+  };
+};
+
 const componentTypeContract = (
   type: string,
   family: typeof CUSTOM_FRONTEND_COMPONENT_API_FAMILIES[number],
@@ -133,6 +298,10 @@ const componentTypeContract = (
   flowParticipation: options.flowParticipation || 'absolute-layer',
   sharedSiteChrome: Boolean(options.sharedSiteChrome),
   sharedChromeBindings: options.sharedChromeBindings || [],
+  creationHints: buildComponentCreationHints(type, label, propPaths, {
+    supportsChildren: options.supportsChildren,
+    flowParticipation: options.flowParticipation,
+  }),
 });
 
 export const CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS = [
@@ -362,7 +531,7 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
     `You are building a frontend for Backy site ${siteId}. Start by fetching GET /api/sites/${siteId}/agent-handoff.`,
     `Then read /api/sites/${siteId}/manifest, /api/sites/${siteId}/openapi, and /api/sites/${siteId}/render?path=/... before writing UI, routes, templates, or editable content.`,
     'Every Backy canvas element is API-addressable: read and write id, type, geometry, props, styles, responsive overrides, tokenRefs, assetIds, animation, dataBindings, bindingSlots, accessibility, metadata, and children[].',
-    'Use componentApiContract.componentTypeContracts as the per-element property map. Render from the advertised propPaths/stylePaths/responsivePaths/bindingPaths and write edits back to those same paths.',
+    'Use componentApiContract.componentTypeContracts as the per-element property map. Render from the advertised propPaths/stylePaths/responsivePaths/bindingPaths, create from creationHints.minimalElement, and write edits back to those same paths.',
     'Use componentApiContract.layoutBehavior for section resize flow and shared header/footer/nav binding rules: root sections reflow by bottom-edge delta, while shared chrome should use site navigation/chrome bindings instead of copied static menus.',
     'Keep Backy as the source of truth. Preserve content.contentDocument, content.elements, content.canvas, custom CSS/JS, assets, animations, interactions, data bindings, editable maps, SEO, metadata, and meta.frontendDesign* when creating or editing.',
     'Use manifest.data.site.frontendDesign and the authenticated /api/admin/sites/:siteId/frontend-design contract for fonts, colors, spacing, motion, chrome, templates, and editable maps so future pages keep the same site design.',

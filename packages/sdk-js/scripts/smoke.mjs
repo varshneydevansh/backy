@@ -2065,6 +2065,19 @@ const assertComponentApiContractCoverage = (contract, label) => {
     assert(componentTypeContract?.apiWritable === true, `${label} component API contract missing writable ${type} type contract`);
     assert(componentTypeContract?.propPaths?.some?.((path) => path.startsWith('props.')), `${label} component API contract missing prop paths for ${type}`);
     assert(componentTypeContract?.responsivePaths?.includes?.('responsive.mobile'), `${label} component API contract missing responsive.mobile path for ${type}`);
+    assert(componentTypeContract?.creationHints?.defaultSize?.width > 0, `${label} component API contract missing creation width for ${type}`);
+    assert(componentTypeContract?.creationHints?.defaultSize?.height > 0, `${label} component API contract missing creation height for ${type}`);
+    assert(componentTypeContract?.creationHints?.minimalElement?.type === type, `${label} component API contract missing minimal element for ${type}`);
+    assert(componentTypeContract?.creationHints?.minimalElement?.props, `${label} component API contract missing minimal props for ${type}`);
+    assert(componentTypeContract?.creationHints?.requiredFields?.includes?.('props'), `${label} component API contract missing required props field for ${type}`);
+    for (const propPath of componentTypeContract.propPaths || []) {
+      const propName = propPath.match(/^props\.([^.[\]]+)/)?.[1];
+      if (!propName) continue;
+      assert(
+        Object.prototype.hasOwnProperty.call(componentTypeContract.creationHints.propsTemplate || {}, propName),
+        `${label} component API contract missing creation props template ${propName} for ${type}`,
+      );
+    }
   }
 };
 assertComponentApiContractCoverage(customFrontendAgentHandoff.componentApiContract, 'manifest()');

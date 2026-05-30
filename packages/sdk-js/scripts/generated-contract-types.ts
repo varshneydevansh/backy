@@ -1866,6 +1866,30 @@ const liveManagementRequestOptions = {
 
 void liveManagementRequestOptions;
 
+const componentTypeCreationHints = (
+  type: string,
+  label: string,
+  propsTemplate: Record<string, unknown>,
+) => ({
+  defaultSize: { width: 320, height: 160 },
+  defaultProps: propsTemplate,
+  propsTemplate,
+  minimalElement: {
+    id: `${type}-element`,
+    type,
+    name: label,
+    x: 0,
+    y: 0,
+    width: 320,
+    height: 160,
+    props: propsTemplate,
+    styles: {},
+    responsive: {},
+  },
+  requiredFields: ["id", "type", "x", "y", "width", "height", "props", "styles", "responsive"],
+  writeRule: "Create with minimalElement and mutate advertised paths only.",
+});
+
 const theme = {
   schemaVersion: "backy.theme.v1",
   colors: {
@@ -8036,6 +8060,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("heading", "Heading", { content: "Heading", level: 2 }),
       },
       {
         type: "text",
@@ -8047,6 +8072,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("text", "Text", { content: "Text" }),
       },
       {
         type: "image",
@@ -8058,6 +8084,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("image", "Image", { src: "", mediaId: "", alt: "" }),
         supportsMediaAssets: true,
       },
       {
@@ -8070,6 +8097,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("button", "Button", { content: "Button", href: "/" }),
       },
       {
         type: "nav",
@@ -8081,6 +8109,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("nav", "Navigation", { items: [{ label: "Home", href: "/" }], navigationBinding: "site.navigation.primary" }),
         flowParticipation: "root-section-flow",
         sharedSiteChrome: true,
         sharedChromeBindings: ["props.items", "props.navigationBinding", "site.navigation.primary"],
@@ -8095,6 +8124,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("form", "Form", { formId: "", fields: [] }),
         supportsChildren: true,
       },
       {
@@ -8107,6 +8137,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("repeater", "Repeater", { collectionId: "", titleField: "title" }),
         supportsChildren: true,
       },
       {
@@ -8119,6 +8150,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("comment", "Comment block", { resourceType: "page", resourceId: "" }),
       },
       {
         type: "interactiveFigure",
@@ -8130,6 +8162,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("interactiveFigure", "Interactive figure", { registryId: "", config: {} }),
         supportsCustomCode: true,
       },
       {
@@ -8142,6 +8175,7 @@ const customFrontendAgentHandoff = {
         stylePaths: ["styles.*"],
         responsivePaths: ["responsive.mobile"],
         bindingPaths: ["bindingSlots[]"],
+        creationHints: componentTypeCreationHints("codeComponent", "Code component", { code: "", html: "" }),
         supportsCustomCode: true,
       },
     ],

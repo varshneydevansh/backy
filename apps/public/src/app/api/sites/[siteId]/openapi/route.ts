@@ -6032,6 +6032,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       "stylePaths",
                       "responsivePaths",
                       "bindingPaths",
+                      "creationHints",
                     ],
                     additionalProperties: true,
                     properties: {
@@ -6055,6 +6056,79 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       bindingPaths: {
                         type: "array",
                         items: { type: "string" },
+                      },
+                      creationHints: {
+                        type: "object",
+                        required: [
+                          "defaultSize",
+                          "defaultProps",
+                          "propsTemplate",
+                          "minimalElement",
+                          "requiredFields",
+                          "writeRule",
+                        ],
+                        additionalProperties: true,
+                        properties: {
+                          defaultSize: {
+                            type: "object",
+                            required: ["width", "height"],
+                            additionalProperties: false,
+                            properties: {
+                              width: { type: "number", minimum: 0 },
+                              height: { type: "number", minimum: 0 },
+                            },
+                          },
+                          defaultProps: {
+                            type: "object",
+                            additionalProperties: true,
+                          },
+                          propsTemplate: {
+                            type: "object",
+                            additionalProperties: true,
+                          },
+                          minimalElement: {
+                            type: "object",
+                            required: ["id", "type", "x", "y", "width", "height", "props", "styles", "responsive"],
+                            additionalProperties: true,
+                            properties: {
+                              id: { type: "string" },
+                              type: { type: "string" },
+                              name: { type: "string" },
+                              x: { type: "number" },
+                              y: { type: "number" },
+                              width: { type: "number", minimum: 0 },
+                              height: { type: "number", minimum: 0 },
+                              rotation: { type: "number" },
+                              zIndex: { type: "number" },
+                              visible: { type: "boolean" },
+                              locked: { type: "boolean" },
+                              props: {
+                                type: "object",
+                                additionalProperties: true,
+                              },
+                              styles: {
+                                type: "object",
+                                additionalProperties: true,
+                              },
+                              responsive: {
+                                type: "object",
+                                additionalProperties: true,
+                              },
+                              children: {
+                                type: "array",
+                                items: {
+                                  type: "object",
+                                  additionalProperties: true,
+                                },
+                              },
+                            },
+                          },
+                          requiredFields: {
+                            type: "array",
+                            items: { type: "string" },
+                          },
+                          writeRule: { type: "string" },
+                        },
                       },
                       supportsChildren: { type: "boolean" },
                       supportsMediaAssets: { type: "boolean" },

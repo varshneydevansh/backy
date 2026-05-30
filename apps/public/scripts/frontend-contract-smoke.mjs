@@ -261,6 +261,8 @@ assert(
     extraRendererMapTypes.length === 0 &&
     customFrontendAgentHandoffLib.includes('CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
     customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    customFrontendAgentHandoffLib.includes('creationHints: buildComponentCreationHints') &&
+    customFrontendAgentHandoffLib.includes('minimalElement') &&
     customFrontendAgentHandoffLib.includes('layoutBehavior') &&
     customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.canvas-layout-behavior.v1'") &&
     customFrontendAgentHandoffLib.includes("rootFlowElementTypes: ['section', 'header', 'footer', 'nav']") &&
@@ -271,16 +273,23 @@ assert(
     adminCanvasEditorSource.includes('applyRootSectionFlow') &&
     adminCanvasEditorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
     frontendManifestSchema.includes('"componentTypeContracts"') &&
+    frontendManifestSchema.includes('"creationHints"') &&
+    frontendManifestSchema.includes('"minimalElement"') &&
     frontendManifestSchema.includes('"layoutBehavior"') &&
     frontendManifestSchema.includes('"backy.canvas-layout-behavior.v1"') &&
     frontendManifestSchema.includes('"root-section-flow"') &&
     frontendManifestSchema.includes('"sharedSiteChromeBindings"') &&
+    openApiRoute.includes('creationHints') &&
+    openApiRoute.includes('minimalElement') &&
     openApiRoute.includes('layoutBehavior') &&
     openApiRoute.includes('backy.canvas-layout-behavior.v1') &&
     customFrontendAgentHandoffDocs.includes('`componentTypeContracts`') &&
+    customFrontendAgentHandoffDocs.includes('`creationHints`') &&
+    customFrontendAgentHandoffDocs.includes('`minimalElement`') &&
     customFrontendAgentHandoffDocs.includes('`layoutBehavior`') &&
     customFrontendAgentHandoffDocs.includes('section/header/footer/nav') &&
     apiContracts.includes('componentTypeContracts') &&
+    apiContracts.includes('creationHints') &&
     apiContracts.includes('layoutBehavior') &&
     apiContracts.includes('section/header/footer/nav') &&
     sdkSmoke.includes('const requiredComponentApiTypes = [') &&
@@ -519,7 +528,9 @@ assert(
     customFrontendAgentHandoffLib.includes('readableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS') &&
     customFrontendAgentHandoffLib.includes('writableFieldPaths: CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS') &&
     customFrontendAgentHandoffLib.includes('componentTypeContracts: CUSTOM_FRONTEND_COMPONENT_TYPE_CONTRACTS') &&
+    customFrontendAgentHandoffLib.includes('creationHints.minimalElement') &&
     openApiRoute.includes('componentTypeContracts') &&
+    openApiRoute.includes('creationHints') &&
     customFrontendAgentHandoffLib.includes('noFrontendLocalJsonForks') &&
     customFrontendAgentHandoffLib.includes('preferredHelpers') &&
     customFrontendAgentHandoffLib.includes('preserveFields') &&
@@ -558,6 +569,8 @@ assert(
     frontendManifestSchema.includes('"elementAddressing"') &&
     frontendManifestSchema.includes('"readableFieldPaths"') &&
     frontendManifestSchema.includes('"componentTypeContracts"') &&
+    frontendManifestSchema.includes('"creationHints"') &&
+    frontendManifestSchema.includes('"minimalElement"') &&
     frontendManifestSchema.includes('"noFrontendLocalJsonForks"') &&
     frontendManifestSchema.includes('"preserveFields"') &&
     frontendManifestSchema.includes('"readOrder"') &&
@@ -578,6 +591,8 @@ assert(
     generatedSdkTypes.includes('apiAlignment: {') &&
     generatedSdkTypes.includes('componentApiContract:') &&
     generatedSdkTypes.includes('componentTypeContracts') &&
+    generatedSdkTypes.includes('creationHints') &&
+    generatedSdkTypes.includes('minimalElement') &&
     generatedSdkTypes.includes('layoutBehavior') &&
     generatedSdkTypes.includes('flowParticipation') &&
     generatedSdkTypes.includes('sharedSiteChrome') &&

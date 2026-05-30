@@ -170,6 +170,35 @@ export type GeneratedBackyOpenApiCustomFrontendComponentApiContract = {
     stylePaths: Array<string>;
     responsivePaths: Array<string>;
     bindingPaths: Array<string>;
+    creationHints: {
+      defaultSize: {
+        width: number;
+        height: number;
+      };
+      defaultProps: Record<string, unknown>;
+      propsTemplate: Record<string, unknown>;
+      minimalElement: {
+        id: string;
+        type: string;
+        name?: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        rotation?: number;
+        zIndex?: number;
+        visible?: boolean;
+        locked?: boolean;
+        props: Record<string, unknown>;
+        styles: Record<string, unknown>;
+        responsive: Record<string, unknown>;
+        children?: Array<Record<string, unknown>>;
+        [key: string]: unknown;
+      };
+      requiredFields: Array<string>;
+      writeRule: string;
+      [key: string]: unknown;
+    };
     supportsChildren?: boolean;
     supportsMediaAssets?: boolean;
     supportsDataBinding?: boolean;
@@ -5827,6 +5856,35 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       stylePaths: Array<string>;
       responsivePaths: Array<string>;
       bindingPaths: Array<string>;
+      creationHints: {
+        defaultSize: {
+          width: number;
+          height: number;
+        };
+        defaultProps: Record<string, unknown>;
+        propsTemplate: Record<string, unknown>;
+        minimalElement: {
+          id: string;
+          type: string;
+          name?: string;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          rotation?: number;
+          zIndex?: number;
+          visible?: boolean;
+          locked?: boolean;
+          props: Record<string, unknown>;
+          styles: Record<string, unknown>;
+          responsive: Record<string, unknown>;
+          children?: Array<Record<string, unknown>>;
+          [key: string]: unknown;
+        };
+        requiredFields: Array<string>;
+        writeRule: string;
+        [key: string]: unknown;
+      };
       supportsChildren?: boolean;
       supportsMediaAssets?: boolean;
       supportsDataBinding?: boolean;
