@@ -1646,6 +1646,8 @@ type MarqueeSelection = {
   inputType: 'pointer' | 'mouse';
   pointerId?: number;
   mode: 'replace' | 'add';
+  anchorClientX: number;
+  anchorClientY: number;
   startX: number;
   startY: number;
   currentX: number;
@@ -2013,6 +2015,8 @@ export function Canvas({
     const nextSelection: MarqueeSelection = {
       ...getPointerDetails(event),
       mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace',
+      anchorClientX: event.clientX,
+      anchorClientY: event.clientY,
       startX: start.x,
       startY: start.y,
       currentX: start.x,
@@ -2280,8 +2284,14 @@ export function Canvas({
         return;
       }
 
+      const anchoredStartPoint = getCanvasPoint(
+        activeMarqueeSelection.anchorClientX,
+        activeMarqueeSelection.anchorClientY,
+      );
       const nextSelection = {
         ...activeMarqueeSelection,
+        startX: anchoredStartPoint?.x ?? activeMarqueeSelection.startX,
+        startY: anchoredStartPoint?.y ?? activeMarqueeSelection.startY,
         currentX: nextPoint.x,
         currentY: nextPoint.y,
       };

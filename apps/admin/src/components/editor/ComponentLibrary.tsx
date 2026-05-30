@@ -164,9 +164,9 @@ function createComponentLibraryDragImage(item: ComponentLibraryItem, isTileMode:
   dragImage.setAttribute('aria-hidden', 'true');
   dragImage.style.cssText = [
     'position:fixed',
-    'top:-1000px',
-    'left:-1000px',
-    'z-index:2147483647',
+    'top:0',
+    'left:0',
+    'z-index:-1',
     `width:${isTileMode ? 228 : 260}px`,
     'box-sizing:border-box',
     'display:grid',
@@ -182,6 +182,7 @@ function createComponentLibraryDragImage(item: ComponentLibraryItem, isTileMode:
     'opacity:1',
     'overflow:hidden',
     'pointer-events:none',
+    'contain:layout paint style',
     'font:500 13px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
   ].join(';');
 
@@ -273,6 +274,7 @@ export function ComponentLibrary({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(ESSENTIALS_CATEGORY_ID);
   const [previewItemKey, setPreviewItemKey] = useState<string | null>(null);
+  const [draggingItemKey, setDraggingItemKey] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ComponentLibraryViewMode>(() => {
     if (typeof window === 'undefined') {
       return 'tiles';
@@ -626,7 +628,7 @@ export function ComponentLibrary({
       }
       : groupedItems
   ), [favoriteKeySet, favoriteSearchItems, groupedItems, selectedCategory]);
-  const componentPreviewVisible = Boolean(previewItem);
+  const componentPreviewVisible = Boolean(previewItem) && !draggingItemKey;
   const renderCategoryButton = (cat: ComponentLibraryCategory) => (
     <button
       key={cat.id}
@@ -668,6 +670,7 @@ export function ComponentLibrary({
       data-component-library-view-mode={viewMode}
       data-component-library-view-mode-storage={VIEW_MODE_STORAGE_KEY}
       data-component-library-search-scope={isGlobalSearch ? 'global-catalog' : 'selected-category'}
+      data-component-drag-active={draggingItemKey ? 'true' : 'false'}
       aria-describedby={componentLibraryActionStatusId}
       data-action-status={componentLibraryActionStatus}
     >
@@ -975,9 +978,14 @@ export function ComponentLibrary({
                     isFavorite={favoriteKeySet.has(getLibraryItemKey(item))}
                     onDragStart={() => {
                       rememberRecentItem(item);
+                      setPreviewItemKey(null);
+                      setDraggingItemKey(getLibraryItemKey(item));
                       onDragStart?.(item);
                     }}
-                    onDragEnd={() => onDragEnd?.()}
+                    onDragEnd={() => {
+                      setDraggingItemKey(null);
+                      onDragEnd?.();
+                    }}
                     onAddItem={() => handleAddItem(item)}
                     onToggleFavorite={() => toggleFavorite(item)}
                     onPreviewChange={(nextItem) => setPreviewItemKey(nextItem ? getLibraryItemKey(nextItem) : null)}
@@ -1434,9 +1442,11 @@ function LibraryItem({
     }
 
     clearDragImage();
+    onPreviewChange?.(null);
     const dragImage = createComponentLibraryDragImage(item, isTileMode);
     if (dragImage) {
       dragImageRef.current = dragImage;
+      void dragImage.offsetWidth;
       e.dataTransfer.setDragImage(dragImage, 24, 24);
     }
 

@@ -1186,7 +1186,13 @@ const assertCanvasEditorShortcutSource = () => {
   assert(!source.includes('// Placeholder for drag analytics/hooks.'), 'Editor component-library drag start must not remain a placeholder hook');
   assert(source.includes('const [libraryDragItem, setLibraryDragItem]') && source.includes('data-library-drag-active={libraryDragItem ?') && source.includes('data-testid="editor-library-drag-status"'), 'Editor canvas must expose component-library drag status while users drag catalog items');
   assert(source.includes('const handleLibraryDragEnd') && source.includes('setLibraryDragItem(null);') && source.includes('onDragEnd={handleLibraryDragEnd}'), 'Editor canvas must clear component-library drag status after drop or cancelled drag');
-  assert(componentLibrarySource.includes('onDragEnd?: () => void') && componentLibrarySource.includes('onDragEnd={() => onDragEnd?.()}'), 'Component library items must notify the editor when library drags finish');
+  assert(
+    componentLibrarySource.includes('onDragEnd?: () => void') &&
+      componentLibrarySource.includes('onDragEnd={() => {') &&
+      componentLibrarySource.includes('setDraggingItemKey(null);') &&
+      componentLibrarySource.includes('onDragEnd?.();'),
+    'Component library items must notify the editor when library drags finish',
+  );
   assert(layersPanelSource.includes('data-testid="editor-layer-search"') && layersPanelSource.includes('filteredLayerIdSet') && layersPanelSource.includes('getLayerSearchText'), 'Editor layers panel must support filtering layer rows by name, type, or id');
   assert(
     layersPanelSource.includes('Boolean(normalizedLayerSearch) || !collapsedLayerIdSet.has(element.id)') &&
@@ -1589,7 +1595,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
       source.includes('data-component-preview-reserved-space="sticky-footer"') &&
-      source.includes('const componentPreviewVisible = Boolean(previewItem);') &&
+      source.includes('const componentPreviewVisible = Boolean(previewItem) && !draggingItemKey;') &&
       source.includes("componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3'") &&
       source.includes("data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}") &&
       source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
@@ -1624,9 +1630,16 @@ const assertComponentLibraryEmptyStateSource = () => {
   assert(
     source.includes('function createComponentLibraryDragImage(') &&
       source.includes("dragImage.dataset.backyComponentDragImage = 'opaque-single-item';") &&
+      source.includes("'z-index:-1'") &&
       source.includes('const dragImageRef = useRef<HTMLElement | null>(null);') &&
+      source.includes('const [draggingItemKey, setDraggingItemKey] = useState<string | null>(null);') &&
+      source.includes("data-component-drag-active={draggingItemKey ? 'true' : 'false'}") &&
+      source.includes('setPreviewItemKey(null);') &&
+      source.includes('setDraggingItemKey(getLibraryItemKey(item));') &&
+      source.includes('void dragImage.offsetWidth;') &&
       source.includes('e.dataTransfer.setDragImage(dragImage, 24, 24);') &&
       source.includes('clearDragImage();') &&
+      !source.includes("'top:-1000px'") &&
       !source.includes('bg-white/75'),
     'Editor component-library drag preview must use an opaque custom drag image so the component rail cannot bleed through on canvas drops.',
   );
@@ -15590,6 +15603,7 @@ const testComponentLibraryDragPreview = async (client, itemId = 'divider') => {
         x,
         y,
         position: styles?.position || '',
+        zIndex: styles?.zIndex || '',
         backgroundColor: styles?.backgroundColor || '',
         opacity: styles?.opacity || '',
         pointerEvents: styles?.pointerEvents || '',
@@ -15609,6 +15623,7 @@ const testComponentLibraryDragPreview = async (client, itemId = 'divider') => {
           attr: htmlElement?.getAttribute('data-backy-component-drag-image') || '',
           text: htmlElement?.textContent?.replace(/\\s+/g, ' ').trim() || '',
           position: styles?.position || '',
+          zIndex: styles?.zIndex || '',
           backgroundColor: styles?.backgroundColor || '',
           opacity: styles?.opacity || '',
         };
@@ -15649,6 +15664,7 @@ const testComponentLibraryDragPreview = async (client, itemId = 'divider') => {
       state.capturedDragImage.x === 24 &&
       state.capturedDragImage.y === 24 &&
       state.capturedDragImage.position === 'fixed' &&
+      state.capturedDragImage.zIndex === '-1' &&
       state.capturedDragImage.opacity === '1' &&
       state.capturedDragImage.pointerEvents === 'none' &&
       state.capturedDragImage.width >= 220 &&
