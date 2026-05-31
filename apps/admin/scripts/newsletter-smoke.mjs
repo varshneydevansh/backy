@@ -20,6 +20,10 @@ const helpSource = read('../src/routes/help.tsx');
 const routeTreeSource = read('../src/routeTree.gen.ts');
 const publicNewsletterSubscribersRouteSource = read('../../public/src/app/api/sites/[siteId]/newsletter/subscribers/route.ts');
 const adminNewsletterSubscribersRouteSource = read('../../public/src/app/api/admin/sites/[siteId]/newsletter/subscribers/route.ts');
+const adminNewsletterIssueDraftRouteSource = read('../../public/src/app/api/admin/sites/[siteId]/newsletter/issues/draft/route.ts');
+const manifestSource = read('../../public/src/app/api/sites/[siteId]/manifest/route.ts');
+const openApiSource = read('../../public/src/app/api/sites/[siteId]/openapi/route.ts');
+const sdkSource = read('../../../packages/sdk-js/src/index.ts');
 
 assert(routeSource.includes("createFileRoute('/newsletter')"), 'Newsletter route must be registered at /newsletter.');
 assert(routeSource.includes("const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';"), 'Newsletter route must expose a versioned handoff schema.');
@@ -65,6 +69,7 @@ assert(routeSource.includes('<ApiSnippet label="Send-ready sync" value={sendable
 assert(routeSource.includes('data-testid="newsletter-copy-api-handoff"') && routeSource.includes('data-target-site-id={activeSiteId}'), 'Newsletter API handoff copy action must expose site-scoped copy metadata.');
 assert(routeSource.includes('data-testid="newsletter-issue-handoff"'), 'Newsletter page must expose a newsletter issue handoff section.');
 assert(routeSource.includes('data-testid="newsletter-copy-issue-handoff"'), 'Newsletter page must expose a copyable issue handoff action.');
+assert(routeSource.includes('buildNewsletterIssueDraft(activeSiteId') && routeSource.includes('data-testid="newsletter-build-issue-draft"') && routeSource.includes('data-testid="newsletter-issue-draft-json"'), 'Newsletter page must build and expose a copyable issue draft from the latest published report.');
 assert(routeSource.includes('data-issue-handoff-schema={NEWSLETTER_ISSUE_SCHEMA_VERSION}') && routeSource.includes('data-agent-handoff-url={agentHandoffUrl}'), 'Newsletter issue handoff must expose schema and canonical agent-handoff metadata.');
 assert(routeSource.includes('data-testid="newsletter-copy-handoff"'), 'Newsletter page must expose a copy-handoff action.');
 assert(routeSource.includes('data-testid="newsletter-export-csv"'), 'Newsletter page must expose a subscriber CSV export action.');
@@ -89,6 +94,7 @@ assert(routeTreeSource.includes("Route as NewsletterRouteImport") && routeTreeSo
 assert(adminContentApiSource.includes('newsletterSubscriptionStatus?: AdminContact') && adminContentApiSource.includes('newsletterUnsubscribedAt?: string | null'), 'Admin content API contact updates must accept newsletter subscription lifecycle fields.');
 assert(adminContentApiSource.includes("newsletterStatus?: NonNullable<Contact['newsletterSubscriptionStatus']>"), 'Admin content API newsletter subscriber records must expose the full provider lifecycle status.');
 assert(adminContentApiSource.includes('export async function saveNewsletterSubscriber') && adminContentApiSource.includes('/newsletter/subscribers'), 'Admin content API must expose a private newsletter subscriber save helper.');
+assert(adminContentApiSource.includes('export async function buildNewsletterIssueDraft') && adminContentApiSource.includes('/newsletter/issues/draft'), 'Admin content API must expose a private newsletter issue draft builder helper.');
 assert(publicNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && publicNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Public newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
 assert(adminNewsletterSubscribersRouteSource.includes('readNewsletterBodyField') && adminNewsletterSubscribersRouteSource.includes("readNewsletterBodyField(body, 'signup_source')"), 'Admin newsletter subscriber API must accept Backy form values payloads and signup_source aliases.');
 assert(adminNewsletterSubscribersRouteSource.includes("const NEWSLETTER_OPERATIONAL_STATUSES: NewsletterOperationalStatus[] = ['subscribed', 'unsubscribed', 'pending', 'bounced', 'complained'];"), 'Admin newsletter subscribers API must preserve full provider lifecycle filter states.');
@@ -96,5 +102,11 @@ assert(adminNewsletterSubscribersRouteSource.includes('newsletterOperationalStat
 assert(adminNewsletterSubscribersRouteSource.includes("const NEWSLETTER_AUDIENCE_FILTERS = ['all', 'sendable', 'held'] as const;"), 'Admin newsletter subscribers API must expose strict sendable/held audience filters.');
 assert(adminNewsletterSubscribersRouteSource.includes('isNewsletterSubscriberSendable(contact)'), 'Admin newsletter subscribers API must filter send-ready contacts through canonical newsletter logic.');
 assert(adminNewsletterSubscribersRouteSource.includes("sendableSubscribers: `/api/admin/sites/${site.id}/newsletter/subscribers?audience=sendable`"), 'Admin newsletter subscribers API handoff must expose the send-ready delivery sync URL.');
+assert(adminNewsletterIssueDraftRouteSource.includes("const NEWSLETTER_ISSUE_DRAFT_SCHEMA_VERSION = 'backy.newsletter-issue-draft.v1';") && adminNewsletterIssueDraftRouteSource.includes("permission: 'forms.export'"), 'Newsletter issue draft builder must expose a versioned admin-only forms.export endpoint.');
+assert(adminNewsletterIssueDraftRouteSource.includes('buildNewsletterSummary(newsletterContacts)') && adminNewsletterIssueDraftRouteSource.includes('isNewsletterSubscriberSendable(contact)'), 'Newsletter issue draft builder must derive audience counts through canonical subscriber readiness logic.');
+assert(adminNewsletterIssueDraftRouteSource.includes('noRawEmailsInIssueDraft: true') && adminNewsletterIssueDraftRouteSource.includes('selectedRecipientIds'), 'Newsletter issue draft builder must provide recipient ids/counts without raw subscriber emails.');
+assert(manifestSource.includes('issueDraftBuilder: `/api/admin/sites/${siteId}/newsletter/issues/draft`') && manifestSource.includes("schemaVersion: 'backy.newsletter-issue-draft.v1'"), 'Manifest newsletter discovery must expose the issue draft builder route and policy.');
+assert(openApiSource.includes('operationId: "buildBackyNewsletterIssueDraft"') && openApiSource.includes('NewsletterIssueDraftEnvelope') && openApiSource.includes('newsletterIssueDraftBuilder'), 'OpenAPI must expose the newsletter issue draft builder endpoint, schema, and discovery helper.');
+assert(sdkSource.includes('buildNewsletterIssueDraft(') && sdkSource.includes('/newsletter/issues/draft') && sdkSource.includes('BackyNewsletterIssueDraftResponse'), 'SDK must expose the newsletter issue draft builder helper and response contract.');
 
 console.log('Newsletter source smoke passed.');

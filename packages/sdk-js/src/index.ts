@@ -8954,6 +8954,62 @@ export type BackyNewsletterSubscribersResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+export type BackyNewsletterIssueAudience = "all" | "sendable" | "held";
+
+export interface BackyNewsletterIssueDraftInput {
+  postId: string;
+  audience?: BackyNewsletterIssueAudience;
+  recipientLimit?: number;
+  subjectOverride?: string | null;
+  preheaderOverride?: string | null;
+  templateId?: string | null;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface BackyNewsletterIssueDraft {
+  id: string;
+  status:
+    | "ready-for-provider-draft"
+    | "needs-published-post"
+    | "needs-send-ready-subscribers"
+    | string;
+  templateId?: string | null;
+  site?: Record<string, unknown>;
+  sourcePost: Record<string, unknown>;
+  copy: {
+    subject: string;
+    preheader: string;
+    suggestedSections: string[];
+    [key: string]: unknown;
+  };
+  urls: Record<string, string>;
+  audience: {
+    requested: BackyNewsletterIssueAudience | string;
+    recipientLimit: number;
+    selectedRecipientCount: number;
+    selectedRecipientIds: string[];
+    totalMatchedRecipients?: number;
+    totalSubscribers?: number;
+    sendReadySubscribers?: number;
+    heldOrSuppressed?: number;
+    unsubscribedOrArchived?: number;
+    [key: string]: unknown;
+  };
+  syncContract: Record<string, unknown>;
+  providerBoundary: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export type BackyNewsletterIssueDraftResponse = BackyEnvelope<
+  {
+    schemaVersion: "backy.newsletter-issue-draft.v1";
+    generatedAt: string;
+    issueDraft: BackyNewsletterIssueDraft;
+    handoff: Record<string, string>;
+  } & Record<string, unknown>
+>;
+
 export interface BackyAdminFormListOptions
   extends BackyListOptions,
     BackyLiveManagementRequestOptions {
@@ -13829,6 +13885,7 @@ export interface BackyManifestNewsletterRuntimeModule {
     unsubscribe: "DELETE";
     adminList: "GET";
     adminUpsert: "POST";
+    buildIssueDraft: "POST";
     syncContacts: "POST";
     [key: string]: unknown;
   };
@@ -13837,6 +13894,7 @@ export interface BackyManifestNewsletterRuntimeModule {
     unsubscribe: "unsubscribeNewsletter";
     adminList: "newsletterSubscribers";
     adminUpsert: "upsertNewsletterSubscriber";
+    buildIssueDraft: "buildNewsletterIssueDraft";
     syncContacts: "syncFormContacts";
     [key: string]: unknown;
   };
@@ -13858,6 +13916,15 @@ export interface BackyManifestNewsletterRuntimeModule {
     targetBody: Record<string, unknown>;
     adminOnly: boolean;
     useCase: string;
+    [key: string]: unknown;
+  };
+  issueDraftPolicy?: {
+    schemaVersion: "backy.newsletter-issue-draft.v1";
+    routeTemplate: string;
+    requiredAdminPermission: "forms.export" | string;
+    defaultAudience: BackyNewsletterIssueAudience | string;
+    sourcePostField: "postId" | string;
+    privacy: string;
     [key: string]: unknown;
   };
   canvasRoutes: {
@@ -18517,6 +18584,25 @@ export class BackyClient {
     const { requestId, ...body } = input;
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
+      {
+        method: "POST",
+        body,
+        requestId:
+          options.requestId ??
+          (typeof requestId === "string" ? requestId : undefined),
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  buildNewsletterIssueDraft(
+    input: BackyNewsletterIssueDraftInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyNewsletterIssueDraftResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/issues/draft`,
       {
         method: "POST",
         body,

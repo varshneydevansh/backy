@@ -1315,6 +1315,16 @@ interface ApiNewsletterSubscriberResponse {
   };
 }
 
+interface ApiNewsletterIssueDraftResponse {
+  success: boolean;
+  data?: NewsletterIssueDraftHandoff;
+  issueDraft?: NewsletterIssueDraft;
+  error?: {
+    message?: string;
+    details?: unknown;
+  };
+}
+
 interface ApiContactPromotionResponse {
   success: boolean;
   data?: {
@@ -3769,6 +3779,71 @@ export interface NewsletterSubscriberInput {
   status?: 'subscribed' | 'unsubscribed';
   contactStatus?: ContactStatus;
   formId?: string;
+}
+
+export type NewsletterIssueAudience = 'all' | 'sendable' | 'held';
+
+export interface NewsletterIssueDraftInput {
+  postId: string;
+  audience?: NewsletterIssueAudience;
+  recipientLimit?: number;
+  subjectOverride?: string | null;
+  preheaderOverride?: string | null;
+  templateId?: string | null;
+}
+
+export interface NewsletterIssueDraft {
+  id: string;
+  status: 'ready-for-provider-draft' | 'needs-published-post' | 'needs-send-ready-subscribers';
+  templateId?: string | null;
+  site: {
+    id: string;
+    slug?: string | null;
+    name?: string | null;
+  };
+  sourcePost: {
+    schemaVersion: string;
+    id: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    path: string;
+    status: BlogPost['status'];
+    authorId?: string | null;
+    categoryIds: string[];
+    tagIds: string[];
+    featuredImageId?: string | null;
+    publishedAt?: string | null;
+    scheduledAt?: string | null;
+    updatedAt: string;
+    contentSummary: Record<string, unknown>;
+  };
+  copy: {
+    subject: string;
+    preheader: string;
+    suggestedSections: string[];
+  };
+  urls: Record<string, string>;
+  audience: {
+    requested: NewsletterIssueAudience;
+    recipientLimit: number;
+    selectedRecipientCount: number;
+    selectedRecipientIds: string[];
+    totalMatchedRecipients: number;
+    totalSubscribers: number;
+    sendReadySubscribers: number;
+    heldOrSuppressed: number;
+    unsubscribedOrArchived: number;
+  };
+  syncContract: Record<string, unknown>;
+  providerBoundary: Record<string, unknown>;
+}
+
+export interface NewsletterIssueDraftHandoff {
+  schemaVersion: 'backy.newsletter-issue-draft.v1';
+  generatedAt: string;
+  issueDraft: NewsletterIssueDraft;
+  handoff: Record<string, string>;
 }
 
 export interface ContactListFilters {
@@ -7294,6 +7369,27 @@ export async function saveNewsletterSubscriber(
     subscriber,
     existing: Boolean(payload.data?.existing ?? payload.existing),
   };
+}
+
+export async function buildNewsletterIssueDraft(
+  siteId: string,
+  input: NewsletterIssueDraftInput,
+): Promise<NewsletterIssueDraftHandoff> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/newsletter/issues/draft`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiNewsletterIssueDraftResponse>(response);
+  const handoff = payload.data;
+
+  if (!response.ok || !payload.success || !handoff?.issueDraft) {
+    throw new AdminContentApiError(payload.error?.message || 'Unable to build newsletter issue draft', payload.error?.details);
+  }
+
+  return handoff;
 }
 
 export async function promoteContactToUser(

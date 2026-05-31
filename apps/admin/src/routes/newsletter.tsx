@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  buildNewsletterIssueDraft,
   createForm,
   getAdminApiBase,
   listBlogPosts,
@@ -28,6 +29,7 @@ import {
   type ContactStatus,
   type FormDefinition,
   type FormDefinitionInput,
+  type NewsletterIssueDraftHandoff,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -147,6 +149,7 @@ function NewsletterRoute() {
   const [selectedFormId, setSelectedFormId] = useState(routeSearch.formId || 'all');
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState<string | null>(null);
+  const [newsletterIssueDraft, setNewsletterIssueDraft] = useState<NewsletterIssueDraftHandoff | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [manualSubscriber, setManualSubscriber] = useState(DEFAULT_MANUAL_SUBSCRIBER);
@@ -217,6 +220,9 @@ function NewsletterRoute() {
     newsletterForms,
   }), [activeSiteId, metrics, newsletterForms, publicBaseUrl, recentPosts]);
   const newsletterIssueHandoffText = useMemo(() => JSON.stringify(newsletterIssueHandoff, null, 2), [newsletterIssueHandoff]);
+  const newsletterIssueDraftText = useMemo(() => (
+    newsletterIssueDraft ? JSON.stringify(newsletterIssueDraft, null, 2) : ''
+  ), [newsletterIssueDraft]);
   const actionBusy = isLoading || Boolean(isMutating);
   const viewActionStatusId = 'newsletter-view-action-status';
   const manageActionStatusId = 'newsletter-manage-action-status';
@@ -230,6 +236,9 @@ function NewsletterRoute() {
   const exportActionStatus = exportDisabledReason
     ? `Newsletter export unavailable: ${exportDisabledReason}`
     : `Newsletter export available for ${subscribers.length} subscriber${subscribers.length === 1 ? '' : 's'}.`;
+  const issueDraftDisabledReason = recentPosts.length === 0
+    ? 'Publish a report before building a newsletter issue draft.'
+    : exportDisabledReason || '';
   const manualSubscriberCanSave = Boolean(
     manualSubscriber.email.trim() &&
     manualSubscriber.consentConfirmed &&
@@ -408,6 +417,31 @@ function NewsletterRoute() {
       setNotice(`${label} copied.`);
     } catch {
       setError(`${label} could not be copied. Use the visible API text instead.`);
+    }
+  };
+
+  const buildLatestNewsletterIssueDraft = async () => {
+    const sourcePost = recentPosts[0];
+    if (!sourcePost || issueDraftDisabledReason || actionBusy) return;
+
+    setIsMutating('issue-draft');
+    setError(null);
+    setNotice(null);
+    try {
+      const draft = await buildNewsletterIssueDraft(activeSiteId, {
+        postId: sourcePost.id,
+        audience: 'sendable',
+        recipientLimit: 100,
+        subjectOverride: sourcePost.title,
+        preheaderOverride: sourcePost.excerpt || null,
+      });
+      setNewsletterIssueDraft(draft);
+      setNotice(`Newsletter issue draft ${draft.issueDraft.id} built for ${draft.issueDraft.audience.selectedRecipientCount} send-ready subscriber${draft.issueDraft.audience.selectedRecipientCount === 1 ? '' : 's'}.`);
+    } catch (draftError) {
+      setNewsletterIssueDraft(null);
+      setError(draftError instanceof Error ? draftError.message : 'Unable to build newsletter issue draft.');
+    } finally {
+      setIsMutating(null);
     }
   };
 
@@ -906,7 +940,50 @@ function NewsletterRoute() {
               >
                 Copy issue kit
               </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void buildLatestNewsletterIssueDraft()}
+                disabled={actionBusy || Boolean(issueDraftDisabledReason)}
+                title={issueDraftDisabledReason || undefined}
+                iconStart={<Send className="size-3.5" />}
+                data-testid="newsletter-build-issue-draft"
+                data-action-state={actionBusy ? 'busy' : issueDraftDisabledReason ? 'blocked' : 'ready'}
+                data-disabled-reason={issueDraftDisabledReason || undefined}
+              >
+                {isMutating === 'issue-draft' ? 'Building...' : 'Build draft'}
+              </Button>
             </div>
+            {newsletterIssueDraft && (
+              <div
+                className="mt-3 rounded-lg border border-border bg-card p-3"
+                data-testid="newsletter-issue-draft-json"
+                data-issue-draft-id={newsletterIssueDraft.issueDraft.id}
+                data-issue-draft-schema={newsletterIssueDraft.schemaVersion}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">{newsletterIssueDraft.issueDraft.id}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {newsletterIssueDraft.issueDraft.audience.selectedRecipientCount} send-ready recipients selected without raw emails.
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyNewsletterText(newsletterIssueDraftText, 'Newsletter issue draft')}
+                    disabled={!newsletterIssueDraftText}
+                    iconStart={<Copy className="size-3.5" />}
+                    data-testid="newsletter-copy-issue-draft"
+                  >
+                    Copy draft
+                  </Button>
+                </div>
+                <pre className="mt-3 max-h-52 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+{newsletterIssueDraftText}
+                </pre>
+              </div>
+            )}
             <div className="mt-3 space-y-2">
               {recentPosts.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-border bg-card px-3 py-4 text-sm text-muted-foreground">

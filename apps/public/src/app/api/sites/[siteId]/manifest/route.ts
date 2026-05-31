@@ -3162,6 +3162,7 @@ const buildManifestNewsletterDiscovery = (
       publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`,
       adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
       sendableSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
+      issueDraftBuilder: `/api/admin/sites/${siteId}/newsletter/issues/draft`,
       forms: `/api/sites/${siteId}/forms`,
       contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
       contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
@@ -3173,6 +3174,7 @@ const buildManifestNewsletterDiscovery = (
       unsubscribe: 'DELETE',
       adminList: 'GET',
       adminUpsert: 'POST',
+      buildIssueDraft: 'POST',
       syncContacts: 'POST',
     },
     sdkHelpers: {
@@ -3180,6 +3182,7 @@ const buildManifestNewsletterDiscovery = (
       unsubscribe: 'unsubscribeNewsletter',
       adminList: 'newsletterSubscribers',
       adminUpsert: 'upsertNewsletterSubscriber',
+      buildIssueDraft: 'buildNewsletterIssueDraft',
       syncContacts: 'syncFormContacts',
     },
     forms: newsletterForms.map((form) => ({
@@ -3215,6 +3218,14 @@ const buildManifestNewsletterDiscovery = (
       },
       adminOnly: true,
       useCase: 'Send selected Backy contact/subscriber records to an external delivery provider worker without exposing provider credentials to public pages or frontend repositories.',
+    },
+    issueDraftPolicy: {
+      schemaVersion: 'backy.newsletter-issue-draft.v1',
+      routeTemplate: `/api/admin/sites/${siteId}/newsletter/issues/draft`,
+      requiredAdminPermission: 'forms.export',
+      defaultAudience: 'sendable',
+      sourcePostField: 'postId',
+      privacy: 'Builds subject, preheader, post URLs, content summary, recipient ids, and counts without raw subscriber emails or provider secrets.',
     },
     canvasRoutes: {
       newsletterPage: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,

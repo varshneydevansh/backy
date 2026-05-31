@@ -1344,6 +1344,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     analytics: `/api/admin/sites/${siteId}/forms/analytics`,
     newsletterSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
     newsletterSendableSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
+    newsletterIssueDraftBuilder: `/api/admin/sites/${siteId}/newsletter/issues/draft`,
     contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
     contactLists: `/api/admin/sites/${siteId}/forms/contact-lists`,
     consentRetention: `/api/admin/sites/${siteId}/forms/consent-retention`,
@@ -1371,6 +1372,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     analytics: "GET",
     newsletterSubscribers: "GET",
     upsertNewsletterSubscriber: "POST",
+    buildNewsletterIssueDraft: "POST",
     contactSegments: "GET",
     contactLists: "GET",
     saveContactList: "POST",
@@ -1425,6 +1427,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     unsubscribeNewsletter: "unsubscribeNewsletter",
     newsletterSubscribers: "newsletterSubscribers",
     upsertNewsletterSubscriber: "upsertNewsletterSubscriber",
+    buildNewsletterIssueDraft: "buildNewsletterIssueDraft",
     contactSegments: "formContactSegments",
     contactLists: "formContactLists",
     saveContactList: "saveFormContactList",
@@ -1460,6 +1463,7 @@ const formsManagementDiscovery = (siteId: string) => ({
     contactSegments: "backy.form-contact-segments.v1",
     contactLists: "backy.form-contact-lists.v1",
     newsletterSubscribers: "backy.newsletter-subscribers.v1",
+    newsletterIssueDraft: "backy.newsletter-issue-draft.v1",
     consentRetention: "backy.form-consent-retention.v1",
   },
   privacy: {
@@ -4814,6 +4818,41 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                   },
                 },
+              },
+            },
+          },
+          [`/api/admin/sites/${site.id}/newsletter/issues/draft`]: {
+            post: {
+              tags: ["Interactions"],
+              summary: "Build a provider-safe newsletter issue draft from a blog post",
+              operationId: "buildBackyNewsletterIssueDraft",
+              requestBody: {
+                required: true,
+                content: {
+                  "application/json": {
+                    schema: {
+                      $ref: "#/components/schemas/NewsletterIssueDraftBuildRequest",
+                    },
+                  },
+                },
+              },
+              responses: {
+                "200": {
+                  description: "Newsletter issue draft built",
+                  content: {
+                    "application/json": {
+                      schema: {
+                        $ref: "#/components/schemas/NewsletterIssueDraftEnvelope",
+                      },
+                    },
+                  },
+                },
+              },
+              "x-backy": {
+                schemaVersion: "backy.newsletter-issue-draft.v1",
+                requiredAdminPermission: "forms.export",
+                providerBoundary:
+                  "Draft payload includes post URLs, content summary, recipient ids, and counts. Raw subscriber emails and provider secrets remain outside the issue draft.",
               },
             },
           },
@@ -12388,6 +12427,76 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 handoff: { type: "object", additionalProperties: true },
               },
             }),
+            NewsletterIssueDraftBuildRequest: {
+              type: "object",
+              required: ["postId"],
+              properties: {
+                postId: { type: "string" },
+                audience: {
+                  type: "string",
+                  enum: ["all", "sendable", "held"],
+                  default: "sendable",
+                },
+                recipientLimit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 100,
+                  default: 100,
+                },
+                subjectOverride: { type: ["string", "null"] },
+                preheaderOverride: { type: ["string", "null"] },
+                templateId: { type: ["string", "null"] },
+              },
+            },
+            NewsletterIssueDraftEnvelope: envelopeSchema({
+              type: "object",
+              required: ["schemaVersion", "generatedAt", "issueDraft", "handoff"],
+              properties: {
+                schemaVersion: { const: "backy.newsletter-issue-draft.v1" },
+                generatedAt: { type: "string", format: "date-time" },
+                issueDraft: { $ref: "#/components/schemas/NewsletterIssueDraft" },
+                handoff: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+              },
+            }),
+            NewsletterIssueDraft: {
+              type: "object",
+              required: ["id", "status", "sourcePost", "copy", "urls", "audience", "syncContract", "providerBoundary"],
+              properties: {
+                id: { type: "string" },
+                status: {
+                  type: "string",
+                  enum: ["ready-for-provider-draft", "needs-published-post", "needs-send-ready-subscribers"],
+                },
+                templateId: { type: ["string", "null"] },
+                site: { type: "object", additionalProperties: true },
+                sourcePost: { type: "object", additionalProperties: true },
+                copy: { type: "object", additionalProperties: true },
+                urls: {
+                  type: "object",
+                  additionalProperties: { type: "string" },
+                },
+                audience: {
+                  type: "object",
+                  required: ["requested", "recipientLimit", "selectedRecipientCount", "selectedRecipientIds", "sendReadySubscribers"],
+                  properties: {
+                    requested: { type: "string", enum: ["all", "sendable", "held"] },
+                    recipientLimit: { type: "integer" },
+                    selectedRecipientCount: { type: "integer" },
+                    selectedRecipientIds: { type: "array", items: { type: "string" } },
+                    totalMatchedRecipients: { type: "integer" },
+                    totalSubscribers: { type: "integer" },
+                    sendReadySubscribers: { type: "integer" },
+                    heldOrSuppressed: { type: "integer" },
+                    unsubscribedOrArchived: { type: "integer" },
+                  },
+                },
+                syncContract: { type: "object", additionalProperties: true },
+                providerBoundary: { type: "object", additionalProperties: true },
+              },
+            },
             NewsletterSubscriber: {
               type: "object",
               required: ["id", "formId", "contactStatus", "subscriptionStatus", "createdAt", "updatedAt"],

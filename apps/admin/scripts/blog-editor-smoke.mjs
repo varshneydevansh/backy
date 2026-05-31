@@ -258,6 +258,11 @@ const assertBlogEditorFallbackIsReadOnly = () => {
       source.includes('externalDeliveryRequired: true') &&
       source.includes('newsletterIssue: newsletterIssueHandoff') &&
       source.includes('data-testid="blog-editor-newsletter-issue"') &&
+      source.includes('buildNewsletterIssueDraft(activeSiteId') &&
+      source.includes('data-testid="blog-editor-build-newsletter-issue-draft"') &&
+      source.includes('data-testid="blog-editor-newsletter-issue-draft-json"') &&
+      source.includes('data-testid="blog-editor-copy-newsletter-issue-draft"') &&
+      source.includes('forms.export') &&
       source.includes('data-testid="blog-editor-newsletter-handoff-json"') &&
       source.includes('data-testid="blog-editor-copy-newsletter-issue-handoff"') &&
       source.includes('data-testid="blog-editor-open-newsletter"') &&

@@ -40,6 +40,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 
 - [2026-05-30] Backy owns newsletter subscriber management and provider-safe handoff, but actual outbound email delivery/mailbox hosting remains provider-backed for now.
 - [2026-05-31] Newsletter handoff should make provider-safe sync URLs visible beside capture URLs: `audience=sendable` and contact-sync route templates are operator-facing workflow surfaces, not just hidden payload fields.
+- [2026-05-31] Newsletter authoring needs an executable provider-safe draft step between “blog post exists” and “external provider sends.” The draft can include post URLs, content summary, recipient ids, and counts, but must not include raw subscriber emails or provider secrets.
 - [2026-05-30] Every page/blog/product/form/custom frontend path must preserve design tokens, fonts, colors, media assets, animations, interactions, responsive overrides, editable maps, and API-visible properties.
 - [2026-05-31] Production Vercel runbooks must keep `backy-admin` as a protected Vite shell with only public/admin API base URLs; server-only admin keys, database URLs, provider secrets, and cron secrets belong on `backy-public`, never in `VITE_*` env.
 - [2026-05-31] Help should expose the same protected deployment topology as the README: protected `backy-admin`, public `backy-public`, and separate custom frontend projects with only `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST` in frontend env.

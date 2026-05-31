@@ -8,6 +8,7 @@ import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, 
 import {
     AdminContentApiError,
     archiveBlogPost,
+    buildNewsletterIssueDraft,
     createBlogPostPreview,
     deleteBlogPost,
     getAdminApiBase,
@@ -32,6 +33,7 @@ import {
     type BlogTag,
     type CommentModerationStatus,
     type ContentRevision,
+    type NewsletterIssueDraftHandoff,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
@@ -156,7 +158,8 @@ type BlogEditorPermissionKey =
     | 'media.create'
     | 'collections.view'
     | 'comments.view'
-    | 'comments.manage';
+    | 'comments.manage'
+    | 'forms.export';
 
 const BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<BlogEditorPermissionKey, Array<User['role']>> = {
     'pages.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -168,6 +171,7 @@ const BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS: Record<BlogEditorPermissionKey, Arra
     'collections.view': ['owner', 'admin', 'editor', 'viewer'],
     'comments.view': ['owner', 'admin', 'editor', 'viewer'],
     'comments.manage': ['owner', 'admin', 'editor'],
+    'forms.export': ['owner', 'admin'],
 };
 
 const getMetaString = (meta: Record<string, any> | undefined, key: string): string => {
@@ -706,6 +710,9 @@ function EditBlogPostPage() {
     const [isCommentsLoading, setIsCommentsLoading] = useState(false);
     const [commentError, setCommentError] = useState<string | null>(null);
     const [updatingCommentIds, setUpdatingCommentIds] = useState<string[]>([]);
+    const [newsletterIssueDraft, setNewsletterIssueDraft] = useState<NewsletterIssueDraftHandoff | null>(null);
+    const [isBuildingNewsletterIssueDraft, setIsBuildingNewsletterIssueDraft] = useState(false);
+    const [newsletterIssueDraftError, setNewsletterIssueDraftError] = useState<string | null>(null);
     const [postReadiness, setPostReadiness] = useState<BlogPostReadiness | null>(null);
     const [readinessLoading, setReadinessLoading] = useState(false);
     const [readinessError, setReadinessError] = useState<string | null>(null);
@@ -726,6 +733,7 @@ function EditBlogPostPage() {
     const canViewCollections = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canViewComments = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const canManageComments = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const canExportNewsletter = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'forms.export', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewBlogPermissionTitle = canViewBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const editBlogPermissionTitle = canEditBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.edit', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const publishBlogPermissionTitle = canPublishBlog ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'pages.publish', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
@@ -735,6 +743,7 @@ function EditBlogPostPage() {
     const viewCollectionsPermissionTitle = canViewCollections ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'collections.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const commentsViewPermissionTitle = canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const commentsManagePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
+    const exportNewsletterPermissionTitle = canExportNewsletter ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', BLOG_EDITOR_PERMISSION_ROLE_DEFAULTS);
     const viewBlogDeniedMessage = `Your account needs pages.view to load this blog post. ${viewBlogPermissionTitle}`;
     const editBlogDeniedMessage = `Your account needs pages.edit to change this blog post. ${editBlogPermissionTitle}`;
     const publishBlogDeniedMessage = `Your account needs pages.publish to preview or publish this blog post. ${publishBlogPermissionTitle}`;
@@ -743,6 +752,7 @@ function EditBlogPostPage() {
     const createMediaDeniedMessage = `Your account needs media.create to upload featured media. ${createMediaPermissionTitle}`;
     const viewCollectionsDeniedMessage = `Your account needs collections.view to bind blog canvas elements to collection data. ${viewCollectionsPermissionTitle}`;
     const manageCommentsDeniedMessage = `Your account needs comments.manage to moderate comments. ${commentsManagePermissionTitle}`;
+    const exportNewsletterDeniedMessage = `Your account needs forms.export to build newsletter issue drafts with subscriber sync metadata. ${exportNewsletterPermissionTitle}`;
 
     // Initialize State from Post
     const [title, setTitle] = useState(post?.title || '');
@@ -1905,6 +1915,20 @@ function EditBlogPostPage() {
     const blogEditorHandoffActionStatus = blogEditorHandoffDisabledReason
         ? `Blog editor handoff unavailable: ${blogEditorHandoffDisabledReason}`
         : 'Blog editor handoff ready for custom frontend sync.';
+    const blogEditorNewsletterIssueDraftDisabledReason = isBuildingNewsletterIssueDraft
+        ? 'Wait for the current newsletter issue draft build to finish.'
+        : editorCommandBusy
+            ? blogEditorCommandBusyReason
+            : !canViewBlog
+                ? viewBlogPermissionTitle || viewBlogDeniedMessage
+                : !canExportNewsletter
+                    ? exportNewsletterDeniedMessage
+                    : editorHasUnsavedChanges
+                        ? 'Save this post before building a newsletter issue draft so the API uses the latest title, excerpt, URLs, taxonomy, and canvas metadata.'
+                        : '';
+    const blogEditorNewsletterIssueDraftActionStatus = blogEditorNewsletterIssueDraftDisabledReason
+        ? `Newsletter issue draft unavailable: ${blogEditorNewsletterIssueDraftDisabledReason}`
+        : 'Newsletter issue draft build available for the send-ready subscriber audience.';
     const blogEditorSaveDisabledReason = saveActionBusy
         ? 'Wait for the current save, preview, or readiness workflow to finish.'
         : saveDisabledReason || '';
@@ -2571,6 +2595,36 @@ function EditBlogPostPage() {
         ],
     };
     const editorHandoffText = JSON.stringify(editorHandoff, null, 2);
+    const newsletterIssueDraftText = newsletterIssueDraft
+        ? JSON.stringify(newsletterIssueDraft, null, 2)
+        : '';
+
+    const handleBuildNewsletterIssueDraft = async () => {
+        if (!post || blogEditorNewsletterIssueDraftDisabledReason) return;
+
+        setIsBuildingNewsletterIssueDraft(true);
+        setNewsletterIssueDraftError(null);
+        setWorkflowNotice(null);
+        setSaveWarning(null);
+        try {
+            const handoff = await buildNewsletterIssueDraft(activeSiteId, {
+                postId: post.id,
+                audience: 'sendable',
+                recipientLimit: 100,
+                subjectOverride: title.trim() || post.title,
+                preheaderOverride: excerpt.trim() || post.excerpt || null,
+            });
+            setNewsletterIssueDraft(handoff);
+            setWorkflowNotice(
+                `Newsletter issue draft ${handoff.issueDraft.id} built for ${handoff.issueDraft.audience.selectedRecipientCount} send-ready subscriber${handoff.issueDraft.audience.selectedRecipientCount === 1 ? '' : 's'}.`,
+            );
+        } catch (issueError) {
+            setNewsletterIssueDraft(null);
+            setNewsletterIssueDraftError(issueError instanceof Error ? issueError.message : 'Unable to build newsletter issue draft.');
+        } finally {
+            setIsBuildingNewsletterIssueDraft(false);
+        }
+    };
 
     const copyEditorHandoffText = async (value: string, label: string) => {
         if (editorCommandBusy) return;
@@ -4086,6 +4140,70 @@ function EditBlogPostPage() {
                                     <BlogEditorContractTile label="Issue source" value={status === 'published' ? 'Ready' : 'Publish or schedule first'} />
                                     <BlogEditorContractTile label="Subscribers" value="audience=sendable" />
                                     <BlogEditorContractTile label="Delivery" value="External provider" />
+                                </div>
+                                <div
+                                    className="rounded-lg border border-border bg-background p-3"
+                                    data-testid="blog-editor-newsletter-issue-draft"
+                                    data-issue-draft-schema={newsletterIssueDraft?.schemaVersion || 'backy.newsletter-issue-draft.v1'}
+                                    data-issue-draft-id={newsletterIssueDraft?.issueDraft.id || ''}
+                                >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-medium uppercase text-muted-foreground">Issue draft builder</div>
+                                            <p className="mt-1 text-sm text-foreground">
+                                                Build a copyable provider draft from the saved post plus the private send-ready audience contract.
+                                            </p>
+                                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                                Draft payloads include recipient ids and counts, not raw subscriber emails or provider secrets.
+                                            </p>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            onClick={() => void handleBuildNewsletterIssueDraft()}
+                                            disabled={Boolean(blogEditorNewsletterIssueDraftDisabledReason)}
+                                            title={blogEditorNewsletterIssueDraftDisabledReason || undefined}
+                                            variant="primary"
+                                            iconStart={<Send className="size-4" />}
+                                            aria-describedby={blogEditorCommandActionStatusId}
+                                            data-testid="blog-editor-build-newsletter-issue-draft"
+                                            data-action-state={blogEditorNewsletterIssueDraftDisabledReason ? isBuildingNewsletterIssueDraft ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorNewsletterIssueDraftActionStatus}
+                                            data-disabled-reason={blogEditorNewsletterIssueDraftDisabledReason || undefined}
+                                        >
+                                            {isBuildingNewsletterIssueDraft ? 'Building...' : 'Build issue draft'}
+                                        </Button>
+                                    </div>
+                                    {newsletterIssueDraftError && (
+                                        <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                            {newsletterIssueDraftError}
+                                        </div>
+                                    )}
+                                    {newsletterIssueDraft && (
+                                        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+                                            <pre
+                                                className="max-h-56 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground"
+                                                data-testid="blog-editor-newsletter-issue-draft-json"
+                                            >
+{newsletterIssueDraftText}
+                                            </pre>
+                                            <div className="space-y-2">
+                                                <BlogEditorContractTile label="Draft" value={newsletterIssueDraft.issueDraft.id} />
+                                                <BlogEditorContractTile label="Audience" value={`${newsletterIssueDraft.issueDraft.audience.selectedRecipientCount} send-ready`} />
+                                                <Button
+                                                    type="button"
+                                                    onClick={() => void copyEditorHandoffText(newsletterIssueDraftText, 'Newsletter issue draft')}
+                                                    disabled={!newsletterIssueDraftText || editorCommandBusy || !canViewBlog}
+                                                    variant="outline"
+                                                    iconStart={<Copy className="size-4" />}
+                                                    className="w-full"
+                                                    data-testid="blog-editor-copy-newsletter-issue-draft"
+                                                    data-action-state={newsletterIssueDraftText && !editorCommandBusy && canViewBlog ? 'ready' : 'blocked'}
+                                                >
+                                                    Copy draft
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="grid gap-3 md:grid-cols-2">
                                     <div className="rounded-lg border border-border bg-background p-3">

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 08:01 IST
+- **Last updated:** 2026-05-31 09:03 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 09:03 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Blog/Newsletter now has an executable provider-safe issue draft step; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/public/src/app/api/admin/sites/[siteId]/newsletter/issues/draft/route.ts`: added an admin-only `forms.export` issue draft builder that turns a saved blog post plus the current newsletter audience into a deterministic `backy.newsletter-issue-draft.v1` payload.
+- `apps/admin/src/routes/blog.$postId.tsx`: added a Newsletter issue draft builder to the post editor that blocks stale unsaved drafts, builds from the saved post, and exposes copyable draft JSON without raw subscriber emails.
+- `apps/admin/src/routes/newsletter.tsx`: added a Build draft action for the latest published report in the Newsletter workspace.
+- `apps/admin/src/lib/adminContentApi.ts` and `packages/sdk-js/src/index.ts`: added typed `buildNewsletterIssueDraft` helpers.
+- `apps/public/src/app/api/sites/[siteId]/manifest/route.ts`, `apps/public/src/app/api/sites/[siteId]/openapi/route.ts`, and generated SDK contract types: exposed the issue draft endpoint, schema, helper name, and provider boundary.
+- `apps/admin/scripts/newsletter-smoke.mjs` and `apps/admin/scripts/blog-editor-smoke.mjs`: added source guards for the endpoint, UI hooks, SDK helper, manifest, OpenAPI, and no-raw-email draft policy.
+
+**Commands run:**
+- `npm run test:newsletter --workspace @backy-cms/admin` -> PASS.
+- `BACKY_BLOG_EDITOR_SOURCE_ONLY=1 npm run test:blog-editor --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy/public` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js` -> PASS.
+- `npm run test:generated-types --workspace @backy/sdk-js` -> PASS.
+- Direct API smoke against `http://localhost:3001/api/admin/sites/site-demo/newsletter/issues/draft` with admin session + `backy-dev-mfa` -> PASS; returned `backy.newsletter-issue-draft.v1`, deterministic draft id, no raw emails, and provider-safe status.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this logical newsletter issue-draft slice.
+2. Continue Batch 5 on the next highest-friction editor/release surface: responsive/mobile canvas behavior, page/blog canvas ergonomics, or deployment readiness.
 
 ## 2026-05-31 08:01 IST
 
