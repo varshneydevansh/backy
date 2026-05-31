@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 06:01 IST
+- **Last updated:** 2026-05-31 06:31 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 06:31 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; rendered Sites smoke duplicate flow now passes under blocked global site quotas; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/scripts/sites-smoke.mjs`: `temporarilyAllowSiteCreationQuota` now treats blocked quota mode as a temporary global workspace gate and adds a cushion before create-plus-duplicate validation, then restores the original settings in cleanup. This matches the product reality that the admin-visible sites list is role/team scoped while create/duplicate billing enforcement counts the whole workspace.
+- `apps/admin/scripts/sites-smoke.mjs`: duplicate-site UI smoke failures now include the actual duplicate API request status/payload, visible notice, and action-button state so future regressions expose the cause instead of timing out generically.
+
+**Commands run:**
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 npm run test:sites --workspace @backy-cms/admin` -> PASS.
+- `BACKY_SITES_SOURCE_ONLY=1 npm run test:sites --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: canvas component-library ergonomics, section reflow/resizing semantics, blog/newsletter authoring polish, Help discoverability, or deployment readiness.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 06:01 IST
 

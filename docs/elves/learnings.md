@@ -13,6 +13,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 
 - [2026-05-30] Focused admin/editor gates are preferred before broad builds: admin typecheck, editor source/zoom smokes, pages/users/settings smokes, help/handoff smoke, release doctor, and `git diff --check`.
 - [2026-05-30] `gh auth status` reports a stale invalid `GITHUB_TOKEN`, but a keyring login for `varshneydevansh` exists. Avoid relying on the bad environment token; use keychain auth or unset the token for GitHub CLI operations.
+- [2026-05-31] Sites rendered smokes that exercise create plus duplicate must temporarily relax blocked workspace site quotas with a cushion, because the admin-visible sites list is role/team scoped while create/duplicate billing enforcement counts the whole workspace.
 
 ## Review Heuristics
 

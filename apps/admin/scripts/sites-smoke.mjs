@@ -715,11 +715,15 @@ const temporarilyAllowSiteCreationQuota = async (extraSites = 2) => {
   const originalIntegrations = settings.integrations || {};
   const originalCommerce = originalIntegrations.commerce || {};
   const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
-  const requiredSiteLimit = existingSites.length + extraSites;
 
-  if (originalCommerce.overageMode !== 'block' || currentSiteLimit >= requiredSiteLimit) {
+  if (originalCommerce.overageMode !== 'block') {
     return null;
   }
+
+  // The admin list is scoped by role/team, while billing enforcement counts the
+  // whole workspace. Use a small cushion so this smoke can exercise create and
+  // duplicate paths without depending on hidden sites from other scopes.
+  const requiredSiteLimit = Math.max(currentSiteLimit, existingSites.length) + extraSites + 5;
 
   await updateSettings({
     integrations: {
@@ -1354,6 +1358,26 @@ const clickSiteAction = async (client, siteName, action) => {
 };
 
 const duplicateSiteThroughUi = async (client, siteName, originalSlug, sessionToken) => {
+  await evaluate(client, `(() => {
+    window.__backySiteDuplicateRequests = [];
+    if (!window.__backyOriginalFetchForSiteDuplicateSmoke) {
+      window.__backyOriginalFetchForSiteDuplicateSmoke = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const requestUrl = String(args[0]?.url || args[0] || '');
+        const response = await window.__backyOriginalFetchForSiteDuplicateSmoke(...args);
+        if (requestUrl.includes('/api/admin/sites/') && requestUrl.includes('/duplicate')) {
+          const entry = { url: requestUrl, status: response.status, ok: response.ok };
+          try {
+            entry.payload = await response.clone().json();
+          } catch {
+            entry.payload = null;
+          }
+          window.__backySiteDuplicateRequests.push(entry);
+        }
+        return response;
+      };
+    }
+  })()`);
   await clickSiteAction(client, siteName, 'Duplicate');
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -1370,7 +1394,23 @@ const duplicateSiteThroughUi = async (client, siteName, originalSlug, sessionTok
     await sleep(250);
   }
 
-  throw new Error(`Duplicated site was not created for ${siteName}`);
+  const diagnostics = await evaluate(client, `(() => {
+    const duplicateButton = Array.from(document.querySelectorAll('button')).find((candidate) => (
+      (candidate.getAttribute('aria-label') || '') === ${JSON.stringify(`Duplicate ${siteName}`)}
+    ));
+    return {
+      requests: window.__backySiteDuplicateRequests || [],
+      notice: document.querySelector('[role="status"], [aria-live="polite"]')?.textContent?.slice(0, 700) || '',
+      duplicateButton: duplicateButton instanceof HTMLButtonElement ? {
+        disabled: duplicateButton.disabled,
+        actionState: duplicateButton.getAttribute('data-action-state') || '',
+        disabledReason: duplicateButton.getAttribute('data-disabled-reason') || '',
+      } : null,
+      matchingSitesText: Array.from(document.querySelectorAll('[data-testid^="sites-actions-"]')).map((candidate) => candidate.getAttribute('aria-label') || '').filter((label) => label.includes(${JSON.stringify(siteName)})).slice(0, 20),
+      body: document.body?.innerText?.slice(0, 1200) || '',
+    };
+  })()`);
+  throw new Error(`Duplicated site was not created for ${siteName}: ${JSON.stringify(diagnostics)}`);
 };
 
 const collectNavigationPageIds = (items = [], ids = new Set()) => {
