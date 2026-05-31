@@ -711,6 +711,12 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-testid="editor-viewport-action-status"') &&
       source.includes('data-active-breakpoint={breakpoint}') &&
       source.includes('data-active-preset={activeCanvasPresetId}') &&
+      source.includes('data-responsive-inheritance-state={responsiveViewportInheritanceState}') &&
+      source.includes('data-responsive-active-override-layer-count={activeBreakpointOverrideLayerCount}') &&
+      source.includes('data-responsive-total-override-layer-count={totalResponsiveOverrideLayerCount}') &&
+      source.includes('data-testid="editor-responsive-viewport-summary"') &&
+      source.includes('data-responsive-breakpoint={breakpoint}') &&
+      source.includes('data-action-status={responsiveViewportActionStatus}') &&
       source.includes('data-testid="editor-breakpoint-desktop"') &&
       source.includes('data-testid="editor-breakpoint-tablet"') &&
       source.includes('data-testid="editor-breakpoint-mobile"') &&
@@ -10991,7 +10997,11 @@ const assertEditorViewportControls = async (client, options = {}) => {
     const compactPreset = document.querySelector('[data-testid="editor-canvas-compact-preset-select"]');
     const compactWidth = document.querySelector('[data-testid="editor-canvas-compact-width-input"]');
     const compactHeight = document.querySelector('[data-testid="editor-canvas-compact-height-input"]');
+    const responsiveSummary = document.querySelector('[data-testid="editor-responsive-viewport-summary"]');
     const controlsState = controls?.getAttribute('data-action-state') || '';
+    const responsiveInheritanceState = controls?.getAttribute('data-responsive-inheritance-state') || '';
+    const responsiveActiveOverrideLayerCount = Number(controls?.getAttribute('data-responsive-active-override-layer-count') || 0);
+    const responsiveTotalOverrideLayerCount = Number(controls?.getAttribute('data-responsive-total-override-layer-count') || 0);
     const expectedActiveButtonState = controlsState === 'blocked' ? 'blocked' : 'selected';
     const malformedButtons = buttons.filter((button) => (
       !button.exists ||
@@ -11001,6 +11011,16 @@ const assertEditorViewportControls = async (client, options = {}) => {
       button.actionState !== (button.breakpoint === activeBreakpoint ? expectedActiveButtonState : controlsState === 'blocked' ? 'blocked' : 'ready') ||
       !button.actionStatus
     ));
+    const responsiveSummaryOk = activeBreakpoint === 'desktop'
+      ? responsiveSummary === null && responsiveInheritanceState === 'desktop-source'
+      : responsiveSummary instanceof HTMLElement &&
+        responsiveSummary.getAttribute('aria-describedby') === (status?.id || '') &&
+        responsiveSummary.getAttribute('data-responsive-breakpoint') === activeBreakpoint &&
+        responsiveSummary.getAttribute('data-responsive-inheritance-state') === responsiveInheritanceState &&
+        Number(responsiveSummary.getAttribute('data-responsive-override-layer-count') || -1) === responsiveActiveOverrideLayerCount &&
+        Number(responsiveSummary.getAttribute('data-responsive-total-override-layer-count') || -1) === responsiveTotalOverrideLayerCount &&
+        normalize(responsiveSummary.getAttribute('data-action-status')).length > 0 &&
+        ['overrides', 'inherits-desktop'].includes(responsiveInheritanceState);
     return {
       ok: Boolean(controls) &&
         Boolean(status?.id) &&
@@ -11013,6 +11033,10 @@ const assertEditorViewportControls = async (client, options = {}) => {
         controls.getAttribute('data-active-breakpoint-label') === activeBreakpoint.charAt(0).toUpperCase() + activeBreakpoint.slice(1) + ' canvas' &&
         Number(controls.getAttribute('data-canvas-width') || 0) > 0 &&
         Number(controls.getAttribute('data-canvas-height') || 0) > 0 &&
+        Number.isFinite(responsiveActiveOverrideLayerCount) &&
+        Number.isFinite(responsiveTotalOverrideLayerCount) &&
+        responsiveTotalOverrideLayerCount >= responsiveActiveOverrideLayerCount &&
+        responsiveSummaryOk &&
         Boolean(controls.getAttribute('data-active-preset')) &&
         malformedButtons.length === 0 &&
         Boolean(activeButton) &&
@@ -11078,6 +11102,14 @@ const assertEditorViewportControls = async (client, options = {}) => {
       activePreset: controls?.getAttribute('data-active-preset') || '',
       width: Number(controls?.getAttribute('data-canvas-width') || 0),
       height: Number(controls?.getAttribute('data-canvas-height') || 0),
+      responsiveViewport: {
+        inheritanceState: responsiveInheritanceState,
+        activeOverrideLayerCount: responsiveActiveOverrideLayerCount,
+        totalOverrideLayerCount: responsiveTotalOverrideLayerCount,
+        summaryExists: responsiveSummary instanceof HTMLElement,
+        summaryText: normalize(responsiveSummary?.textContent),
+        summaryActionStatus: normalize(responsiveSummary?.getAttribute('data-action-status')),
+      },
       buttons,
       malformedButtons,
       preset: {

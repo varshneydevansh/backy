@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 05:01 IST
+- **Last updated:** 2026-05-31 05:33 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 05:33 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; responsive viewport state is now visible in the editor toolbar; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: the viewport toolbar now counts responsive override layers and exposes an active breakpoint state of `desktop-source`, `inherits-desktop`, or `overrides`. Tablet/mobile mode shows a compact status pill such as `0 Inherits desktop` or `2 override layers`, with action-status metadata explaining how to create or clear breakpoint-specific canvas overrides.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: editor source and rendered viewport smokes now guard the responsive inheritance metadata, active/total override counts, and compact mobile preset path.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_EDITOR_PRIMARY_ACTION_STATUS_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: section/component resizing semantics, blog/newsletter authoring polish, domain/subdomain management wording, or custom frontend/APIability discoverability.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 05:01 IST
 

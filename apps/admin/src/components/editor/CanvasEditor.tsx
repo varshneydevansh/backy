@@ -953,6 +953,30 @@ const getResponsiveOverrideGroups = (
     .map((group) => group.id)
 );
 
+const countResponsiveOverrideLayers = (
+  nodes: CanvasElement[],
+  targetBreakpoint?: Exclude<EditorBreakpoint, 'desktop'>,
+): number => {
+  const breakpoints = targetBreakpoint ? [targetBreakpoint] : EDITOR_RESPONSIVE_BREAKPOINTS;
+  let count = 0;
+
+  const walk = (items: CanvasElement[]) => {
+    items.forEach((item) => {
+      if (breakpoints.some((itemBreakpoint) => (
+        getResponsiveOverrideGroups(item.responsive?.[itemBreakpoint], item).length > 0
+      ))) {
+        count += 1;
+      }
+      if (item.children?.length) {
+        walk(item.children);
+      }
+    });
+  };
+
+  walk(nodes);
+  return count;
+};
+
 const clearResponsiveOverrideGroup = (
   override: ResponsiveElementOverride,
   group: BreakpointOverrideGroup,
@@ -2712,6 +2736,27 @@ export function CanvasEditor({
   ), [size.height, size.width]);
   const activeCanvasPresetLabel = CANVAS_SIZE_PRESETS.find((preset) => preset.id === activeCanvasPresetId)?.label || 'Custom';
   const activeBreakpointLabel = formatCanvasBreakpointLabel(breakpoint);
+  const totalResponsiveOverrideLayerCount = useMemo(() => countResponsiveOverrideLayers(elements), [elements]);
+  const activeBreakpointOverrideLayerCount = useMemo(() => (
+    breakpoint === 'desktop' ? 0 : countResponsiveOverrideLayers(elements, breakpoint)
+  ), [breakpoint, elements]);
+  const responsiveViewportInheritanceState = breakpoint === 'desktop'
+    ? 'desktop-source'
+    : activeBreakpointOverrideLayerCount > 0
+    ? 'overrides'
+    : 'inherits-desktop';
+  const responsiveViewportSummaryLabel = breakpoint === 'desktop'
+    ? `${totalResponsiveOverrideLayerCount} breakpoint override layer${totalResponsiveOverrideLayerCount === 1 ? '' : 's'}`
+    : activeBreakpointOverrideLayerCount > 0
+    ? `${activeBreakpointOverrideLayerCount} override layer${activeBreakpointOverrideLayerCount === 1 ? '' : 's'}`
+    : 'Inherits desktop';
+  const responsiveViewportActionStatus = breakpoint === 'desktop'
+    ? totalResponsiveOverrideLayerCount > 0
+      ? `${totalResponsiveOverrideLayerCount} layer${totalResponsiveOverrideLayerCount === 1 ? '' : 's'} include tablet or mobile overrides for frontend renderers.`
+      : 'Desktop is the source of truth; tablet and mobile inherit it until a breakpoint override is authored.'
+    : activeBreakpointOverrideLayerCount > 0
+    ? `${activeBreakpointLabel} has ${activeBreakpointOverrideLayerCount} layer${activeBreakpointOverrideLayerCount === 1 ? '' : 's'} with local responsive overrides. Other groups inherit desktop.`
+    : `${activeBreakpointLabel} currently inherits desktop settings. Edit layer geometry, content, style, or state here to create a ${breakpoint} override.`;
   const canvasViewportActionStatusId = 'editor-viewport-action-status';
   const canvasViewportDisabledReason = isCanvasMutationDisabled
     ? isPreview
@@ -2721,7 +2766,7 @@ export function CanvasEditor({
   const canvasViewportActionState = isCanvasMutationDisabled ? 'blocked' : 'ready';
   const canvasViewportActionStatus = isCanvasMutationDisabled
     ? `Viewport controls unavailable: ${canvasViewportDisabledReason}`
-    : `${activeBreakpointLabel} active at ${size.width} x ${size.height}px. Canvas preset and dimensions are editable.`;
+    : `${activeBreakpointLabel} active at ${size.width} x ${size.height}px. Canvas preset and dimensions are editable. ${responsiveViewportActionStatus}`;
   const canvasSizeControlActionStatus = isCanvasMutationDisabled
     ? `Canvas size controls unavailable: ${canvasViewportDisabledReason}`
     : `Canvas size editable. Current size ${size.width} x ${size.height}px using ${activeCanvasPresetLabel} preset.`;
@@ -7884,6 +7929,9 @@ export function CanvasEditor({
             data-active-preset={activeCanvasPresetId}
             data-canvas-width={size.width}
             data-canvas-height={size.height}
+            data-responsive-inheritance-state={responsiveViewportInheritanceState}
+            data-responsive-active-override-layer-count={activeBreakpointOverrideLayerCount}
+            data-responsive-total-override-layer-count={totalResponsiveOverrideLayerCount}
             data-disabled-reason={canvasViewportDisabledReason || undefined}
           >
             <span
@@ -7962,6 +8010,29 @@ export function CanvasEditor({
                 <Smartphone className="w-4 h-4" />
               </button>
             </div>
+            {breakpoint !== 'desktop' && (
+              <div
+                className={cn(
+                  'hidden max-w-48 items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold lg:flex',
+                  activeBreakpointOverrideLayerCount > 0
+                    ? 'border-sky-200 bg-white text-sky-700'
+                    : 'border-slate-200 bg-white text-slate-600',
+                )}
+                title={responsiveViewportActionStatus}
+                aria-describedby={canvasViewportActionStatusId}
+                data-testid="editor-responsive-viewport-summary"
+                data-responsive-breakpoint={breakpoint}
+                data-responsive-inheritance-state={responsiveViewportInheritanceState}
+                data-responsive-override-layer-count={activeBreakpointOverrideLayerCount}
+                data-responsive-total-override-layer-count={totalResponsiveOverrideLayerCount}
+                data-action-status={responsiveViewportActionStatus}
+              >
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 tabular-nums text-slate-700">
+                  {activeBreakpointOverrideLayerCount}
+                </span>
+                <span className="truncate">{responsiveViewportSummaryLabel}</span>
+              </div>
+            )}
             <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm xl:flex">
               <select
                 value={activeCanvasPresetId}
