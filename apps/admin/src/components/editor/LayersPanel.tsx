@@ -220,6 +220,13 @@ const getStringProp = (props: CanvasElement['props'], key: string): string => {
     return typeof value === 'string' && value.trim() ? value.trim() : '';
 };
 
+const getLinkLayerLabel = (element: CanvasElement): string => (
+    getStringProp(element.props, 'content')
+    || getStringProp(element.props, 'label')
+    || getStringProp(element.props, 'text')
+    || getLayerDisplayName(element)
+);
+
 const normalizeNavigationItemRecords = (value: unknown): Array<{ label: string; href: string }> => {
     if (!Array.isArray(value)) {
         return [];
@@ -427,6 +434,14 @@ function LayerItem({
     const navLayerMode = element.type === 'nav' ? getNavigationLayerMode(element) : undefined;
     const navLayerHint = element.type === 'nav' ? getNavigationLayerHint(element) : undefined;
     const navItemLabels = navItemRecords.map((item) => `${item.label}:${item.href}`).join('|') || undefined;
+    const navChildLinks = element.type === 'nav'
+        ? (element.children || []).filter((child) => child.type === 'link')
+        : [];
+    const navChildLinkShortcuts = navChildLinks.slice(0, 4);
+    const navChildLinkOverflowCount = Math.max(0, navChildLinks.length - navChildLinkShortcuts.length);
+    const navChildShortcutLabels = navChildLinks.map((child) => (
+        `${getLinkLayerLabel(child)}:${getStringProp(child.props, 'href') || '#'}`
+    )).join('|') || undefined;
     const navSelectableChildPolicy = element.type === 'nav'
         ? navLayerMode === 'child-layers'
             ? 'expand-nav-container-select-link-children'
@@ -551,6 +566,8 @@ function LayerItem({
             data-layer-nav-child-link-count={navLinkChildCount}
             data-layer-nav-edit-mode={navLayerMode}
             data-layer-nav-item-labels={navItemLabels}
+            data-layer-nav-child-shortcut-count={element.type === 'nav' ? navChildLinks.length : undefined}
+            data-layer-nav-child-shortcut-labels={navChildShortcutLabels}
             data-layer-link-href={linkHref}
             data-layer-readable-meta-value={layerReadableMeta}
             data-layer-selected={isSelected ? 'true' : 'false'}
@@ -770,6 +787,82 @@ function LayerItem({
                                 title={navLayerHint}
                             >
                                 {navLayerHint}
+                            </span>
+                        ) : null}
+                        {navChildLinkShortcuts.length > 0 ? (
+                            <span
+                                data-testid="editor-layer-nav-child-link-shortcuts"
+                                data-layer-nav-child-link-shortcut-count={navChildLinks.length}
+                                data-layer-nav-child-link-shortcut-shown={navChildLinkShortcuts.length}
+                                data-layer-nav-child-link-shortcut-labels={navChildShortcutLabels}
+                                style={{
+                                    display: 'flex',
+                                    flexWrap: 'wrap',
+                                    gap: '4px',
+                                    marginTop: '6px',
+                                }}
+                            >
+                                {navChildLinkShortcuts.map((child) => {
+                                    const childLabel = getLinkLayerLabel(child);
+                                    const childHref = getStringProp(child.props, 'href') || '#';
+
+                                    return (
+                                        <button
+                                            key={child.id}
+                                            type="button"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                onSelect(child.id, event.metaKey || event.ctrlKey, event.shiftKey);
+                                            }}
+                                            data-layer-nav-child-link-id={child.id}
+                                            data-layer-nav-child-link-label={childLabel}
+                                            data-layer-nav-child-link-href={childHref}
+                                            title={`Select ${childLabel} link layer (${childHref})`}
+                                            aria-label={`Select ${childLabel} navigation link layer`}
+                                            style={{
+                                                alignItems: 'center',
+                                                background: '#ffffff',
+                                                border: '1px solid #c7d2fe',
+                                                borderRadius: '999px',
+                                                color: '#1e3a8a',
+                                                cursor: disabled ? 'not-allowed' : 'pointer',
+                                                display: 'inline-flex',
+                                                fontSize: '10px',
+                                                fontWeight: 700,
+                                                gap: '4px',
+                                                lineHeight: '14px',
+                                                maxWidth: '100%',
+                                                minWidth: 0,
+                                                opacity: disabled ? 0.55 : 1,
+                                                padding: '2px 7px',
+                                            }}
+                                            disabled={disabled}
+                                        >
+                                            <span style={{ maxWidth: '8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {childLabel}
+                                            </span>
+                                            <span style={{ color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {childHref}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                                {navChildLinkOverflowCount > 0 ? (
+                                    <span
+                                        data-layer-nav-child-link-overflow-count={navChildLinkOverflowCount}
+                                        style={{
+                                            alignItems: 'center',
+                                            color: '#64748b',
+                                            display: 'inline-flex',
+                                            fontSize: '10px',
+                                            fontWeight: 700,
+                                            lineHeight: '14px',
+                                            padding: '2px 4px',
+                                        }}
+                                    >
+                                        +{navChildLinkOverflowCount} more
+                                    </span>
+                                ) : null}
                             </span>
                         ) : null}
                     </>

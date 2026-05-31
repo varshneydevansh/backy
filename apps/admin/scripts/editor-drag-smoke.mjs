@@ -1098,6 +1098,9 @@ const assertCanvasEditorShortcutSource = () => {
       layersPanelSource.includes('data-layer-nav-child-link-count={navLinkChildCount}') &&
       layersPanelSource.includes('data-layer-nav-edit-mode={navLayerMode}') &&
       layersPanelSource.includes('data-layer-nav-item-labels={navItemLabels}') &&
+      layersPanelSource.includes('data-testid="editor-layer-nav-child-link-shortcuts"') &&
+      layersPanelSource.includes('data-layer-nav-child-link-id={child.id}') &&
+      layersPanelSource.includes('data-layer-nav-child-shortcut-count={element.type ===') &&
       layersPanelSource.includes('data-layer-link-href={linkHref}') &&
       layersPanelSource.includes("const navSelectableChildPolicy = element.type === 'nav'") &&
       layersPanelSource.includes('expand-nav-container-select-link-children') &&
@@ -24203,6 +24206,33 @@ const testNavBehaviorControls = async (client) => {
     const navIndex = rows.indexOf(navRow);
     const navDepth = Number(navRow.getAttribute('data-layer-depth') || 0);
     const navHint = navRow.querySelector('[data-testid="editor-layer-nav-selection-hint"]');
+    const shortcutHost = navRow.querySelector('[data-testid="editor-layer-nav-child-link-shortcuts"]');
+    const shortcutButtons = Array.from(shortcutHost?.querySelectorAll('[data-layer-nav-child-link-id]') || []);
+    const shortcutRows = shortcutButtons.map((button) => ({
+      id: button.getAttribute('data-layer-nav-child-link-id') || '',
+      label: button.getAttribute('data-layer-nav-child-link-label') || '',
+      href: button.getAttribute('data-layer-nav-child-link-href') || '',
+      text: button.textContent?.replace(/\\s+/g, ' ').trim() || '',
+    }));
+    const shortcutTarget = shortcutButtons.find((button) => button.getAttribute('data-layer-nav-child-link-label') === 'Docs') || shortcutButtons[0];
+    if (shortcutTarget instanceof HTMLButtonElement) {
+      shortcutTarget.click();
+      await settle();
+    }
+    const layoutAfterShortcut = document.querySelector('[data-testid="editor-shell-layout"]');
+    const shortcutSelectedChildId = shortcutTarget?.getAttribute('data-layer-nav-child-link-id') || '';
+    const shortcutSelection = {
+      hostExists: shortcutHost instanceof HTMLElement,
+      count: shortcutHost?.getAttribute('data-layer-nav-child-link-shortcut-count') || '',
+      shown: shortcutHost?.getAttribute('data-layer-nav-child-link-shortcut-shown') || '',
+      labels: shortcutHost?.getAttribute('data-layer-nav-child-link-shortcut-labels') || '',
+      rows: shortcutRows,
+      selectedChildId: shortcutSelectedChildId,
+      layoutSelectedId: layoutAfterShortcut?.getAttribute('data-selected-id') || '',
+      canvasChildExists: shortcutSelectedChildId
+        ? document.querySelector('[data-element-id="' + CSS.escape(shortcutSelectedChildId) + '"]') instanceof HTMLElement
+        : false,
+    };
     const childRows = [];
     for (let index = navIndex + 1; index < rows.length; index += 1) {
       const row = rows[index];
@@ -24262,6 +24292,7 @@ const testNavBehaviorControls = async (client) => {
         hintText: navHint?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         hintValue: navHint?.getAttribute('data-layer-nav-selection-hint') || '',
       },
+      shortcutSelection,
       childRows,
       selectedChildId: target.id,
       selectedRows,
@@ -24282,6 +24313,14 @@ const testNavBehaviorControls = async (client) => {
       navChildLayerSelection.navLayerMetadata.itemLabels.includes('Docs:/docs') &&
       navChildLayerSelection.navLayerMetadata.childPolicy === 'expand-nav-container-select-link-children' &&
       /Expand to select individual link layers/.test(navChildLayerSelection.navLayerMetadata.hintText) &&
+      navChildLayerSelection.shortcutSelection.hostExists === true &&
+      navChildLayerSelection.shortcutSelection.count === '3' &&
+      navChildLayerSelection.shortcutSelection.shown === '3' &&
+      navChildLayerSelection.shortcutSelection.labels.includes('Docs:/docs') &&
+      navChildLayerSelection.shortcutSelection.rows.length === 3 &&
+      navChildLayerSelection.shortcutSelection.rows.some((row) => row.label === 'Docs' && row.href === '/docs') &&
+      navChildLayerSelection.shortcutSelection.layoutSelectedId === navChildLayerSelection.shortcutSelection.selectedChildId &&
+      navChildLayerSelection.shortcutSelection.canvasChildExists === true &&
       navChildLayerSelection.childRows.length === 3 &&
       navChildLayerSelection.childRows.every((row) => row.depth > navChildLayerSelection.navDepth) &&
       ['Docs', 'Pricing', 'Contact'].every((label) => navChildLayerSelection.childRows.some((row) => row.text.includes(label))) &&

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 11:38 IST
+- **Last updated:** 2026-05-31 12:16 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 12:16 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Layers now expose selectable navigation child links directly; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/LayersPanel.tsx`: added visible nav child-link shortcut chips inside nav layer rows, using the generated link layer label and href so users can select Home/Blog/About-style child links without first discovering the expanded tree.
+- `apps/admin/src/components/editor/LayersPanel.tsx`: exposed smoke-readable child-link shortcut count, label, href, and selected child layer metadata.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: extended the editor drag smoke to assert the nav row shortcuts show `Docs:/docs`, click a real child link layer, and verify the selected canvas layer id changes to that child.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+
+**Next:**
+1. Run `git diff --check`, commit, and push this Layers/nav shortcut slice.
+2. Continue Batch 5 on the next highest-friction release UX/editor surface: responsive canvas behavior, blog/newsletter authoring ergonomics, custom frontend/API discoverability, or deployment readiness.
 
 ## 2026-05-31 11:38 IST
 
