@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 16:59 IST
+- **Last updated:** 2026-05-31 17:22 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 17:22 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Inspector purpose is now explicit in editor chrome and status metadata
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: added a shared Inspector purpose label/key so the main toolbar, floating context bar, and Inspector panel all explain that Inspector covers selected-layer properties, the layer tree, and quick actions.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: wired the same purpose into action-status metadata so command/status tooling does not reduce Inspector to a vague toggle.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: expanded source and rendered shortcut coverage to verify the Inspector purpose label, panel purpose key, aside semantics, and status metadata.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 node apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-shortcuts` -> PASS.
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote projects `backy-public`/`backy-admin` are not created/linked yet.
+- `npm --workspace @backy-cms/admin run build` -> PASS.
+- `npm --workspace @backy/public run build` -> PASS.
+- `vercel whoami` -> PASS as `varshneydevansh`.
+- `vercel project ls` -> PASS; only `filtertube-website` exists under `varshneydevanshs-projects`, so Backy project linkage is still pending.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this Inspector purpose clarity slice.
+2. If the user wants an actual Vercel preview deploy, create/link `backy-public` and `backy-admin`, configure required env/protection, then deploy previews from `apps/public` and `apps/admin`.
+3. Otherwise continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-05-31 16:59 IST
 

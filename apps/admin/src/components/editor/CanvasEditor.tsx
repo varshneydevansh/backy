@@ -214,6 +214,8 @@ const INSPECTOR_EMPTY_QUICK_ADD_ITEMS = CANVAS_CONTEXT_QUICK_ADD_ITEMS.filter(({
 const INSPECTOR_EMPTY_QUICK_ADD_TYPES = INSPECTOR_EMPTY_QUICK_ADD_ITEMS
   .map(({ key }) => key)
   .join(',');
+const INSPECTOR_PANEL_PURPOSE = 'selected-layer properties, layer tree, and quick actions';
+const INSPECTOR_PANEL_PURPOSE_KEY = 'selected-layer-properties-layer-tree-actions';
 
 const CANVAS_TEXT_EDIT_EVENT = 'backy-open-text-editor';
 const CANVAS_TEXT_EDITABLE_TYPES = new Set<CanvasElement['type']>(['text', 'heading', 'paragraph', 'quote', 'list']);
@@ -5184,7 +5186,9 @@ export function CanvasEditor({
         ariaKeyshortcuts: 'I',
         testId: 'editor-toggle-inspector-panel',
         enabled: true,
-        reason: showInspectorPanel && !isCanvasFocusMode ? 'Inspector panel is visible.' : 'Inspector panel can be opened.',
+        reason: showInspectorPanel && !isCanvasFocusMode
+          ? `Inspector panel is visible for ${INSPECTOR_PANEL_PURPOSE}.`
+          : `Inspector panel can be opened for ${INSPECTOR_PANEL_PURPOSE}.`,
         disabledReason: 'Inspector panel command is unavailable.',
       }),
       command({
@@ -7584,6 +7588,12 @@ export function CanvasEditor({
     .filter((command) => command.state === 'ready')
     .length;
   const editorSecondaryToolbarStatus = `Secondary editor toolbar ready. ${editorSecondaryToolbarReadyCount} of ${editorSecondaryToolbarCommands.length} actions ready for the current selection.`;
+  const inspectorPanelToggleActionStatus = showInspectorPanel && !isCanvasFocusMode
+    ? `Hide inspector panel available for ${INSPECTOR_PANEL_PURPOSE}.`
+    : `Show inspector panel available for ${INSPECTOR_PANEL_PURPOSE}.`;
+  const contextInspectorPanelActionStatus = isCanvasFocusMode
+    ? `Show inspector and exit focus mode available for ${INSPECTOR_PANEL_PURPOSE}.`
+    : `Toggle inspector panel available for ${INSPECTOR_PANEL_PURPOSE}.`;
   const editorSecondaryToolbarCommandProps = (commandId: string) => {
     const command = editorCommandsById.get(commandId);
     return {
@@ -8781,14 +8791,16 @@ export function CanvasEditor({
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel: selected-layer properties and quick actions (I)' : 'Show inspector panel: selected-layer properties and quick actions (I)'}
-              aria-label={showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel for selected-layer properties and quick actions' : 'Show inspector panel for selected-layer properties and quick actions'}
+              title={showInspectorPanel && !isCanvasFocusMode ? `Hide inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)` : `Show inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)`}
+              aria-label={showInspectorPanel && !isCanvasFocusMode ? `Hide inspector panel for ${INSPECTOR_PANEL_PURPOSE}` : `Show inspector panel for ${INSPECTOR_PANEL_PURPOSE}`}
               aria-pressed={showInspectorPanel && !isCanvasFocusMode}
               aria-keyshortcuts="I"
               data-testid="editor-toggle-inspector-panel"
               data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
-              data-panel-purpose="selected-layer-properties-actions"
+              data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
+              data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
               {...editorSecondaryToolbarCommandProps('toggle-inspector-panel')}
+              data-action-status={inspectorPanelToggleActionStatus}
             >
               <PanelRight className="w-4 h-4" />
               Inspector
@@ -9400,13 +9412,15 @@ export function CanvasEditor({
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                     )}
-                    title={isCanvasFocusMode ? 'Show inspector and exit focus mode: selected-layer properties and quick actions (I)' : 'Toggle inspector panel: selected-layer properties and quick actions (I)'}
-                    aria-label={isCanvasFocusMode ? 'Show inspector and exit focus mode for selected-layer properties and quick actions' : 'Toggle inspector panel for selected-layer properties and quick actions'}
+                    title={isCanvasFocusMode ? `Show inspector and exit focus mode: ${INSPECTOR_PANEL_PURPOSE} (I)` : `Toggle inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)`}
+                    aria-label={isCanvasFocusMode ? `Show inspector and exit focus mode for ${INSPECTOR_PANEL_PURPOSE}` : `Toggle inspector panel for ${INSPECTOR_PANEL_PURPOSE}`}
                     aria-pressed={showInspectorPanel && !isCanvasFocusMode}
                     aria-keyshortcuts="I"
                     data-testid="editor-context-inspector"
                     data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
-                    data-panel-purpose="selected-layer-properties-actions"
+                    data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
+                    data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
+                    data-action-status={contextInspectorPanelActionStatus}
                     data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
                   >
                     <PanelRight className="h-4 w-4" />
@@ -9842,6 +9856,11 @@ export function CanvasEditor({
             <aside
               className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
               data-testid="editor-inspector"
+              aria-label={`Inspector panel: ${INSPECTOR_PANEL_PURPOSE}`}
+              aria-describedby={editorInspectorActionStatusId}
+              data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
+              data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
+              data-action-status={editorInspectorActionStatus}
             >
               <div className="border-b border-slate-200 p-3">
                 <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-medium">

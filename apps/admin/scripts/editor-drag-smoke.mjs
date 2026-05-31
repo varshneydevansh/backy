@@ -805,10 +805,16 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('onClick={handleToggleInspectorPanel}') &&
       source.includes('data-testid="editor-context-focus"') &&
       source.includes('onClick={handleToggleCanvasFocus}') &&
+      source.includes("const INSPECTOR_PANEL_PURPOSE = 'selected-layer properties, layer tree, and quick actions';") &&
+      source.includes("const INSPECTOR_PANEL_PURPOSE_KEY = 'selected-layer-properties-layer-tree-actions';") &&
       source.includes('data-exits-focus-mode={isCanvasFocusMode ?') &&
       source.includes('Show components and exit focus mode (B)') &&
       source.includes('Show layers and exit focus mode (L)') &&
-      source.includes('Show inspector and exit focus mode: selected-layer properties and quick actions (I)') &&
+      source.includes('Show inspector and exit focus mode: ${INSPECTOR_PANEL_PURPOSE} (I)') &&
+      source.includes('data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}') &&
+      source.includes('data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}') &&
+      source.includes('aria-label={`Inspector panel: ${INSPECTOR_PANEL_PURPOSE}`}') &&
+      source.includes('data-action-status={editorInspectorActionStatus}') &&
       !source.includes('disabled={isCanvasFocusMode}'),
     'Editor canvas context bar must expose quick component, layers, inspector, and focus controls that exit focus mode instead of becoming dead buttons',
   );
@@ -870,9 +876,14 @@ const assertCanvasEditorShortcutSource = () => {
   );
   assert(source.includes('data-testid="editor-toggle-component-panel"') && source.includes('aria-keyshortcuts="B"') && source.includes('data-testid="editor-toggle-inspector-panel"') && source.includes('aria-keyshortcuts="I"'), 'Editor component and inspector panel toggles must expose keyboard shortcut metadata');
   assert(
-    source.includes('Show inspector panel: selected-layer properties and quick actions (I)') &&
-      source.includes('Toggle inspector panel: selected-layer properties and quick actions (I)') &&
-      source.includes('data-panel-purpose="selected-layer-properties-actions"') &&
+    source.includes("const INSPECTOR_PANEL_PURPOSE = 'selected-layer properties, layer tree, and quick actions';") &&
+      source.includes("const INSPECTOR_PANEL_PURPOSE_KEY = 'selected-layer-properties-layer-tree-actions';") &&
+      source.includes('Show inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)') &&
+      source.includes('Toggle inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)') &&
+      source.includes('data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}') &&
+      source.includes('data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}') &&
+      source.includes('aria-label={`Inspector panel: ${INSPECTOR_PANEL_PURPOSE}`}') &&
+      source.includes('data-action-status={editorInspectorActionStatus}') &&
       source.includes('Properties: edit selected-layer content, layout, style, data, and advanced controls') &&
       source.includes('Layers: select, reorder, hide, lock, and inspect root or nested layers') &&
       source.includes('data-panel-purpose="selected-layer-properties"') &&
@@ -12104,6 +12115,9 @@ const readEditorShellPanelState = async (client, label) => {
     const contextDistributeHorizontalButton = document.querySelector('[data-testid="editor-context-distribute-horizontal"]');
     const contextDeleteButton = document.querySelector('[data-testid="editor-context-delete"]');
     const contextActionStatus = document.querySelector('[data-testid="editor-context-action-status"]');
+    const inspectorAside = document.querySelector('[data-testid="editor-inspector"]');
+    const propertiesTab = document.querySelector('[data-testid="editor-tab-properties"]');
+    const layersTab = document.querySelector('[data-testid="editor-tab-layers"]');
     const inspectorEmpty = document.querySelector('[data-testid="editor-inspector-empty"]');
     const inspectorEmptyActions = document.querySelector('[data-testid="editor-inspector-empty-actions"]');
     const inspectorEmptySelectFirst = document.querySelector('[data-testid="editor-inspector-empty-select-first-layer"]');
@@ -12240,8 +12254,16 @@ const readEditorShellPanelState = async (client, label) => {
       contextInspectorPressed: contextInspectorButton?.getAttribute('aria-pressed') === 'true',
       contextInspectorDisabled: contextInspectorButton instanceof HTMLButtonElement ? contextInspectorButton.disabled : null,
       contextInspectorExitsFocus: contextInspectorButton?.getAttribute('data-exits-focus-mode') || '',
+      contextInspectorPurpose: contextInspectorButton?.getAttribute('data-panel-purpose') || '',
+      contextInspectorPurposeLabel: contextInspectorButton?.getAttribute('data-panel-purpose-label') || '',
+      contextInspectorLabel: contextInspectorButton?.getAttribute('aria-label') || '',
       contextFocusShortcut: contextFocusButton?.getAttribute('aria-keyshortcuts') || '',
       contextFocusPressed: contextFocusButton?.getAttribute('aria-pressed') === 'true',
+      inspectorAsideLabel: inspectorAside?.getAttribute('aria-label') || '',
+      inspectorAsideDescribedBy: inspectorAside?.getAttribute('aria-describedby') || '',
+      inspectorAsidePurpose: inspectorAside?.getAttribute('data-panel-purpose') || '',
+      inspectorAsidePurposeLabel: inspectorAside?.getAttribute('data-panel-purpose-label') || '',
+      inspectorAsideStatus: inspectorAside?.getAttribute('data-action-status') || '',
       inspectorEmptyVisible: Boolean(inspectorEmpty),
       inspectorEmptyVisibleLayerCount: Number(inspectorEmpty?.getAttribute('data-visible-layer-count') || 0),
       inspectorEmptyTotalLayerCount: Number(inspectorEmpty?.getAttribute('data-total-layer-count') || 0),
@@ -12256,9 +12278,9 @@ const readEditorShellPanelState = async (client, label) => {
       inspectorEmptyAddButtonCount: inspectorEmptyAddButtons.length,
       inspectorPassiveEmptyTextVisible,
       hasComponentLibrary: Boolean(document.querySelector('[data-testid="editor-component-library"]')),
-      hasInspector: Boolean(document.querySelector('[data-testid="editor-inspector"]')),
-      hasPropertiesTab: Boolean(document.querySelector('[data-testid="editor-tab-properties"]')),
-      hasLayersTab: Boolean(document.querySelector('[data-testid="editor-tab-layers"]')),
+      hasInspector: Boolean(inspectorAside),
+      hasPropertiesTab: Boolean(propertiesTab),
+      hasLayersTab: Boolean(layersTab),
       componentPressed: componentButton?.getAttribute('aria-pressed') === 'true',
       componentShortcut: componentButton?.getAttribute('aria-keyshortcuts') || '',
       componentVisibleAttr: componentButton?.getAttribute('data-panel-visible') || '',
@@ -12269,6 +12291,11 @@ const readEditorShellPanelState = async (client, label) => {
       inspectorPressed: inspectorButton?.getAttribute('aria-pressed') === 'true',
       inspectorShortcut: inspectorButton?.getAttribute('aria-keyshortcuts') || '',
       inspectorVisibleAttr: inspectorButton?.getAttribute('data-panel-visible') || '',
+      inspectorPurpose: inspectorButton?.getAttribute('data-panel-purpose') || '',
+      inspectorPurposeLabel: inspectorButton?.getAttribute('data-panel-purpose-label') || '',
+      inspectorLabel: inspectorButton?.getAttribute('aria-label') || '',
+      inspectorTitle: inspectorButton?.getAttribute('title') || '',
+      inspectorStatus: inspectorButton?.getAttribute('data-action-status') || '',
       focusPressed: focusButton?.getAttribute('aria-pressed') === 'true',
       focusShortcut: focusButton?.getAttribute('aria-keyshortcuts') || '',
       focusAttr: focusButton?.getAttribute('data-focus-mode') || '',
@@ -12277,6 +12304,8 @@ const readEditorShellPanelState = async (client, label) => {
 
   assert(state.hasLayout, `Editor shell layout state is missing during ${label}: ${JSON.stringify(state)}`);
   assert(state.hasContextBar, `Editor canvas context bar is missing during ${label}: ${JSON.stringify(state)}`);
+  const expectedInspectorPurpose = 'selected-layer properties, layer tree, and quick actions';
+  const expectedInspectorPurposeKey = 'selected-layer-properties-layer-tree-actions';
   assert(
     state.shellShortcuts === 'components:B;inspector:I;layers:L;focus:F',
     `Editor shell shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`,
@@ -12429,6 +12458,17 @@ const readEditorShellPanelState = async (client, label) => {
   assert(state.contextInspectorShortcut === 'I', `Context inspector shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.contextLayersShortcut === 'L', `Context layers shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.contextFocusShortcut === 'F', `Context focus shortcut metadata mismatch during ${label}: ${JSON.stringify(state)}`);
+  assert(
+    state.inspectorPurpose === expectedInspectorPurposeKey &&
+      state.inspectorPurposeLabel === expectedInspectorPurpose &&
+      state.inspectorLabel.includes(expectedInspectorPurpose) &&
+      state.inspectorTitle.includes(expectedInspectorPurpose) &&
+      state.inspectorStatus.includes(expectedInspectorPurpose) &&
+      state.contextInspectorPurpose === expectedInspectorPurposeKey &&
+      state.contextInspectorPurposeLabel === expectedInspectorPurpose &&
+      state.contextInspectorLabel.includes(expectedInspectorPurpose),
+    `Inspector toggle purpose metadata should explain selected-layer properties, layer tree, and quick actions during ${label}: ${JSON.stringify(state)}`,
+  );
   assert(state.componentPressed === state.componentPanelVisible, `Component panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.inspectorPressed === state.inspectorPanelVisible, `Inspector panel pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
   assert(state.focusPressed === state.focusMode, `Focus mode pressed state mismatch during ${label}: ${JSON.stringify(state)}`);
@@ -12500,7 +12540,17 @@ const readEditorShellPanelState = async (client, label) => {
     assert(!state.hasComponentLibrary, `Component panel should be hidden during ${label}: ${JSON.stringify(state)}`);
   }
   if (state.inspectorPanelVisible) {
-    assert(state.hasInspector && state.hasPropertiesTab && state.hasLayersTab, `Inspector panel should be visible during ${label}: ${JSON.stringify(state)}`);
+    assert(
+      state.hasInspector &&
+        state.hasPropertiesTab &&
+        state.hasLayersTab &&
+        state.inspectorAsidePurpose === expectedInspectorPurposeKey &&
+        state.inspectorAsidePurposeLabel === expectedInspectorPurpose &&
+        state.inspectorAsideLabel.includes(expectedInspectorPurpose) &&
+        state.inspectorAsideDescribedBy === 'editor-inspector-action-status' &&
+        state.inspectorAsideStatus.length > 0,
+      `Inspector panel should be visible and self-describing during ${label}: ${JSON.stringify(state)}`,
+    );
   } else {
     assert(!state.hasInspector, `Inspector panel should be hidden during ${label}: ${JSON.stringify(state)}`);
   }

@@ -48,6 +48,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Site switching and domain setup should be one visible flow in shared chrome. Keep a no-signout site selector, a direct Domains/subdomains target, and machine-readable domain state together so users do not treat site switching, Sites, and DNS setup as separate hidden workflows.
 - [2026-05-31] Custom frontend/API handoff should be discoverable from global admin search, not only from deep Help or site-detail panels. Search results should name the agent handoff and component API contract in the exact terms frontend agents need.
 - [2026-05-31] Section templates should not be discoverable only as a small category filter. Keep a persistent Page sections starter shelf with quick-add section presets that uses the same component add/recent/action-status path as normal library items.
+- [2026-05-31] Editor chrome labels must explain unfamiliar modes through purpose metadata, not extra visible helper copy. Inspector should consistently identify selected-layer properties, layer tree, and quick actions across toolbar buttons, floating context controls, panel aria labels, and smoke-testable action status.
 
 ## Product and Domain Invariants
 
@@ -62,6 +63,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Env examples are part of deployment safety. Keep `.env.example` split by `backy-public`, protected `backy-admin`, and custom website frontend so Vite/client env never looks like a valid place for server-only admin/database/provider secrets.
 - [2026-05-31] Public custom-domain and locale-domain discovery must require `site.settings.domainVerification.status === "verified"` for the exact host. A saved domain string alone is configuration intent, not routing permission.
 - [2026-05-31] Help content should mirror deploy behavior immediately after hardening changes; otherwise users and frontend agents keep following the old, looser mental model.
+- [2026-05-31] Vercel source readiness is not the same as deployability to the user's account. A green build plus `test:vercel-preview-readiness` means code/config is ready, but actual preview deploy still needs created/linked `backy-public` and `backy-admin` projects, required env, and deployment protection.
 
 ## Known Traps
 
