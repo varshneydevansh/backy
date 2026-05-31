@@ -38,6 +38,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Dense Pages-table fixes should prefer route-local column budgets before shared grid changes. Keep delivery/action cells clipped or in-flow, but reduce the total table width so the surface feels operational instead of horizontally hostile.
 - [2026-05-31] Nested keyboard nudge tests must account for parent/canvas movement bounds. A child near the right edge may correctly move less than the nudge step on X while still moving a full step on Y, and authored geometry data attrs are more reliable than computed CSS for this assertion.
 - [2026-05-31] Avoid unbounded `requestAnimationFrame` waits inside long CDP `Runtime.evaluate` smoke steps. In backgrounded or heavily exercised Chrome tabs, rAF can stall; use bounded timer settles and include the current smoke step in timeout errors.
+- [2026-05-31] Editor Preview should fit width and preserve vertical scroll, not fit the whole authored height. Rendered smoke should prove `scrollHeight > clientHeight` and that lower authored content becomes visible after scrolling, because source guards alone can miss a tiny, non-scrollable preview.
 
 ## Product and Domain Invariants
 

@@ -32,6 +32,7 @@ const MARQUEE_ORIGIN_SMOKE = process.env.BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE === '
 const NESTED_GROUP_SMOKE = process.env.BACKY_EDITOR_NESTED_GROUP_SMOKE === '1';
 const ANIMATION_SMOKE = process.env.BACKY_EDITOR_ANIMATION_SMOKE === '1';
 const ZOOM_SMOKE = process.env.BACKY_EDITOR_ZOOM_SMOKE === '1';
+const PREVIEW_SCROLL_SMOKE = process.env.BACKY_EDITOR_PREVIEW_SCROLL_SMOKE === '1';
 const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
@@ -1492,6 +1493,8 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes("isPreview ? 'overflow-auto' : 'overflow-visible'") && source.includes('data-preview-scroll-policy={isPreview ?'), 'Editor preview canvas must remain scrollable when authored content extends beyond the selected viewport.');
   assert(editorSource.includes('const collectCanvasContentBounds = (') && editorSource.includes('const expandCanvasSizeToContent = (') && editorSource.includes('height: Math.max(canvasSize.height, Math.ceil(bounds.maxY + CANVAS_CONTENT_PADDING))'), 'Editor shell must calculate a content-aware canvas frame for authored elements beyond the selected viewport.');
   assert(editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
+  assert(editorSource.includes("data-preview-scale-model={isPreview ? 'fit-width-scroll-y'") && editorSource.includes('const nextScale = Math.min(1, widthScale);'), 'Editor preview must fit width while preserving vertical scroll for long pages.');
+  assert(smokeSource.includes('BACKY_EDITOR_PREVIEW_SCROLL_SMOKE') && smokeSource.includes('testEditorPreviewScrollBounds'), 'Editor preview scrolling must have rendered smoke coverage.');
   assert(editorSource.includes('data-editor-content-bounds="expanded"') && editorSource.includes('width: renderedCanvasSize.width') && editorSource.includes('height: renderedCanvasSize.height'), 'Editor edit surface must also expand to authored content bounds so resized root sections do not clip later layers.');
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
   assert(
@@ -13635,6 +13638,153 @@ const setCanvasZoomSlider = async (client, percent, label) => {
     afterPageZoom,
     pageZoomStable,
     state: await readZoomControlState(client, label),
+  };
+};
+
+const readEditorPreviewScrollState = async (client, label, targetElementId = 'smoke-flow-after') => evaluate(client, `(() => {
+  const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+  const surface = document.querySelector('[data-testid="editor-canvas-scale-surface"]');
+  const canvas = surface?.querySelector('[data-preview-scroll-policy]');
+  const target = document.querySelector('[data-element-id="${targetElementId}"]');
+  if (!(viewport instanceof HTMLElement) || !(surface instanceof HTMLElement) || !(canvas instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+    return {
+      ok: false,
+      label: ${JSON.stringify(label)},
+      reason: 'missing-preview-scroll-node',
+      hasViewport: viewport instanceof HTMLElement,
+      hasSurface: surface instanceof HTMLElement,
+      hasCanvas: canvas instanceof HTMLElement,
+      hasTarget: target instanceof HTMLElement,
+    };
+  }
+
+  const viewportRect = viewport.getBoundingClientRect();
+  const surfaceRect = surface.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const viewportStyle = getComputedStyle(viewport);
+  const canvasStyle = getComputedStyle(canvas);
+  const scale = Number(surface.getAttribute('data-canvas-scale') || 0);
+  const scaleWidth = Number(surface.getAttribute('data-preview-scale-width') || 0);
+  const scaleHeight = Number(surface.getAttribute('data-preview-scale-height') || 0);
+  const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+  const targetVisible =
+    targetRect.bottom > viewportRect.top + 4 &&
+    targetRect.top < viewportRect.bottom - 4 &&
+    targetRect.right > viewportRect.left + 4 &&
+    targetRect.left < viewportRect.right - 4;
+
+  return {
+    ok: true,
+    label: ${JSON.stringify(label)},
+    previewZoom: viewport.getAttribute('data-preview-zoom') || '',
+    scaleBasis: viewport.getAttribute('data-preview-scale-basis') || '',
+    scaleModel: viewport.getAttribute('data-preview-scale-model') || '',
+    scrollOwner: viewport.getAttribute('data-preview-scroll-owner') || '',
+    surfaceContentBounds: surface.getAttribute('data-preview-content-bounds') || '',
+    surfaceScaleModel: surface.getAttribute('data-preview-scale-model') || '',
+    canvasScrollPolicy: canvas.getAttribute('data-preview-scroll-policy') || '',
+    viewportOverflowY: viewportStyle.overflowY,
+    canvasOverflowY: canvasStyle.overflowY,
+    scrollTop: Math.round(viewport.scrollTop),
+    scrollHeight: Math.round(viewport.scrollHeight),
+    clientHeight: Math.round(viewport.clientHeight),
+    maxScrollTop: Math.round(maxScrollTop),
+    scrollableY: viewport.scrollHeight > viewport.clientHeight + 32,
+    scale,
+    scaleWidth,
+    scaleHeight,
+    surfaceVisualWidth: Math.round(surfaceRect.width),
+    surfaceVisualHeight: Math.round(surfaceRect.height),
+    targetElementId: ${JSON.stringify(targetElementId)},
+    targetTop: Math.round(targetRect.top),
+    targetBottom: Math.round(targetRect.bottom),
+    targetVisible,
+    targetBelowViewport: targetRect.top > viewportRect.bottom,
+    viewportTop: Math.round(viewportRect.top),
+    viewportBottom: Math.round(viewportRect.bottom),
+  };
+})()`);
+
+const testEditorPreviewScrollBounds = async (client) => {
+  await clickButtonByAriaLabel(client, 'Desktop canvas');
+  await waitForEditorBreakpoint(client, 'desktop');
+  await setCanvasZoomSlider(client, 100, 'before preview scroll smoke');
+  await clickControlByTestId(client, 'editor-preview-toggle');
+
+  let initial = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    initial = await readEditorPreviewScrollState(client, 'preview scroll initial');
+    if (
+      initial?.ok &&
+      initial.previewZoom === 'canvas-scoped' &&
+      initial.scaleModel === 'fit-width-scroll-y' &&
+      initial.scrollableY &&
+      initial.targetBelowViewport
+    ) {
+      break;
+    }
+    await sleep(150);
+  }
+
+  assert(initial?.ok, `Preview scroll smoke could not read preview nodes: ${JSON.stringify(initial)}`);
+  assert(
+    initial.previewZoom === 'canvas-scoped' &&
+      initial.scaleBasis === 'expanded-content-bounds' &&
+      initial.scaleModel === 'fit-width-scroll-y' &&
+      initial.scrollOwner === 'editor-canvas-viewport' &&
+      initial.surfaceContentBounds === 'expanded' &&
+      initial.surfaceScaleModel === 'fit-width-scroll-y' &&
+      initial.canvasScrollPolicy === 'canvas-overflow-auto',
+    `Preview scroll metadata is incomplete: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    initial.scale > 0 &&
+      initial.scale <= 1 &&
+      initial.scaleHeight > initial.clientHeight &&
+      initial.surfaceVisualHeight > initial.clientHeight + 48,
+    `Preview should fit width and keep a vertically scrollable long page instead of fitting height: ${JSON.stringify(initial)}`,
+  );
+  assert(
+    initial.scrollableY &&
+      initial.maxScrollTop > 48 &&
+      initial.targetBelowViewport === true &&
+      initial.targetVisible === false &&
+      /auto|scroll/i.test(initial.viewportOverflowY),
+    `Preview viewport is not proving vertical scroll before scrolling: ${JSON.stringify(initial)}`,
+  );
+
+  const scrollRequest = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    if (!(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-viewport' };
+    }
+    viewport.scrollTop = viewport.scrollHeight;
+    return {
+      ok: true,
+      requestedScrollTop: Math.round(viewport.scrollHeight),
+      scrollTop: Math.round(viewport.scrollTop),
+      maxScrollTop: Math.round(Math.max(0, viewport.scrollHeight - viewport.clientHeight)),
+    };
+  })()`);
+  assert(scrollRequest?.ok, `Unable to scroll preview viewport: ${JSON.stringify(scrollRequest)}`);
+  await sleep(180);
+
+  const afterScroll = await readEditorPreviewScrollState(client, 'preview scroll after scroll');
+  assert(afterScroll?.ok, `Preview scroll state missing after scrolling: ${JSON.stringify(afterScroll)}`);
+  assert(
+    afterScroll.scrollTop > initial.scrollTop + 48 &&
+      afterScroll.targetVisible === true &&
+      afterScroll.scrollableY === true &&
+      afterScroll.scaleModel === 'fit-width-scroll-y',
+    `Preview lower content was not reachable after scrolling: ${JSON.stringify({ initial, scrollRequest, afterScroll })}`,
+  );
+
+  await clickControlByTestId(client, 'editor-preview-toggle');
+
+  return {
+    initial,
+    scrollRequest,
+    afterScroll,
   };
 };
 
@@ -26726,7 +26876,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || PREVIEW_SCROLL_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -27116,6 +27266,19 @@ const main = async () => {
         mode: 'zoom',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         zoomControls,
+      }, null, 2));
+      return;
+    }
+
+    if (PREVIEW_SCROLL_SMOKE) {
+      assert(!EDITOR_PATH, 'Preview scroll smoke currently requires an internally created smoke page');
+      const previewScroll = await testEditorPreviewScrollBounds(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'preview-scroll',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        previewScroll,
       }, null, 2));
       return;
     }

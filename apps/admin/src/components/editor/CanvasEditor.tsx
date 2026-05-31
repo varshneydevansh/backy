@@ -2771,7 +2771,9 @@ export function CanvasEditor({
     const availableHeight = Math.max(container.clientHeight - 120, 1);
     const fitWidth = isPreview ? renderedCanvasSize.width : size.width;
     const fitHeight = isPreview ? renderedCanvasSize.height : size.height;
-    const nextScale = Math.min(1.5, availableWidth / fitWidth, availableHeight / fitHeight);
+    const nextScale = isPreview
+      ? Math.min(1, availableWidth / fitWidth)
+      : Math.min(1.5, availableWidth / fitWidth, availableHeight / fitHeight);
     const normalizedScale = Number(nextScale.toFixed(2));
     if (isPreview) {
       setCanvasScaleValue(normalizedScale);
@@ -7222,11 +7224,8 @@ export function CanvasEditor({
       }
 
       const availableWidth = Math.max(container.clientWidth - 64, 0);
-      const availableHeight = Math.max(container.clientHeight - 64, 0);
-
       const widthScale = availableWidth / renderedCanvasSize.width;
-      const heightScale = availableHeight / renderedCanvasSize.height;
-      const nextScale = Math.min(1, widthScale, heightScale);
+      const nextScale = Math.min(1, widthScale);
 
       setCanvasScaleValue(Number.isFinite(nextScale) ? Math.max(0.25, nextScale) : 1);
     };
@@ -8978,6 +8977,7 @@ export function CanvasEditor({
             data-preview-scale-width={isPreview ? renderedCanvasSize.width : undefined}
             data-preview-scale-height={isPreview ? renderedCanvasSize.height : undefined}
             data-preview-scroll-owner={isPreview ? 'editor-canvas-viewport' : undefined}
+            data-preview-scale-model={isPreview ? 'fit-width-scroll-y' : undefined}
             data-canvas-zoom-listener-scope="window-visualviewport-document-root-body-shell-viewport-surface-capture"
             data-canvas-zoom-native-phase="layout-effect-capture"
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
@@ -9430,6 +9430,7 @@ export function CanvasEditor({
                     data-preview-zoom="canvas-scoped"
                     data-preview-scroll-owner="editor-canvas-viewport"
                     data-preview-scale-basis="expanded-content-bounds"
+                    data-preview-scale-model="fit-width-scroll-y"
                     data-preview-scale-width={renderedCanvasSize.width}
                     data-preview-scale-height={renderedCanvasSize.height}
                     style={{

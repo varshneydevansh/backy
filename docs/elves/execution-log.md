@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 11:08 IST
+- **Last updated:** 2026-05-31 11:38 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 11:38 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; editor Preview now fits width while preserving vertical scroll; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: changed Preview scaling from width-and-height fit to width fit, so long authored pages stay readable and scrollable instead of shrinking to a tiny full-page thumbnail.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: added `data-preview-scale-model="fit-width-scroll-y"` metadata on the preview viewport/surface for debugging and smoke coverage.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added `BACKY_EDITOR_PREVIEW_SCROLL_SMOKE=1`, which toggles Preview, verifies width-fit/scroll metadata, proves `scrollHeight > clientHeight`, scrolls the canvas viewport, and asserts lower authored content becomes visible.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_PREVIEW_SCROLL_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> FAIL first on a brittle hardcoded fixture-height assertion (`2100` vs expanded content `1968`), then corrected to assert scrollable visual height.
+- `BACKY_EDITOR_PREVIEW_SCROLL_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+
+**Next:**
+1. Commit and push this preview-scroll editor UX slice.
+2. Continue Batch 5 on the next highest-friction release UX/editor surface: layer map/mobile behavior, page/blog editor ergonomics, or deployment/custom-frontend readiness.
 
 ## 2026-05-31 11:08 IST
 
