@@ -944,11 +944,11 @@ export function ComponentLibrary({
       <div
         className={cn(
           'min-h-0 flex-1 space-y-3 overflow-y-auto p-2',
-          componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3',
+          'pb-3',
         )}
         data-testid="editor-component-list"
         data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
-        data-component-preview-reserved-space="sticky-footer"
+        data-component-preview-reserved-space="rail-footer"
         data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
@@ -1086,10 +1086,10 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)] overflow-hidden border-t border-slate-200 bg-slate-50/95 p-2.5 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
+      className="pointer-events-none shrink-0 max-h-[min(12rem,38vh)] overflow-hidden border-t border-slate-200 bg-slate-50/95 p-2.5 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
       data-testid="editor-component-preview"
       data-component-preview={itemKey}
-      data-component-preview-placement="sticky-footer"
+      data-component-preview-placement="rail-footer"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">

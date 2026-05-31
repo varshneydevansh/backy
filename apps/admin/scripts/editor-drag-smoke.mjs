@@ -1646,14 +1646,15 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}") &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
-      source.includes('data-component-preview-reserved-space="sticky-footer"') &&
+      source.includes('data-component-preview-reserved-space="rail-footer"') &&
       source.includes('const componentPreviewVisible = Boolean(previewItem) && !draggingItemKey;') &&
-      source.includes("componentPreviewVisible ? 'pb-[12.5rem]' : 'pb-3'") &&
+      source.includes("'pb-3',") &&
       source.includes("data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}") &&
       source.includes('data-component-preview-hidden-while-dragging="true"') &&
       source.includes('{componentPreviewVisible && previewItem && (') &&
-      source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
-      source.includes('data-component-preview-placement="sticky-footer"') &&
+      source.includes('pointer-events-none shrink-0 max-h-[min(12rem,38vh)]') &&
+      source.includes('data-component-preview-placement="rail-footer"') &&
+      !source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
       source.includes('data-component-library-item-actions="visible"') &&
@@ -15230,6 +15231,30 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const preview = document.querySelector('[data-testid="editor-component-preview"]');
     const library = document.querySelector('[data-testid="editor-component-library"]');
     const list = document.querySelector('[data-testid="editor-component-list"]');
+    const libraryRect = library instanceof HTMLElement ? library.getBoundingClientRect() : null;
+    const listRect = list instanceof HTMLElement ? list.getBoundingClientRect() : null;
+    const previewRect = preview instanceof HTMLElement ? preview.getBoundingClientRect() : null;
+    const rectData = (rect) => rect
+      ? {
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        left: Math.round(rect.left),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      }
+      : null;
+    const previewClipped = Boolean(libraryRect && previewRect && (
+      previewRect.top < libraryRect.top - 1 ||
+      previewRect.right > libraryRect.right + 1 ||
+      previewRect.bottom > libraryRect.bottom + 1 ||
+      previewRect.left < libraryRect.left - 1
+    ));
+    const previewVisibleInRailFlow = Boolean(libraryRect && listRect && previewRect &&
+      previewRect.top >= listRect.bottom - 1 &&
+      previewRect.bottom <= libraryRect.bottom + 1 &&
+      previewRect.left >= libraryRect.left - 1 &&
+      previewRect.right <= libraryRect.right + 1);
     const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
     const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
     const shellModeToggle = document.querySelector('[data-testid="editor-component-shell-mode-toggle"]');
@@ -15492,6 +15517,13 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       dividerFavoritePressed: favoriteButton?.getAttribute('aria-pressed') === 'true',
       previewKey: preview?.getAttribute('data-component-preview') || null,
       previewPlacement: preview?.getAttribute('data-component-preview-placement') || null,
+      previewGeometry: {
+        libraryRect: rectData(libraryRect),
+        listRect: rectData(listRect),
+        previewRect: rectData(previewRect),
+        previewClipped,
+        previewVisibleInRailFlow,
+      },
       previewText: preview?.textContent || '',
       storedFavorites: (() => {
         try {
@@ -16086,7 +16118,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.viewMode === 'tiles' &&
       initial.viewModeStorageKey === 'backy.editor.componentLibrary.viewMode' &&
       initial.listDensity === 'visual-tiles' &&
-      initial.listPreviewReservedSpace === 'sticky-footer' &&
+      initial.listPreviewReservedSpace === 'rail-footer' &&
       initial.summary.category === 'essentials' &&
       initial.summary.shellMode === 'compact' &&
       initial.summary.viewMode === 'tiles' &&
@@ -16398,20 +16430,24 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   const dividerPreview = await readComponentLibraryState(client, 'divider preview');
   assert(dividerPreview.previewKey === 'divider', `Hovering divider did not show divider preview: ${JSON.stringify(dividerPreview)}`);
   assert(
-    dividerPreview.previewPlacement === 'sticky-footer' &&
+    dividerPreview.previewPlacement === 'rail-footer' &&
+      dividerPreview.previewGeometry.previewVisibleInRailFlow &&
+      !dividerPreview.previewGeometry.previewClipped &&
       /Divider/.test(dividerPreview.previewText) &&
       /300 x 2/.test(dividerPreview.previewText),
-    `Divider preview content or placement missing expected metadata: ${JSON.stringify(dividerPreview)}`,
+    `Divider preview content, placement, or rail geometry missing expected metadata: ${JSON.stringify(dividerPreview)}`,
   );
 
   await hoverControlBySelector(client, '[data-component-library-item="image"]');
   const imagePreview = await readComponentLibraryState(client, 'image preview');
   assert(imagePreview.previewKey === 'image', `Hovering image did not update component preview: ${JSON.stringify(imagePreview)}`);
   assert(
-    imagePreview.previewPlacement === 'sticky-footer' &&
+    imagePreview.previewPlacement === 'rail-footer' &&
+      imagePreview.previewGeometry.previewVisibleInRailFlow &&
+      !imagePreview.previewGeometry.previewClipped &&
       /Image/.test(imagePreview.previewText) &&
       /300 x 200/.test(imagePreview.previewText),
-    `Image preview content or placement missing expected metadata: ${JSON.stringify(imagePreview)}`,
+    `Image preview content, placement, or rail geometry missing expected metadata: ${JSON.stringify(imagePreview)}`,
   );
 
   await leaveControlBySelector(client, '[data-component-library-item="image"]');

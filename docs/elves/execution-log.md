@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 06:31 IST
+- **Last updated:** 2026-05-31 06:47 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 06:47 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; component-library preview now docks in the rail instead of overlaying/clipping the scroll list; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`: hover previews now render as a normal `shrink-0` rail footer with `data-component-preview-placement="rail-footer"` instead of an absolutely positioned sticky overlay. The component list keeps stable bottom padding and no longer needs the `pb-[12.5rem]` reserved-space hack.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: component-library source and rendered smokes now assert the `rail-footer` contract, record preview/list/library geometry, and fail if the hover preview is clipped outside the rail or not placed after the scroll list in normal flow.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_LIBRARY_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `mcp__computer_use__.get_app_state({ app: "Google Chrome" })` -> FAILED with `cgWindowNotFound`; rendered CDP smoke was used for visual/interaction verification.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: section reflow/resizing semantics, blog/newsletter authoring polish, Help discoverability, deployment readiness, or remaining canvas ergonomics.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 06:31 IST
 
