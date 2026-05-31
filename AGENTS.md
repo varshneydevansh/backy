@@ -41,6 +41,10 @@ Read order:
 7. Render verification
    - Render: `/api/sites/:siteId/render?path=/...`
 
+8. Deployment topology
+   - Machine-readable pointer: `data.handoff.deploymentTopology` or `manifest.data.contract.customFrontendAgentHandoff.deploymentTopology`.
+   - Deploy Backy as protected `backy-admin` plus public `backy-public`; deploy each custom website as a separate frontend that only receives public Backy API/site env.
+
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).
 
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.

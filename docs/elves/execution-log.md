@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 13:39 IST
+- **Last updated:** 2026-05-31 14:13 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,39 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 14:13 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** deployment readiness slice completed; live Vercel projects not created in this slice
+
+**What changed:**
+- Added `backy.deployment-topology.v1` to the shared custom frontend agent handoff contract so `/agent-handoff`, manifest, and OpenAPI now expose the protected `backy-admin`, public `backy-public`, and separate custom-frontend project model directly.
+- Added top-level `deploymentTopology` to the direct `/api/sites/:siteId/agent-handoff` response.
+- Updated the frontend manifest schema, OpenAPI schema, SDK generated type fixtures, SDK smoke, public frontend-contract smoke, custom frontend handoff spec, and `AGENTS.md` so deploy/frontend agents can read required/forbidden env, verified-domain policy, and release verification commands without relying on README prose.
+
+**Vercel readiness findings:**
+- Vercel MCP token is expired, but local Vercel CLI is authenticated as `varshneydevansh`.
+- Vercel team visible: `varshneydevanshs-projects`.
+- Existing Vercel projects visible from CLI: only `filtertube-website`; Backy is not yet linked as `backy-public` or `backy-admin`.
+- Backy is deployable as preview once those two Vercel projects are created/linked and env is configured.
+
+**Commands run:**
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:frontend-contract-types` -> PASS.
+- `BACKY_HELP_SOURCE_ONLY=1 npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `BACKY_NEWSLETTER_SOURCE_ONLY=1 npm run test:newsletter --workspace @backy-cms/admin` -> PASS before this patch while scouting backend readiness.
+- `BACKY_BLOG_EDITOR_SOURCE_ONLY=1 npm run test:blog-editor --workspace @backy-cms/admin` -> PASS before this patch while scouting backend readiness.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck` -> PASS.
+- `npm run doctor:release-certification` -> PASS, still 41 Ready / 4 Partial / 0 Prototype / 0 Missing without external provider artifacts.
+- `git diff --check` -> PASS.
+- `npm run build --workspace @backy/public` -> PASS.
+- `npm run build --workspace @backy-cms/admin` -> PASS with existing large Vite bundle warning.
+
+**Residual risk:**
+- The admin Vite build emits a large JS chunk warning. This is not a deployment blocker, but admin code splitting should be scheduled before broad production traffic.
+- The four Partial rows remain external Settings/Commerce provider certification artifact gates and were not faked.
 
 ## 2026-05-31 13:39 IST
 

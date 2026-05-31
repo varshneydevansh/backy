@@ -2102,6 +2102,17 @@ const assertComponentApiLayoutBehavior = (contract, label) => {
   assert(navBinding?.fields?.includes('site.navigation.primary'), `${label} component API layout behavior missing primary nav binding`);
 };
 assertComponentApiLayoutBehavior(customFrontendAgentHandoff.componentApiContract, 'manifest()');
+assert(customFrontendAgentHandoff.deploymentTopology?.schemaVersion === 'backy.deployment-topology.v1', 'manifest() custom frontend agent handoff missing deployment topology schema');
+assert(customFrontendAgentHandoff.deploymentTopology?.model === 'protected-admin-public-api-separated-frontends', 'manifest() custom frontend agent handoff deployment topology model drifted');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyAdmin?.publicStatus === 'protected', 'manifest() deployment topology must mark backy-admin protected');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyAdmin?.requiredEnv?.includes('VITE_BACKY_PUBLIC_API_BASE_URL'), 'manifest() deployment topology missing backy-admin public API env');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyAdmin?.forbiddenEnv?.includes('BACKY_ADMIN_API_KEY'), 'manifest() deployment topology must forbid admin API keys in admin shell');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyPublic?.publicStatus === 'public', 'manifest() deployment topology must mark backy-public public');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyPublic?.serves?.includes('agent-handoff'), 'manifest() deployment topology missing public agent-handoff surface');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.requiredEnv?.includes('BACKY_PUBLIC_API_BASE_URL'), 'manifest() deployment topology missing custom frontend public API env');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.optionalEnv?.includes('BACKY_SITE_PUBLIC_HOST'), 'manifest() deployment topology missing optional custom frontend host env');
+assert(customFrontendAgentHandoff.deploymentTopology?.domainPolicy?.verificationRequired === true, 'manifest() deployment topology must require verified domains');
+assert(customFrontendAgentHandoff.deploymentTopology?.verification?.releaseConfigSmoke === 'npm run test:vercel-release-config', 'manifest() deployment topology missing Vercel release smoke');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
@@ -2127,6 +2138,9 @@ assert(agentHandoff.data.componentApiContract?.readableFieldPaths?.includes('ele
 assert(agentHandoff.data.componentApiContract?.elementAddressing?.nestedChildrenField === 'children', 'customFrontendAgentHandoff() component API contract missing child addressing');
 assertComponentApiContractCoverage(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
 assertComponentApiLayoutBehavior(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
+assert(agentHandoff.data.deploymentTopology?.schemaVersion === 'backy.deployment-topology.v1', 'customFrontendAgentHandoff() missing top-level deployment topology');
+assert(agentHandoff.data.deploymentTopology?.projects?.backyAdmin?.publicStatus === 'protected', 'customFrontendAgentHandoff() deployment topology must mark admin protected');
+assert(agentHandoff.data.handoff?.deploymentTopology?.verification?.frontendContractSmoke === 'npm run test:frontend-contract-types', 'customFrontendAgentHandoff() handoff deployment topology missing frontend contract smoke');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');
 const cachedAgentHandoff = await client.customFrontendAgentHandoffCached();

@@ -784,6 +784,111 @@
           },
           "required": ["schemaVersion", "siteId", "identifiers", "publicResolution", "customDomainManagement", "subdomainRouting", "customFrontendDeployment", "agentRules"]
         },
+        "deploymentTopology": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "schemaVersion": { "const": "backy.deployment-topology.v1" },
+            "model": { "const": "protected-admin-public-api-separated-frontends" },
+            "siteId": { "type": "string", "minLength": 1 },
+            "projects": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "backyAdmin": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "project": { "const": "backy-admin" },
+                    "rootDirectory": { "const": "apps/admin" },
+                    "publicStatus": { "const": "protected" },
+                    "requiredEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "VITE_BACKY_PUBLIC_API_BASE_URL" }
+                    },
+                    "forbiddenEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "BACKY_DATABASE_URL" }
+                    }
+                  },
+                  "required": ["project", "rootDirectory", "publicStatus", "requiredEnv", "forbiddenEnv"]
+                },
+                "backyPublic": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "project": { "const": "backy-public" },
+                    "rootDirectory": { "const": "apps/public" },
+                    "publicStatus": { "const": "public" },
+                    "requiredEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "BACKY_DATABASE_URL" }
+                    },
+                    "serves": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "agent-handoff" }
+                    }
+                  },
+                  "required": ["project", "rootDirectory", "publicStatus", "requiredEnv", "serves"]
+                },
+                "customFrontend": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "publicStatus": { "const": "public" },
+                    "requiredEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "BACKY_PUBLIC_API_BASE_URL" }
+                    },
+                    "optionalEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "BACKY_SITE_PUBLIC_HOST" }
+                    },
+                    "forbiddenEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  "required": ["publicStatus", "requiredEnv", "optionalEnv", "forbiddenEnv"]
+                }
+              },
+              "required": ["backyAdmin", "backyPublic", "customFrontend"]
+            },
+            "domainPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "verificationRequired": { "const": true },
+                "verificationStatusField": { "const": "site.settings.domainVerification.status" },
+                "examples": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "blog.example.com" }
+                }
+              },
+              "required": ["verificationRequired", "verificationStatusField", "examples"]
+            },
+            "verification": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "releaseConfigSmoke": { "const": "npm run test:vercel-release-config" },
+                "frontendContractSmoke": { "const": "npm run test:frontend-contract-types" },
+                "releaseDoctor": { "const": "npm run doctor:release-certification" },
+                "providerArtifactAdmission": { "const": "npm run ci:provider-artifact-admission" }
+              },
+              "required": ["releaseConfigSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission"]
+            },
+            "secretHandling": { "type": "string", "minLength": 1 }
+          },
+          "required": ["schemaVersion", "model", "siteId", "projects", "domainPolicy", "verification", "secretHandling"]
+        },
         "designState": {
           "type": "object",
           "additionalProperties": true,
@@ -821,7 +926,7 @@
           "required": ["includesSecretValues", "publicDiscoveryOnly", "adminWritesRequireAuth", "secretHandling"]
         }
       },
-      "required": ["schemaVersion", "source", "agentBrief", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "designState", "rules", "privacy"]
+      "required": ["schemaVersion", "source", "agentBrief", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "deploymentTopology", "designState", "rules", "privacy"]
     },
     "databaseCertification": {
       "type": "object",

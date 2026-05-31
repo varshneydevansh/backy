@@ -6320,6 +6320,121 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
               },
             },
+            CustomFrontendDeploymentTopology: {
+              type: "object",
+              required: [
+                "schemaVersion",
+                "model",
+                "siteId",
+                "projects",
+                "domainPolicy",
+                "verification",
+                "secretHandling",
+              ],
+              additionalProperties: true,
+              properties: {
+                schemaVersion: {
+                  const: "backy.deployment-topology.v1",
+                },
+                model: {
+                  const: "protected-admin-public-api-separated-frontends",
+                },
+                siteId: { type: "string" },
+                projects: {
+                  type: "object",
+                  required: ["backyAdmin", "backyPublic", "customFrontend"],
+                  additionalProperties: true,
+                  properties: {
+                    backyAdmin: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        project: { const: "backy-admin" },
+                        rootDirectory: { const: "apps/admin" },
+                        publicStatus: { const: "protected" },
+                        requiredEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        forbiddenEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                      },
+                    },
+                    backyPublic: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        project: { const: "backy-public" },
+                        rootDirectory: { const: "apps/public" },
+                        publicStatus: { const: "public" },
+                        requiredEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        serves: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                      },
+                    },
+                    customFrontend: {
+                      type: "object",
+                      additionalProperties: true,
+                      properties: {
+                        publicStatus: { const: "public" },
+                        requiredEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        optionalEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        forbiddenEnv: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                },
+                domainPolicy: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    verificationRequired: { const: true },
+                    verificationStatusField: {
+                      const: "site.settings.domainVerification.status",
+                    },
+                    examples: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                  },
+                },
+                verification: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    releaseConfigSmoke: {
+                      const: "npm run test:vercel-release-config",
+                    },
+                    frontendContractSmoke: {
+                      const: "npm run test:frontend-contract-types",
+                    },
+                    releaseDoctor: {
+                      const: "npm run doctor:release-certification",
+                    },
+                    providerArtifactAdmission: {
+                      const: "npm run ci:provider-artifact-admission",
+                    },
+                  },
+                },
+                secretHandling: { type: "string" },
+              },
+            },
             CustomFrontendAgentHandoff: {
               type: "object",
               required: [
@@ -6333,6 +6448,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "apiAlignment",
                 "componentApiContract",
                 "routing",
+                "deploymentTopology",
                 "designState",
                 "rules",
                 "privacy",
@@ -6419,6 +6535,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 routing: {
                   $ref: "#/components/schemas/CustomFrontendRoutingHandoff",
                 },
+                deploymentTopology: {
+                  $ref: "#/components/schemas/CustomFrontendDeploymentTopology",
+                },
                 designState: {
                   type: "object",
                   additionalProperties: true,
@@ -6444,6 +6563,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 "apiAlignment",
                 "componentApiContract",
                 "routing",
+                "deploymentTopology",
                 "canvasFirst",
                 "designState",
                 "contentCreation",
@@ -6493,6 +6613,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 routing: {
                   $ref: "#/components/schemas/CustomFrontendRoutingHandoff",
+                },
+                deploymentTopology: {
+                  $ref: "#/components/schemas/CustomFrontendDeploymentTopology",
                 },
                 canvasFirst: {
                   type: "object",

@@ -705,6 +705,7 @@ assert(
     publicAgentHandoffRoute.includes('agentBrief: handoff.agentBrief') &&
     publicAgentHandoffRoute.includes('apiAlignment: handoff.apiAlignment') &&
     publicAgentHandoffRoute.includes('routing: handoff.routing') &&
+    publicAgentHandoffRoute.includes('deploymentTopology: handoff.deploymentTopology') &&
     publicAgentHandoffRoute.includes('handoff.contentCreation.canvasFirst') &&
     publicAgentHandoffRoute.includes('handoff.designState') &&
     publicAgentHandoffRoute.includes('!site || !site.isPublished') &&
@@ -722,6 +723,8 @@ assert(
     openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendApiAlignment"') &&
     openApiRoute.includes('CustomFrontendComponentApiContract') &&
     openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendComponentApiContract"') &&
+    openApiRoute.includes('CustomFrontendDeploymentTopology') &&
+    openApiRoute.includes('$ref: "#/components/schemas/CustomFrontendDeploymentTopology"') &&
     openApiRoute.includes('CustomFrontendAgentHandoffEnvelope') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_HANDOFF_SCHEMA = 'backy.custom-frontend-agent-handoff.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_AGENT_BRIEF_SCHEMA = 'backy.custom-frontend-agent-brief.v1'") &&
@@ -742,6 +745,15 @@ assert(
     customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.custom-frontend-api-alignment.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA = 'backy.custom-frontend-routing-handoff.v1'") &&
     customFrontendAgentHandoffLib.includes('buildCustomFrontendRoutingHandoff') &&
+    customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_DEPLOYMENT_TOPOLOGY_SCHEMA = 'backy.deployment-topology.v1'") &&
+    customFrontendAgentHandoffLib.includes('buildCustomFrontendDeploymentTopology') &&
+    customFrontendAgentHandoffLib.includes('deploymentTopology: buildCustomFrontendDeploymentTopology(siteId)') &&
+    customFrontendAgentHandoffLib.includes('protected-admin-public-api-separated-frontends') &&
+    customFrontendAgentHandoffLib.includes('backy-admin') &&
+    customFrontendAgentHandoffLib.includes('backy-public') &&
+    customFrontendAgentHandoffLib.includes('VITE_BACKY_PUBLIC_API_BASE_URL') &&
+    customFrontendAgentHandoffLib.includes('BACKY_ADMIN_API_KEY') &&
+    customFrontendAgentHandoffLib.includes('npm run test:vercel-release-config') &&
     customFrontendAgentHandoffLib.includes('subdomainRouting') &&
     customFrontendAgentHandoffLib.includes('BACKY_SITE_PUBLIC_HOST') &&
     customFrontendAgentHandoffLib.includes('resolveWithHost') &&
@@ -784,6 +796,12 @@ assert(
     frontendManifestSchema.includes('"backy.custom-frontend-api-alignment.v1"') &&
     frontendManifestSchema.includes('"routing"') &&
     frontendManifestSchema.includes('"backy.custom-frontend-routing-handoff.v1"') &&
+    frontendManifestSchema.includes('"deploymentTopology"') &&
+    frontendManifestSchema.includes('"backy.deployment-topology.v1"') &&
+    frontendManifestSchema.includes('"protected-admin-public-api-separated-frontends"') &&
+    frontendManifestSchema.includes('"backyAdmin"') &&
+    frontendManifestSchema.includes('"backyPublic"') &&
+    frontendManifestSchema.includes('"VITE_BACKY_PUBLIC_API_BASE_URL"') &&
     frontendManifestSchema.includes('"subdomainRouting"') &&
     frontendManifestSchema.includes('"BACKY_SITE_PUBLIC_HOST"') &&
     frontendManifestSchema.includes('"componentApiContract"') &&
@@ -821,6 +839,9 @@ assert(
     generatedSdkTypes.includes('sharedSiteChrome') &&
     generatedSdkTypes.includes('sharedChromeBindings') &&
     generatedSdkTypes.includes('routing: GeneratedBackyOpenApiCustomFrontendRoutingHandoff') &&
+    generatedSdkTypes.includes('deploymentTopology') &&
+    generatedSdkTypes.includes('"backy.deployment-topology.v1"') &&
+    generatedSdkTypes.includes('"protected-admin-public-api-separated-frontends"') &&
     generatedSdkTypes.includes('"backy.custom-frontend-api-alignment.v1"') &&
     generatedSdkTypes.includes('"backy.custom-frontend-routing-handoff.v1"') &&
     generatedSdkTypes.includes('"backy.canvas-component-api-contract.v1"') &&
@@ -835,6 +856,7 @@ assert(
     sdkSmoke.includes("agentBrief?.schemaVersion === 'backy.custom-frontend-agent-brief.v1'") &&
     sdkSmoke.includes("agentBriefPointer === 'data.agentBrief'") &&
     sdkSmoke.includes('componentApiContract') &&
+    sdkSmoke.includes('deploymentTopology') &&
     generatedSdkSmoke.includes('agentHandoff') &&
     generatedSdkSmoke.includes('agentBrief') &&
     generatedSdkSmoke.includes('customFrontendAgentHandoff') &&

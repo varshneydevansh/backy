@@ -51,6 +51,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-30] Every page/blog/product/form/custom frontend path must preserve design tokens, fonts, colors, media assets, animations, interactions, responsive overrides, editable maps, and API-visible properties.
 - [2026-05-31] Production Vercel runbooks must keep `backy-admin` as a protected Vite shell with only public/admin API base URLs; server-only admin keys, database URLs, provider secrets, and cron secrets belong on `backy-public`, never in `VITE_*` env.
 - [2026-05-31] Help should expose the same protected deployment topology as the README: protected `backy-admin`, public `backy-public`, and separate custom frontend projects with only `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST` in frontend env.
+- [2026-05-31] The public `/agent-handoff` payload should include `deploymentTopology`, not just the README/Help prose. Deploy/frontend agents need machine-readable project roles, required/forbidden env, verified-domain policy, and release smoke commands before creating Vercel projects.
 - [2026-05-31] Public custom-domain and locale-domain discovery must require `site.settings.domainVerification.status === "verified"` for the exact host. A saved domain string alone is configuration intent, not routing permission.
 - [2026-05-31] Help content should mirror deploy behavior immediately after hardening changes; otherwise users and frontend agents keep following the old, looser mental model.
 

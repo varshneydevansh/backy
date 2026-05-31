@@ -84,6 +84,7 @@ const agentHandoffResponse = (
       apiAlignment: handoff.apiAlignment,
       componentApiContract: handoff.componentApiContract,
       routing: handoff.routing,
+      deploymentTopology: handoff.deploymentTopology,
       canvasFirst: handoff.contentCreation.canvasFirst,
       designState: handoff.designState,
       contentCreation: handoff.contentCreation,

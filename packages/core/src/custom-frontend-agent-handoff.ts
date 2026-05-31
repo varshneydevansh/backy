@@ -6,6 +6,8 @@ export const CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA = 'backy.canvas-compo
 
 export const CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA = 'backy.custom-frontend-routing-handoff.v1';
 
+export const CUSTOM_FRONTEND_DEPLOYMENT_TOPOLOGY_SCHEMA = 'backy.deployment-topology.v1';
+
 export const CUSTOM_FRONTEND_AGENT_HANDOFF_DOC = 'specs/custom-frontend-agent-handoff.md';
 
 export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
@@ -466,6 +468,84 @@ export const buildCustomFrontendRoutingHandoff = (
   };
 };
 
+export const buildCustomFrontendDeploymentTopology = (siteId: string) => ({
+  schemaVersion: CUSTOM_FRONTEND_DEPLOYMENT_TOPOLOGY_SCHEMA,
+  model: 'protected-admin-public-api-separated-frontends',
+  siteId,
+  projects: {
+    backyAdmin: {
+      project: 'backy-admin',
+      rootDirectory: 'apps/admin',
+      framework: 'Vite',
+      publicStatus: 'protected',
+      purpose: 'Admin/editor shell for authenticated operators.',
+      requiredEnv: ['VITE_BACKY_PUBLIC_API_BASE_URL', 'VITE_BACKY_ADMIN_API_BASE_URL'],
+      forbiddenEnv: [
+        'BACKY_DATABASE_URL',
+        'DATABASE_URL',
+        'CRON_SECRET',
+        'BACKY_ADMIN_API_KEY',
+        'BACKY_ADMIN_SECRET_KEY',
+        'storage/provider secrets',
+      ],
+      protection: 'Use Vercel Deployment Protection, team SSO, or an equivalent access-control layer.',
+    },
+    backyPublic: {
+      project: 'backy-public',
+      rootDirectory: 'apps/public',
+      framework: 'Next.js',
+      publicStatus: 'public',
+      purpose: 'Public rendering, discovery, visitor interactions, and protected admin API routes.',
+      requiredEnv: [
+        'BACKY_DATA_MODE=database',
+        'BACKY_DATABASE_URL',
+        'BACKY_ADMIN_API_KEY',
+        'BACKY_ADMIN_SECRET_KEY',
+        'CRON_SECRET',
+        'NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
+        'BACKY_CORS_ALLOWED_ORIGINS',
+      ],
+      serves: [
+        'manifest',
+        'OpenAPI',
+        'agent-handoff',
+        'resolve/render',
+        'forms/comments/newsletter signup',
+        'authenticated admin APIs',
+      ],
+      secretBoundary: 'Server-only database, admin, cron, storage, commerce, and mail-provider secrets stay here or in CI/provider secret stores.',
+    },
+    customFrontend: {
+      projectPolicy: 'Use a separate frontend project per independent website, framework, team, release cadence, or public host.',
+      publicStatus: 'public',
+      requiredEnv: ['BACKY_PUBLIC_API_BASE_URL', 'BACKY_SITE_ID'],
+      optionalEnv: ['BACKY_SITE_PUBLIC_HOST'],
+      forbiddenEnv: [
+        'Backy admin URLs',
+        'admin/session secrets',
+        'provider secrets',
+        'database URLs',
+        'copied Backy content as a second source of truth',
+      ],
+      sourceOfTruth: 'Read Backy agent-handoff, manifest, OpenAPI, frontend-design, and render payloads instead of committing duplicated content JSON.',
+    },
+  },
+  domainPolicy: {
+    verificationRequired: true,
+    verificationStatusField: 'site.settings.domainVerification.status',
+    independentSubdomainModel: 'Use one Backy site per independent public subdomain when content, navigation, SEO, or design tokens differ.',
+    examples: ['www.example.com', 'blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com'],
+    hostContext: 'Pass browser host as domain={host}, Host, or forwarded-host when resolve/render behavior depends on the public domain.',
+  },
+  verification: {
+    releaseConfigSmoke: 'npm run test:vercel-release-config',
+    frontendContractSmoke: 'npm run test:frontend-contract-types',
+    releaseDoctor: 'npm run doctor:release-certification',
+    providerArtifactAdmission: 'npm run ci:provider-artifact-admission',
+  },
+  secretHandling: 'This topology exposes env names, project roles, and verification commands only; it never returns provider tokens, database URLs, admin sessions, private submissions, or order payloads.',
+});
+
 export const buildCustomFrontendComponentApiContract = (siteId: string) => ({
   schemaVersion: CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA,
   everyComponentApiAddressable: true,
@@ -561,6 +641,7 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
     'Use componentApiContract.layoutBehavior for section resize flow and shared header/footer/nav binding rules: root sections reflow by bottom-edge delta, while shared chrome should use site navigation/chrome bindings instead of copied static menus.',
     'Keep Backy as the source of truth. Preserve content.contentDocument, content.elements, content.canvas, custom CSS/JS, assets, animations, interactions, data bindings, editable maps, SEO, metadata, and meta.frontendDesign* when creating or editing.',
     'Use manifest.data.site.frontendDesign and the authenticated /api/admin/sites/:siteId/frontend-design contract for fonts, colors, spacing, motion, chrome, templates, and editable maps so future pages keep the same site design.',
+    'Deploy Backy as protected backy-admin plus public backy-public. Custom websites should be separate frontend projects that only receive BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST.',
     'For writes use authenticated /api/admin/sites/:siteId/* endpoints or the advertised contentCreation.adminEntryPoints. Public endpoints are for discovery, render, and visitor interactions only.',
     'For newsletters use Backy newsletter/form subscriber APIs and keep mail-provider secrets, SMTP/API keys, unsubscribe signing, bounces, complaints, and webhooks server/provider-side.',
   ].join('\n'),
@@ -783,6 +864,7 @@ export const buildCustomFrontendAgentHandoff = (
   },
   componentApiContract: buildCustomFrontendComponentApiContract(siteId),
   routing: buildCustomFrontendRoutingHandoff(siteId, site),
+  deploymentTopology: buildCustomFrontendDeploymentTopology(siteId),
   designState: {
     roundTripFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
     siteStyleSources: [
@@ -814,6 +896,7 @@ export const buildCustomFrontendAgentHandoff = (
     'Use frontendDesignTemplateId or designTemplateId for captured custom-frontend templates.',
     'Do not flatten editable canvas content to plain HTML/text unless the target is a throwaway static export.',
     'Use authenticated admin endpoints for writes and public endpoints for read/render discovery.',
+    'Deploy protected backy-admin, public backy-public, and separate custom frontend projects with the env boundary advertised in deploymentTopology.',
   ],
   privacy: {
     includesSecretValues: false,
