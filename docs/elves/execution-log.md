@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 06:47 IST
+- **Last updated:** 2026-05-31 07:00 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 07:00 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Help now makes protected Backy/public/custom-frontend deployment topology copyable and searchable; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/routes/help.tsx`: added a searchable Deploy Backy and custom frontends topic explaining the protected `backy-admin`, public `backy-public`, and separate custom frontend Vercel surfaces, including subdomain/site modeling and forbidden frontend secrets/content copies.
+- `apps/admin/src/routes/help.tsx`: added a copyable Custom frontend env starter that site-scopes `BACKY_SITE_ID` and shows `BACKY_PUBLIC_API_BASE_URL` plus optional `BACKY_SITE_PUBLIC_HOST` for frontend agents and Vercel projects.
+- `apps/admin/scripts/help-smoke.mjs`: source and rendered Help smokes now guard the deployment topology topic and rendered frontend-env starter values.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `curl -fsS -o /dev/null -w '%{http_code}' 'http://127.0.0.1:5173/help?siteId=site-demo'` -> PASS (`200`).
+- `BACKY_HELP_RENDERED_SMOKE=1 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 npm run test:help-rendered --workspace @backy-cms/admin` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on another high-friction release surface: section reflow/resizing semantics, blog/newsletter authoring polish, deployment dry-run readiness, or remaining canvas ergonomics.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 06:47 IST
 

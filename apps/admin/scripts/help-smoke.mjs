@@ -350,6 +350,7 @@ const assertHelpSourceContracts = () => {
     'switch-sites',
     'subdomains',
     'verified-domain-routing',
+    'deployment-topology',
     'canvas-basics',
     'canvas-zoom-selection',
     'navigation-shared-chrome',
@@ -413,6 +414,17 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('pass Host/domain context to resolve/render when routing depends on the browser host') &&
       helpSource.includes('Use one Backy site per independent public subdomain'),
     'Help route must explain verified custom-domain/subdomain routing before deploy.',
+  );
+
+  assert(
+    helpSource.includes('Run Backy admin, Backy public APIs, and each custom website as separate deployment surfaces.') &&
+      helpSource.includes('protected backy-admin Vercel project') &&
+      helpSource.includes('public backy-public Vercel project') &&
+      helpSource.includes('BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optionally BACKY_SITE_PUBLIC_HOST') &&
+      helpSource.includes("id: 'frontend-env'") &&
+      helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
+      helpSource.includes('Custom frontends use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST only.'),
+    'Help route must explain protected Backy/admin-public/custom-frontend deployment topology and copyable frontend env.',
   );
 
   assert(
@@ -509,6 +521,8 @@ const runRenderedHelpSmoke = async () => {
       `/api/sites/${HELP_SMOKE_SITE_ID}/openapi`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/...`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/...`,
+      `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
+      'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
     ]) {
       assert(endpointState.text.includes(expected), `Rendered Help starter endpoints are missing ${expected}`);
     }

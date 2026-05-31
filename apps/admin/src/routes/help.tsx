@@ -109,6 +109,21 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open domain setup',
   },
   {
+    id: 'deployment-topology',
+    category: 'sites',
+    title: 'Deploy Backy and custom frontends',
+    summary: 'Run Backy admin, Backy public APIs, and each custom website as separate deployment surfaces.',
+    details: [
+      'Use a protected backy-admin Vercel project for the editor shell. It should only receive VITE_BACKY_PUBLIC_API_BASE_URL and VITE_BACKY_ADMIN_API_BASE_URL.',
+      'Use a public backy-public Vercel project for render, resolve, manifest, OpenAPI, forms, comments, newsletter signup, and protected admin API routes.',
+      'Deploy each custom website as its own frontend project when it has a separate domain, team, release cadence, or framework. It should use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optionally BACKY_SITE_PUBLIC_HOST.',
+      'Never put database URLs, provider secrets, cron secrets, admin API keys, session cookies, or copied Backy content into a custom frontend bundle.',
+      'For independent subdomains such as akriti.devanshvarshney.com, blog.devanshvarshney.com, or docs.devanshvarshney.com, create one Backy site per independent content/design/navigation model.',
+    ],
+    route: '/sites',
+    routeLabel: 'Open deployment handoff',
+  },
+  {
     id: 'canvas-basics',
     category: 'editor',
     title: 'Build with the canvas editor',
@@ -356,6 +371,12 @@ const FRONTEND_AGENT_STARTERS = [
     value: 'GET /api/sites/:siteId/render?path=/...  |  GET /api/sites/:siteId/resolve?path=/...',
     detail: 'Use render for page payloads and resolve for route decisions across root domains and subdomains.',
   },
+  {
+    id: 'frontend-env',
+    label: 'Custom frontend env',
+    value: 'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api  |  BACKY_SITE_ID=:siteId  |  BACKY_SITE_PUBLIC_HOST=<custom-host>',
+    detail: 'Use in each public website project. Keep admin URLs, sessions, provider keys, database URLs, and copied Backy content out.',
+  },
 ];
 
 const categoryById = new Map(HELP_CATEGORIES.map((category) => [category.id, category]));
@@ -393,6 +414,7 @@ const buildAgentCopyBrief = (siteId: string) => [
   '7. Keep Backy as the source of truth. Do not fork content, design state, subscribers, orders, or form submissions into frontend-local JSON.',
   '8. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
   '9. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
+  '10. For Vercel release topology, deploy protected backy-admin, public backy-public, and separate custom frontend projects. Custom frontends use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST only.',
 ].join('\n');
 
 function HelpPage() {
