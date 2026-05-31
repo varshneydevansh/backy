@@ -222,6 +222,17 @@ const readJson = async <T>(response: Response): Promise<T> => {
 
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
 
+const describeAdminAuthEndpoint = () => {
+  const adminApiBase = getAdminApiBase();
+  const isLocalBackend = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):3001\/api\/admin$/i.test(adminApiBase);
+
+  if (isLocalBackend) {
+    return `Check that the local backend is running on port 3001. Admin API base: ${adminApiBase}.`;
+  }
+
+  return `Check VITE_BACKY_ADMIN_API_BASE_URL / VITE_BACKY_PUBLIC_API_BASE_URL and confirm backy-public is healthy. Admin API base: ${adminApiBase}.`;
+};
+
 const adminAuthFetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timeout = controller
@@ -235,10 +246,10 @@ const adminAuthFetch = async (input: RequestInfo | URL, init: RequestInit = {}):
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new AdminAuthNetworkError('Backy admin API did not respond. Check that the local backend is running on port 3001.');
+      throw new AdminAuthNetworkError(`Backy admin API did not respond. ${describeAdminAuthEndpoint()}`);
     }
     if (error instanceof TypeError) {
-      throw new AdminAuthNetworkError('Backy admin API could not be reached. Check that the local backend is running on port 3001.');
+      throw new AdminAuthNetworkError(`Backy admin API could not be reached. ${describeAdminAuthEndpoint()}`);
     }
     throw error;
   } finally {

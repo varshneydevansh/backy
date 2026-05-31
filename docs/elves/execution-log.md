@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 00:11 IST
+- **Last updated:** 2026-06-01 00:44 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,46 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 00:44 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Live Vercel public/admin failure diagnosed and source fix prepared
+
+**What changed:**
+- `apps/public/next.config.js`: excluded `*.vercel.app` project/deployment hosts from the tenant subdomain rewrite so `backy-public.vercel.app/` can render the public runtime home instead of being treated as `/sites/backy-public/`.
+- `scripts/vercel-release-config-smoke.mjs`: added a guard for the Vercel-domain rewrite exclusion.
+- `apps/admin/src/lib/adminAuthApi.ts`: made network errors environment-aware; Vercel admin shells now point operators at `VITE_BACKY_ADMIN_API_BASE_URL`/`VITE_BACKY_PUBLIC_API_BASE_URL` and `backy-public` health instead of only saying to start localhost port 3001.
+- `apps/admin/scripts/login-smoke.mjs`: added source coverage for the environment-aware auth troubleshooting copy.
+- `apps/public/src/lib/admin-auth/productionPolicy.ts` and `apps/public/scripts/admin-auth-production-policy-smoke.ts`: changed production local-auth failure copy to direct operators to provider-backed auth/database-backed sessions and explicitly not to enable the release-blocked local-auth flag.
+
+**Live evidence:**
+- `curl https://backy-admin.vercel.app/login` returned the Vite shell; its built asset has `VITE_BACKY_ADMIN_API_BASE_URL=https://backy-public.vercel.app/api/admin` and `VITE_BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api`.
+- `curl https://backy-public.vercel.app/` returned HTTP 500 with `x-nextjs-rewritten-path: /sites/backy-public/`, proving the Vercel project-domain host was caught by tenant subdomain routing.
+- `curl https://backy-public.vercel.app/api/sites/site-demo/agent-handoff` returned normalized HTTP 500 JSON.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 30m --expand` showed `Database mode requires BACKY_DATABASE_URL or DATABASE_URL` for `/`, `/api/sites/site-demo/agent-handoff`, and `/api/admin/auth/session`.
+- `npx vercel@latest env ls --cwd apps/public` showed only preview demo env; production `backy-public` database/admin/cron/CORS env remains missing.
+- `npx vercel@latest env ls --cwd apps/admin` showed production `VITE_BACKY_ADMIN_API_BASE_URL` and `VITE_BACKY_PUBLIC_API_BASE_URL` are present.
+
+**Commands run:**
+- `npm run test:vercel-release-config --silent` -> PASS.
+- `npm run test:admin-auth-production-policy --workspace @backy/public --silent` -> PASS.
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected warnings for root link state and missing production `backy-public` database/admin/cron/CORS env.
+- `npm run test:vercel-public-production-env-guard --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Review findings:**
+- [High] `backy-public.vercel.app` was being rewritten as a tenant hosted-site subdomain. Fixed in source by excluding Vercel project/deployment hosts from subdomain routing.
+- [High] `backy-public` production has no database runtime env, so public APIs and admin auth endpoints crash at runtime. Left unresolved because setting fake demo production env would violate the release boundary; real database/admin/cron/CORS env is required.
+- [Medium] Admin login network copy incorrectly blamed local port 3001 on deployed Vercel. Fixed with environment-aware copy.
+
+**Next:**
+1. Commit and push this Vercel host/admin-auth troubleshooting slice.
+2. Expect `backy-admin` production to rebuild cleanly, while `backy-public` production should keep failing new builds until real production env is configured.
+3. Configure real production env on `backy-public`, then redeploy and run the live production contract gate.
 
 ## 2026-06-01 00:11 IST
 

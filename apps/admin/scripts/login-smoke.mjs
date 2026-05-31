@@ -337,8 +337,11 @@ const assertAuthRecoverySource = () => {
     adminAuthApiSource.includes('AUTH_REQUEST_TIMEOUT_MS') &&
       adminAuthApiSource.includes('adminAuthFetch') &&
       adminAuthApiSource.includes('AdminAuthNetworkError') &&
-      adminAuthApiSource.includes('Backy admin API did not respond'),
-    'Admin auth API requests must time out with a clear local-backend message instead of trapping the shell behind an infinite loader.',
+      adminAuthApiSource.includes('Backy admin API did not respond') &&
+      adminAuthApiSource.includes('describeAdminAuthEndpoint') &&
+      adminAuthApiSource.includes('VITE_BACKY_ADMIN_API_BASE_URL / VITE_BACKY_PUBLIC_API_BASE_URL') &&
+      adminAuthApiSource.includes('Admin API base:'),
+    'Admin auth API requests must time out with environment-aware troubleshooting instead of trapping local and Vercel shells behind an infinite loader.',
   );
 
   assert(

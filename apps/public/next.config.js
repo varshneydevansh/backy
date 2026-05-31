@@ -18,7 +18,7 @@ const nextConfig = {
                     has: [
                         {
                             type: 'host',
-                            value: '(?<subdomain>[^.]+)\\.(?<domain>.*[A-Za-z].*)',
+                            value: '(?<subdomain>[^.]+)\\.(?<domain>(?!vercel\\.app$).*[A-Za-z].*)',
                         },
                     ],
                     destination: '/sites/:subdomain/:path',

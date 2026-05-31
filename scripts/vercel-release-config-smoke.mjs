@@ -130,8 +130,8 @@ assert(
 );
 
 assert(
-  publicNextConfig.includes('(?<domain>.*[A-Za-z].*)'),
-  'apps/public subdomain rewrite must not treat IPv4 localhost hosts as tenant subdomains.',
+  publicNextConfig.includes('(?<domain>(?!vercel\\\\.app$).*[A-Za-z].*)'),
+  'apps/public subdomain rewrite must not treat IPv4 localhost hosts or Vercel project domains as tenant subdomains.',
 );
 
 console.log('Vercel release config smoke passed.');

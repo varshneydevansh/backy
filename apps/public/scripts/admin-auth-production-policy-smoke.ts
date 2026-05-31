@@ -48,7 +48,19 @@ assert.equal(
   'Production local admin auth failures should expose a stable API error code',
 );
 
+assert.match(
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+  /provider-backed admin login/,
+  'Production local admin auth failure should direct operators to provider-backed admin login',
+);
+
+assert.match(
+  PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+  /Do not enable BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH for release builds/,
+  'Production local admin auth failure should not recommend the release-blocked local-auth flag',
+);
+
 console.log(JSON.stringify({
   ok: true,
-  cases: 6,
+  cases: 8,
 }));
