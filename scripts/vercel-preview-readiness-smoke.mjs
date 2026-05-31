@@ -15,6 +15,7 @@ const checks = [];
 const strictCli = process.env.BACKY_VERCEL_REQUIRE_CLI === '1';
 const strictLinks = process.env.BACKY_VERCEL_REQUIRE_PROJECT_LINKS === '1';
 const strictRemoteProjects = process.env.BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS === '1';
+const strictRemoteEnv = process.env.BACKY_VERCEL_REQUIRE_REMOTE_ENV === '1';
 const skipCli = process.env.BACKY_VERCEL_SKIP_CLI === '1';
 
 const rel = (file) => path.join(repoRoot, file);
@@ -52,6 +53,12 @@ const semverAtLeast = (actual, minimum) => {
   }
   return true;
 };
+
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const outputContainsEnvName = (output, name) => (
+  new RegExp(`(^|[^A-Z0-9_])${escapeRegExp(name)}([^A-Z0-9_]|$)`, 'u').test(output)
+);
 
 const hasCron = (config) => (
   Array.isArray(config.crons) &&
@@ -196,6 +203,7 @@ includesAll(
     'Vercel Agent',
     'Project Settings -> AI',
     'npm run test:vercel-preview-readiness',
+    'BACKY_VERCEL_REQUIRE_REMOTE_ENV=1',
     'npm run test:vercel-production-readiness',
     'npm run test:repo-public-hygiene',
     'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',
@@ -301,6 +309,19 @@ const projectLinks = [
       outputDirectory: null,
       rootDirectory: 'apps/public',
     },
+    env: {
+      requiredGroups: [
+        ['BACKY_DATA_MODE'],
+        ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+        ['BACKY_ADMIN_API_KEY'],
+        ['BACKY_ADMIN_SECRET_KEY'],
+        ['CRON_SECRET'],
+        ['NEXT_PUBLIC_BACKY_ADMIN_APP_URL'],
+        ['BACKY_CORS_ALLOWED_ORIGINS'],
+      ],
+      requiredLabel: 'production public runtime env',
+      forbidden: ['VITE_BACKY_ADMIN_API_KEY'],
+    },
   },
   {
     app: 'backy-admin',
@@ -312,6 +333,27 @@ const projectLinks = [
       framework: 'vite',
       outputDirectory: 'dist',
       rootDirectory: 'apps/admin',
+    },
+    env: {
+      requiredGroups: [
+        ['VITE_BACKY_PUBLIC_API_BASE_URL'],
+        ['VITE_BACKY_ADMIN_API_BASE_URL'],
+      ],
+      requiredLabel: 'admin shell API URL env',
+      forbidden: [
+        'BACKY_DATABASE_URL',
+        'DATABASE_URL',
+        'CRON_SECRET',
+        'BACKY_ADMIN_API_KEY',
+        'BACKY_ADMIN_SECRET_KEY',
+        'BACKY_SUPABASE_SERVICE_ROLE_KEY',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'BACKY_S3_SECRET_ACCESS_KEY',
+        'AWS_SECRET_ACCESS_KEY',
+        'STRIPE_SECRET_KEY',
+        'STRIPE_WEBHOOK_SECRET',
+        'VITE_BACKY_ADMIN_API_KEY',
+      ],
     },
   },
 ];
@@ -439,6 +481,42 @@ if (skipCli) {
       } else {
         warn(`${linkedProject.app} should include source files outside its root directory for workspace packages`);
       }
+
+      if (parsedProject.link?.type === 'github' && parsedProject.link?.repo === 'backy') {
+        pass(`${linkedProject.app} is connected to the GitHub backy repository`);
+      } else {
+        const message = `${linkedProject.app} is not connected to the GitHub backy repository`;
+        if (strictRemoteProjects) fail(message);
+        else warn(message);
+      }
+
+      const envList = run('vercel', ['env', 'ls', '--cwd', linkedProject.root, '--no-color'], {
+        timeout: 20000,
+      });
+      if (envList.status !== 0) {
+        const message = `Could not list Vercel env vars for ${linkedProject.app}: ${(envList.stderr || envList.stdout || '').trim()}`;
+        if (strictRemoteEnv) fail(message);
+        else warn(message);
+        continue;
+      }
+
+      const envOutput = `${envList.stdout}\n${envList.stderr}`;
+      for (const forbiddenName of linkedProject.env.forbidden) {
+        if (outputContainsEnvName(envOutput, forbiddenName)) {
+          fail(`${linkedProject.app} must not configure forbidden env var ${forbiddenName}`);
+        } else {
+          pass(`${linkedProject.app} does not configure forbidden env var ${forbiddenName}`);
+        }
+      }
+
+      for (const group of linkedProject.env.requiredGroups) {
+        const hasGroup = group.some((envName) => outputContainsEnvName(envOutput, envName));
+        const label = group.join(' or ');
+        const message = `${linkedProject.app} has ${linkedProject.env.requiredLabel}: ${label}`;
+        if (hasGroup) pass(message);
+        else if (strictRemoteEnv) fail(message);
+        else warn(`${message} is not configured yet`);
+      }
     }
   }
 }
@@ -458,6 +536,6 @@ if (failures.length > 0) {
 
 console.log(
   warnings.length > 0
-    ? '\nBacky is source-ready for Vercel preview, but operator/project linkage warnings remain.'
+    ? '\nBacky is source-ready for Vercel preview, but operator/project/env warnings remain.'
     : '\nBacky Vercel preview readiness smoke passed without warnings.',
 );

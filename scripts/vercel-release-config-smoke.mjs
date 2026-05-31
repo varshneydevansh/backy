@@ -75,6 +75,7 @@ for (const snippet of [
   'httpOnly `backy_admin_session` cookie',
   'Forbidden env',
   'npm run test:vercel-preview-readiness',
+  'BACKY_VERCEL_REQUIRE_REMOTE_ENV=1',
   'npm run test:vercel-production-readiness',
   'npm run test:repo-public-hygiene',
   '### Production promotion gate',

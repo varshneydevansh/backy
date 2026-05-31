@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 21:09 IST
+- **Last updated:** 2026-05-31 22:16 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,87 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 22:16 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Vercel preview deployment failure diagnosed and protected previews verified
+
+**What changed:**
+- Identified two stale deploy failures as pre-fix Vercel project configuration issues: one used the wrong root/source package context, and one ran the app build without first building workspace packages.
+- Identified the current public preview runtime failure as missing `backy-public` env: without `BACKY_DATA_MODE`, the runtime defaults to database mode and returns 500 until `BACKY_DATABASE_URL` or demo-mode preview env exists.
+- Configured preview-only `backy-public` env names for demo-mode verification, leaving production env untouched.
+- Redeployed `backy-public` and `backy-admin` previews from repo-root source. The admin preview was built with one-deploy `VITE_BACKY_*` API base URLs pointing to the healthy public preview.
+
+**Current Vercel state observed:**
+- `backy-public`: preview env now includes `BACKY_DATA_MODE`, `BACKY_ALLOW_PRODUCTION_DEMO_MODE`, and `BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH`; production database/admin/cron/CORS env is still intentionally missing.
+- `backy-admin`: no persistent project env yet; the verified preview used build-time `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL`, so automatic Git previews still need those env names configured.
+- Preview URLs and deployment ids are verified locally but intentionally not recorded in tracked docs.
+
+**Commands run:**
+- `npm run build:vercel:public` -> PASS.
+- `npm run build:vercel:admin` -> PASS with the existing non-blocking large editor chunk warning.
+- `npx vercel@latest deploy --target=preview --yes --logs` for `backy-public` before preview env -> READY build, runtime 500.
+- `npx vercel@latest logs <backy-public-preview-url> --level error --since 15m --expand` -> PASS; showed `Database mode requires BACKY_DATABASE_URL or DATABASE_URL`.
+- `npx vercel@latest env add BACKY_DATA_MODE preview` -> PASS, all Preview branches.
+- `npx vercel@latest env add BACKY_ALLOW_PRODUCTION_DEMO_MODE preview` -> PASS, all Preview branches.
+- `npx vercel@latest env add BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH preview` -> PASS, all Preview branches.
+- `npx vercel@latest deploy --target=preview --yes --logs` for `backy-public` after preview env -> PASS, READY.
+- `npx vercel@latest deploy --target=preview --yes --logs --build-env VITE_BACKY_PUBLIC_API_BASE_URL=<public-preview-api> --build-env VITE_BACKY_ADMIN_API_BASE_URL=<public-preview-admin-api>` for `backy-admin` -> PASS, READY.
+- `npx vercel@latest curl <backy-admin-preview-url>/login` -> PASS; returned the Vite admin shell.
+- `npx vercel@latest curl <backy-public-preview-url>/api/sites/site-demo/agent-handoff` -> PASS; returned `success: true` with component API, design-state, routing, newsletter, and deployment-topology contract fields.
+- `npx vercel@latest curl <backy-public-preview-url>/api/sites/site-demo/manifest` -> PASS; returned `backy.frontend-manifest.v1` with frontend design and handoff mirrors.
+- `npx vercel@latest curl <backy-public-preview-url>/api/sites/site-demo/openapi` -> PASS; returned OpenAPI `3.1.0` with deployment topology in the Backy handoff extension.
+- `npx vercel@latest curl <backy-public-preview-url>/api/sites/site-demo/render?path=/` -> PASS; returned successful render JSON for `/`.
+- `npm run test:vercel-preview-readiness` -> PASS with warnings for root link state, missing production `backy-public` env, and missing persistent `backy-admin` API URL env.
+- `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 BACKY_VERCEL_REQUIRE_REMOTE_ENV=1 npm run test:vercel-preview-readiness` -> FAIL as expected because production-grade public env and persistent admin env are not fully configured yet.
+
+**Review findings:**
+- [High] A Ready Vercel build was not enough evidence because the public runtime defaulted to database mode and 500ed without database env. Resolved for previews with preview-only demo env and recorded as a strict production boundary.
+- [High] Manual admin deploy build env does not configure automatic Git previews. Left as an explicit readiness warning until the two persistent `VITE_BACKY_*` env names are configured on `backy-admin`.
+
+**Next:**
+1. Configure production `backy-public` with real database/admin/session/cron/CORS/provider env and remove any temptation to promote demo previews.
+2. Configure persistent `backy-admin` `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL` for Git previews.
+3. Rerun strict remote-env readiness, then only promote production after the live public-domain contract gate passes.
+
+## 2026-05-31 21:36 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Vercel projects are GitHub-connected, but remote env is now explicitly gated before release
+
+**What changed:**
+- `scripts/vercel-preview-readiness-smoke.mjs`: now verifies each linked Vercel project is connected to the GitHub `backy` repository instead of only checking local project links and remote build settings.
+- `scripts/vercel-preview-readiness-smoke.mjs`: now lists Vercel env names for `backy-public` and `backy-admin`, warns when required project env is missing, and hard-fails if forbidden server/admin/provider secrets are configured on the Vite admin shell.
+- Added strict remote-env mode through `BACKY_VERCEL_REQUIRE_REMOTE_ENV=1` so operator certification can fail missing runtime env after the Vercel projects are linked.
+- README and AGENTS now document the strict env-boundary gate beside the existing `backy-public` / `backy-admin` deployment split.
+
+**Current Vercel state observed:**
+- `backy-public`: connected to the GitHub `backy` repository, root `apps/public`, Next.js, build command `npm --prefix=../.. run build:vercel:public`, Node 24.x, SSO protection enabled, but no Vercel env vars are configured yet.
+- `backy-admin`: connected to the GitHub `backy` repository, root `apps/admin`, Vite, output `dist`, build command `npm --prefix=../.. run build:vercel:admin`, Node 24.x, SSO protection enabled, but no Vercel env vars are configured yet.
+
+**Commands run:**
+- `npx vercel@latest git connect https://github.com/<github-owner>/backy --cwd apps/public --no-color --non-interactive` -> PASS, already connected.
+- `npx vercel@latest git connect https://github.com/<github-owner>/backy --cwd apps/admin --no-color --non-interactive` -> PASS, already connected.
+- `npx vercel@latest project inspect backy-public --no-color` -> PASS.
+- `npx vercel@latest project inspect backy-admin --no-color` -> PASS.
+- `npx vercel@latest env ls --cwd apps/public --no-color` -> PASS, no env vars configured.
+- `npx vercel@latest env ls --cwd apps/admin --no-color` -> PASS, no env vars configured.
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings for root link state and missing Vercel env.
+- `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 BACKY_VERCEL_REQUIRE_REMOTE_ENV=1 npm run test:vercel-preview-readiness` -> FAIL as expected because required env is not configured on either Vercel project yet.
+- `npm run test:vercel-production-readiness` -> PASS with expected warning that no live production URL is set.
+- `npm run test:repo-public-hygiene` -> PASS.
+- `git diff --check` -> PASS.
+
+**Review findings:**
+- [High] The two Vercel projects are connected correctly, but automatic Git deploys will still be unsafe/incomplete until env is configured. Resolved by making missing env explicit in default readiness output and strict-failable with `BACKY_VERCEL_REQUIRE_REMOTE_ENV=1`.
+- [High] `backy-admin` must never receive server-only env. Resolved by checking remote env names for forbidden database/admin/provider/Stripe/S3/Supabase secret variables and failing if any appear on the Vite shell project.
+
+**Next:**
+1. Configure real `backy-public` database/admin/session/cron/CORS/provider env and only the two `VITE_BACKY_*_API_BASE_URL` values on `backy-admin`.
+2. Rerun strict remote-env readiness, then deploy/promote only after the live production contract gate passes.
+3. Continue Batch 5 with the next visible admin/editor release friction point if env remains operator-deferred.
 
 ## 2026-05-31 21:09 IST
 
