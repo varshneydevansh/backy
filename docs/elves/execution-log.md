@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 17:22 IST
+- **Last updated:** 2026-05-31 18:16 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 18:16 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Layers now expose breakpoint override/inheritance state
+
+**What changed:**
+- `apps/admin/src/components/editor/LayersPanel.tsx`: added a responsive Overrides scope, responsive layer counts, per-layer breakpoint state, and compact badges that distinguish desktop source, tablet/mobile local overrides, and inherited desktop state.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: passes the active editor breakpoint into the layer map so desktop/tablet/mobile summaries match the current canvas.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: expanded source/rendered coverage so layer-map smokes verify responsive scope filtering, desktop variant counts, mobile local layout overrides, inherited unchanged layers, and return-to-desktop behavior after breakpoint probes.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 node apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-layers` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-responsive` -> PASS; slow because it exercises public mobile/tablet render geometry across many element types.
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote projects `backy-public`/`backy-admin` are not created/linked yet.
+- `npm run test:vercel-release-config` -> PASS.
+- `npm --workspace @backy-cms/admin run build` -> PASS with the existing large Vite bundle warning.
+- `npm --workspace @backy/public run build` -> PASS.
+- `vercel whoami` -> PASS as `varshneydevansh`.
+- `vercel project ls` -> PASS; only `filtertube-website` exists under `varshneydevanshs-projects`, so Backy project linkage is still pending.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this responsive layer-state slice.
+2. If proceeding with Vercel mutation, create/link `backy-public` and `backy-admin`, set required protected env, then deploy previews.
+3. Continue Batch 5 with the next visible editor/admin polish target if Vercel project linkage is deferred.
 
 ## 2026-05-31 17:22 IST
 

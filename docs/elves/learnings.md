@@ -49,6 +49,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Custom frontend/API handoff should be discoverable from global admin search, not only from deep Help or site-detail panels. Search results should name the agent handoff and component API contract in the exact terms frontend agents need.
 - [2026-05-31] Section templates should not be discoverable only as a small category filter. Keep a persistent Page sections starter shelf with quick-add section presets that uses the same component add/recent/action-status path as normal library items.
 - [2026-05-31] Editor chrome labels must explain unfamiliar modes through purpose metadata, not extra visible helper copy. Inspector should consistently identify selected-layer properties, layer tree, and quick actions across toolbar buttons, floating context controls, panel aria labels, and smoke-testable action status.
+- [2026-05-31] Layer maps must be breakpoint-aware. Tablet/mobile rows should expose local override versus desktop inheritance state, and rendered smokes that switch breakpoints must return to desktop before later layer visibility/lock assertions to avoid persisting breakpoint-local state by accident.
 
 ## Product and Domain Invariants
 

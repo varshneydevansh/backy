@@ -10952,6 +10952,7 @@ export function CanvasEditor({
                   <LayersPanel
                     elements={displayedElements}
                     selectedIds={selectedIds}
+                    currentBreakpoint={breakpoint}
                     onSelect={handleLayerSelect}
                     onReorder={handleLayerReorder}
                     onMove={handleLayerMove}

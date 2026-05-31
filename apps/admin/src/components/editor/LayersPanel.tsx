@@ -53,7 +53,7 @@ import {
     Video,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { CanvasElement } from '../../types/editor';
+import type { CanvasElement, EditorBreakpoint, ResponsiveElementOverride } from '../../types/editor';
 
 // ==========================================================================
 // TYPES
@@ -62,6 +62,7 @@ import type { CanvasElement } from '../../types/editor';
 interface LayersPanelProps {
     elements: CanvasElement[];
     selectedIds: string[];
+    currentBreakpoint?: EditorBreakpoint;
     onSelect: (ids: string[]) => void;
     onReorder: (fromId: string, toId: string) => void;
     onMove: (id: string, action: LayerMoveAction) => void;
@@ -77,7 +78,9 @@ interface LayersPanelProps {
 }
 
 type LayerMoveAction = 'up' | 'down' | 'outdent';
-type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested';
+type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested' | 'responsive';
+type BreakpointOverrideGroup = 'layout' | 'layer' | 'content' | 'style';
+type LayerResponsiveState = 'desktop-source' | 'local-override' | 'inherits-desktop';
 
 interface LayerPanelStats {
     total: number;
@@ -85,6 +88,8 @@ interface LayerPanelStats {
     locked: number;
     nested: number;
     groups: number;
+    responsiveAny: number;
+    responsiveActive: number;
 }
 
 const parseLayerBoolean = (value: unknown, fallback = false): boolean => {
@@ -122,6 +127,7 @@ interface LayerItemProps {
     isSelected: boolean;
     isHidden: boolean;
     isLocked: boolean;
+    currentBreakpoint: EditorBreakpoint;
     isFocusable: boolean;
     isDragTarget: boolean;
     hasChildren: boolean;
@@ -195,6 +201,18 @@ const LAYER_SCOPE_OPTIONS: Array<{ id: LayerScope; label: string; icon: LucideIc
     { id: 'hidden', label: 'Hidden', icon: EyeOff },
     { id: 'locked', label: 'Locked', icon: Lock },
     { id: 'nested', label: 'Nested', icon: Rows3 },
+    { id: 'responsive', label: 'Overrides', icon: MoveRight },
+];
+
+const RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile'] as const satisfies readonly Exclude<EditorBreakpoint, 'desktop'>[];
+const RESPONSIVE_GEOMETRY_FIELDS = ['x', 'y', 'width', 'height', 'rotation', 'zIndex'] as const;
+const RESPONSIVE_LAYER_FIELDS = ['visible', 'locked'] as const;
+
+const BREAKPOINT_OVERRIDE_GROUPS: Array<{ id: BreakpointOverrideGroup; label: string }> = [
+    { id: 'layout', label: 'Layout' },
+    { id: 'layer', label: 'Layer' },
+    { id: 'content', label: 'Content' },
+    { id: 'style', label: 'Style' },
 ];
 
 const CHILD_ACCEPTING_TYPES = new Set([
@@ -293,6 +311,94 @@ const getNavigationLayerHint = (element: CanvasElement): string => {
     return 'Add nav items in Inspector.';
 };
 
+const getBreakpointLabel = (breakpoint: EditorBreakpoint): string => (
+    breakpoint.charAt(0).toUpperCase() + breakpoint.slice(1)
+);
+
+const getResponsiveOverrideGroups = (
+    override: ResponsiveElementOverride | undefined,
+): BreakpointOverrideGroup[] => {
+    if (!override) {
+        return [];
+    }
+
+    return BREAKPOINT_OVERRIDE_GROUPS
+        .filter((group) => {
+            if (group.id === 'layout') {
+                return RESPONSIVE_GEOMETRY_FIELDS.some((field) => override[field] !== undefined);
+            }
+
+            if (group.id === 'layer') {
+                return RESPONSIVE_LAYER_FIELDS.some((field) => override[field] !== undefined);
+            }
+
+            if (group.id === 'content') {
+                return Boolean(override.props && Object.keys(override.props).length > 0);
+            }
+
+            return Boolean(
+                (override.styles && Object.keys(override.styles).length > 0) ||
+                (override.tokenRefs && Object.keys(override.tokenRefs).length > 0),
+            );
+        })
+        .map((group) => group.id);
+};
+
+const getResponsiveOverrideBreakpoints = (element: CanvasElement): Array<Exclude<EditorBreakpoint, 'desktop'>> => (
+    RESPONSIVE_BREAKPOINTS.filter((breakpoint) => (
+        getResponsiveOverrideGroups(element.responsive?.[breakpoint]).length > 0
+    ))
+);
+
+const getResponsiveOverrideLayerCount = (
+    element: CanvasElement,
+    breakpoint?: Exclude<EditorBreakpoint, 'desktop'>,
+): number => {
+    if (breakpoint) {
+        return getResponsiveOverrideGroups(element.responsive?.[breakpoint]).length > 0 ? 1 : 0;
+    }
+
+    return getResponsiveOverrideBreakpoints(element).length > 0 ? 1 : 0;
+};
+
+const getLayerResponsiveState = (
+    element: CanvasElement,
+    currentBreakpoint: EditorBreakpoint,
+): LayerResponsiveState => {
+    if (currentBreakpoint === 'desktop') {
+        return 'desktop-source';
+    }
+
+    return getResponsiveOverrideGroups(element.responsive?.[currentBreakpoint]).length > 0
+        ? 'local-override'
+        : 'inherits-desktop';
+};
+
+const formatResponsiveGroupLabels = (groups: BreakpointOverrideGroup[]): string => (
+    groups
+        .map((group) => BREAKPOINT_OVERRIDE_GROUPS.find((item) => item.id === group)?.label || group)
+        .join(', ')
+);
+
+const getLayerResponsiveLabel = (
+    element: CanvasElement,
+    currentBreakpoint: EditorBreakpoint,
+): string => {
+    const responsiveBreakpoints = getResponsiveOverrideBreakpoints(element);
+    const breakpointLabel = getBreakpointLabel(currentBreakpoint);
+
+    if (currentBreakpoint === 'desktop') {
+        return responsiveBreakpoints.length > 0
+            ? `${responsiveBreakpoints.map(getBreakpointLabel).join('/')} variant${responsiveBreakpoints.length === 1 ? '' : 's'}`
+            : 'Desktop source';
+    }
+
+    const groups = getResponsiveOverrideGroups(element.responsive?.[currentBreakpoint]);
+    return groups.length > 0
+        ? `${breakpointLabel}: ${formatResponsiveGroupLabels(groups)} override${groups.length === 1 ? '' : 's'}`
+        : `${breakpointLabel}: inherits desktop`;
+};
+
 const getLayerReadableMeta = (element: CanvasElement): string => {
     if (element.type === 'nav') {
         const linkCount = getNavigationItemCount(element);
@@ -329,6 +435,7 @@ const getLayerScopeCount = (
     scope: LayerScope,
     stats: LayerPanelStats,
     selectedCount: number,
+    responsiveScopeCount: number,
 ): number => {
     switch (scope) {
         case 'selected':
@@ -339,6 +446,8 @@ const getLayerScopeCount = (
             return stats.locked;
         case 'nested':
             return stats.nested;
+        case 'responsive':
+            return responsiveScopeCount;
         case 'all':
         default:
             return stats.total;
@@ -400,6 +509,7 @@ function LayerItem({
     isSelected,
     isHidden,
     isLocked,
+    currentBreakpoint,
     isFocusable,
     isDragTarget,
     hasChildren,
@@ -442,6 +552,15 @@ function LayerItem({
     const navChildShortcutLabels = navChildLinks.map((child) => (
         `${getLinkLayerLabel(child)}:${getStringProp(child.props, 'href') || '#'}`
     )).join('|') || undefined;
+    const responsiveBreakpoints = getResponsiveOverrideBreakpoints(element);
+    const activeResponsiveGroups = currentBreakpoint === 'desktop'
+        ? []
+        : getResponsiveOverrideGroups(element.responsive?.[currentBreakpoint]);
+    const activeResponsiveGroupLabels = formatResponsiveGroupLabels(activeResponsiveGroups);
+    const layerResponsiveState = getLayerResponsiveState(element, currentBreakpoint);
+    const layerResponsiveLabel = getLayerResponsiveLabel(element, currentBreakpoint);
+    const hasAnyResponsiveOverride = responsiveBreakpoints.length > 0;
+    const shouldShowResponsiveBadge = currentBreakpoint !== 'desktop' || hasAnyResponsiveOverride;
     const navSelectableChildPolicy = element.type === 'nav'
         ? navLayerMode === 'child-layers'
             ? 'expand-nav-container-select-link-children'
@@ -478,6 +597,7 @@ function LayerItem({
         layerRowSelectionContext,
         isHidden ? 'Layer is hidden.' : 'Layer is visible.',
         isLocked ? 'Layer is locked.' : 'Layer is unlocked.',
+        layerResponsiveLabel,
     ].join(' ');
 
     useEffect(() => {
@@ -578,6 +698,13 @@ function LayerItem({
             data-layer-nav-child-shortcut-labels={navChildShortcutLabels}
             data-layer-link-href={linkHref}
             data-layer-readable-meta-value={layerReadableMeta}
+            data-layer-active-breakpoint={currentBreakpoint}
+            data-layer-responsive-state={layerResponsiveState}
+            data-layer-responsive-any-overrides={hasAnyResponsiveOverride ? 'true' : 'false'}
+            data-layer-responsive-breakpoints={responsiveBreakpoints.join(',')}
+            data-layer-responsive-groups={activeResponsiveGroups.join(',')}
+            data-layer-responsive-group-labels={activeResponsiveGroupLabels}
+            data-layer-responsive-label={layerResponsiveLabel}
             data-layer-selected={isSelected ? 'true' : 'false'}
             data-layer-selection-peer-count={selectedPeerCount}
             data-layer-selection-context={layerRowSelectionContext}
@@ -797,6 +924,34 @@ function LayerItem({
                                 title={navLayerHint}
                             >
                                 {navLayerHint}
+                            </span>
+                        ) : null}
+                        {shouldShowResponsiveBadge ? (
+                            <span
+                                data-testid="editor-layer-responsive-badge"
+                                data-layer-responsive-state={layerResponsiveState}
+                                data-layer-responsive-breakpoint={currentBreakpoint}
+                                data-layer-responsive-groups={activeResponsiveGroups.join(',')}
+                                title={layerResponsiveLabel}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    marginTop: '5px',
+                                    borderRadius: '999px',
+                                    background: layerResponsiveState === 'local-override' ? '#ecfeff' : layerResponsiveState === 'inherits-desktop' ? '#f8fafc' : '#f1f5f9',
+                                    border: layerResponsiveState === 'local-override' ? '1px solid #bae6fd' : '1px solid #e2e8f0',
+                                    color: layerResponsiveState === 'local-override' ? '#0369a1' : '#475569',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    lineHeight: '14px',
+                                    maxWidth: '100%',
+                                    overflow: 'hidden',
+                                    padding: '2px 7px',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {layerResponsiveLabel}
                             </span>
                         ) : null}
                         {navChildLinkShortcuts.length > 0 ? (
@@ -1134,6 +1289,7 @@ function LayerItem({
 export function LayersPanel({
     elements,
     selectedIds,
+    currentBreakpoint = 'desktop',
     onSelect,
     onReorder,
     onMove,
@@ -1163,6 +1319,8 @@ export function LayersPanel({
             locked: 0,
             nested: 0,
             groups: 0,
+            responsiveAny: 0,
+            responsiveActive: 0,
         };
 
         const collect = (items: CanvasElement[], depth = 0) => {
@@ -1181,12 +1339,21 @@ export function LayersPanel({
                     stats.groups += 1;
                     collect(element.children, depth + 1);
                 }
+                if (getResponsiveOverrideLayerCount(element) > 0) {
+                    stats.responsiveAny += 1;
+                }
+                if (
+                    currentBreakpoint !== 'desktop' &&
+                    getResponsiveOverrideLayerCount(element, currentBreakpoint) > 0
+                ) {
+                    stats.responsiveActive += 1;
+                }
             });
         };
 
         collect(elements);
         return stats;
-    }, [elements]);
+    }, [currentBreakpoint, elements]);
     const collapsibleLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
@@ -1224,6 +1391,10 @@ export function LayersPanel({
                     return isLayerLocked(element);
                 case 'nested':
                     return depth > 0;
+                case 'responsive':
+                    return currentBreakpoint === 'desktop'
+                        ? getResponsiveOverrideLayerCount(element) > 0
+                        : getResponsiveOverrideLayerCount(element, currentBreakpoint) > 0;
                 case 'all':
                 default:
                     return true;
@@ -1255,7 +1426,7 @@ export function LayersPanel({
 
         walk(elements, []);
         return visibleIds;
-    }, [elements, hasActiveLayerFilter, layerScope, normalizedLayerSearch, selectedIdSet]);
+    }, [currentBreakpoint, elements, hasActiveLayerFilter, layerScope, normalizedLayerSearch, selectedIdSet]);
     const renderedLayerIds = useMemo(() => {
         const ids: string[] = [];
         const collect = (items: CanvasElement[]) => {
@@ -1368,7 +1539,13 @@ export function LayersPanel({
             : layerScope === 'selected'
                 ? 'No selected layers.'
                 : `No ${activeLayerScopeLabel.toLowerCase()} layers yet.`;
-    const layerPanelActionStatus = `Layers panel ready. ${renderedLayerIds.length} of ${layerStats.total} layers shown. ${layerSelectionSummary}`;
+    const responsiveScopeCount = currentBreakpoint === 'desktop'
+        ? layerStats.responsiveAny
+        : layerStats.responsiveActive;
+    const responsiveLayerSummary = currentBreakpoint === 'desktop'
+        ? `${layerStats.responsiveAny} layer${layerStats.responsiveAny === 1 ? ' includes' : 's include'} tablet or mobile overrides.`
+        : `${getBreakpointLabel(currentBreakpoint)} layer map: ${layerStats.responsiveActive} local override layer${layerStats.responsiveActive === 1 ? '' : 's'}, ${layerStats.responsiveAny} responsive layer${layerStats.responsiveAny === 1 ? '' : 's'} total.`;
+    const layerPanelActionStatus = `Layers panel ready. ${renderedLayerIds.length} of ${layerStats.total} layers shown. ${layerSelectionSummary} ${responsiveLayerSummary}`;
     const clearSearchDisabledReason = layerSearch ? undefined : 'Type a layer search before clearing.';
     const resetLayerFiltersStatus = hasActiveLayerFilter
         ? `Reset active layer filters from ${activeLayerScopeLabel}${normalizedLayerSearch ? ` search "${layerSearch.trim()}"` : ''}.`
@@ -1494,6 +1671,7 @@ export function LayersPanel({
                         canReorder={!disabled && !isLayerLocked(element)}
                         canAcceptChildren={CHILD_ACCEPTING_TYPES.has(element.type)}
                         selectedIds={selectedIds}
+                        currentBreakpoint={currentBreakpoint}
                         disabled={disabled}
                         onSelect={handleSelect}
                         onKeyboardNavigate={handleKeyboardNavigate}
@@ -1630,7 +1808,7 @@ export function LayersPanel({
                     padding: '10px 12px',
                     background: '#f8fafc',
                 }}
-                    data-testid="editor-layer-summary"
+                data-testid="editor-layer-summary"
                 data-layer-total-count={layerStats.total}
                 data-layer-visible-count={renderedLayerIds.length}
                 data-layer-selected-count={selectedIds.length}
@@ -1639,10 +1817,15 @@ export function LayersPanel({
                 data-layer-hidden-count={layerStats.hidden}
                 data-layer-locked-count={layerStats.locked}
                 data-layer-nested-count={layerStats.nested}
-                    data-layer-scope={layerScope}
-                    aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
-                    data-action-status={layerPanelActionStatus}
-                >
+                data-layer-responsive-active-breakpoint={currentBreakpoint}
+                data-layer-responsive-active-override-layer-count={layerStats.responsiveActive}
+                data-layer-responsive-total-override-layer-count={layerStats.responsiveAny}
+                data-layer-responsive-scope-count={responsiveScopeCount}
+                data-layer-responsive-summary={responsiveLayerSummary}
+                data-layer-scope={layerScope}
+                aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
+                data-action-status={layerPanelActionStatus}
+            >
                 <div
                     style={{
                         display: 'flex',
@@ -1677,13 +1860,33 @@ export function LayersPanel({
                         >
                             {layerSelectionSummary}
                         </div>
+                        <div
+                            data-testid="editor-layer-responsive-summary"
+                            data-layer-responsive-active-breakpoint={currentBreakpoint}
+                            data-layer-responsive-active-override-layer-count={layerStats.responsiveActive}
+                            data-layer-responsive-total-override-layer-count={layerStats.responsiveAny}
+                            title={responsiveLayerSummary}
+                            style={{
+                                color: currentBreakpoint === 'desktop' ? '#64748b' : layerStats.responsiveActive > 0 ? '#0369a1' : '#64748b',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                lineHeight: '16px',
+                                marginTop: '2px',
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {responsiveLayerSummary}
+                        </div>
                     </div>
                     <div
                         style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                            gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
                             gap: '4px',
-                            minWidth: '116px',
+                            minWidth: '148px',
                             textAlign: 'right',
                             color: '#475569',
                             fontSize: '11px',
@@ -1695,6 +1898,9 @@ export function LayersPanel({
                         <span title="Selected layers">{selectedIds.length} sel</span>
                         <span title="Hidden layers">{layerStats.hidden} hid</span>
                         <span title="Locked layers">{layerStats.locked} lock</span>
+                        <span title={currentBreakpoint === 'desktop' ? 'Layers with responsive variants' : `${getBreakpointLabel(currentBreakpoint)} override layers`}>
+                            {responsiveScopeCount} bp
+                        </span>
                     </div>
                 </div>
                 <div
@@ -1714,7 +1920,7 @@ export function LayersPanel({
                     {LAYER_SCOPE_OPTIONS.map((option) => {
                         const ScopeIcon = option.icon;
                         const isActive = option.id === layerScope;
-                        const count = getLayerScopeCount(option.id, layerStats, selectedIds.length);
+                        const count = getLayerScopeCount(option.id, layerStats, selectedIds.length, responsiveScopeCount);
                         return (
                             <button
                                 key={option.id}

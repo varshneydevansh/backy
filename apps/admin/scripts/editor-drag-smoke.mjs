@@ -1004,7 +1004,15 @@ const assertCanvasEditorShortcutSource = () => {
     'Editor breakpoint override panel must expose Reset all/group action status metadata and rendered reset-all recovery coverage',
   );
   assert(
-    layersPanelSource.includes("type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested'") &&
+    layersPanelSource.includes("type LayerScope = 'all' | 'selected' | 'hidden' | 'locked' | 'nested' | 'responsive'") &&
+      layersPanelSource.includes('currentBreakpoint?: EditorBreakpoint') &&
+      layersPanelSource.includes("const RESPONSIVE_BREAKPOINTS = ['tablet', 'mobile']") &&
+      layersPanelSource.includes('data-testid="editor-layer-responsive-summary"') &&
+      layersPanelSource.includes('data-testid="editor-layer-responsive-badge"') &&
+      layersPanelSource.includes('data-layer-responsive-state={layerResponsiveState}') &&
+      layersPanelSource.includes('data-layer-responsive-groups={activeResponsiveGroups.join') &&
+      layersPanelSource.includes('data-layer-responsive-scope-count={responsiveScopeCount}') &&
+      source.includes('currentBreakpoint={breakpoint}') &&
       layersPanelSource.includes('data-testid="editor-layer-summary"') &&
       layersPanelSource.includes('data-testid="editor-layer-scope-controls"') &&
       layersPanelSource.includes('data-testid={`editor-layer-scope-${option.id}`}') &&
@@ -1014,9 +1022,11 @@ const assertCanvasEditorShortcutSource = () => {
       layersPanelSource.includes('data-testid="editor-layer-empty-reset-filters"') &&
       smokeSource.includes('layerScopeFilters') &&
       smokeSource.includes('layerNoMatchRecovery') &&
+      smokeSource.includes("layerScopeFilters.responsive.scope === 'responsive'") &&
+      smokeSource.includes("layerScopeFilters.mobileResponsive.headingState === 'local-override'") &&
       smokeSource.includes("layerScopeFilters.selected.scope === 'selected'") &&
       smokeSource.includes("layerScopeFilters.nested.scope === 'nested'"),
-    'Layers panel must expose compact layer-map counts, selected/hidden/locked/nested scope filters, and actionable filter-empty recovery for long editor trees',
+    'Layers panel must expose compact layer-map counts, selected/hidden/locked/nested/responsive scope filters, breakpoint override state, and actionable filter-empty recovery for long editor trees',
   );
   assert(
     layersPanelSource.includes("const LAYER_PANEL_ACTION_STATUS_ID = 'editor-layer-panel-action-status';") &&
@@ -2525,6 +2535,12 @@ const createSmokePage = async () => {
               width: '80px',
               height: '40px',
               transform: 'translateX(30px)',
+            },
+            responsive: {
+              mobile: {
+                x: 24,
+                width: 300,
+              },
             },
           },
           {
@@ -20031,6 +20047,7 @@ const testLayersPanelControls = async (client, pageId) => {
       all: readControl('[data-testid="editor-layer-scope-all"]'),
       selected: readControl('[data-testid="editor-layer-scope-selected"]'),
       nested: readControl('[data-testid="editor-layer-scope-nested"]'),
+      responsive: readControl('[data-testid="editor-layer-scope-responsive"]'),
     };
     const rowActions = {
       moveUp: readRowAction('move-up', 'smoke-heading'),
@@ -20084,6 +20101,8 @@ const testLayersPanelControls = async (client, pageId) => {
       layerPanelActionMetadata.scopeControls.selected.actionState === 'ready' &&
       layerPanelActionMetadata.scopeControls.selected.targetScope === 'selected' &&
       Number(layerPanelActionMetadata.scopeControls.nested.matchedLayers) >= 1 &&
+      layerPanelActionMetadata.scopeControls.responsive.targetScope === 'responsive' &&
+      Number(layerPanelActionMetadata.scopeControls.responsive.matchedLayers) >= 1 &&
       layerPanelActionMetadata.treeControls.describedBy === 'editor-layer-panel-action-status' &&
       layerPanelActionMetadata.expandAll.actionState === 'blocked' &&
       layerPanelActionMetadata.collapseAll.actionState === 'ready' &&
@@ -20357,11 +20376,13 @@ const testLayersPanelControls = async (client, pageId) => {
   const layerScopeFilters = await evaluate(client, `(async () => {
     const summary = document.querySelector('[data-testid="editor-layer-summary"]');
     const selectedScope = document.querySelector('[data-testid="editor-layer-scope-selected"]');
+    const responsiveScope = document.querySelector('[data-testid="editor-layer-scope-responsive"]');
     const nestedScope = document.querySelector('[data-testid="editor-layer-scope-nested"]');
     const allScope = document.querySelector('[data-testid="editor-layer-scope-all"]');
     if (
       !(summary instanceof HTMLElement) ||
       !(selectedScope instanceof HTMLButtonElement) ||
+      !(responsiveScope instanceof HTMLButtonElement) ||
       !(nestedScope instanceof HTMLButtonElement) ||
       !(allScope instanceof HTMLButtonElement)
     ) {
@@ -20370,6 +20391,7 @@ const testLayersPanelControls = async (client, pageId) => {
         reason: 'missing-layer-scope-controls',
         hasSummary: Boolean(summary),
         hasSelectedScope: Boolean(selectedScope),
+        hasResponsiveScope: Boolean(responsiveScope),
         hasNestedScope: Boolean(nestedScope),
         hasAllScope: Boolean(allScope),
       };
@@ -20378,7 +20400,23 @@ const testLayersPanelControls = async (client, pageId) => {
     const readRows = () => Array.from(document.querySelectorAll('[data-layer-id]')).map((node) => ({
       id: node.getAttribute('data-layer-id') || '',
       depth: Number(node.getAttribute('data-layer-depth') || 0),
+      responsiveState: node.getAttribute('data-layer-responsive-state') || '',
+      responsiveBreakpoints: node.getAttribute('data-layer-responsive-breakpoints') || '',
+      responsiveGroups: node.getAttribute('data-layer-responsive-groups') || '',
+      responsiveLabel: node.getAttribute('data-layer-responsive-label') || '',
+      responsiveBadgeText: node.querySelector('[data-testid="editor-layer-responsive-badge"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
     }));
+    const readResponsiveSummary = () => {
+      const summaryNode = document.querySelector('[data-testid="editor-layer-summary"]');
+      const responsiveSummary = document.querySelector('[data-testid="editor-layer-responsive-summary"]');
+      return {
+        breakpoint: summaryNode?.getAttribute('data-layer-responsive-active-breakpoint') || '',
+        active: Number(summaryNode?.getAttribute('data-layer-responsive-active-override-layer-count') || 0),
+        total: Number(summaryNode?.getAttribute('data-layer-responsive-total-override-layer-count') || 0),
+        scopeCount: Number(summaryNode?.getAttribute('data-layer-responsive-scope-count') || 0),
+        text: responsiveSummary?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      };
+    };
     const initialSummary = {
       total: Number(summary.getAttribute('data-layer-total-count') || 0),
       visible: Number(summary.getAttribute('data-layer-visible-count') || 0),
@@ -20388,6 +20426,7 @@ const testLayersPanelControls = async (client, pageId) => {
       nested: Number(summary.getAttribute('data-layer-nested-count') || 0),
       scope: summary.getAttribute('data-layer-scope') || '',
       selectionSummaryText: document.querySelector('[data-testid="editor-layer-selection-summary"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      responsive: readResponsiveSummary(),
     };
 
     selectedScope.click();
@@ -20403,6 +20442,17 @@ const testLayersPanelControls = async (client, pageId) => {
     };
     const selectedRows = readRows();
 
+    responsiveScope.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const responsiveSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const responsiveScopeState = {
+      scope: responsiveSummary?.getAttribute('data-layer-scope') || '',
+      active: responsiveScope.getAttribute('data-layer-scope-active') || '',
+      matchedLayers: Number(responsiveScope.getAttribute('data-matched-layers') || 0),
+      responsive: readResponsiveSummary(),
+    };
+    const responsiveRows = readRows();
+
     nestedScope.click();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const nestedSummary = document.querySelector('[data-testid="editor-layer-summary"]');
@@ -20415,6 +20465,24 @@ const testLayersPanelControls = async (client, pageId) => {
     allScope.click();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const allSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const mobileButton = document.querySelector('[data-testid="editor-breakpoint-mobile"]');
+    if (!(mobileButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-mobile-breakpoint-button' };
+    }
+    mobileButton.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const mobileRows = readRows();
+    const mobileHeading = mobileRows.find((row) => row.id === 'smoke-heading');
+    const mobileImage = mobileRows.find((row) => row.id === 'smoke-image');
+    const mobileResponsiveSummary = readResponsiveSummary();
+    const desktopButton = document.querySelector('[data-testid="editor-breakpoint-desktop"]');
+    if (!(desktopButton instanceof HTMLButtonElement)) {
+      return { ok: false, reason: 'missing-desktop-breakpoint-button' };
+    }
+    desktopButton.click();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
     return {
       ok: true,
@@ -20423,6 +20491,10 @@ const testLayersPanelControls = async (client, pageId) => {
         ...selectedScopeState,
         rows: selectedRows,
       },
+      responsive: {
+        ...responsiveScopeState,
+        rows: responsiveRows,
+      },
       nested: {
         ...nestedScopeState,
         rows: nestedRows,
@@ -20430,6 +20502,14 @@ const testLayersPanelControls = async (client, pageId) => {
       all: {
         scope: allSummary?.getAttribute('data-layer-scope') || '',
         visible: Number(allSummary?.getAttribute('data-layer-visible-count') || 0),
+      },
+      mobileResponsive: {
+        summary: mobileResponsiveSummary,
+        headingState: mobileHeading?.responsiveState || '',
+        headingGroups: mobileHeading?.responsiveGroups || '',
+        headingLabel: mobileHeading?.responsiveLabel || '',
+        headingBadgeText: mobileHeading?.responsiveBadgeText || '',
+        imageState: mobileImage?.responsiveState || '',
       },
     };
   })()`);
@@ -20441,6 +20521,9 @@ const testLayersPanelControls = async (client, pageId) => {
       layerScopeFilters.initialSummary.selectedFiltered === 0 &&
       /selected and visible/.test(layerScopeFilters.initialSummary.selectionSummaryText) &&
       layerScopeFilters.initialSummary.nested >= 2 &&
+      layerScopeFilters.initialSummary.responsive.breakpoint === 'desktop' &&
+      layerScopeFilters.initialSummary.responsive.total >= 1 &&
+      /tablet or mobile overrides/.test(layerScopeFilters.initialSummary.responsive.text) &&
       layerScopeFilters.selected.scope === 'selected' &&
       layerScopeFilters.selected.active === 'true' &&
       layerScopeFilters.selected.visibleCount >= 2 &&
@@ -20448,12 +20531,23 @@ const testLayersPanelControls = async (client, pageId) => {
       /selected and visible/.test(layerScopeFilters.selected.selectionSummaryText) &&
       layerScopeFilters.selected.rows.length === 2 &&
       ['smoke-heading', 'smoke-image'].every((id) => layerScopeFilters.selected.rows.some((row) => row.id === id)) &&
+      layerScopeFilters.responsive.scope === 'responsive' &&
+      layerScopeFilters.responsive.active === 'true' &&
+      layerScopeFilters.responsive.matchedLayers >= 1 &&
+      layerScopeFilters.responsive.responsive.total >= 1 &&
+      layerScopeFilters.responsive.rows.some((row) => row.id === 'smoke-heading' && row.responsiveBreakpoints.includes('mobile')) &&
       layerScopeFilters.nested.scope === 'nested' &&
       layerScopeFilters.nested.active === 'true' &&
       layerScopeFilters.nested.rows.some((row) => row.id === 'smoke-box' && row.depth === 0) &&
       layerScopeFilters.nested.rows.some((row) => row.id === 'smoke-child-button' && row.depth > 0) &&
       layerScopeFilters.all.scope === 'all' &&
-      layerScopeFilters.all.visible >= initialTree.rows.length,
+      layerScopeFilters.all.visible >= initialTree.rows.length &&
+      layerScopeFilters.mobileResponsive.summary.breakpoint === 'mobile' &&
+      layerScopeFilters.mobileResponsive.summary.active >= 1 &&
+      layerScopeFilters.mobileResponsive.headingState === 'local-override' &&
+      layerScopeFilters.mobileResponsive.headingGroups.includes('layout') &&
+      /Mobile: .*Layout/.test(layerScopeFilters.mobileResponsive.headingBadgeText) &&
+      layerScopeFilters.mobileResponsive.imageState === 'inherits-desktop',
     `Layer scope filters did not narrow selected/nested views and reset to all: ${JSON.stringify(layerScopeFilters)}`,
   );
   const rangeSetup = await evaluate(client, `(() => {
