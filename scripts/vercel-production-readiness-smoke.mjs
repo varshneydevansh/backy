@@ -42,15 +42,29 @@ const agents = read('AGENTS.md');
 const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
+const productionEnvGuard = read('scripts/vercel-public-production-env-guard.mjs');
 
 assert(
   rootPackage.scripts?.['test:vercel-production-readiness'] === 'node scripts/vercel-production-readiness-smoke.mjs',
   'Root package exposes test:vercel-production-readiness',
 );
+assert(
+  rootPackage.scripts?.['test:vercel-public-production-env-guard'] ===
+    'node scripts/vercel-public-production-env-guard-smoke.mjs',
+  'Root package exposes test:vercel-public-production-env-guard',
+);
+assert(
+  rootPackage.scripts?.['build:vercel:public']?.startsWith('node scripts/vercel-public-production-env-guard.mjs && '),
+  'Public Vercel production builds run the env guard before Next.js build',
+);
 includesAll(
   rootPackage.scripts?.['test:partial-gate-preflights'] || '',
-  ['npm run test:vercel-production-readiness', 'npm run test:repo-public-hygiene'],
-  'Root Partial gate aggregate includes production readiness and public hygiene',
+  [
+    'npm run test:vercel-public-production-env-guard',
+    'npm run test:vercel-production-readiness',
+    'npm run test:repo-public-hygiene',
+  ],
+  'Root Partial gate aggregate includes production env guard, production readiness, and public hygiene',
 );
 
 includesAll(
@@ -60,6 +74,7 @@ includesAll(
     'Never promote a preview or production alias while `BACKY_DATA_MODE=demo`',
     'BACKY_VERCEL_PRODUCTION_URL',
     'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',
+    'Vercel production builds run a public env guard before Next.js builds',
     'npm run test:vercel-production-readiness',
     '/api/sites/site-demo/agent-handoff',
     '/api/sites/site-demo/manifest',
@@ -110,6 +125,19 @@ includesAll(
     'liveProof: {',
   ],
   'OpenAPI deployment topology production schema',
+);
+
+includesAll(
+  productionEnvGuard,
+  [
+    "valueFor('VERCEL_ENV') === 'production'",
+    "BACKY_DATA_MODE') !== 'database'",
+    "BACKY_DATABASE_URL') && !valueFor('DATABASE_URL')",
+    'BACKY_ALLOW_PRODUCTION_DEMO_MODE',
+    'BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH',
+    'must not be enabled for production release builds',
+  ],
+  'Public production env guard source',
 );
 
 const normalizeProductionUrl = (value) => {

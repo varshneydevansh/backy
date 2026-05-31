@@ -160,6 +160,8 @@ Do not use the current prebuilt standalone output as release proof for `backy-pu
 
 Never promote a preview or production alias while `BACKY_DATA_MODE=demo`, while database/provider/storage env is missing, or while the public production URL cannot serve Backy JSON contracts. A Vercel deployment can be marked Ready even when the public alias points at a stale static build, so production proof must hit the final public domain directly.
 
+Vercel production builds run a public env guard before Next.js builds. Missing `BACKY_DATA_MODE=database`, database URL, admin keys, cron secret, admin app URL, or CORS origins now fail the production build early instead of producing a Ready deployment with crashing API routes. The guard also rejects production builds that leave `BACKY_ALLOW_PRODUCTION_DEMO_MODE` or `BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH` enabled. Run `npm run test:vercel-public-production-env-guard` when changing the guard or release scripts.
+
 Before promoting or sharing a production URL, set `BACKY_DATA_MODE=database` on `backy-public`, configure real Supabase/Postgres, storage/provider, admin/session, cron, and CORS env, then run:
 
 ```bash

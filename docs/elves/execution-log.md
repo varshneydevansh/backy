@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 22:43 IST
+- **Last updated:** 2026-05-31 23:08 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 23:08 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Public production builds now fail early when required production env is missing
+
+**What changed:**
+- Added `scripts/vercel-public-production-env-guard.mjs`, a value-redacted guard that runs only on Vercel production builds or when explicitly forced by `BACKY_REQUIRE_PUBLIC_PRODUCTION_ENV=1`.
+- Wired the guard into `build:vercel:public` before workspace package builds and the Next.js build.
+- Added `scripts/vercel-public-production-env-guard-smoke.mjs` and `npm run test:vercel-public-production-env-guard` to verify skip, fail, reject-demo-flag, pass, and no-secret-output cases.
+- Updated Vercel release/readiness smokes and README so the production guard is part of the release contract.
+
+**Commands run:**
+- `npm run test:vercel-public-production-env-guard --silent` -> PASS.
+- `npm run test:vercel-release-config --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected warnings for root link state and missing production `backy-public` env.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected warning that no live production URL is set.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run build:vercel:public --silent` -> PASS; guard skipped outside Vercel production and the Next build listed the expected API routes.
+
+**Review findings:**
+- [High] `backy-public` production could previously deploy as Ready while missing database/admin/cron/CORS env and then crash at runtime. Resolved by failing Vercel production builds before release output is produced.
+- [Medium] Production demo/local-auth allow flags were preview-only escape hatches but could be accidentally carried into production env. Resolved by making the public production build guard reject them.
+
+**Next:**
+1. Commit and push this guard slice.
+2. After push, expect `backy-public` automatic production deployment to fail until real production env is configured; that is intentional and safer than a false-ready runtime crash.
+3. Continue Batch 5 with the next visible editor/admin friction point while production env remains operator-deferred.
 
 ## 2026-05-31 22:43 IST
 

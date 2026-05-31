@@ -101,6 +101,7 @@ includesAll(
   [
     'npm run test:vercel-release-config',
     'npm run test:vercel-preview-readiness',
+    'npm run test:vercel-public-production-env-guard',
     'npm run test:vercel-production-readiness',
     'npm run test:repo-public-hygiene',
   ],
@@ -119,9 +120,14 @@ assert(
   'Root package exposes test:repo-public-hygiene',
 );
 assert(
+  rootPackage.scripts?.['test:vercel-public-production-env-guard'] ===
+    'node scripts/vercel-public-production-env-guard-smoke.mjs',
+  'Root package exposes test:vercel-public-production-env-guard',
+);
+assert(
   rootPackage.scripts?.['build:vercel:public'] ===
-    'npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public',
-  'Root package exposes a Vercel public build that compiles workspace packages before Next',
+    'node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public',
+  'Root package exposes a Vercel public build that guards production env and compiles workspace packages before Next',
 );
 assert(
   rootPackage.scripts?.['build:vercel:admin'] ===
@@ -204,6 +210,8 @@ includesAll(
     'Project Settings -> AI',
     'npm run test:vercel-preview-readiness',
     'BACKY_VERCEL_REQUIRE_REMOTE_ENV=1',
+    'test:vercel-public-production-env-guard',
+    'Vercel production builds run a public env guard before Next.js builds',
     'npm run test:vercel-production-readiness',
     'npm run test:repo-public-hygiene',
     'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',

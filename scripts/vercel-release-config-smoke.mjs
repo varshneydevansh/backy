@@ -76,6 +76,8 @@ for (const snippet of [
   'Forbidden env',
   'npm run test:vercel-preview-readiness',
   'BACKY_VERCEL_REQUIRE_REMOTE_ENV=1',
+  'test:vercel-public-production-env-guard',
+  'Vercel production builds run a public env guard before Next.js builds',
   'npm run test:vercel-production-readiness',
   'npm run test:repo-public-hygiene',
   '### Production promotion gate',
@@ -107,6 +109,16 @@ assert(
 assert(
   rootPackage.scripts?.['test:repo-public-hygiene'] === 'node scripts/repo-public-hygiene-smoke.mjs',
   'Root package.json must expose test:repo-public-hygiene.',
+);
+assert(
+  rootPackage.scripts?.['test:vercel-public-production-env-guard'] ===
+    'node scripts/vercel-public-production-env-guard-smoke.mjs',
+  'Root package.json must expose test:vercel-public-production-env-guard.',
+);
+
+assert(
+  rootPackage.scripts?.['build:vercel:public']?.startsWith('node scripts/vercel-public-production-env-guard.mjs && '),
+  'Root package public Vercel build must run the production env guard before a release build.',
 );
 
 assert(
