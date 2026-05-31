@@ -182,7 +182,6 @@ async function createSupabaseAuthUser(input: {
       email_confirm: true,
       user_metadata: {
         full_name: input.fullName,
-        role: 'owner',
         source: 'backy-owner-bootstrap',
       },
     }),

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 03:14 IST
+- **Last updated:** 2026-06-01 04:08 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,50 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 04:08 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production owner bootstrap completed and live public contract gate is green
+
+**What changed:**
+- `supabase/migrations/013_harden_auth_profile_trigger.sql`: hardens `public.handle_new_user()` with an explicit trusted `search_path`, `public.user_role` casts, guarded metadata role parsing, and idempotent profile upsert behavior so Supabase Auth Admin user creation works from its runtime context.
+- `apps/public/src/app/api/admin/auth/bootstrap-owner/route.ts`: first-owner Auth metadata no longer tries to assign the owner role through Supabase user metadata; Backy keeps the owner role in its own profile/workspace records.
+- `apps/public/next.config.js` plus Vercel readiness smokes: removed the redundant optional-driver externalization assertion now that optional database providers are already lazy inside `@backy/db`.
+- `scripts/vercel-production-readiness-smoke.mjs`: live render verification now checks the negotiated `x-backy-schema-version: backy.content-payload.v1` contract header and the embedded `backy.content.v1` document instead of an obsolete body-level render schema field.
+- `README.md`: added the post-bootstrap operator step to remove `BACKY_OWNER_BOOTSTRAP_TOKEN` from `backy-public` production env and redeploy.
+
+**Live production actions:**
+- Applied migration `013` to the production Supabase database.
+- Verified Supabase Auth Admin API can create/delete a smoke user after the trigger hardening.
+- Created the real first owner through `POST /api/admin/auth/bootstrap-owner` and verified production login returns an owner Supabase-backed admin session.
+- Removed `BACKY_OWNER_BOOTSTRAP_TOKEN` from `backy-public` production env and deleted the ignored local bootstrap-token file.
+- Created a small published `site-demo` database site plus published homepage through the authenticated admin API so production handoff, manifest, OpenAPI, and render endpoints have real database content to prove against.
+
+**Commands run:**
+- `psql "$POSTGRES_URL_NON_POOLING" -v ON_ERROR_STOP=1 -f supabase/migrations/013_harden_auth_profile_trigger.sql` -> PASS.
+- Supabase Auth Admin create/delete smoke against production -> PASS.
+- Production owner bootstrap request -> PASS; returned owner role through Supabase auth.
+- Production admin login smoke -> PASS; returned an owner Supabase-backed session.
+- `npx vercel@latest env rm BACKY_OWNER_BOOTSTRAP_TOKEN production --cwd apps/public --yes --no-color` -> PASS.
+- `npx vercel@latest env ls --cwd apps/public --no-color | rg 'BACKY_(OWNER|ADMIN)_BOOTSTRAP_TOKEN'` -> no bootstrap token present.
+- `npm run test:admin-owner-bootstrap --workspace @backy/public --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with the expected repo-root link warning.
+- `npm run test:vercel-production-readiness --silent` -> PASS with the expected no-live-production-URL warning.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run build:vercel:public --silent` -> PASS.
+
+**Review findings:**
+- [High] Supabase Auth user creation failed because the profile trigger relied on caller `search_path` and an unqualified `user_role` enum cast. Fixed with a hardened trigger migration.
+- [High] The bootstrap route should not make Supabase user metadata authoritative for Backy owner role assignment. Fixed by letting Backy profile/workspace upserts own role assignment.
+- [Medium] The production readiness live render check asserted an outdated body schema. Fixed to verify the actual negotiated render schema header and content-document schema.
+
+**Next:**
+1. Commit and push this production owner/bootstrap hardening slice.
+2. Wait for the new production deployment so the removed bootstrap token and route cleanup are both reflected in the active runtime.
+3. Continue Batch 5 with the next highest-friction admin/editor surface after confirming production deploy health.
 
 ## 2026-06-01 03:14 IST
 

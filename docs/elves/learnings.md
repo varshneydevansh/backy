@@ -81,6 +81,9 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Production admin login must never advertise seeded demo credentials. Keep demo account buttons and dev MFA phrases behind local/dev-only flags, and create the first real owner through a server-token, one-time bootstrap path.
 - [2026-06-01] Protected admin bundles should not publish source maps by default. A hidden demo panel can still leak local/demo constants through `.map` files unless source maps are explicitly opt-in for private debugging.
 - [2026-06-01] Vercel must be able to trace Backy workspace packages from `backy-public` functions. Bundle `@backy/db`/core/storage through Next `transpilePackages`, keep app-level runtime clients such as `postgres` in `apps/public` dependencies, and hide only unused optional provider drivers behind lazy runtime imports.
+- [2026-06-01] Supabase Auth triggers must not rely on caller `search_path`. Auth Admin API runs under a different execution context than operator SQL, so profile bootstrap triggers should pin trusted schemas and schema-qualify Backy enum casts such as `public.user_role`.
+- [2026-06-01] First-owner bootstrap tokens are one-use operational secrets. Remove them from `backy-public` production env immediately after owner creation and redeploy; the active-owner lockout is defense in depth, not a reason to keep the token around.
+- [2026-06-01] The public render schema is negotiated through headers. Production readiness should assert `x-backy-schema-version: backy.content-payload.v1` and the embedded `backy.content.v1` document rather than expecting a body-level `data.schemaVersion`.
 
 ## Known Traps
 

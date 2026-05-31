@@ -316,7 +316,6 @@ includesAll(
   publicNextConfig,
   [
     "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
-    "serverExternalPackages: ['better-sqlite3', 'mysql2']",
   ],
   'Public Next config bundles Backy workspace packages into Vercel functions',
 );

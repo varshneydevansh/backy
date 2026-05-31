@@ -149,7 +149,6 @@ includesAll(
   publicNextConfig,
   [
     "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
-    "serverExternalPackages: ['better-sqlite3', 'mysql2']",
   ],
   'Public production Next config bundles Backy workspace packages into Vercel functions',
 );
@@ -200,7 +199,14 @@ const parseJsonResponse = async (url) => {
   }
 
   try {
-    return JSON.parse(text);
+    const json = JSON.parse(text);
+    if (json && typeof json === 'object') {
+      Object.defineProperty(json, '__headers', {
+        value: response.headers,
+        enumerable: false,
+      });
+    }
+    return json;
   } catch (error) {
     fail(`${url} did not return parseable JSON: ${error instanceof Error ? error.message : String(error)}`);
     return null;
@@ -273,8 +279,16 @@ const checkLiveProduction = async () => {
   if (render) {
     assert(render.success === true, 'Production render returns success=true');
     assert(
-      render.data?.schemaVersion === 'backy.render-payload.v1',
-      'Production render exposes the render payload schema',
+      render.__headers?.get('x-backy-schema-version') === 'backy.content-payload.v1',
+      'Production render exposes the negotiated content payload schema header',
+    );
+    assert(
+      render.__headers?.get('x-backy-supported-schema-versions')?.includes('backy.content-payload.v1'),
+      'Production render exposes supported content payload schema versions',
+    );
+    assert(
+      render.data?.content?.contentDocument?.schemaVersion === 'backy.content.v1',
+      'Production render includes the Backy content document schema',
     );
     assert(Boolean(render.data?.site?.id), 'Production render includes site identity');
   }

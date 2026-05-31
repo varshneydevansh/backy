@@ -159,6 +159,8 @@ curl -X POST https://<backy-public-domain>/api/admin/auth/bootstrap-owner \
   --data '{"email":"you@example.com","password":"use-a-long-private-password","fullName":"Your Name"}'
 ```
 
+After the first owner is created, immediately remove `BACKY_OWNER_BOOTSTRAP_TOKEN` from the `backy-public` production environment and redeploy so the active production runtime no longer carries the bootstrap secret. The endpoint also refuses a second active owner, but the token should still be treated as one-use only.
+
 Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, packaging ignores, project linkage, GitHub repository connection, env-boundary warnings, production promotion rules, public repo hygiene, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 BACKY_VERCEL_REQUIRE_REMOTE_ENV=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin` and configuring the required Vercel env on both projects.
 
 Use Vercel CLI `47.2.2+` for preview deploys; the local global CLI may be older, so `npx vercel@latest` is the safest release command. The repo root and app roots include `.vercelignore` files so local `.next`, `dist`, cache, Vercel link, and `node_modules` folders are not uploaded as source.

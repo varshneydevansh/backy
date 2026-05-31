@@ -5,10 +5,9 @@ const nextConfig = {
     // Enable React strict mode for better development experience
     reactStrictMode: true,
 
-    // Bundle Backy workspace packages into Vercel functions. Provider-specific
-    // third-party storage/database clients stay lazy inside those packages.
+    // Bundle Backy workspace packages into Vercel functions. Optional provider
+    // clients stay lazy inside those packages so unused drivers are not required.
     transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage'],
-    serverExternalPackages: ['better-sqlite3', 'mysql2'],
 
     // Configure for subdomain routing
     async rewrites() {
