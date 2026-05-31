@@ -196,14 +196,13 @@ const withRepositoryMediaReferenceSync = (
     },
   };
 };
-const importDatabaseAdapters = async (): Promise<DatabaseAdapterModule> => {
-  const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseAdapterModule>;
-  return dynamicImport('@backy/db/adapters');
-};
-const importDatabaseRepositories = async (): Promise<DatabaseRepositoryModule> => {
-  const dynamicImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<DatabaseRepositoryModule>;
-  return dynamicImport('@backy/db/repositories');
-};
+const importDatabaseAdapters = async (): Promise<DatabaseAdapterModule> => (
+  import('@backy/db/adapters') as Promise<DatabaseAdapterModule>
+);
+
+const importDatabaseRepositories = async (): Promise<DatabaseRepositoryModule> => (
+  import('@backy/db/repositories') as Promise<DatabaseRepositoryModule>
+);
 
 export type PublicRepositoryRuntime =
   | {

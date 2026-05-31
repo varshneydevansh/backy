@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 00:44 IST
+- **Last updated:** 2026-06-01 03:14 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 03:14 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** `backy-public` production bundle fixed for database-backed Vercel functions
+
+**What changed:**
+- `apps/public/next.config.js`: Next now bundles Backy workspace packages (`@backy-cms/core`, `@backy/db`, `@backy/storage`) into Vercel functions instead of externalizing `@backy/db`; only unused optional MySQL/SQLite native drivers remain external/lazy.
+- `apps/public/src/lib/repositoryRuntime.ts`: database adapters/repositories are imported with Vercel-traceable dynamic imports so serverless functions include the Backy DB package.
+- `apps/public/package.json` and `package-lock.json`: `postgres` is now a `backy-public` runtime dependency, not only a root dev dependency.
+- `packages/db/src/adapters/index.ts`: optional MySQL/SQLite provider imports are lazy runtime imports, preserving Postgres production builds without requiring irrelevant optional drivers.
+- `scripts/vercel-preview-readiness-smoke.mjs` and `scripts/vercel-production-readiness-smoke.mjs`: added guards for traceable workspace bundling and against hiding `@backy/db` from Vercel tracing.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/db --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with the expected root-link warning.
+- `npm run test:vercel-production-readiness --silent` -> PASS with the expected no-live-production-URL warning.
+- `npm run build:vercel:public --silent` -> PASS after the optional-provider lazy import fix.
+- `git diff --check` -> PASS.
+
+**Review findings:**
+- [High] Hosted `backy-public` API routes crashed because Vercel could not find the local `@backy/db` package inside serverless functions. Fixed by bundling workspace packages and making repository imports traceable.
+- [High] Once `@backy/db` was bundled, Turbopack tried to resolve optional MySQL/SQLite drivers that production does not use. Fixed by lazily importing only those optional provider packages while keeping Postgres traceable and installed for production.
+
+**Next:**
+1. Commit and push this Vercel runtime packaging fix.
+2. Wait for `backy-public` production to rebuild, then run the live production contract gate against `https://backy-public.vercel.app`.
+3. If production DB has no initial site yet, create the real owner and seed/create the first site through the secured admin path instead of enabling production demo mode.
 
 ## 2026-06-01 01:24 IST
 

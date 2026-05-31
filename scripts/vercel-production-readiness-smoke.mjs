@@ -43,6 +43,8 @@ const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
 const productionEnvGuard = read('scripts/vercel-public-production-env-guard.mjs');
+const publicNextConfig = read('apps/public/next.config.js');
+const publicRepositoryRuntime = read('apps/public/src/lib/repositoryRuntime.ts');
 
 assert(
   rootPackage.scripts?.['test:vercel-production-readiness'] === 'node scripts/vercel-production-readiness-smoke.mjs',
@@ -141,6 +143,31 @@ includesAll(
     'must not be enabled for production release builds',
   ],
   'Public production env guard source',
+);
+
+includesAll(
+  publicNextConfig,
+  [
+    "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
+    "serverExternalPackages: ['better-sqlite3', 'mysql2']",
+  ],
+  'Public production Next config bundles Backy workspace packages into Vercel functions',
+);
+assert(
+  !publicNextConfig.includes("serverExternalPackages: ['@backy/storage', '@backy/db']"),
+  'Public production Next config does not externalize Backy workspace packages from Vercel functions',
+);
+includesAll(
+  publicRepositoryRuntime,
+  [
+    "import('@backy/db/adapters')",
+    "import('@backy/db/repositories')",
+  ],
+  'Public production repository runtime uses Vercel-traceable Backy database imports',
+);
+assert(
+  !publicRepositoryRuntime.includes("new Function('specifier', 'return import(specifier)')"),
+  'Public production repository runtime does not hide Backy database imports from Vercel tracing',
 );
 
 const normalizeProductionUrl = (value) => {

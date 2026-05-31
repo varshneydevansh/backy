@@ -80,6 +80,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Vercel Marketplace databases may provide `POSTGRES_URL`/`POSTGRES_PRISMA_URL` without `DATABASE_URL`. Backy runtime config and production guards should accept provider-standard Postgres aliases directly instead of requiring operators to duplicate secrets.
 - [2026-06-01] Production admin login must never advertise seeded demo credentials. Keep demo account buttons and dev MFA phrases behind local/dev-only flags, and create the first real owner through a server-token, one-time bootstrap path.
 - [2026-06-01] Protected admin bundles should not publish source maps by default. A hidden demo panel can still leak local/demo constants through `.map` files unless source maps are explicitly opt-in for private debugging.
+- [2026-06-01] Vercel must be able to trace Backy workspace packages from `backy-public` functions. Bundle `@backy/db`/core/storage through Next `transpilePackages`, keep app-level runtime clients such as `postgres` in `apps/public` dependencies, and hide only unused optional provider drivers behind lazy runtime imports.
 
 ## Known Traps
 

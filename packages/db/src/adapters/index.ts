@@ -19,6 +19,15 @@ import type { MySql2Database } from 'drizzle-orm/mysql2';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../schema';
 
+const importOptionalDatabaseProvider = async <TModule>(
+    specifier: string
+): Promise<TModule> => {
+    const dynamicImport = new Function('specifier', 'return import(specifier)') as (
+        value: string
+    ) => Promise<TModule>;
+    return dynamicImport(specifier);
+};
+
 // ==========================================================================
 // TYPES
 // ==========================================================================
@@ -138,13 +147,11 @@ export async function createMySQLAdapter(
         throw new Error('MySQL requires a connection URL');
     }
 
-    const { drizzle } = await import('drizzle-orm/mysql2');
+    const { drizzle } = await importOptionalDatabaseProvider<
+        typeof import('drizzle-orm/mysql2')
+    >('drizzle-orm/mysql2');
 
-    const mysqlModule = (await import('mysql2/promise').catch((_error) => {
-        throw new Error(
-            'mysql2/promise package is not installed. Install "mysql2" to enable MySQL adapter functionality.'
-        );
-    })) as {
+    const mysqlModule = (await importOptionalDatabaseProvider<{
         createPool?: (
             config: string | Record<string, unknown>,
             options?: Record<string, unknown>
@@ -161,7 +168,11 @@ export async function createMySQLAdapter(
                 end: () => Promise<void>;
             };
         };
-    };
+    }>('mysql2/promise').catch((_error) => {
+        throw new Error(
+            'mysql2/promise package is not installed. Install "mysql2" to enable MySQL adapter functionality.'
+        );
+    }));
 
     const createPool = mysqlModule.createPool || mysqlModule.default?.createPool;
     if (!createPool) {
@@ -204,8 +215,15 @@ export async function createSQLiteAdapter(
 ): Promise<DatabaseAdapter> {
     const dbPath = config.path || ':memory:';
 
-    const { drizzle } = await import('drizzle-orm/better-sqlite3');
-    const Database = (await import('better-sqlite3').catch((_error) => {
+    const { drizzle } = await importOptionalDatabaseProvider<
+        typeof import('drizzle-orm/better-sqlite3')
+    >('drizzle-orm/better-sqlite3');
+    const Database = (await importOptionalDatabaseProvider<{
+        default: new (filename?: string, options?: unknown) => {
+            prepare: (sql: string) => { get: () => unknown };
+            close: () => void;
+        };
+    }>('better-sqlite3').catch((_error) => {
         throw new Error(
             'better-sqlite3 package is not installed. Install "better-sqlite3" to enable SQLite adapter functionality.'
         );

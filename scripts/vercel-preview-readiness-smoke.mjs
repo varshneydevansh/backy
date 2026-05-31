@@ -82,6 +82,8 @@ const envExample = read('.env.example');
 const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
+const publicNextConfig = read('apps/public/next.config.js');
+const publicRepositoryRuntime = read('apps/public/src/lib/repositoryRuntime.ts');
 
 assert(hasCron(rootVercel), 'Root vercel.json keeps the commerce reconciliation cron');
 assert(hasCron(publicVercel), 'apps/public/vercel.json keeps the commerce reconciliation cron');
@@ -308,6 +310,31 @@ includesAll(
     'const: "Never promote demo-mode previews or production aliases."',
   ],
   'OpenAPI deployment topology schema',
+);
+
+includesAll(
+  publicNextConfig,
+  [
+    "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
+    "serverExternalPackages: ['better-sqlite3', 'mysql2']",
+  ],
+  'Public Next config bundles Backy workspace packages into Vercel functions',
+);
+assert(
+  !publicNextConfig.includes("serverExternalPackages: ['@backy/storage', '@backy/db']"),
+  'Public Next config does not externalize Backy workspace packages from Vercel functions',
+);
+includesAll(
+  publicRepositoryRuntime,
+  [
+    "import('@backy/db/adapters')",
+    "import('@backy/db/repositories')",
+  ],
+  'Public repository runtime uses Vercel-traceable Backy database imports',
+);
+assert(
+  !publicRepositoryRuntime.includes("new Function('specifier', 'return import(specifier)')"),
+  'Public repository runtime does not hide Backy database imports from Vercel tracing',
 );
 
 const projectLinks = [
