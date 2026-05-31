@@ -65,6 +65,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Public custom-domain and locale-domain discovery must require `site.settings.domainVerification.status === "verified"` for the exact host. A saved domain string alone is configuration intent, not routing permission.
 - [2026-05-31] Help content should mirror deploy behavior immediately after hardening changes; otherwise users and frontend agents keep following the old, looser mental model.
 - [2026-05-31] Vercel source readiness is not the same as deployability to the user's account. A green build plus `test:vercel-preview-readiness` means code/config is ready, but actual preview deploy still needs created/linked `backy-public` and `backy-admin` projects, required env, and deployment protection.
+- [2026-05-31] Backy admin should keep TanStack Router `autoCodeSplitting` enabled. Without it, the generated route tree imports every route into the Vite entry bundle and turns Vercel preview builds into one oversized admin payload.
 
 ## Known Traps
 

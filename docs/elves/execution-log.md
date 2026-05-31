@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 18:16 IST
+- **Last updated:** 2026-05-31 18:36 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 18:36 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Admin Vercel build now uses route-level code splitting
+
+**What changed:**
+- `apps/admin/vite.config.ts`: enabled TanStack Router `autoCodeSplitting` so admin routes are no longer all pulled into the initial Vite entry bundle.
+- The production admin build now emits route chunks plus an isolated editor chunk. The previous single ~6.5 MB minified entry is now split into a ~0.87 MB main entry and a lazy ~2.18 MB editor chunk, with other admin routes split by route.
+
+**Commands run:**
+- `vercel whoami && vercel project ls` -> PASS as `varshneydevansh`; only `filtertube-website` currently exists, so `backy-public` and `backy-admin` are still not created/linked.
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote projects `backy-public`/`backy-admin` are not created/linked yet.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run build` -> PASS; route splitting is active, though Vite still warns because the editor chunk remains larger than 500 kB.
+- `npm --workspace @backy-cms/admin run test:login` -> PASS.
+- `npm --workspace @backy-cms/admin run test:pages-list` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-layers` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this Vercel-readiness bundle-splitting slice.
+2. For actual Vercel preview deployment, create/link `backy-public` and `backy-admin`, set required protected env, and deploy previews.
+3. Continue Batch 5 with the next visible editor/admin polish target if Vercel project linkage remains deferred.
 
 ## 2026-05-31 18:16 IST
 
