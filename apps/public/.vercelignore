@@ -1,0 +1,10 @@
+.DS_Store
+.next/
+.next-sdk-smoke/
+.turbo/
+.vercel/
+node_modules/
+tsconfig.tsbuildinfo
+*.log
+coverage/
+test-results/

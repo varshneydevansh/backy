@@ -66,6 +66,10 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Help content should mirror deploy behavior immediately after hardening changes; otherwise users and frontend agents keep following the old, looser mental model.
 - [2026-05-31] Vercel source readiness is not the same as deployability to the user's account. A green build plus `test:vercel-preview-readiness` means code/config is ready, but actual preview deploy still needs created/linked `backy-public` and `backy-admin` projects, required env, and deployment protection.
 - [2026-05-31] Backy admin should keep TanStack Router `autoCodeSplitting` enabled. Without it, the generated route tree imports every route into the Vite entry bundle and turns Vercel preview builds into one oversized admin payload.
+- [2026-05-31] Current Backy Vercel deploys must use repo-root source deploys when project `rootDirectory` is set. Running source deploy from `apps/public` or `apps/admin` can make Vercel look for `apps/public/apps/public` or `apps/admin/apps/admin`.
+- [2026-05-31] Vercel source builds for workspace apps must compile local package outputs before app builds. A local build can pass because `packages/*/dist` already exists, while a remote clean build fails unless `@backy-cms/core`, `@backy/db`, and `@backy/storage` are built first.
+- [2026-05-31] The current prebuilt standalone output is not valid release proof for `backy-public`. It can produce static-only output without the Next.js API routes Backy needs for agent handoff, manifest, OpenAPI, render, forms, and admin APIs.
+- [2026-05-31] Vercel preview protection can correctly hide direct preview URLs behind SSO. Use `vercel curl` for authenticated verification, and do not mistake protected preview 401 responses for missing routes when the authenticated curl returns JSON.
 
 ## Known Traps
 

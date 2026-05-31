@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 18:36 IST
+- **Last updated:** 2026-05-31 20:28 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,51 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 20:28 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Vercel monorepo source previews are now deployable and verified
+
+**What changed:**
+- `package.json`: added `build:vercel:public` and `build:vercel:admin` scripts that build local workspace packages before the Next/Vite app build.
+- `scripts/vercel-preview-readiness-smoke.mjs`: now verifies monorepo packaging ignores, Vercel CLI version, root/app Vercel ignore coverage, Vercel-specific build scripts, remote project settings, and source-files-outside-root support.
+- `README.md`: replaced the stale prebuilt preview guidance with the proven root-source deploy flow and documented that current prebuilt public output is not valid release proof for API routes.
+- `.vercelignore`, `apps/public/.vercelignore`, `apps/admin/.vercelignore`, `apps/public/.gitignore`, `apps/admin/.gitignore`: keep local Vercel links, Next/Vite build output, workspace `dist`, caches, and `node_modules` out of source uploads and commits.
+- Vercel projects now exist and are configured:
+  - `backy-public`: `rootDirectory=apps/public`, framework Next.js, build command `npm --prefix=../.. run build:vercel:public`, source files outside root enabled.
+  - `backy-admin`: `rootDirectory=apps/admin`, framework Vite, output `dist`, build command `npm --prefix=../.. run build:vercel:admin`, source files outside root enabled.
+
+**Preview deployments verified:**
+- `backy-public` preview: `https://backy-public-n1jid5uw9-varshneydevanshs-projects.vercel.app`, deployment `dpl_CQUdcrB8tocz2YR6aLTHCNSaA4ty`, status READY.
+- `backy-admin` preview: `https://backy-admin-6twzx9xff-varshneydevanshs-projects.vercel.app`, deployment `dpl_27gogqawQKKQyMnJXMcrtGg7CKA7`, status READY.
+- Public preview serves real Next API routes; `vercel curl` confirmed successful JSON for `/api/sites/site-demo/agent-handoff`, `/manifest`, `/openapi`, `/render`, and `/api/admin/auth/password-policy`.
+- Admin preview is protected by Vercel auth from unauthenticated fetches, serves `/login` through authenticated Vercel curl, and its built entry references the public preview API/admin base URLs.
+- `backy-admin.vercel.app/login` currently returns Vercel `DEPLOYMENT_NOT_FOUND`, so the old public admin alias remains removed.
+
+**Commands run:**
+- `npx vercel@latest api /v10/projects/<backy-public> -X PATCH ...` -> PASS; remote build/root settings updated.
+- `npx vercel@latest api /v10/projects/<backy-admin> -X PATCH ...` -> PASS; remote build/root/output settings updated.
+- `npm run build:vercel:public` -> PASS; local build lists all public/admin API routes.
+- `npm run build:vercel:admin` -> PASS; Vite large editor chunk warning remains non-blocking.
+- `npx vercel@latest deploy --target=preview --yes --logs` for `backy-public` -> PASS with randomized demo preview credentials.
+- `npx vercel@latest deploy --target=preview --yes --logs` for `backy-admin` -> PASS with build-time API base URLs pointing at the public preview.
+- `npm run test:vercel-release-config` -> PASS.
+- `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 npm run test:vercel-preview-readiness` -> PASS with the expected root-link warning.
+- `npm --workspace @backy/public run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `git diff --check` -> PASS before docs.
+
+**Review findings:**
+- [High] The previous prebuilt public deployment produced static output without Backy API routes. Resolved by switching the documented and verified release path to root source deploy with workspace package build scripts.
+- [Medium] App-directory source deploy failed because Vercel applied `rootDirectory` again (`apps/public/apps/public`). Resolved by documenting and verifying repo-root deploys after linking the root to the intended project.
+- [Medium] Remote Vercel builds failed to resolve local workspace package `dist` outputs. Resolved by building `@backy-cms/core`, `@backy/db`, and `@backy/storage` before app builds.
+- [Medium] Preview deployment URLs are protected by Vercel auth. This is acceptable for previews; production/custom-domain public API deployment still needs explicit database-mode env and promotion.
+
+**Next:**
+1. Do not call this production-live yet. Promote only after setting real database/provider/storage env on `backy-public`, using only public/admin API base URLs in `backy-admin`, and intentionally promoting a verified source deployment.
+2. Remove or replace the old broken `backy-public.vercel.app` production alias/deployment before sharing a public URL.
+3. Continue Batch 5 with production database/provider env hardening or the next visible admin/editor release friction point.
 
 ## 2026-05-31 18:36 IST
 

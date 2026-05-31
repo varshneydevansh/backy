@@ -106,7 +106,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 
 - Root Directory: `apps/public`
 - Framework Preset: Next.js
-- Build Command: `npm run build`
+- Build Command: `npm --prefix=../.. run build:vercel:public`
 - Development Command: `npm run dev`
 - Runtime config: set `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, storage/provider secrets, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and exact custom-frontend origins in `BACKY_CORS_ALLOWED_ORIGINS`.
 - Cron config: `apps/public/vercel.json` schedules `/api/admin/commerce/reconcile?limit=100` at `0 3 * * *`.
@@ -116,7 +116,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 
 - Root Directory: `apps/admin`
 - Framework Preset: Vite
-- Build Command: `npm run build`
+- Build Command: `npm --prefix=../.. run build:vercel:admin`
 - Output Directory: `dist`
 - Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api` and `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`. Production admin auth uses session login plus the httpOnly `backy_admin_session` cookie against `backy-public`; do not put admin API keys in Vite/client environment variables.
 - SPA routing and baseline headers are tracked in `apps/admin/vercel.json`.
@@ -138,7 +138,23 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 
 Backy-hosted routes in `apps/public` currently support `/sites/<site-slug>` paths and custom-domain lookup through the public site APIs. For separate custom frontend projects, resolve the site by `BACKY_SITE_ID` first, then use `BACKY_SITE_PUBLIC_HOST` only as metadata for canonical URLs, SEO, and domain ownership until host-based rendering is promoted through the production-hardening gate.
 
-Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, project linkage, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin`.
+Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, packaging ignores, project linkage, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin`.
+
+Use Vercel CLI `47.2.2+` for preview deploys; the local global CLI may be older, so `npx vercel@latest` is the safest release command. The repo root and app roots include `.vercelignore` files so local `.next`, `dist`, cache, Vercel link, and `node_modules` folders are not uploaded as source.
+
+Deploy from the repo root after linking that root to the target Vercel project. The Vercel project `Root Directory` still points at the app, so the build command must jump back to the monorepo root and build workspace packages first:
+
+```bash
+npx vercel@latest link --project backy-public --yes
+npx vercel@latest deploy --target=preview --yes
+
+npx vercel@latest link --project backy-admin --yes
+npx vercel@latest deploy --target=preview --yes \
+  --build-env VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-preview>/api \
+  --build-env VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-preview>/api/admin
+```
+
+Do not use the current prebuilt standalone output as release proof for `backy-public`; it can produce static assets without the Next.js API routes Backy needs for `/api/sites/:siteId/agent-handoff`, manifest, OpenAPI, render, forms, and admin API traffic.
 
 ---
 

@@ -36,6 +36,23 @@ const includesAll = (text, snippets, label) => {
   assert(missing.length === 0, `${label}${missing.length ? ` missing: ${missing.join(', ')}` : ''}`);
 };
 
+const parseSemver = (value) => {
+  const match = String(value || '').match(/(\d+)\.(\d+)\.(\d+)/);
+  return match ? match.slice(1).map((part) => Number(part)) : null;
+};
+
+const semverAtLeast = (actual, minimum) => {
+  const actualParts = parseSemver(actual);
+  const minimumParts = parseSemver(minimum);
+  if (!actualParts || !minimumParts) return false;
+
+  for (let index = 0; index < minimumParts.length; index += 1) {
+    if (actualParts[index] > minimumParts[index]) return true;
+    if (actualParts[index] < minimumParts[index]) return false;
+  }
+  return true;
+};
+
 const hasCron = (config) => (
   Array.isArray(config.crons) &&
   config.crons.some((entry) => (
@@ -51,6 +68,9 @@ const adminVercel = readJson('apps/admin/vercel.json');
 const readme = read('README.md');
 const agents = read('AGENTS.md');
 const gitignore = read('.gitignore');
+const rootVercelIgnore = read('.vercelignore');
+const publicVercelIgnore = read('apps/public/.vercelignore');
+const adminVercelIgnore = read('apps/admin/.vercelignore');
 const envExample = read('.env.example');
 const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
@@ -78,7 +98,40 @@ assert(
   rootPackage.scripts?.['test:vercel-preview-readiness'] === 'node scripts/vercel-preview-readiness-smoke.mjs',
   'Root package exposes test:vercel-preview-readiness',
 );
+assert(
+  rootPackage.scripts?.['build:vercel:public'] ===
+    'npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public',
+  'Root package exposes a Vercel public build that compiles workspace packages before Next',
+);
+assert(
+  rootPackage.scripts?.['build:vercel:admin'] ===
+    'npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy-cms/admin',
+  'Root package exposes a Vercel admin build that compiles workspace packages before Vite',
+);
 assert(gitignore.includes('.vercel/'), 'Git ignore keeps local Vercel project links out of commits');
+includesAll(
+  rootVercelIgnore,
+  [
+    '.vercel/',
+    'node_modules/',
+    'apps/*/node_modules/',
+    'apps/admin/dist/',
+    'apps/public/.next/',
+    'apps/public/.next-sdk-smoke/',
+    'packages/*/dist/',
+  ],
+  'Root .vercelignore keeps local monorepo build/cache artifacts out of root source uploads',
+);
+includesAll(
+  publicVercelIgnore,
+  ['.next/', '.next-sdk-smoke/', '.turbo/', '.vercel/', 'node_modules/', 'tsconfig.tsbuildinfo'],
+  'apps/public/.vercelignore keeps local Next/Vercel/cache artifacts out of CLI source uploads',
+);
+includesAll(
+  adminVercelIgnore,
+  ['dist/', '.turbo/', '.vercel/', 'node_modules/', 'tsconfig.tsbuildinfo'],
+  'apps/admin/.vercelignore keeps local Vite/Vercel/cache artifacts out of CLI source uploads',
+);
 
 includesAll(
   envExample,
@@ -110,8 +163,10 @@ includesAll(
     '## Vercel release runbook',
     'backy-public',
     'Root Directory: `apps/public`',
+    'Build Command: `npm --prefix=../.. run build:vercel:public`',
     'backy-admin',
     'Root Directory: `apps/admin`',
+    'Build Command: `npm --prefix=../.. run build:vercel:admin`',
     'VITE_BACKY_PUBLIC_API_BASE_URL',
     'VITE_BACKY_ADMIN_API_BASE_URL',
     'BACKY_DATA_MODE=database',
@@ -128,6 +183,7 @@ includesAll(
     'Vercel Agent',
     'Project Settings -> AI',
     'npm run test:vercel-preview-readiness',
+    'Do not use the current prebuilt standalone output as release proof for `backy-public`',
   ],
   'README Vercel runbook',
 );
@@ -208,9 +264,33 @@ includesAll(
 );
 
 const projectLinks = [
-  { app: 'backy-public', root: 'apps/public', file: 'apps/public/.vercel/project.json' },
-  { app: 'backy-admin', root: 'apps/admin', file: 'apps/admin/.vercel/project.json' },
+  {
+    app: 'backy-public',
+    root: 'apps/public',
+    file: 'apps/public/.vercel/project.json',
+    expected: {
+      buildCommand: 'npm --prefix=../.. run build:vercel:public',
+      devCommand: 'npm run dev',
+      framework: 'nextjs',
+      outputDirectory: null,
+      rootDirectory: 'apps/public',
+    },
+  },
+  {
+    app: 'backy-admin',
+    root: 'apps/admin',
+    file: 'apps/admin/.vercel/project.json',
+    expected: {
+      buildCommand: 'npm --prefix=../.. run build:vercel:admin',
+      devCommand: 'npm run dev',
+      framework: 'vite',
+      outputDirectory: 'dist',
+      rootDirectory: 'apps/admin',
+    },
+  },
 ];
+
+const linkedProjects = [];
 
 for (const link of projectLinks) {
   if (!exists(link.file)) {
@@ -226,10 +306,12 @@ for (const link of projectLinks) {
   if (hasProjectId && hasOrgId) pass(`${link.file} contains projectId and orgId`);
   else if (strictLinks) fail(`${link.file} must contain projectId and orgId`);
   else warn(`${link.file} exists but is missing projectId or orgId.`);
+
+  if (hasProjectId && hasOrgId) linkedProjects.push({ ...link, projectJson });
 }
 
 if (exists('.vercel/project.json')) {
-  warn('Root .vercel/project.json exists, but Backy deploys from apps/public and apps/admin project roots. Root linkage is not sufficient.');
+  warn('Root .vercel/project.json exists. Source deploys should run from the repo root, but re-link the root to the intended project before each deploy.');
 }
 
 const run = (command, args, options = {}) => spawnSync(command, args, {
@@ -238,6 +320,18 @@ const run = (command, args, options = {}) => spawnSync(command, args, {
   timeout: options.timeout || 15000,
   env: { ...process.env, FORCE_COLOR: '0' },
 });
+
+const parseCliJson = (output) => {
+  const text = String(output || '');
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+};
 
 if (skipCli) {
   warn('Skipped Vercel CLI checks because BACKY_VERCEL_SKIP_CLI=1.');
@@ -248,7 +342,15 @@ if (skipCli) {
     if (strictCli) fail(message);
     else warn(message);
   } else {
-    pass(`Vercel CLI available (${(version.stdout || '').trim().split('\n').pop()})`);
+    const versionText = (version.stdout || '').trim().split('\n').pop();
+    pass(`Vercel CLI available (${versionText})`);
+    if (!semverAtLeast(versionText, '47.2.2')) {
+      const message = `Vercel CLI ${versionText || 'unknown'} is too old for current source-upload endpoints; use \`npx vercel@latest\` or upgrade to 47.2.2+.`;
+      if (strictCli) fail(message);
+      else warn(message);
+    } else {
+      pass('Vercel CLI is new enough for current source-upload endpoints');
+    }
 
     const whoami = run('vercel', ['whoami'], { timeout: 10000 });
     if (whoami.status !== 0) {
@@ -270,6 +372,46 @@ if (skipCli) {
         if (output.includes(expectedProject)) pass(`Remote Vercel project exists: ${expectedProject}`);
         else if (strictRemoteProjects) fail(`Remote Vercel project is missing: ${expectedProject}`);
         else warn(`Remote Vercel project not found yet: ${expectedProject}. Create/link it before preview deploy.`);
+      }
+    }
+
+    for (const linkedProject of linkedProjects) {
+      const project = run('vercel', ['api', `/v10/projects/${linkedProject.projectJson.projectId}`, '--raw'], {
+        timeout: 20000,
+      });
+      if (project.status !== 0) {
+        const message = `Could not inspect remote Vercel settings for ${linkedProject.app}.`;
+        if (strictRemoteProjects) fail(message);
+        else warn(message);
+        continue;
+      }
+
+      const parsedProject = parseCliJson(`${project.stdout}\n${project.stderr}`);
+      if (!parsedProject) {
+        const message = `Could not parse remote Vercel settings for ${linkedProject.app}.`;
+        if (strictRemoteProjects) fail(message);
+        else warn(message);
+        continue;
+      }
+
+      for (const [key, expected] of Object.entries(linkedProject.expected)) {
+        const actual = parsedProject[key] ?? null;
+        const matches = actual === expected;
+        const message = `${linkedProject.app} remote ${key} is ${JSON.stringify(expected)}`;
+        if (matches) pass(message);
+        else if (strictRemoteProjects) {
+          fail(`${message}; actual ${JSON.stringify(actual)}`);
+        } else {
+          warn(`${message}; actual ${JSON.stringify(actual)}`);
+        }
+      }
+
+      if (parsedProject.sourceFilesOutsideRootDirectory === true) {
+        pass(`${linkedProject.app} includes source files outside its root directory for workspace packages`);
+      } else if (strictRemoteProjects) {
+        fail(`${linkedProject.app} must include source files outside its root directory for workspace packages`);
+      } else {
+        warn(`${linkedProject.app} should include source files outside its root directory for workspace packages`);
       }
     }
   }

@@ -32,6 +32,8 @@
     "test:release-certification-doctor-contract": "node scripts/backy-release-certification-doctor-contract-smoke.mjs",
     "test:vercel-release-config": "node scripts/vercel-release-config-smoke.mjs",
     "test:vercel-preview-readiness": "node scripts/vercel-preview-readiness-smoke.mjs",
+    "build:vercel:public": "npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public",
+    "build:vercel:admin": "npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy-cms/admin",
     "doctor:release-certification": "node scripts/backy-release-certification-doctor.mjs",
     "test:sdk-postgres-preflight-contract": "npm run test:sdk-postgres-preflight-contract --workspace @backy/public",
     "test:forms-postgres-preflight-contract": "npm run test:forms-postgres-preflight-contract --workspace @backy/db",
