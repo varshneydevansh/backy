@@ -169,7 +169,7 @@ function ForgotPasswordPage() {
                     setDeliveryStatus(null);
                     setLocalRecoveryUrl(null);
                   }}
-                  placeholder="admin@backy.io"
+                  placeholder="owner@example.com"
                   className={cn(
                     'min-h-11 w-full rounded-lg border bg-background py-2.5 pl-9 pr-10 text-sm outline-none transition focus:ring-2 focus:ring-ring',
                     recoveryState === 'error' && 'border-red-500 focus:ring-red-500',

@@ -224,6 +224,7 @@ const assertAuthRecoverySource = () => {
   const headerModelSource = fs.readFileSync(new URL('../src/components/layout/headerModel.ts', import.meta.url), 'utf8');
   const permissionSource = fs.readFileSync(new URL('../src/lib/adminPermissionUi.ts', import.meta.url), 'utf8');
   const navigationAccessSource = fs.readFileSync(new URL('../src/lib/adminNavigationAccess.ts', import.meta.url), 'utf8');
+  const viteConfigSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
   const loginSmokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
 
   assert(
@@ -233,7 +234,9 @@ const assertAuthRecoverySource = () => {
       loginSource.includes('autoComplete="one-time-code"') &&
       loginSource.includes('autoCapitalize="none"') &&
       loginSource.includes('spellCheck={false}') &&
-      loginSource.includes("const DEMO_MFA_CODE = 'backy-dev-mfa';") &&
+      loginSource.includes("const DEMO_MFA_CODE = SHOW_DEMO_ACCESS ? 'backy-dev-mfa' : '';") &&
+      loginSource.includes('placeholder="owner@example.com"') &&
+      forgotSource.includes('placeholder="owner@example.com"') &&
       loginSource.includes('Authenticator code or MFA phrase') &&
       loginSource.includes('Two-factor code or workspace MFA phrase is required') &&
       loginSource.includes('Seeded demo MFA:'),
@@ -342,6 +345,21 @@ const assertAuthRecoverySource = () => {
       adminAuthApiSource.includes('VITE_BACKY_ADMIN_API_BASE_URL / VITE_BACKY_PUBLIC_API_BASE_URL') &&
       adminAuthApiSource.includes('Admin API base:'),
     'Admin auth API requests must time out with environment-aware troubleshooting instead of trapping local and Vercel shells behind an infinite loader.',
+  );
+
+  assert(
+    loginSource.includes("const SHOW_DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1';") &&
+      loginSource.includes('const DEMO_ACCOUNTS = SHOW_DEMO_ACCESS ? [') &&
+      loginSource.includes('VITE_BACKY_SHOW_DEMO_ACCESS') &&
+      loginSource.includes('{SHOW_DEMO_ACCESS && (') &&
+      loginSource.includes('Use seeded accounts only in local/demo workspaces.') &&
+      loginSource.includes("SHOW_DEMO_ACCESS\n                      ? `Seeded demo MFA: ${DEMO_MFA_CODE}`"),
+    'Hosted production login must not expose seeded demo account credentials or the dev MFA phrase unless demo access is explicitly enabled.',
+  );
+
+  assert(
+    viteConfigSource.includes("sourcemap: process.env.BACKY_ADMIN_ENABLE_SOURCEMAPS === '1'"),
+    'Hosted production admin builds must not publish source maps by default because they can expose local/demo source constants.',
   );
 
   assert(

@@ -22,6 +22,7 @@
         "test:admin-auth-supabase": "tsx scripts/admin-supabase-auth-smoke.ts",
         "test:admin-auth-supabase-route": "node scripts/admin-supabase-login-route-smoke.mjs",
         "test:admin-auth-production-policy": "tsx scripts/admin-auth-production-policy-smoke.ts",
+        "test:admin-owner-bootstrap": "node scripts/admin-owner-bootstrap-smoke.mjs",
     "test:form-captcha": "tsx scripts/form-captcha-smoke.ts",
     "test:media-quota": "node scripts/media-quota-smoke.mjs",
     "test:media-upload-policy": "tsx --tsconfig tsconfig.json scripts/media-upload-policy-smoke.ts",

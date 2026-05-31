@@ -33,6 +33,6 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: process.env.BACKY_ADMIN_ENABLE_SOURCEMAPS === '1',
   },
 });

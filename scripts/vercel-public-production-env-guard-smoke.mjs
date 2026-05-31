@@ -40,7 +40,7 @@ const missing = runGuard({
 assert(missing.status === 1, `Expected missing production env to fail, got ${missing.status}`);
 assert(missing.stderr.includes('BACKY_DATA_MODE must be set to database'), 'Expected BACKY_DATA_MODE failure');
 assert(
-  missing.stderr.includes('BACKY_DATABASE_URL or DATABASE_URL must be configured'),
+  missing.stderr.includes('BACKY_DATABASE_URL, DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL must be configured'),
   'Expected database URL failure',
 );
 assert(missing.stderr.includes('BACKY_ADMIN_API_KEY must be configured'), 'Expected admin API key failure');
@@ -87,6 +87,28 @@ assert(
   !passing.stderr.includes('postgres://guard-secret') &&
     !passing.stdout.includes('postgres://guard-secret'),
   'Guard pass output must not print configured secret values',
+);
+
+const passingWithVercelPostgresAlias = runGuard({
+  ...baseEnv,
+  VERCEL: '1',
+  VERCEL_ENV: 'production',
+  BACKY_DATA_MODE: 'database',
+  POSTGRES_URL: 'postgres://guard-secret@db.example/backy',
+  BACKY_ADMIN_API_KEY: 'guard-admin-api-key',
+  BACKY_ADMIN_SECRET_KEY: 'guard-admin-secret-key',
+  CRON_SECRET: 'guard-cron-secret',
+  NEXT_PUBLIC_BACKY_ADMIN_APP_URL: 'https://admin.example.com',
+  BACKY_CORS_ALLOWED_ORIGINS: 'https://admin.example.com',
+});
+assert(
+  passingWithVercelPostgresAlias.status === 0,
+  `Expected Vercel Marketplace Postgres alias to pass, got ${passingWithVercelPostgresAlias.status}: ${passingWithVercelPostgresAlias.stderr}`,
+);
+assert(
+  !passingWithVercelPostgresAlias.stderr.includes('postgres://guard-secret') &&
+    !passingWithVercelPostgresAlias.stdout.includes('postgres://guard-secret'),
+  'Guard pass output must not print configured Vercel Marketplace Postgres alias values',
 );
 
 console.log('Backy public production env guard smoke passed.');

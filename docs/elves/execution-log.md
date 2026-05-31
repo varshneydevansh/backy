@@ -13,6 +13,48 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-01 01:24 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production Supabase resource provisioned, migrated, and owner bootstrap hardened
+
+**What changed:**
+- Provisioned the existing Vercel Supabase Marketplace installation into `backy-public` as `backy-production` on the free plan, connected it to Production, and confirmed injected `POSTGRES_*`/`SUPABASE_*` env names without printing values.
+- Applied `supabase/migrations/001` through `012` to the new production Supabase database with `psql` against the provider URL from ignored production env.
+- `packages/db/src/runtime-config.ts`, `packages/db/drizzle.config.ts`, and production env guard scripts now accept Vercel Marketplace `POSTGRES_URL`/`POSTGRES_PRISMA_URL` aliases in addition to `BACKY_DATABASE_URL`/`DATABASE_URL`.
+- `apps/admin/src/routes/login.tsx`: demo account buttons and the seeded dev MFA phrase are hidden from production builds unless `VITE_BACKY_SHOW_DEMO_ACCESS=1` is explicitly set.
+- `apps/public/src/app/api/admin/auth/bootstrap-owner/route.ts`: added a server-token protected, one-time first-owner bootstrap endpoint that creates the Supabase Auth user, Backy owner profile, and initial workspace membership, then refuses a second active owner.
+- `apps/public/src/app/api/admin/sites/route.ts`: database mode site creation can infer the single bootstrapped team when no site exists yet.
+- `README.md` and `.env.example`: documented `POSTGRES_URL` aliases and the first-owner bootstrap boundary.
+
+**Commands run:**
+- `npx vercel@latest integration add supabase --installation-id ... --environment production --name backy-production --cwd apps/public --no-color` -> PASS.
+- `npx vercel@latest env pull .env.production.local --environment=production --yes --cwd apps/public --no-color` -> PASS; file is ignored.
+- `psql "$POSTGRES_URL_NON_POOLING" -v ON_ERROR_STOP=1 -q -f supabase/migrations/*.sql` -> PASS across migrations 001-012.
+- `npm run test:runtime --workspace @backy/db --silent` -> PASS.
+- `npm run test:admin-owner-bootstrap --workspace @backy/public --silent` -> PASS.
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:vercel-public-production-env-guard --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run build:vercel:admin --silent` -> PASS; default production admin build emitted no `.map` files and no seeded demo passwords/MFA phrase in built assets.
+- `npm run test:vercel-release-config --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with the expected root-link warning.
+- `npm run test:vercel-production-readiness --silent` -> PASS with the expected no-live-production-URL warning.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Review findings:**
+- [High] Hosted production login exposed local demo credentials even though production local auth is blocked. Fixed by hiding demo access in production unless explicitly enabled.
+- [High] Admin production source maps could expose local/demo source constants even when UI panels are hidden. Fixed by disabling Vite source maps by default unless `BACKY_ADMIN_ENABLE_SOURCEMAPS=1`.
+- [High] Fresh production had no safe first-owner path. Fixed with a one-time server-token bootstrap route backed by Supabase service-role env and active-owner lockout.
+- [Medium] Vercel Supabase injects `POSTGRES_URL`/`POSTGRES_PRISMA_URL`, not Backy-prefixed aliases. Fixed runtime/guard/migration config to accept provider-standard names directly.
+
+**Next:**
+1. Commit and push this production bootstrap/security slice.
+2. Redeploy `backy-public` and `backy-admin` production from the pushed source.
+3. Use the ignored bootstrap token plus a user-chosen email/password to create the real owner, then remove `BACKY_OWNER_BOOTSTRAP_TOKEN` from Vercel production.
+
 ## 2026-06-01 00:44 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish

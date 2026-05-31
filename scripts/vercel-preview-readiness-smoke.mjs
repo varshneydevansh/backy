@@ -165,6 +165,7 @@ includesAll(
     'Vercel project env: backy-public',
     'BACKY_DATA_MODE=database',
     'BACKY_DATABASE_URL=postgres://...',
+    'POSTGRES_URL=postgres://...',
     'BACKY_ADMIN_API_KEY=<server-only-admin-api-key>',
     'BACKY_ADMIN_SECRET_KEY=<server-only-admin-session-secret>',
     'CRON_SECRET=<same-server-only-admin-or-cron-secret>',
@@ -324,7 +325,7 @@ const projectLinks = [
     env: {
       requiredGroups: [
         ['BACKY_DATA_MODE'],
-        ['BACKY_DATABASE_URL', 'DATABASE_URL'],
+        ['BACKY_DATABASE_URL', 'DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL'],
         ['BACKY_ADMIN_API_KEY'],
         ['BACKY_ADMIN_SECRET_KEY'],
         ['CRON_SECRET'],

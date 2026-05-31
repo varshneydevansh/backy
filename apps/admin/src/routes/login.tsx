@@ -18,12 +18,12 @@ import { useAuthStore } from '@/stores/authStore';
 import { AdminAuthApiError } from '@/lib/adminAuthApi';
 import { cn } from '@/lib/utils';
 
-const DEMO_ACCOUNTS = [
+const SHOW_DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1';
+const DEMO_ACCOUNTS = SHOW_DEMO_ACCESS ? [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
   { email: 'jane@backy.io', password: 'editor123', label: 'Editor' },
-];
-const DEMO_MFA_CODE = 'backy-dev-mfa';
-const env = (import.meta as unknown as { env?: { DEV?: boolean } }).env ?? {};
+] : [];
+const DEMO_MFA_CODE = SHOW_DEMO_ACCESS ? 'backy-dev-mfa' : '';
 
 const AUTH_WORKSPACE_ITEMS = [
   {
@@ -297,7 +297,7 @@ function LoginPage() {
                         setTwoFactorCode('');
                       }
                     }}
-                    placeholder="admin@backy.io"
+                    placeholder="owner@example.com"
                     aria-invalid={Boolean(formErrors.email)}
                     aria-describedby={emailDescription}
                     data-testid="login-email-input"
@@ -420,7 +420,7 @@ function LoginPage() {
                     </p>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {env.DEV
+                    {SHOW_DEMO_ACCESS
                       ? `Seeded demo MFA: ${DEMO_MFA_CODE}`
                       : 'Use the MFA code configured for this workspace.'}
                   </p>
@@ -454,45 +454,47 @@ function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 border-t border-border pt-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold">Demo access</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">Use seeded accounts while auth delivery is being connected.</p>
+            {SHOW_DEMO_ACCESS && (
+              <div className="mt-6 border-t border-border pt-5" data-testid="login-demo-access">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold">Demo access</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">Use seeded accounts only in local/demo workspaces.</p>
+                  </div>
+                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Local
+                  </span>
                 </div>
-                <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                  API
-                </span>
+                <div className="mt-3 grid gap-2">
+                  {DEMO_ACCOUNTS.map((account) => (
+                    <button
+                      key={account.email}
+                      type="button"
+                      disabled={isLoginBusy}
+                      aria-describedby={loginActionStatusId}
+                      data-testid={`login-demo-${account.label.toLowerCase()}`}
+                      data-action-state={isLoginBusy ? 'blocked' : 'ready'}
+                      data-disabled-reason={loginSubmitDisabledReason || undefined}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => {
+                        if (isLoginBusy) return;
+                        setEmail(account.email);
+                        setPassword(account.password);
+                        setTwoFactorCode('');
+                        setRequiresMfa(false);
+                        setFormErrors({});
+                        clearError();
+                      }}
+                    >
+                      <span className="block font-medium">{account.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {account.email} / {account.password}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="mt-3 grid gap-2">
-                {DEMO_ACCOUNTS.map((account) => (
-                  <button
-                    key={account.email}
-                    type="button"
-                    disabled={isLoginBusy}
-                    aria-describedby={loginActionStatusId}
-                    data-testid={`login-demo-${account.label.toLowerCase()}`}
-                    data-action-state={isLoginBusy ? 'blocked' : 'ready'}
-                    data-disabled-reason={loginSubmitDisabledReason || undefined}
-                    className="rounded-lg border border-border bg-background px-3 py-2 text-left text-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => {
-                      if (isLoginBusy) return;
-                      setEmail(account.email);
-                      setPassword(account.password);
-                      setTwoFactorCode('');
-                      setRequiresMfa(false);
-                      setFormErrors({});
-                      clearError();
-                    }}
-                  >
-                    <span className="block font-medium">{account.label}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {account.email} / {account.password}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </section>

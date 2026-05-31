@@ -132,7 +132,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 
 | Vercel project | Public status | Domains | Required env | Forbidden env |
 | --- | --- | --- | --- | --- |
-| `backy-public` | Public app with protected admin API routes | `content.<domain>` or the Backy API/rendering domain | `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, provider/storage secrets, `CRON_SECRET`, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and exact custom-frontend origins in `BACKY_CORS_ALLOWED_ORIGINS` | Client-exposed copies of database, storage, provider, cron, or admin secrets |
+| `backy-public` | Public app with protected admin API routes | `content.<domain>` or the Backy API/rendering domain | `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`/`DATABASE_URL` or Vercel Marketplace `POSTGRES_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, provider/storage secrets, `CRON_SECRET`, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and exact custom-frontend origins in `BACKY_CORS_ALLOWED_ORIGINS` | Client-exposed copies of database, storage, provider, cron, or admin secrets |
 | `backy-admin` | Protected admin shell | `admin.<domain>` or private Vercel preview/production URL | `VITE_BACKY_PUBLIC_API_BASE_URL`, `VITE_BACKY_ADMIN_API_BASE_URL` | `BACKY_DATABASE_URL`, storage/provider secrets, `CRON_SECRET`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, and any `VITE_*` admin key |
 | Custom frontend | Public website/app | `www.<domain>`, `blog.<domain>`, `studio.example.com`, or another site-specific domain | `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, optional `BACKY_SITE_PUBLIC_HOST` | Backy admin URLs, admin/session secrets, provider secrets, database URLs, or copied Backy content as a second source of truth |
 
@@ -143,11 +143,21 @@ Backy-hosted routes in `apps/public` currently support `/sites/<site-slug>` path
 The local seeded accounts are for development only. Production admin access should not depend on committed emails, passwords, or client-visible keys.
 
 - Configure Supabase Auth or another provider-backed login on `backy-public` with server-side env only: `BACKY_SUPABASE_URL` plus `BACKY_SUPABASE_ANON_KEY` or a server-only service-role key when needed by the provider path.
+- For a fresh production database, create the first real owner through `POST /api/admin/auth/bootstrap-owner` using a server-only `BACKY_OWNER_BOOTSTRAP_TOKEN`. The endpoint creates the Supabase Auth user, Backy `owner` profile, and initial workspace membership, then refuses to create another active owner.
 - Create the real owner/editor users in the Backy database and keep their email addresses aligned with the identity provider. Backy grants workspace roles from its own user records after provider authentication succeeds.
 - Keep MFA configured for production with `BACKY_ADMIN_MFA_TOTP_SECRET` or user recovery codes stored in the persistent settings store; use `BACKY_ADMIN_MFA_CODE` only for controlled development or disposable certification runs.
 - Keep `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, `CRON_SECRET`, database URLs, storage/provider secrets, and payment keys on `backy-public` server-side env. Do not configure them on `backy-admin`, custom frontends, `NEXT_PUBLIC_*`, or `VITE_*` variables.
 - Do not enable `BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH` or `BACKY_ALLOW_PRODUCTION_DEMO_MODE` for a release. The production build guard rejects those flags so a demo-auth deployment cannot be promoted accidentally.
 - Use Vercel Deployment Protection or SSO on `backy-admin` even though API/session enforcement also lives on `backy-public`; the editor shell should not be broadly discoverable.
+
+Example first-owner bootstrap request. Keep the token and password out of Git, shell history, screenshots, and frontend env:
+
+```bash
+curl -X POST https://<backy-public-domain>/api/admin/auth/bootstrap-owner \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $BACKY_OWNER_BOOTSTRAP_TOKEN" \
+  --data '{"email":"you@example.com","password":"use-a-long-private-password","fullName":"Your Name"}'
+```
 
 Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, packaging ignores, project linkage, GitHub repository connection, env-boundary warnings, production promotion rules, public repo hygiene, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 BACKY_VERCEL_REQUIRE_REMOTE_ENV=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin` and configuring the required Vercel env on both projects.
 

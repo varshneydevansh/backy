@@ -65,9 +65,12 @@ export function resolveBackyDataRuntimeConfig(
     if (type === 'sqlite') {
         config.path = valueFor(env, 'BACKY_DATABASE_PATH') || valueFor(env, 'SQLITE_PATH') || ':memory:';
     } else {
-        config.url = valueFor(env, 'BACKY_DATABASE_URL') || valueFor(env, 'DATABASE_URL');
+        config.url = valueFor(env, 'BACKY_DATABASE_URL')
+            || valueFor(env, 'DATABASE_URL')
+            || valueFor(env, 'POSTGRES_URL')
+            || valueFor(env, 'POSTGRES_PRISMA_URL');
         if (!config.url) {
-            throw new Error('Database mode requires BACKY_DATABASE_URL or DATABASE_URL.');
+            throw new Error('Database mode requires BACKY_DATABASE_URL, DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL.');
         }
     }
 

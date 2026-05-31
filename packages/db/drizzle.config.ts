@@ -13,6 +13,10 @@ export default {
     out: './drizzle',
     dialect: 'postgresql', // Change for other DBs
     dbCredentials: {
-        url: process.env.DATABASE_URL || 'postgres://localhost:5432/backy',
+        url: process.env.BACKY_DATABASE_URL
+            || process.env.DATABASE_URL
+            || process.env.POSTGRES_URL
+            || process.env.POSTGRES_PRISMA_URL
+            || 'postgres://localhost:5432/backy',
     },
 } satisfies Config;

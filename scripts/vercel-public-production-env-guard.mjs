@@ -24,8 +24,13 @@ if (valueFor('BACKY_DATA_MODE') !== 'database') {
   failures.push('BACKY_DATA_MODE must be set to database');
 }
 
-if (!valueFor('BACKY_DATABASE_URL') && !valueFor('DATABASE_URL')) {
-  failures.push('BACKY_DATABASE_URL or DATABASE_URL must be configured');
+if (
+  !valueFor('BACKY_DATABASE_URL') &&
+  !valueFor('DATABASE_URL') &&
+  !valueFor('POSTGRES_URL') &&
+  !valueFor('POSTGRES_PRISMA_URL')
+) {
+  failures.push('BACKY_DATABASE_URL, DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL must be configured');
 }
 
 for (const key of [

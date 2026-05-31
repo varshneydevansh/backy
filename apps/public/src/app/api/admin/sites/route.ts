@@ -169,9 +169,18 @@ const resolveSiteCreateTeamId = async (
     ),
   );
 
-  return !existingSites.pagination.hasMore && existingTeamIds.length === 1
-    ? existingTeamIds[0]
-    : "";
+  if (!existingSites.pagination.hasMore && existingTeamIds.length === 1) {
+    return existingTeamIds[0];
+  }
+
+  if (!existingSites.pagination.hasMore && existingTeamIds.length === 0) {
+    const teams = await repositories.teams.list({ limit: 2, offset: 0 });
+    if (!teams.pagination.hasMore && teams.items.length === 1) {
+      return teams.items[0].id;
+    }
+  }
+
+  return "";
 };
 
 const adminSiteFromRepositorySite = (site: Site | null) => {

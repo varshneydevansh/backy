@@ -29,6 +29,17 @@ const sqliteConfig = resolveBackyDataRuntimeConfig({
 assert(sqliteConfig.database?.type === 'sqlite', 'Expected sqlite database type');
 assert(sqliteConfig.database?.path === './backy.db', 'Expected sqlite database path');
 
+const vercelPostgresConfig = resolveBackyDataRuntimeConfig({
+  BACKY_DATA_MODE: 'database',
+  POSTGRES_URL: 'postgres://user:pass@vercel-marketplace.example:5432/backy',
+});
+assert(vercelPostgresConfig.mode === 'database', 'Expected Vercel Marketplace Postgres alias database mode');
+assert(vercelPostgresConfig.database?.type === 'postgres', 'Expected Vercel Marketplace Postgres alias type');
+assert(
+  vercelPostgresConfig.database?.url === 'postgres://user:pass@vercel-marketplace.example:5432/backy',
+  'Expected Vercel Marketplace Postgres alias URL',
+);
+
 const demoConfig = resolveBackyDataRuntimeConfig({
   BACKY_DATA_MODE: 'demo',
 });

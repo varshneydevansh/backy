@@ -132,7 +132,10 @@ includesAll(
   [
     "valueFor('VERCEL_ENV') === 'production'",
     "BACKY_DATA_MODE') !== 'database'",
-    "BACKY_DATABASE_URL') && !valueFor('DATABASE_URL')",
+    "BACKY_DATABASE_URL')",
+    "DATABASE_URL')",
+    "POSTGRES_URL')",
+    "POSTGRES_PRISMA_URL')",
     'BACKY_ALLOW_PRODUCTION_DEMO_MODE',
     'BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH',
     'must not be enabled for production release builds',

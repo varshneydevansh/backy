@@ -77,6 +77,9 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] A missing-env `backy-public` production build should fail before Next.js builds, not deploy Ready and crash at runtime. Keep production env guards value-redacted and Vercel-production-scoped so local/preview builds still work while real releases require database/admin/cron/CORS env.
 - [2026-06-01] The public root must identify itself as `backy-public`, not as the private editor. Keep localhost/public-runtime copy explicit: public render/API service here, protected admin shell elsewhere, and all server-only admin/database/provider secrets on the public server env.
 - [2026-06-01] Public project domains such as `backy-public.vercel.app` are control/runtime hosts, not tenant hosts. Subdomain routing should exclude `*.vercel.app`; otherwise the public root is rewritten as `/sites/backy-public/` and hides runtime/deploy diagnostics behind hosted-page errors.
+- [2026-06-01] Vercel Marketplace databases may provide `POSTGRES_URL`/`POSTGRES_PRISMA_URL` without `DATABASE_URL`. Backy runtime config and production guards should accept provider-standard Postgres aliases directly instead of requiring operators to duplicate secrets.
+- [2026-06-01] Production admin login must never advertise seeded demo credentials. Keep demo account buttons and dev MFA phrases behind local/dev-only flags, and create the first real owner through a server-token, one-time bootstrap path.
+- [2026-06-01] Protected admin bundles should not publish source maps by default. A hidden demo panel can still leak local/demo constants through `.map` files unless source maps are explicitly opt-in for private debugging.
 
 ## Known Traps
 
