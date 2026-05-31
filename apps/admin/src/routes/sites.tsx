@@ -544,10 +544,15 @@ const getSiteEndpointMap = (site: Site, publicApiBase: string, adminApiBase: str
 
   return {
     public: {
+      agentHandoff: `${publicApiBase}/sites/${siteApiId}/agent-handoff`,
       manifest: `${publicApiBase}/sites/${siteApiId}/manifest`,
       openApi: `${publicApiBase}/sites/${siteApiId}/openapi`,
+      resolveHome: `${publicApiBase}/sites/${siteApiId}/resolve?path=/`,
+      resolvePath: `${publicApiBase}/sites/${siteApiId}/resolve?path={path}`,
       renderHome: `${publicApiBase}/sites/${siteApiId}/render?path=/`,
       renderPath: `${publicApiBase}/sites/${siteApiId}/render?path={path}`,
+      resolveWithHost: `${publicApiBase}/sites/${siteApiId}/resolve?path=/&domain={host}`,
+      renderWithHost: `${publicApiBase}/sites/${siteApiId}/render?path={path}&domain={host}`,
       navigation: `${publicApiBase}/sites/${siteApiId}/navigation`,
       redirects: `${publicApiBase}/sites/${siteApiId}/redirects`,
       seo: `${publicApiBase}/sites/${siteApiId}/seo`,
@@ -564,6 +569,8 @@ const getSiteEndpointMap = (site: Site, publicApiBase: string, adminApiBase: str
 
 const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBase: string) => {
   const endpoints = getSiteEndpointMap(site, publicApiBase, adminApiBase);
+  const domainVerification = getDomainVerification(site);
+  const publicHost = domainVerification.domain || getDisplayDomain(site);
 
   return {
     contract: 'backy.site.frontend.v1',
@@ -578,8 +585,29 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
       pageCount: site.pageCount || 0,
       lastUpdated: site.lastUpdated,
       previewUrl: getPublicPreviewHref(site),
+      publicHost,
+      domainVerification: {
+        domain: domainVerification.domain,
+        status: domainVerification.status,
+        method: domainVerification.method,
+        verifiedAt: domainVerification.verifiedAt,
+      },
     },
     endpoints,
+    environment: {
+      BACKY_PUBLIC_API_BASE_URL: publicApiBase,
+      BACKY_SITE_ID: getSiteApiId(site),
+      BACKY_SITE_PUBLIC_HOST: publicHost,
+    },
+    routing: {
+      schemaVersion: 'backy.site-frontend-routing.v1',
+      verifiedDomainRequired: Boolean(site.customDomain),
+      domainVerificationStatus: domainVerification.status,
+      hostContext: 'Pass the browser Host as domain={host} when a custom frontend serves root domains or subdomains.',
+      resolveWithHost: endpoints.public.resolveWithHost,
+      renderWithHost: endpoints.public.renderWithHost,
+      examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com'],
+    },
     delivery: {
       hosting: 'Vercel-ready custom frontend or Backy managed preview',
       database: 'Backy-owned content APIs with Supabase metadata and runtime env verification managed in Settings',
@@ -830,9 +858,13 @@ function SitesListView() {
   const selectedApiSiteId = selectedApiSite?.publicSiteId || selectedApiSite?.id || '{siteId}';
   const adminSitesUrl = `${adminApiBase}/sites`;
   const adminSiteDetailUrl = `${adminApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}`;
+  const publicAgentHandoffUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/agent-handoff`;
   const publicManifestUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/manifest`;
   const publicOpenApiUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/openapi`;
+  const publicResolveWithHostUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/resolve?path=/&domain={host}`;
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
+  const publicRenderWithHostUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/...&domain={host}`;
+  const selectedPublicHost = selectedApiSite ? (getDomainVerification(selectedApiSite).domain || getDisplayDomain(selectedApiSite)) : '{host}';
   const selectedFrontendContract = useMemo(() => (
     selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
   ), [adminApiBase, publicApiBase, selectedApiSite]);
@@ -2336,9 +2368,13 @@ function SitesListView() {
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <SiteApiSnippet label="Agent handoff" value={publicAgentHandoffUrl} />
             <SiteApiSnippet label="Frontend manifest" value={publicManifestUrl} />
             <SiteApiSnippet label="OpenAPI schema" value={publicOpenApiUrl} />
             <SiteApiSnippet label="Render by path" value={publicRenderUrl} />
+            <SiteApiSnippet label="Resolve with host" value={publicResolveWithHostUrl} />
+            <SiteApiSnippet label="Render with host" value={publicRenderWithHostUrl} />
+            <SiteApiSnippet label="Frontend env" value={`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\nBACKY_SITE_ID=${selectedApiSiteId}\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`} />
             <SiteApiSnippet label="Admin sites" value={adminSitesUrl} />
             <SiteApiSnippet label="Admin site detail" value={adminSiteDetailUrl} />
           </div>

@@ -653,9 +653,24 @@ function NewSitePage() {
       redirects: `${adminSitesUrl}/{siteId}/redirects`,
       seo: `${adminSitesUrl}/{siteId}/seo`,
       pages: `${adminSitesUrl}/{siteId}/pages`,
+      agentHandoff: `${publicApiBase}/sites/{siteId}/agent-handoff`,
+      publicManifest: `${publicApiBase}/sites/{siteId}/manifest`,
       publicResolve: `${publicApiBase}/sites/{siteId}/resolve?path=/`,
+      publicResolveWithHost: `${publicApiBase}/sites/{siteId}/resolve?path=/&domain={host}`,
       publicRender: `${publicApiBase}/sites/{siteId}/render?path=/`,
+      publicRenderWithHost: `${publicApiBase}/sites/{siteId}/render?path=/...&domain={host}`,
       publicOpenApi: `${publicApiBase}/sites/{siteId}/openapi`,
+    },
+    frontendEnvironmentAfterCreate: {
+      BACKY_PUBLIC_API_BASE_URL: publicApiBase,
+      BACKY_SITE_ID: '{siteId}',
+      BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`,
+    },
+    routingAfterCreate: {
+      schemaVersion: 'backy.site-create-routing-handoff.v1',
+      customDomainRequiresVerifiedDns: Boolean(normalizedDomain),
+      hostContext: 'Use domain={host} or request Host when rendering root domains and subdomains from a custom frontend.',
+      examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com'],
     },
     readiness: siteCreationReadiness,
     payloadPreview: createPayloadPreview,
@@ -663,6 +678,7 @@ function NewSitePage() {
       'Backend owns duplicate slug and custom domain validation.',
       'Starter pages are persisted only after the site record is created.',
       'Seeded pages use serialized canvas content with editable header, navigation, body, and footer blocks.',
+      'Frontend agents should read /agent-handoff first, then manifest/OpenAPI, and pass Host/domain context for custom domains or subdomains.',
       'Custom frontends should resolve site/page content through public endpoints and keep admin endpoints private.',
     ],
   }), [
@@ -1337,6 +1353,9 @@ function NewSitePage() {
                   aria-describedby={showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain ? 'site-create-custom-domain-error' : undefined}
                 />
               </div>
+              <span className="mt-2 block text-xs leading-5 text-muted-foreground">
+                Subdomains are valid custom domains. Save the exact host, for example <code className="rounded bg-muted px-1 py-0.5 font-mono">akriti.devanshvarshney.com</code>, then verify DNS before public routing.
+              </span>
               {showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain && (
                 <span id="site-create-custom-domain-error" data-testid="site-create-custom-domain-error" className="mt-2 block text-xs text-red-600">
                   {siteCreateInlineErrors.customDomain}
@@ -1722,6 +1741,31 @@ function NewSitePage() {
             <div className="mt-4 rounded-lg border border-border bg-background p-3">
               <div className="text-xs font-medium text-muted-foreground">Create endpoint</div>
               <div className="mt-2 break-all font-mono text-xs text-foreground">{adminSitesUrl}</div>
+            </div>
+            <div
+              className="mt-3 grid gap-3 rounded-lg border border-teal-200 bg-teal-50/60 p-3 md:grid-cols-2"
+              data-testid="site-create-agent-handoff-read-start"
+            >
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Frontend agent read start</div>
+                <code className="mt-2 block overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs text-teal-950">
+                  GET {publicApiBase}/sites/{'{siteId}'}/agent-handoff
+                </code>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Host-aware render</div>
+                <code className="mt-2 block overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs text-teal-950">
+                  {publicApiBase}/sites/{'{siteId}'}/render?path=/...&amp;domain={'{host}'}
+                </code>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Frontend env after create</div>
+                <pre className="mt-2 overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs leading-5 text-teal-950">
+{`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}
+BACKY_SITE_ID={siteId}
+BACKY_SITE_PUBLIC_HOST=${normalizedDomain || `${displaySlug || 'new-site'}.backy.app`}`}
+                </pre>
+              </div>
             </div>
             <pre className="mt-3 max-h-72 overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
 {JSON.stringify(createPayloadPreview, null, 2)}

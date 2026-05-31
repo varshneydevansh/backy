@@ -52,6 +52,21 @@ const assertSitesRouteSourceContract = () => {
   );
   assert(source.includes('title="No domain verification workspace selected"'), 'Sites domain verification workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to prepare custom-domain DNS records and track verification status.'), 'Sites domain verification empty state must explain how to start DNS setup');
+  assert(
+    source.includes('agentHandoff: `${publicApiBase}/sites/${siteApiId}/agent-handoff`') &&
+      source.includes('resolveWithHost: `${publicApiBase}/sites/${siteApiId}/resolve?path=/&domain={host}`') &&
+      source.includes('renderWithHost: `${publicApiBase}/sites/${siteApiId}/render?path={path}&domain={host}`') &&
+      source.includes('BACKY_PUBLIC_API_BASE_URL: publicApiBase') &&
+      source.includes('BACKY_SITE_ID: getSiteApiId(site)') &&
+      source.includes('BACKY_SITE_PUBLIC_HOST: publicHost') &&
+      source.includes("schemaVersion: 'backy.site-frontend-routing.v1'") &&
+      source.includes("examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com']") &&
+      source.includes('<SiteApiSnippet label="Agent handoff" value={publicAgentHandoffUrl} />') &&
+      source.includes('<SiteApiSnippet label="Resolve with host" value={publicResolveWithHostUrl} />') &&
+      source.includes('<SiteApiSnippet label="Render with host" value={publicRenderWithHostUrl} />') &&
+      source.includes('<SiteApiSnippet label="Frontend env" value={`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\\nBACKY_SITE_ID=${selectedApiSiteId}\\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`} />'),
+    'Sites frontend API panel must expose agent-handoff, host-aware render/resolve, public host env, and routing contract metadata.',
+  );
   assert(source.includes('title="No deployment workspace selected"'), 'Sites deployment workspace must keep the no-site selected empty title visible');
   assert(source.includes('Create or select a site to prepare Vercel handoff commands, target URLs, and deploy history.'), 'Sites deployment empty state must explain how to start deployment setup');
   assert(source.includes('data-testid="sites-error-state"') && source.includes('Sites workspace needs attention'), 'Sites route must expose a labelled backend error state');
@@ -169,6 +184,21 @@ const assertSitesRouteSourceContract = () => {
       createSource.includes("data-target-site-id={displaySlug || 'new-site'}") &&
       createSource.includes('data-target-blueprint={selectedBlueprint.id}'),
     'Site create form must keep the create action reachable for permitted users and show source-guarded inline validation before backend mutation',
+  );
+  assert(
+    createSource.includes('Subdomains are valid custom domains. Save the exact host') &&
+      createSource.includes('akriti.devanshvarshney.com') &&
+      createSource.includes('data-testid="site-create-agent-handoff-read-start"') &&
+      createSource.includes('agentHandoff: `${publicApiBase}/sites/{siteId}/agent-handoff`') &&
+      createSource.includes('publicManifest: `${publicApiBase}/sites/{siteId}/manifest`') &&
+      createSource.includes('publicResolveWithHost: `${publicApiBase}/sites/{siteId}/resolve?path=/&domain={host}`') &&
+      createSource.includes('publicRenderWithHost: `${publicApiBase}/sites/{siteId}/render?path=/...&domain={host}`') &&
+      createSource.includes('BACKY_PUBLIC_API_BASE_URL: publicApiBase') &&
+      createSource.includes("BACKY_SITE_ID: '{siteId}'") &&
+      createSource.includes("BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`") &&
+      createSource.includes("schemaVersion: 'backy.site-create-routing-handoff.v1'") &&
+      createSource.includes('Frontend agents should read /agent-handoff first'),
+    'Site create handoff must expose subdomain examples, agent-handoff read start, host-aware render/resolve, and frontend env variables.',
   );
   assert(
     /const canUseSiteDetailRoleDefaults =\s*isPermissionsLoading && !permissionMatrix && Boolean\(currentAdmin\);/.test(detailSource) &&
@@ -1455,6 +1485,10 @@ const assertLayout = async (client, siteName) => {
     hasVercelDeployment: Boolean(document.querySelector('[data-testid="sites-vercel-deployment"]')),
     hasBillingQuotas: Boolean(document.querySelector('[data-testid="sites-billing-quotas"]')),
     hasFeatureContract: document.body?.innerText?.includes('Website feature contract') || false,
+    hasAgentHandoffContract: (document.body?.innerText || '').includes('/agent-handoff') &&
+      (document.body?.innerText || '').includes('Resolve with host') &&
+      (document.body?.innerText || '').includes('Render with host') &&
+      (document.body?.innerText || '').includes('BACKY_SITE_PUBLIC_HOST'),
     hasRequiredControls: document.body?.innerText?.includes('What Backy still needs here') || false,
     hasAuditDetails: Boolean(document.querySelector('[data-testid="sites-audit-details"]')),
     auditDefaultCollapsed: document.querySelector('[data-testid="sites-audit-details"]')?.getAttribute('data-default-collapsed') === 'true',
@@ -1467,7 +1501,7 @@ const assertLayout = async (client, siteName) => {
   assert(layout.hasDeliveryOperationsDetails && layout.deliveryOperationsDefaultCollapsed && !layout.deliveryOperationsOpen && layout.hasDeliveryOperationsPanels, `Sites delivery/deployment/quota operations should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(layout.hasAuditDetails && layout.auditDefaultCollapsed && !layout.auditOpen && layout.hasAuditDisclosurePanel, `Sites audit evidence should start collapsed but remain available: ${JSON.stringify(layout)}`);
   assert(
-    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasDomainVerification && layout.hasVercelDeployment && layout.hasBillingQuotas && layout.hasFeatureContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
+    layout.hasCommandCenter && layout.hasSite && layout.hasFrontendApi && layout.hasDomainVerification && layout.hasVercelDeployment && layout.hasBillingQuotas && layout.hasFeatureContract && layout.hasAgentHandoffContract && layout.hasRequiredControls && layout.hasAuditPanel && layout.hasLibrary,
     `Sites page missing expected regions: ${JSON.stringify(layout)}`,
   );
   return layout;
