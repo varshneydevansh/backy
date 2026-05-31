@@ -451,6 +451,14 @@ function LayerItem({
     const [draftLayerName, setDraftLayerName] = useState(layerName);
     const renameInputRef = useRef<HTMLInputElement | null>(null);
     const hasExternalSelection = selectedIds.some((id) => id !== element.id);
+    const selectedPeerCount = Math.max(0, selectedIds.length - (isSelected ? 1 : 0));
+    const layerRowSelectionContext = selectedIds.length > 1
+        ? isSelected
+            ? `This layer is one of ${selectedIds.length} selected layers.`
+            : `${selectedIds.length} other layers are selected.`
+        : isSelected
+            ? 'This is the selected layer.'
+            : 'This layer is not selected.';
     const canNestSelectedHere = !disabled && !isLocked && canAcceptChildren && hasExternalSelection;
     const showRowActions = showActions || isSelected;
     const actionButtonTabIndex = showRowActions ? 0 : -1;
@@ -467,7 +475,7 @@ function LayerItem({
         || (!hasExternalSelection ? `Select another layer before nesting into ${layerName}.` : undefined);
     const layerRowActionStatus = [
         `${layerName} layer actions.`,
-        isSelected ? 'Layer is selected.' : 'Layer is not selected.',
+        layerRowSelectionContext,
         isHidden ? 'Layer is hidden.' : 'Layer is visible.',
         isLocked ? 'Layer is locked.' : 'Layer is unlocked.',
     ].join(' ');
@@ -571,6 +579,8 @@ function LayerItem({
             data-layer-link-href={linkHref}
             data-layer-readable-meta-value={layerReadableMeta}
             data-layer-selected={isSelected ? 'true' : 'false'}
+            data-layer-selection-peer-count={selectedPeerCount}
+            data-layer-selection-context={layerRowSelectionContext}
             data-layer-readable-name="two-line"
             data-layer-selectable-child-policy={navSelectableChildPolicy}
             data-action-status={layerRowActionStatus}
@@ -1262,6 +1272,15 @@ export function LayersPanel({
         collect(elements);
         return ids;
     }, [collapsedLayerIdSet, elements, filteredLayerIdSet, normalizedLayerSearch]);
+    const selectedVisibleLayerCount = useMemo(() => (
+        selectedIds.filter((id) => renderedLayerIds.includes(id)).length
+    ), [renderedLayerIds, selectedIds]);
+    const selectedFilteredLayerCount = Math.max(0, selectedIds.length - selectedVisibleLayerCount);
+    const layerSelectionSummary = selectedIds.length > 0
+        ? selectedFilteredLayerCount > 0
+            ? `${selectedIds.length} selected; ${selectedFilteredLayerCount} hidden by current layer map.`
+            : `${selectedIds.length} selected and visible in this layer map.`
+        : 'No layer selected.';
 
     const handleSelect = useCallback(
         (id: string, multiSelect: boolean, rangeSelect: boolean) => {
@@ -1349,7 +1368,7 @@ export function LayersPanel({
             : layerScope === 'selected'
                 ? 'No selected layers.'
                 : `No ${activeLayerScopeLabel.toLowerCase()} layers yet.`;
-    const layerPanelActionStatus = `Layers panel ready. ${renderedLayerIds.length} of ${layerStats.total} layers shown. ${selectedIds.length} selected.`;
+    const layerPanelActionStatus = `Layers panel ready. ${renderedLayerIds.length} of ${layerStats.total} layers shown. ${layerSelectionSummary}`;
     const clearSearchDisabledReason = layerSearch ? undefined : 'Type a layer search before clearing.';
     const resetLayerFiltersStatus = hasActiveLayerFilter
         ? `Reset active layer filters from ${activeLayerScopeLabel}${normalizedLayerSearch ? ` search "${layerSearch.trim()}"` : ''}.`
@@ -1615,6 +1634,8 @@ export function LayersPanel({
                 data-layer-total-count={layerStats.total}
                 data-layer-visible-count={renderedLayerIds.length}
                 data-layer-selected-count={selectedIds.length}
+                data-layer-selected-visible-count={selectedVisibleLayerCount}
+                data-layer-selected-filtered-count={selectedFilteredLayerCount}
                 data-layer-hidden-count={layerStats.hidden}
                 data-layer-locked-count={layerStats.locked}
                 data-layer-nested-count={layerStats.nested}
@@ -1636,6 +1657,25 @@ export function LayersPanel({
                         </div>
                         <div style={{ color: '#64748b', fontSize: '11px', lineHeight: '16px' }}>
                             {renderedLayerIds.length} shown from {layerStats.total} total
+                        </div>
+                        <div
+                            data-testid="editor-layer-selection-summary"
+                            data-layer-selected-visible-count={selectedVisibleLayerCount}
+                            data-layer-selected-filtered-count={selectedFilteredLayerCount}
+                            title={layerSelectionSummary}
+                            style={{
+                                color: selectedIds.length === 0 ? '#64748b' : selectedFilteredLayerCount > 0 ? '#b45309' : '#0f766e',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                lineHeight: '16px',
+                                marginTop: '2px',
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {layerSelectionSummary}
                         </div>
                     </div>
                     <div

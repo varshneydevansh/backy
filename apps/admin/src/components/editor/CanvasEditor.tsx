@@ -4714,9 +4714,45 @@ export function CanvasEditor({
       height: Math.round(Math.max(1, maxY - minY)),
     };
   }, [selectedActiveElements]);
+  const selectedMissingLayerCount = Math.max(0, selectedIds.length - selectedEntries.length);
   const selectedParentId = selectedEntries[0]?.parentId ?? null;
   const selectedEntriesShareParent = selectedEntries.length > 0
+    && selectedMissingLayerCount === 0
     && selectedEntries.every((entry) => entry.parentId === selectedParentId);
+  const selectedParentScopeCount = useMemo(() => {
+    if (selectedEntries.length === 0) return 0;
+    return new Set(selectedEntries.map((entry) => entry.parentId ?? 'canvas-root')).size;
+  }, [selectedEntries]);
+  const selectedParentScopeLabel = useMemo(() => {
+    if (!selectedParentId) return 'Canvas root';
+    const parent = findElementById(elements, selectedParentId);
+    return parent?.name || `${normalizeElementType(parent?.type || 'box')} ${selectedParentId}`;
+  }, [elements, findElementById, selectedParentId]);
+  const selectedSelectionScopeState = selectedIds.length <= 1
+    ? 'single-layer'
+    : selectedMissingLayerCount > 0
+      ? 'stale-selection'
+      : selectedEntriesShareParent
+        ? 'sibling-scope'
+        : 'mixed-parent-scope';
+  const selectedSelectionScopeLabel = selectedSelectionScopeState === 'sibling-scope'
+    ? 'Sibling scope ready'
+    : selectedSelectionScopeState === 'mixed-parent-scope'
+      ? 'Mixed parent scopes'
+      : selectedSelectionScopeState === 'stale-selection'
+        ? 'Selection needs refresh'
+        : selectedParentScopeLabel;
+  const selectedLayerScopeVerb = selectedIds.length === 1 ? 'shares' : 'share';
+  const selectionScopeReason = selectedEntriesShareParent
+    ? `${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'} ${selectedLayerScopeVerb} ${selectedParentScopeLabel}.`
+    : selectedMissingLayerCount > 0
+      ? `${selectedMissingLayerCount} selected layer${selectedMissingLayerCount === 1 ? '' : 's'} no longer exist on the canvas.`
+      : selectedIds.length > 1
+        ? `Selection spans ${selectedParentScopeCount} parent scopes; choose sibling layers under one parent for bulk compose actions.`
+        : 'Select a layer to see its parent scope.';
+  const sameParentSelectionDisabledReason = selectedIds.length > 1 && !selectedEntriesShareParent
+    ? selectionScopeReason
+    : null;
   const selectableSiblingIds = useMemo(() => {
     const selectedEntry = selectedId ? findElementEntry(elements, selectedId) : null;
     const parentId = selectedEntry?.parentId ?? null;
@@ -4851,9 +4887,6 @@ export function CanvasEditor({
       reason: visible ? enabled ? reason : disabledReason : hiddenReason || 'Command is not visible in the current editor mode.',
     });
 
-    const selectionScopeReason = selectedEntriesShareParent
-      ? `${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'} share the active parent scope.`
-      : 'Selected layers must share one parent scope.';
     const saveDisabledReason = isSaving
       ? 'Save is already in progress.'
       : !canEdit
@@ -4910,7 +4943,7 @@ export function CanvasEditor({
         testId: 'editor-copy-selection',
         enabled: !isCanvasMutationDisabled && canCopySelected,
         reason: `Copy ${selectedLayerActionLabel}. ${selectionScopeReason}`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select one or more layers in the same parent scope before copying.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select one or more layers in the same parent scope before copying.',
       }),
       command({
         id: 'cut-selection',
@@ -4922,7 +4955,7 @@ export function CanvasEditor({
         testId: 'editor-cut-selection',
         enabled: !isCanvasMutationDisabled && canCutSelected,
         reason: `Cut ${selectedLayerActionLabel}. ${selectionScopeReason}`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before cutting.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select unlocked layers in the same parent scope before cutting.',
       }),
       command({
         id: 'paste-selection',
@@ -4946,7 +4979,7 @@ export function CanvasEditor({
         testId: 'editor-duplicate-selection',
         enabled: !isCanvasMutationDisabled && canDuplicateSelected,
         reason: `Duplicate ${selectedLayerActionLabel}. ${selectionScopeReason}`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before duplicating.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select unlocked layers in the same parent scope before duplicating.',
       }),
       command({
         id: 'select-sibling-layers',
@@ -5006,7 +5039,7 @@ export function CanvasEditor({
         testId: 'editor-group-selection',
         enabled: !isCanvasMutationDisabled && canGroupSelected,
         reason: `Group ${selectedIds.length} unlocked sibling layers.`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least two unlocked layers in the same parent scope.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select at least two unlocked layers in the same parent scope.',
       }),
       command({
         id: 'ungroup-selection',
@@ -5018,7 +5051,7 @@ export function CanvasEditor({
         testId: 'editor-ungroup-selection',
         enabled: !isCanvasMutationDisabled && canUngroupSelected,
         reason: `Ungroup ${selectedIds.length} selected editor group${selectedIds.length === 1 ? '' : 's'}.`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked editor groups in the same parent scope.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select unlocked editor groups in the same parent scope.',
       }),
       command({
         id: 'toggle-selection-visibility',
@@ -5067,7 +5100,7 @@ export function CanvasEditor({
         testId,
         enabled: !isCanvasMutationDisabled && canZOrderSelected,
         reason: `Reorder ${selectedLayerActionLabel} inside the current parent scope.`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers with neighboring siblings before changing layer order.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select unlocked layers with neighboring siblings before changing layer order.',
       })),
       ...([
         ['align-left', 'Align left', 'editor-align-left'],
@@ -5084,7 +5117,7 @@ export function CanvasEditor({
         testId,
         enabled: !isCanvasMutationDisabled && canAlignSelected,
         reason: `Align ${selectedLayerActionLabel}. ${selectionScopeReason}`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select visible unlocked layers in the same parent scope before aligning.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select visible unlocked layers in the same parent scope before aligning.',
       })),
       command({
         id: 'distribute-horizontal',
@@ -5094,7 +5127,7 @@ export function CanvasEditor({
         testId: 'editor-distribute-horizontal',
         enabled: !isCanvasMutationDisabled && canDistributeSelected,
         reason: `Distribute ${selectedIds.length} visible unlocked sibling layers horizontally.`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least three visible unlocked sibling layers before distributing.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select at least three visible unlocked sibling layers before distributing.',
       }),
       command({
         id: 'distribute-vertical',
@@ -5104,7 +5137,7 @@ export function CanvasEditor({
         testId: 'editor-distribute-vertical',
         enabled: !isCanvasMutationDisabled && canDistributeSelected,
         reason: `Distribute ${selectedIds.length} visible unlocked sibling layers vertically.`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select at least three visible unlocked sibling layers before distributing.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select at least three visible unlocked sibling layers before distributing.',
       }),
       command({
         id: 'delete-selection',
@@ -5116,7 +5149,7 @@ export function CanvasEditor({
         testId: 'editor-delete-selection',
         enabled: !isCanvasMutationDisabled && canDeleteSelected,
         reason: `Delete ${selectedLayerActionLabel}. ${selectionScopeReason}`,
-        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : 'Select unlocked layers in the same parent scope before deleting.',
+        disabledReason: isCanvasMutationDisabled ? mutationDisabledReason : sameParentSelectionDisabledReason || 'Select unlocked layers in the same parent scope before deleting.',
       }),
       command({
         id: 'toggle-component-panel',
@@ -5375,6 +5408,7 @@ export function CanvasEditor({
     selectableChildLayer?.id,
     selectableChildLayerIds.length,
     selectableSiblingIds.length,
+    sameParentSelectionDisabledReason,
     selectedActiveElements.length,
     selectedEntriesShareParent,
     selectedIds.length,
@@ -5382,6 +5416,7 @@ export function CanvasEditor({
     selectedLayersAreHidden,
     selectedLayersAreLocked,
     selectedParentId,
+    selectionScopeReason,
     showComponentPanel,
     showGrid,
     showInspectorPanel,
@@ -5418,11 +5453,9 @@ export function CanvasEditor({
       },
       {
         label: 'Selection scope',
-        detail: selectionCanCompose
-          ? selectedIds.length > 1
-            ? 'Selected layers share a valid compose/ungroup scope.'
-            : 'No multi-layer composition issue in the current selection.'
-          : 'Select unlocked sibling layers before grouping, aligning, duplicating, or deleting together.',
+        detail: selectedIds.length > 1
+          ? selectionScopeReason
+          : 'No multi-layer composition issue in the current selection.',
         ready: selectionCanCompose,
       },
       {
@@ -5463,6 +5496,9 @@ export function CanvasEditor({
         selectedIds,
         selectedLayerCount: selectedIds.length,
         parentId: selectedParentId,
+        parentScopeCount: selectedParentScopeCount,
+        scopeState: selectedSelectionScopeState,
+        scopeReason: selectionScopeReason,
         shareParent: selectedEntriesShareParent,
         canGroup: canGroupSelected,
         canUngroup: canUngroupSelected,
@@ -5507,6 +5543,9 @@ export function CanvasEditor({
           selectedIds,
           selectedLayerCount: selectedIds.length,
           parentId: selectedParentId,
+          parentScopeCount: selectedParentScopeCount,
+          scopeState: selectedSelectionScopeState,
+          scopeReason: selectionScopeReason,
           shareParent: selectedEntriesShareParent,
           canGroup: canGroupSelected,
           canUngroup: canUngroupSelected,
@@ -5535,6 +5574,9 @@ export function CanvasEditor({
     selectedEntriesShareParent,
     selectedIds,
     selectedParentId,
+    selectedParentScopeCount,
+    selectedSelectionScopeState,
+    selectionScopeReason,
   ]);
   const copyEditorCompositionPlan = useCallback(async () => {
     const plan = JSON.stringify(editorCompositionReadiness.actionPlan, null, 2);
@@ -7453,7 +7495,7 @@ export function CanvasEditor({
     .filter((command) => command.state === 'ready')
     .length;
   const editorInspectorActionStatus = selectedIds.length > 0
-    ? `Inspector actions for ${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'}. ${editorInspectorReadyCommandCount} of ${editorInspectorCommands.length} actions ready.`
+    ? `Inspector actions for ${selectedIds.length} selected layer${selectedIds.length === 1 ? '' : 's'}. ${selectionScopeReason} ${editorInspectorReadyCommandCount} of ${editorInspectorCommands.length} actions ready.`
     : `Inspector empty state ready. ${INSPECTOR_EMPTY_QUICK_ADD_ITEMS.length} quick-add actions available.`;
   const editorInspectorCommandProps = (commandId: string) => {
     const command = editorCommandsById.get(commandId);
@@ -10065,6 +10107,10 @@ export function CanvasEditor({
                   data-visible-layer-count={visibleCanvasElementIds.length}
                   data-total-layer-count={totalCanvasElementCount}
                   data-selected-layer-count={selectedIds.length}
+                  data-selection-scope-state={selectedSelectionScopeState}
+                  data-selection-parent-scope={selectedParentScopeLabel}
+                  data-selection-parent-scope-count={selectedParentScopeCount}
+                  data-selection-scope-reason={selectionScopeReason}
                   data-action-status={editorInspectorActionStatus}
                   aria-describedby={editorInspectorActionStatusId}
                   data-empty-quick-add-types={!selectedElement && selectedIds.length <= 1 ? INSPECTOR_EMPTY_QUICK_ADD_TYPES : undefined}
@@ -10080,7 +10126,7 @@ export function CanvasEditor({
                             {selectedIds.length} layers selected
                           </div>
                           <div className="truncate text-xs text-slate-500">
-                            Unlocked sibling selection
+                            {selectedSelectionScopeLabel}
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
@@ -10141,6 +10187,22 @@ export function CanvasEditor({
                             Ungroup
                           </button>
                         </div>
+                      </div>
+                      <div
+                        className={cn(
+                          'mt-3 flex items-start gap-2 rounded-md border px-2.5 py-2 text-[11px] leading-4',
+                          selectedSelectionScopeState === 'sibling-scope'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : 'border-amber-200 bg-amber-50 text-amber-800',
+                        )}
+                        data-testid="editor-inspector-selection-scope-status"
+                        data-selection-scope-state={selectedSelectionScopeState}
+                        data-selection-parent-scope={selectedParentScopeLabel}
+                        data-selection-parent-scope-count={selectedParentScopeCount}
+                        data-selection-scope-reason={selectionScopeReason}
+                      >
+                        <Layers className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{selectionScopeReason}</span>
                       </div>
                       <div className="mt-3 grid grid-cols-5 gap-1.5" data-testid="editor-inspector-selection-actions">
                         <button

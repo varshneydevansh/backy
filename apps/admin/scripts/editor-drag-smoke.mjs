@@ -1015,6 +1015,9 @@ const assertCanvasEditorShortcutSource = () => {
       layersPanelSource.includes('data-testid="editor-layer-panel-action-status"') &&
       layersPanelSource.includes('data-testid="editor-layer-row-action-status"') &&
       layersPanelSource.includes('data-action-status={layerPanelActionStatus}') &&
+      layersPanelSource.includes('data-testid="editor-layer-selection-summary"') &&
+      layersPanelSource.includes('data-layer-selected-visible-count={selectedVisibleLayerCount}') &&
+      layersPanelSource.includes('data-layer-selection-context={layerRowSelectionContext}') &&
       layersPanelSource.includes('data-target-scope={option.id}') &&
       layersPanelSource.includes('data-matched-layers={count}') &&
       layersPanelSource.includes('data-action-status={layerRowActionStatus}') &&
@@ -1029,6 +1032,9 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('const editorInspectorCommandProps = (commandId: string) =>') &&
       source.includes('data-testid="editor-inspector-action-status"') &&
       source.includes('data-selected-layer-count={selectedIds.length}') &&
+      source.includes('data-testid="editor-inspector-selection-scope-status"') &&
+      source.includes('data-selection-scope-state={selectedSelectionScopeState}') &&
+      source.includes('sameParentSelectionDisabledReason ||') &&
       source.includes('data-action-status={editorInspectorActionStatus}') &&
       source.includes("{...editorInspectorCommandProps('copy-selection')}") &&
       source.includes("{...editorInspectorCommandProps('paste-selection')}") &&
@@ -17276,6 +17282,8 @@ const readInspectorMutationState = async (client, elementIds, label) => (
     const selectionCard = document.querySelector('[data-testid="editor-inspector-selection"]');
     const multiSelectionCard = document.querySelector('[data-testid="editor-inspector-multi-selection"]');
     const emptyCard = document.querySelector('[data-testid="editor-inspector-empty"]');
+    const activeInspectorCard = multiSelectionCard || selectionCard || emptyCard;
+    const scopeStatus = document.querySelector('[data-testid="editor-inspector-selection-scope-status"]');
     const actionStatus = document.querySelector('[data-testid="editor-inspector-action-status"]');
     const splitIds = (value) => value.split(',').map((id) => id.trim()).filter(Boolean);
     const readButton = (testId) => {
@@ -17308,8 +17316,12 @@ const readInspectorMutationState = async (client, elementIds, label) => (
       selectedId: shell?.getAttribute('data-selected-id') || '',
       selectedIds: splitIds(shell?.getAttribute('data-selected-ids') || ''),
       inspectorMode: multiSelectionCard ? 'multi' : selectionCard ? 'single' : emptyCard ? 'empty' : 'missing',
-      inspectorSelectedLayerCount: Number((multiSelectionCard || selectionCard || emptyCard)?.getAttribute('data-selected-layer-count') || 0),
+      inspectorSelectedLayerCount: Number(activeInspectorCard?.getAttribute('data-selected-layer-count') || 0),
       inspectorActionStatus: actionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      inspectorScopeState: activeInspectorCard?.getAttribute('data-selection-scope-state') || '',
+      inspectorScopeReason: activeInspectorCard?.getAttribute('data-selection-scope-reason') || '',
+      inspectorScopeStatusState: scopeStatus?.getAttribute('data-selection-scope-state') || '',
+      inspectorScopeStatusText: scopeStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       actions: {
         singleDuplicate: readButton('editor-inspector-single-duplicate-selection'),
         singleDelete: readButton('editor-inspector-single-delete-selection'),
@@ -17397,7 +17409,10 @@ const testInspectorSelectionMutationActions = async (client) => {
       multiBefore.actions.multiDuplicate.describedBy.includes('editor-inspector-action-status') &&
       multiBefore.actions.multiDelete.exists &&
       multiBefore.actions.multiDelete.disabled === false &&
-      multiBefore.actions.multiDelete.actionState === 'ready',
+      multiBefore.actions.multiDelete.actionState === 'ready' &&
+      multiBefore.inspectorScopeState === 'sibling-scope' &&
+      multiBefore.inspectorScopeStatusState === 'sibling-scope' &&
+      /share Canvas root/.test(multiBefore.inspectorScopeStatusText),
     `Inspector multi-selection duplicate/delete actions were not ready: ${JSON.stringify(multiBefore)}`,
   );
 
@@ -19892,6 +19907,7 @@ const testLayersPanelControls = async (client, pageId) => {
     };
     const panel = document.querySelector('[data-testid="editor-layers-panel"]');
     const panelStatus = document.querySelector('[data-testid="editor-layer-panel-action-status"]');
+    const selectionSummary = document.querySelector('[data-testid="editor-layer-selection-summary"]');
     const scopeControls = {
       all: readControl('[data-testid="editor-layer-scope-all"]'),
       selected: readControl('[data-testid="editor-layer-scope-selected"]'),
@@ -19917,6 +19933,12 @@ const testLayersPanelControls = async (client, pageId) => {
         id: panelStatus?.id || '',
         text: panelStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       },
+      selectionSummary: {
+        exists: Boolean(selectionSummary),
+        text: selectionSummary?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        visibleCount: selectionSummary?.getAttribute('data-layer-selected-visible-count') || '',
+        filteredCount: selectionSummary?.getAttribute('data-layer-selected-filtered-count') || '',
+      },
       search: readControl('[data-testid="editor-layer-search"]'),
       clear: readControl('[data-testid="editor-layer-search-clear"]'),
       treeControls: readControl('[data-testid="editor-layer-tree-controls"]'),
@@ -19932,6 +19954,10 @@ const testLayersPanelControls = async (client, pageId) => {
       layerPanelActionMetadata.panel.describedBy === 'editor-layer-panel-action-status' &&
       layerPanelActionMetadata.panel.actionState === 'ready' &&
       /Layers panel ready/.test(layerPanelActionMetadata.panelStatus.text) &&
+      layerPanelActionMetadata.selectionSummary.exists &&
+      layerPanelActionMetadata.selectionSummary.text === 'No layer selected.' &&
+      layerPanelActionMetadata.selectionSummary.visibleCount === '0' &&
+      layerPanelActionMetadata.selectionSummary.filteredCount === '0' &&
       layerPanelActionMetadata.search.actionState === 'ready' &&
       layerPanelActionMetadata.clear.actionState === 'blocked' &&
       /Type a layer search/.test(layerPanelActionMetadata.clear.disabledReason) &&
@@ -20238,15 +20264,22 @@ const testLayersPanelControls = async (client, pageId) => {
       total: Number(summary.getAttribute('data-layer-total-count') || 0),
       visible: Number(summary.getAttribute('data-layer-visible-count') || 0),
       selected: Number(summary.getAttribute('data-layer-selected-count') || 0),
+      selectedVisible: Number(summary.getAttribute('data-layer-selected-visible-count') || 0),
+      selectedFiltered: Number(summary.getAttribute('data-layer-selected-filtered-count') || 0),
       nested: Number(summary.getAttribute('data-layer-nested-count') || 0),
       scope: summary.getAttribute('data-layer-scope') || '',
+      selectionSummaryText: document.querySelector('[data-testid="editor-layer-selection-summary"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '',
     };
 
     selectedScope.click();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const selectedSummary = document.querySelector('[data-testid="editor-layer-summary"]');
+    const selectedSummaryText = document.querySelector('[data-testid="editor-layer-selection-summary"]')?.textContent?.replace(/\\s+/g, ' ').trim() || '';
     const selectedScopeState = {
       scope: selectedSummary?.getAttribute('data-layer-scope') || '',
+      visibleCount: Number(selectedSummary?.getAttribute('data-layer-selected-visible-count') || 0),
+      filteredCount: Number(selectedSummary?.getAttribute('data-layer-selected-filtered-count') || 0),
+      selectionSummaryText: selectedSummaryText,
       active: selectedScope.getAttribute('data-layer-scope-active') || '',
     };
     const selectedRows = readRows();
@@ -20285,9 +20318,15 @@ const testLayersPanelControls = async (client, pageId) => {
     layerScopeFilters?.ok &&
       layerScopeFilters.initialSummary.total >= initialTree.rows.length &&
       layerScopeFilters.initialSummary.selected >= 2 &&
+      layerScopeFilters.initialSummary.selectedVisible >= 2 &&
+      layerScopeFilters.initialSummary.selectedFiltered === 0 &&
+      /selected and visible/.test(layerScopeFilters.initialSummary.selectionSummaryText) &&
       layerScopeFilters.initialSummary.nested >= 2 &&
       layerScopeFilters.selected.scope === 'selected' &&
       layerScopeFilters.selected.active === 'true' &&
+      layerScopeFilters.selected.visibleCount >= 2 &&
+      layerScopeFilters.selected.filteredCount === 0 &&
+      /selected and visible/.test(layerScopeFilters.selected.selectionSummaryText) &&
       layerScopeFilters.selected.rows.length === 2 &&
       ['smoke-heading', 'smoke-image'].every((id) => layerScopeFilters.selected.rows.some((row) => row.id === id)) &&
       layerScopeFilters.nested.scope === 'nested' &&

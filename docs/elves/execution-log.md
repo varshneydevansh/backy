@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 15:11 IST
+- **Last updated:** 2026-05-31 16:00 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 16:00 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** editor Layers/Inspector mixed-selection scope is clearer and smoke-covered
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: the Inspector now exposes sibling, mixed-parent, stale, and single-layer selection scope state as visible status text plus machine-readable data attributes.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: same-parent bulk commands now reuse the exact mixed-scope reason when group, ungroup, copy, cut, duplicate, z-order, align, distribute, or delete actions are unavailable.
+- `apps/admin/src/components/editor/LayersPanel.tsx`: the layer map now summarizes whether selected layers are visible in the current map/filter and row action status now explains whether a row is part of the current multi-selection.
+- `apps/admin/package.json` and editor smoke guards: exposed previously unreachable keyboard-nudge, preview-scroll, and trace smoke modes; coverage now treats trace as a debug-only workflow exclusion and asserts the new rendered selection-scope metadata.
+
+**Commands run:**
+- `npm --workspace @backy-cms/admin run test:editor-smoke-coverage` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-layers` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-inspector` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-inspector-actions` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-multiselect` -> PASS.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this editor selection-scope clarity slice.
+2. Continue Batch 5 with the remaining scout target: site switcher/domain/subdomain discoverability, or Vercel project linkage if explicitly requested.
 
 ## 2026-05-31 15:11 IST
 

@@ -42,6 +42,9 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Navigation child layers should be directly selectable from the parent nav row. Visible label+href shortcut chips reduce layer-map ambiguity and should select the real child link layer, not only edit parent nav props.
 - [2026-05-31] Coordinate-less Mac wheel/pinch zoom should be active-editor gated. Keep canvas zoom interception for viewport/shell/recent-pointer/focused-editor events, but let inactive global browser gestures pass through so Backy does not steal page zoom outside the editor.
 - [2026-05-31] Editor CDP smokes should not share one fixed debug port by default. Use a per-process default port and bounded `Browser.close` cleanup so a hung Chrome does not poison the next responsive/editor validation.
+- [2026-05-31] Inspector bulk-selection UX should make parent scope explicit. When selection spans multiple parent scopes, command metadata should carry the exact reason instead of only disabling group/align/delete controls with generic same-parent wording.
+- [2026-05-31] Layer maps need selection visibility feedback beside filters. If selected layers are hidden by the active layer scope/search, the panel should say so and expose selected-visible/filtered counts for rendered smokes.
+- [2026-05-31] Every `BACKY_EDITOR_*_SMOKE` mode in the editor smoke runner should have a package script unless it is a debug-only modifier recorded in the coverage exclusions. Otherwise coverage can pass source ownership while the behavior is not runnable by name.
 
 ## Product and Domain Invariants
 

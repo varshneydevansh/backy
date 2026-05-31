@@ -62,6 +62,7 @@ const missingComponentScripts = componentHandlerNames.filter((name) => !componen
 const workflowExclusions = new Set([
   'test:editor-drag',
   'test:editor-save-publish',
+  'test:editor-trace',
   'test:editor-workflows',
 ]);
 const collectReachableScripts = (scriptName, reachable = new Set()) => {
