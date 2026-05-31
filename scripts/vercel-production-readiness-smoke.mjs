@@ -45,6 +45,11 @@ const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.
 const productionEnvGuard = read('scripts/vercel-public-production-env-guard.mjs');
 const publicNextConfig = read('apps/public/next.config.js');
 const publicRepositoryRuntime = read('apps/public/src/lib/repositoryRuntime.ts');
+const adminSessionStore = read('apps/public/src/lib/admin-auth/sessionStore.ts');
+const adminLoginRoute = read('apps/public/src/app/api/admin/auth/login/route.ts');
+const adminSessionRoute = read('apps/public/src/app/api/admin/auth/session/route.ts');
+const adminLogoutRoute = read('apps/public/src/app/api/admin/auth/logout/route.ts');
+const adminAccess = read('apps/public/src/lib/adminAccess.ts');
 
 assert(
   rootPackage.scripts?.['test:vercel-production-readiness'] === 'node scripts/vercel-production-readiness-smoke.mjs',
@@ -167,6 +172,60 @@ includesAll(
 assert(
   !publicRepositoryRuntime.includes("new Function('specifier', 'return import(specifier)')"),
   'Public production repository runtime does not hide Backy database imports from Vercel tracing',
+);
+
+includesAll(
+  adminSessionStore,
+  [
+    'upsertAdminSessionAuthRecord',
+    'removeAdminSessionAuthRecord',
+    'pruneExpiredMemorySessions',
+    'options: { authMode?: AdminAuthMode; persist?: boolean }',
+    'options.persist !== false',
+    'options.persist === false',
+    'else if (!hasExternalAuthSettings)',
+  ],
+  'Admin session store exposes database-safe auth-session record transforms',
+);
+includesAll(
+  adminLoginRoute,
+  [
+    'upsertAdminSessionAuthRecord',
+    "{ persist: !repositories }",
+    'persistSuccessfulSession',
+    'completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode, persistSuccessfulSession)',
+  ],
+  'Production admin login persists sessions through repository auth settings instead of local files',
+);
+includesAll(
+  adminSessionRoute,
+  [
+    'removeAdminSessionAuthRecord',
+    'upsertAdminSessionAuthRecord',
+    'authSettings',
+    'updateAuthSettings',
+    "{ persist: !repositories }",
+    'await repositories.settings.update({ auth: nextAuth })',
+  ],
+  'Production admin session refresh and rotation use repository auth settings',
+);
+includesAll(
+  adminLogoutRoute,
+  [
+    'removeAdminSessionAuthRecord',
+    "{ persist: !repositories }",
+    'await repositories.settings.update({ auth: next.auth })',
+  ],
+  'Production admin logout revokes persisted sessions through repository auth settings',
+);
+includesAll(
+  adminAccess,
+  [
+    'const authSettings = repositories',
+    'authSettings,',
+    'updateAuthSettings:',
+  ],
+  'Production admin access restores sessions from repository auth settings',
 );
 
 const normalizeProductionUrl = (value) => {

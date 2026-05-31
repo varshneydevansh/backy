@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 04:08 IST
+- **Last updated:** 2026-06-01 05:05 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,37 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 05:05 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production admin session persistence hardened for database-backed Vercel runtime
+
+**What changed:**
+- `apps/public/src/lib/admin-auth/sessionStore.ts`: split admin session record persistence into pure auth-setting transforms so database-mode routes can upsert/revoke/prune `adminSessions` through Supabase-backed `platform_settings.auth` without touching the local file-backed `backyStore` writer.
+- `apps/public/src/app/api/admin/auth/login/route.ts`: Supabase/local-persistent successful login now creates the in-memory session without local persistence in repository mode, then commits the session record through `repositories.settings.update({ auth })` only after MFA passes.
+- `apps/public/src/app/api/admin/auth/session/route.ts`, `logout/route.ts`, `adminAccess.ts`, and public manifest admin discovery: DB-mode session restore/rotate/logout paths now pass repository `authSettings` plus update callbacks so cold starts and stale-session cleanup read/write the same database source of truth.
+- `scripts/vercel-production-readiness-smoke.mjs`: added source guards that fail if production admin login/session/logout/access regress toward local file-backed session persistence.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run test:admin-auth-supabase --workspace @backy/public --silent` -> PASS.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected repo-root relink warning.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run build:vercel:public --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:admin-auth-supabase-route --workspace @backy/public --silent` -> BLOCKED by the user's active `next dev -p 3001` holding `apps/public/.next/dev/lock`; the local browser session was left running.
+- A separate `next start` admin-auth smoke was attempted on an isolated port, but local demo state rejected the smoke-created `example.test` user before cleanup-sensitive auth assertions; not used as release evidence.
+
+**Review findings:**
+- [High] Vercel production logs showed `POST /api/admin/auth/login` succeeding far enough to persist a session, then trying to `mkdir /var/task/apps/public/data/backy`. Fixed by preventing repository-mode login/session/logout from writing local admin-content files.
+- [Medium] Subagent review caught stale/invalid DB-backed sessions could still fall through to local cleanup when callers supplied external auth settings without an update callback. Fixed by adding DB update callbacks at callsites and suppressing local cleanup when external auth settings are supplied.
+
+**Next:**
+1. Commit and push this production DB-session persistence hardening slice.
+2. Wait for `backy-public` production deployment, then run live admin login/session and Vercel error-log checks.
+3. Continue Batch 5 with the next visible admin/editor friction point after production login is stable.
 
 ## 2026-06-01 04:08 IST
 

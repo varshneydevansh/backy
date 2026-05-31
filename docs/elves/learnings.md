@@ -84,6 +84,8 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Supabase Auth triggers must not rely on caller `search_path`. Auth Admin API runs under a different execution context than operator SQL, so profile bootstrap triggers should pin trusted schemas and schema-qualify Backy enum casts such as `public.user_role`.
 - [2026-06-01] First-owner bootstrap tokens are one-use operational secrets. Remove them from `backy-public` production env immediately after owner creation and redeploy; the active-owner lockout is defense in depth, not a reason to keep the token around.
 - [2026-06-01] The public render schema is negotiated through headers. Production readiness should assert `x-backy-schema-version: backy.content-payload.v1` and the embedded `backy.content.v1` document rather than expecting a body-level `data.schemaVersion`.
+- [2026-06-01] Database-mode admin sessions must persist through repository `platform_settings.auth`, not the local `backyStore` admin-content writer. Creating a Supabase-backed session before MFA is fine only if local persistence is disabled and the DB session record is written after MFA passes.
+- [2026-06-01] When restoring sessions from externally supplied auth settings, stale-session cleanup must also use the same external repository or do nothing. Falling back to local cleanup in Vercel DB mode can reintroduce immutable `/var/task/.../data/backy` writes and leaves the database record unchanged.
 
 ## Known Traps
 

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminSession, getAdminSessionWithPersistence, rotateAdminSession } from '@/lib/admin-auth/sessionStore';
+import {
+  getAdminSession,
+  getAdminSessionWithPersistence,
+  removeAdminSessionAuthRecord,
+  rotateAdminSession,
+  upsertAdminSessionAuthRecord,
+} from '@/lib/admin-auth/sessionStore';
 import { attachAdminSessionCookie, getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminSettings } from '@/lib/backyStore';
@@ -21,9 +27,14 @@ export async function GET(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
+  const authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : undefined;
   const session = repositories
     ? await getAdminSessionWithPersistence(token, {
       getUserById: (userId) => repositories.users.getById(userId),
+      authSettings,
+      updateAuthSettings: (auth) => repositories.settings.update({ auth }).then(() => undefined),
     })
     : getAdminSession(token);
 
@@ -62,9 +73,16 @@ export async function POST(request: NextRequest) {
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
+  const authSettings = repositories
+    ? asAuthSettings((await repositories.settings.get()).auth)
+    : asAuthSettings(getAdminSettings().auth);
   const session = await getAdminSessionWithPersistence(
     token,
-    repositories ? { getUserById: (userId) => repositories.users.getById(userId) } : {},
+    repositories ? {
+      getUserById: (userId) => repositories.users.getById(userId),
+      authSettings,
+      updateAuthSettings: (auth) => repositories.settings.update({ auth }).then(() => undefined),
+    } : {},
   );
 
   if (!session) {
@@ -81,10 +99,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const authSettings = repositories
-    ? asAuthSettings((await repositories.settings.get()).auth)
-    : asAuthSettings(getAdminSettings().auth);
-  const rotated = rotateAdminSession(token, authSettings);
+  const rotated = rotateAdminSession(token, authSettings, { persist: !repositories });
 
   if (!rotated) {
     return NextResponse.json(
@@ -98,6 +113,12 @@ export async function POST(request: NextRequest) {
       },
       { status: 409 },
     );
+  }
+
+  if (repositories) {
+    const withoutPrevious = removeAdminSessionAuthRecord(authSettings || {}, token);
+    const nextAuth = upsertAdminSessionAuthRecord(withoutPrevious.auth, rotated.session);
+    await repositories.settings.update({ auth: nextAuth });
   }
 
   await recordAdminAudit({

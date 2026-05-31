@@ -6,6 +6,7 @@ import {
   checkPersistedAdminAuthRateLimit,
   clearPersistedAdminAuthRateLimit,
   createAdminSessionForExternalUser,
+  upsertAdminSessionAuthRecord,
   peekPersistedAdminAuthRateLimit,
   revokeAdminSession,
   type AdminSession,
@@ -134,9 +135,16 @@ const completeLoginResponse = async (
   repositories: LoginAuditRepositories,
   authSettings: Record<string, unknown> | undefined,
   twoFactorCode: unknown,
+  persistSuccessfulSession?: (session: AdminSession, auth: BackyJsonObject | undefined) => Promise<BackyJsonObject | undefined>,
 ) => {
-  const mfaRequired = isUserMfaRequired(authSettings, session.user.id);
+  let effectiveAuthSettings = authSettings;
+  const persistSession = async () => {
+    if (!persistSuccessfulSession) return;
+    effectiveAuthSettings = (await persistSuccessfulSession(session, asAuthSettings(effectiveAuthSettings))) || effectiveAuthSettings;
+  };
+  const mfaRequired = isUserMfaRequired(effectiveAuthSettings, session.user.id);
   if (!mfaRequired) {
+    await persistSession();
     await recordAuthAudit({
       repositories,
       requestId,
@@ -148,10 +156,10 @@ const completeLoginResponse = async (
   }
 
   const envMfaConfigured = isAdminMfaConfigured();
-  const recoveryCodesConfigured = hasUserMfaRecoveryCodes(authSettings, session.user.id);
+  const recoveryCodesConfigured = hasUserMfaRecoveryCodes(effectiveAuthSettings, session.user.id);
 
   if (typeof twoFactorCode !== 'string' || !twoFactorCode.trim()) {
-    revokeAdminSession(session.token);
+    revokeAdminSession(session.token, { persist: !repositories });
     await recordAuthAudit({
       repositories,
       requestId,
@@ -163,16 +171,18 @@ const completeLoginResponse = async (
   }
 
   const recoveryVerification = verifyUserMfaRecoveryCode({
-    auth: authSettings,
+    auth: effectiveAuthSettings,
     userId: session.user.id,
     code: twoFactorCode,
   });
   if (recoveryVerification.ok) {
+    effectiveAuthSettings = recoveryVerification.auth;
     if (repositories) {
       await repositories.settings.update({ auth: recoveryVerification.auth });
     } else {
       updateAdminSettings({ auth: recoveryVerification.auth });
     }
+    await persistSession();
     await recordAuthAudit({
       repositories,
       requestId,
@@ -188,7 +198,7 @@ const completeLoginResponse = async (
   }
 
   if (!envMfaConfigured && !recoveryCodesConfigured) {
-    revokeAdminSession(session.token);
+    revokeAdminSession(session.token, { persist: !repositories });
     await recordAuthAudit({
       repositories,
       requestId,
@@ -205,7 +215,7 @@ const completeLoginResponse = async (
   }
 
   if (!envMfaConfigured || !verifyAdminMfaCode(twoFactorCode)) {
-    revokeAdminSession(session.token);
+    revokeAdminSession(session.token, { persist: !repositories });
     await recordAuthAudit({
       repositories,
       requestId,
@@ -216,6 +226,7 @@ const completeLoginResponse = async (
     return errorResponse(401, 'INVALID_MFA_CODE', 'Invalid two-factor authentication code.', requestId);
   }
 
+  await persistSession();
   await recordAuthAudit({
     repositories,
     requestId,
@@ -323,6 +334,17 @@ export async function POST(request: NextRequest) {
     authSettings = clearedAuth;
   };
 
+  const persistSuccessfulSession = async (
+    session: AdminSession,
+    auth: BackyJsonObject | undefined,
+  ): Promise<BackyJsonObject | undefined> => {
+    if (!repositories) return auth;
+    const nextAuth = upsertAdminSessionAuthRecord(auth || {}, session);
+    await repositories.settings.update({ auth: nextAuth });
+    authSettings = nextAuth;
+    return nextAuth;
+  };
+
   const supabaseAuthConfigured = isSupabaseAdminAuthConfigured();
   let supabaseAuthUnavailable = false;
   if (supabaseAuthConfigured) {
@@ -340,7 +362,7 @@ export async function POST(request: NextRequest) {
             fullName: user.fullName,
             role: user.role,
             status: user.status,
-          }, 'supabase', authSettings), repositories, authSettings, twoFactorCode);
+          }, 'supabase', authSettings, { persist: !repositories }), repositories, authSettings, twoFactorCode, persistSuccessfulSession);
         }
       }
     } catch (error) {
@@ -381,7 +403,7 @@ export async function POST(request: NextRequest) {
     ? await authenticateAdminCredentialsWithPersistence(email, password, {
       getPasswordCredentialByEmail: (userEmail) => repositories.users.getPasswordCredentialByEmail(userEmail),
       getUserByEmail: (userEmail) => repositories.users.getByEmail(userEmail),
-    }, authSettings)
+    }, authSettings, { persist: !repositories })
     : authenticateAdminCredentials(email, password, authSettings);
   if (!session) {
     const failedAttempt = await recordFailure();
@@ -392,5 +414,5 @@ export async function POST(request: NextRequest) {
   }
 
   await clearFailures();
-  return completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode);
+  return completeLoginResponse(requestId, session, repositories, authSettings, twoFactorCode, persistSuccessfulSession);
 }

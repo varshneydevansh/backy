@@ -143,6 +143,11 @@ export type AdminAuthSessionSettings = {
   permissionOverrides?: unknown;
 };
 
+type AdminSessionPersistence = Pick<AdminAuthUserPersistence, 'getUserById'> & {
+  authSettings?: AdminAuthSessionSettings | BackyJsonObject | null;
+  updateAuthSettings?: (auth: BackyJsonObject) => Promise<void> | void;
+};
+
 const globalAdminSessionStore = globalThis as typeof globalThis & {
   __BACKY_ADMIN_SESSIONS__?: Map<string, StoredSession>;
   __BACKY_ADMIN_PASSWORD_RESET_TOKENS__?: Map<string, AdminPasswordResetToken>;
@@ -286,36 +291,94 @@ const getAuthSettingsObject = (): BackyJsonObject => {
     : {};
 };
 
-const readPersistedAdminSessionRecords = (now = Date.now()): PersistedAdminSessionRecord[] => (
-  normalizePersistedAdminSessionRecords(getAuthSettingsObject()[PERSISTED_ADMIN_SESSIONS_KEY], now)
+const readPersistedAdminSessionRecordsFromAuth = (
+  auth: unknown,
+  now = Date.now(),
+): PersistedAdminSessionRecord[] => (
+  normalizePersistedAdminSessionRecords(toRecord(auth)[PERSISTED_ADMIN_SESSIONS_KEY], now)
 );
 
-const writePersistedAdminSessionRecords = (records: PersistedAdminSessionRecord[]): void => {
-  const auth = getAuthSettingsObject();
-  updateAdminSettings({
-    auth: {
-      ...auth,
-      [PERSISTED_ADMIN_SESSIONS_KEY]: records.slice(0, MAX_PERSISTED_ADMIN_SESSIONS) as unknown as BackyJsonObject[],
-    },
-  });
-};
+const readPersistedAdminSessionRecords = (now = Date.now()): PersistedAdminSessionRecord[] => (
+  readPersistedAdminSessionRecordsFromAuth(getAuthSettingsObject(), now)
+);
 
-const upsertPersistedAdminSession = (session: StoredSession): void => {
+const authWithPersistedAdminSessionRecords = (
+  auth: unknown,
+  records: PersistedAdminSessionRecord[],
+): BackyJsonObject => ({
+  ...toJsonObject(auth),
+  [PERSISTED_ADMIN_SESSIONS_KEY]: records.slice(0, MAX_PERSISTED_ADMIN_SESSIONS) as unknown as BackyJsonObject[],
+});
+
+export const upsertAdminSessionAuthRecord = (
+  auth: unknown,
+  session: AdminSession,
+  options: { lastSeenAt?: string } = {},
+): BackyJsonObject => {
   const tokenHash = hashSessionToken(session.token);
-  const records = readPersistedAdminSessionRecords()
+  const records = readPersistedAdminSessionRecordsFromAuth(auth)
     .filter((record) => record.tokenHash !== tokenHash);
 
-  writePersistedAdminSessionRecords([
+  return authWithPersistedAdminSessionRecords(auth, [
     {
       tokenHash,
       userId: session.user.id,
       issuedAt: session.issuedAt,
       expiresAt: session.expiresAt,
       authMode: session.authMode,
-      lastSeenAt: session.lastSeenAt,
+      lastSeenAt: options.lastSeenAt || session.issuedAt,
     },
     ...records,
   ]);
+};
+
+export const removeAdminSessionAuthRecord = (
+  auth: unknown,
+  token: string | null | undefined,
+): { auth: BackyJsonObject; removed: boolean } => {
+  const normalizedToken = token?.trim();
+  if (!normalizedToken) {
+    return { auth: toJsonObject(auth), removed: false };
+  }
+
+  const tokenHash = hashSessionToken(normalizedToken);
+  const records = readPersistedAdminSessionRecordsFromAuth(auth);
+  const nextRecords = records.filter((record) => record.tokenHash !== tokenHash);
+  return {
+    auth: authWithPersistedAdminSessionRecords(auth, nextRecords),
+    removed: nextRecords.length !== records.length,
+  };
+};
+
+export const pruneAdminSessionAuthRecords = (
+  auth: unknown,
+  now = Date.now(),
+): { auth: BackyJsonObject; changed: boolean } => {
+  const rawRecords = Array.isArray(toRecord(auth)[PERSISTED_ADMIN_SESSIONS_KEY])
+    ? toRecord(auth)[PERSISTED_ADMIN_SESSIONS_KEY] as unknown[]
+    : [];
+  const nextRecords = normalizePersistedAdminSessionRecords(rawRecords, now);
+  return {
+    auth: authWithPersistedAdminSessionRecords(auth, nextRecords),
+    changed: nextRecords.length !== rawRecords.length,
+  };
+};
+
+const writePersistedAdminSessionRecordsToLocalSettings = (records: PersistedAdminSessionRecord[]): void => {
+  updateAdminSettings({
+    auth: authWithPersistedAdminSessionRecords(getAuthSettingsObject(), records),
+  });
+};
+
+const writePersistedAdminSessionRecords = (records: PersistedAdminSessionRecord[]): void => {
+  writePersistedAdminSessionRecordsToLocalSettings(records);
+};
+
+const upsertPersistedAdminSession = (session: StoredSession): void => {
+  const nextAuth = upsertAdminSessionAuthRecord(getAuthSettingsObject(), session, {
+    lastSeenAt: session.lastSeenAt,
+  });
+  writePersistedAdminSessionRecords(readPersistedAdminSessionRecordsFromAuth(nextAuth));
 };
 
 const removePersistedAdminSession = (token: string | null | undefined): boolean => {
@@ -435,7 +498,7 @@ const getSessionTimeoutMinutes = (authSettings?: AdminAuthSessionSettings) => {
 const createAdminSessionForUser = (
   user: AdminAuthUser,
   authSettings?: AdminAuthSessionSettings,
-  options: { authMode?: AdminAuthMode } = {},
+  options: { authMode?: AdminAuthMode; persist?: boolean } = {},
 ): AdminSession => {
   const authMode = options.authMode || 'local-demo';
   if (authMode === 'local-demo') {
@@ -458,7 +521,9 @@ const createAdminSessionForUser = (
   };
 
   ADMIN_SESSIONS.set(session.token, session);
-  upsertPersistedAdminSession(session);
+  if (options.persist !== false) {
+    upsertPersistedAdminSession(session);
+  }
   return {
     token: session.token,
     user: session.user,
@@ -472,7 +537,11 @@ export const createAdminSessionForExternalUser = (
   user: AdminAuthUser,
   authMode: Exclude<AdminAuthMode, 'local-demo'>,
   authSettings?: AdminAuthSessionSettings,
-): AdminSession => createAdminSessionForUser(user, authSettings, { authMode });
+  options: { persist?: boolean } = {},
+): AdminSession => createAdminSessionForUser(user, authSettings, {
+  authMode,
+  persist: options.persist,
+});
 
 export function listAdminSessionPermissionOverrides(
   token: string | null | undefined,
@@ -494,13 +563,18 @@ export function updateAdminSessionPermissionOverrides(
   }
 }
 
-const pruneExpiredSessions = () => {
+const pruneExpiredMemorySessions = () => {
   const now = Date.now();
   for (const [token, session] of ADMIN_SESSIONS.entries()) {
     if (Date.parse(session.expiresAt) <= now) {
       ADMIN_SESSIONS.delete(token);
     }
   }
+};
+
+const pruneExpiredSessions = () => {
+  pruneExpiredMemorySessions();
+  const now = Date.now();
   pruneExpiredPersistedAdminSessions(now);
 };
 
@@ -738,8 +812,9 @@ export async function authenticateAdminCredentialsWithPersistence(
   password: string,
   persistence: Pick<AdminAuthUserPersistence, 'getPasswordCredentialByEmail' | 'getUserByEmail'> = {},
   authSettings?: AdminAuthSessionSettings,
+  options: { persist?: boolean } = {},
 ): Promise<AdminSession | null> {
-  pruneExpiredSessions();
+  pruneExpiredMemorySessions();
 
   const normalizedEmail = normalizeEmail(email);
   if (persistence.getPasswordCredentialByEmail) {
@@ -757,7 +832,7 @@ export async function authenticateAdminCredentialsWithPersistence(
       return null;
     }
 
-    return createAdminSessionForUser(user, authSettings);
+    return createAdminSessionForUser(user, authSettings, { persist: options.persist });
   }
 
   const localCredential = LOCAL_CREDENTIALS.get(normalizedEmail);
@@ -772,7 +847,7 @@ export async function authenticateAdminCredentialsWithPersistence(
       return null;
     }
 
-    return createAdminSessionForUser(user, authSettings);
+    return createAdminSessionForUser(user, authSettings, { persist: options.persist });
   }
 
   if (persistence.getUserByEmail) {
@@ -830,28 +905,40 @@ export function getAdminSession(token: string | null | undefined): AdminSession 
 
 export async function getAdminSessionWithPersistence(
   token: string | null | undefined,
-  persistence: Pick<AdminAuthUserPersistence, 'getUserById'> = {},
+  persistence: AdminSessionPersistence = {},
 ): Promise<AdminSession | null> {
-  pruneExpiredSessions();
+  pruneExpiredMemorySessions();
   if (!token) return null;
 
   const normalizedToken = token.trim();
+  const tokenHash = hashSessionToken(normalizedToken);
+  const hasExternalAuthSettings = persistence.authSettings !== undefined && persistence.authSettings !== null;
+  const persistedAuthSettings = persistence.authSettings || getAuthSettingsObject();
+  const persistedRecord = readPersistedAdminSessionRecordsFromAuth(persistedAuthSettings)
+    .find((candidate) => candidate.tokenHash === tokenHash);
   let session = ADMIN_SESSIONS.get(normalizedToken);
+  if (session && hasExternalAuthSettings && !persistedRecord) {
+    ADMIN_SESSIONS.delete(normalizedToken);
+    session = undefined;
+  }
   if (!session) {
-    const tokenHash = hashSessionToken(normalizedToken);
-    const record = readPersistedAdminSessionRecords().find((candidate) => candidate.tokenHash === tokenHash);
-    const restoredUser = record
+    const restoredUser = persistedRecord
       ? toAuthUser(
         persistence.getUserById
-          ? await persistence.getUserById(record.userId)
-          : getAdminUserById(record.userId),
+          ? await persistence.getUserById(persistedRecord.userId)
+          : getAdminUserById(persistedRecord.userId),
       )
       : null;
-    if (record && restoredUser?.status === 'active') {
-      session = storedSessionFromPersistedRecord(normalizedToken, record, restoredUser);
+    if (persistedRecord && restoredUser?.status === 'active') {
+      session = storedSessionFromPersistedRecord(normalizedToken, persistedRecord, restoredUser, persistedAuthSettings);
       ADMIN_SESSIONS.set(normalizedToken, session);
-    } else if (record) {
-      removePersistedAdminSession(normalizedToken);
+    } else if (persistedRecord) {
+      if (persistence.updateAuthSettings) {
+        const next = removeAdminSessionAuthRecord(persistedAuthSettings, normalizedToken);
+        if (next.removed) await persistence.updateAuthSettings(next.auth);
+      } else if (!hasExternalAuthSettings) {
+        removePersistedAdminSession(normalizedToken);
+      }
     }
   }
   if (!session) return null;
@@ -881,24 +968,35 @@ export async function getAdminSessionWithPersistence(
   };
 }
 
-export function revokeAdminSession(token: string | null | undefined): boolean {
+export function revokeAdminSession(
+  token: string | null | undefined,
+  options: { persist?: boolean } = {},
+): boolean {
   if (!token) return false;
   const normalizedToken = token.trim();
   const removedMemorySession = ADMIN_SESSIONS.delete(normalizedToken);
-  const removedPersistedSession = removePersistedAdminSession(normalizedToken);
+  const removedPersistedSession = options.persist === false
+    ? false
+    : removePersistedAdminSession(normalizedToken);
   return removedMemorySession || removedPersistedSession;
 }
 
-export function rotateAdminSession(token: string | null | undefined, authSettings?: AdminAuthSessionSettings): {
+export function rotateAdminSession(
+  token: string | null | undefined,
+  authSettings?: AdminAuthSessionSettings,
+  options: { persist?: boolean } = {},
+): {
   session: AdminSession;
   previousSessionId: string;
   newSessionId: string;
 } | null {
-  pruneExpiredSessions();
+  pruneExpiredMemorySessions();
   if (!token) return null;
 
   const normalizedToken = token.trim();
-  const current = ADMIN_SESSIONS.get(normalizedToken) || restorePersistedAdminSession(normalizedToken, authSettings);
+  const current = ADMIN_SESSIONS.get(normalizedToken) || (
+    options.persist === false ? null : restorePersistedAdminSession(normalizedToken, authSettings)
+  );
   if (!current) return null;
 
   const user = toAuthUser(getAdminUserById(current.user.id)) || current.user;
@@ -908,9 +1006,14 @@ export function rotateAdminSession(token: string | null | undefined, authSetting
   }
 
   const previousSessionId = current.token.slice(-12);
-  const next = createAdminSessionForUser(user, authSettings, { authMode: current.authMode });
+  const next = createAdminSessionForUser(user, authSettings, {
+    authMode: current.authMode,
+    persist: options.persist,
+  });
   ADMIN_SESSIONS.delete(normalizedToken);
-  removePersistedAdminSession(normalizedToken);
+  if (options.persist !== false) {
+    removePersistedAdminSession(normalizedToken);
+  }
 
   return {
     session: next,

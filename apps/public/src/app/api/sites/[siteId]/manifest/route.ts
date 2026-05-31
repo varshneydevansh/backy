@@ -8,6 +8,7 @@ import { NextRequest } from 'next/server';
 import {
   buildBackyThemeDiscovery,
   buildBackyThemeTokens,
+  type BackyJsonObject,
   type BackyBlogAuthor,
   type BackyBlogCategory,
   type BackyBlogTag,
@@ -1139,6 +1140,8 @@ const buildAdminDiscovery = async (
   options: {
     configuredAdminKey?: string;
     getUserById?: (userId: string) => Promise<ManifestAdminUser | null | undefined>;
+    authSettings?: BackyJsonObject | null;
+    updateAuthSettings?: (auth: BackyJsonObject) => Promise<void> | void;
   } = {},
 ): Promise<ManifestAdminDiscovery> => {
   const baseMatrix = buildUserPermissionMatrix({ id: 'anonymous', role: 'viewer', status: 'inactive' });
@@ -1168,7 +1171,11 @@ const buildAdminDiscovery = async (
   }
 
   const token = getBearerToken(request);
-  const session = await getAdminSessionWithPersistence(token, options.getUserById ? { getUserById: options.getUserById } : {});
+  const session = await getAdminSessionWithPersistence(token, options.getUserById ? {
+    getUserById: options.getUserById,
+    authSettings: options.authSettings,
+    updateAuthSettings: options.updateAuthSettings,
+  } : {});
   if (!session) return emptyAdminDiscovery(siteId, basePermissions);
 
   const sessionOverrides = listAdminSessionPermissionOverrides(session.token, session.user.id);
@@ -3720,6 +3727,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const admin = await buildAdminDiscovery(request, site.id, {
         configuredAdminKey: settings.apiKeys?.secretKeyId,
         getUserById: repositories.users.getById,
+        authSettings: settings.auth,
+        updateAuthSettings: (auth) => repositories.settings.update({ auth }).then(() => undefined),
       });
       const origin = new URL(request.url).origin;
       const delivery = buildDeliveryDiscovery(origin, site);

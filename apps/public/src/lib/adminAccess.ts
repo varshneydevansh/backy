@@ -384,9 +384,16 @@ export async function requireAdminAccess(
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
+  const authSettings = repositories
+    ? (await repositories.settings.get()).auth
+    : undefined;
   const session = await getAdminSessionWithPersistence(
     getAdminSessionTokenFromRequest(request),
-    repositories ? { getUserById: repositories.users.getById } : {},
+    repositories ? {
+      getUserById: repositories.users.getById,
+      authSettings,
+      updateAuthSettings: (auth) => repositories.settings.update({ auth }).then(() => undefined),
+    } : {},
   );
   if (!session) {
     return adminAccessError(401, 'UNAUTHORIZED', 'A valid admin session or admin API key is required.', requestId);
