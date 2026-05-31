@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 05:05 IST
+- **Last updated:** 2026-06-01 05:19 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 05:19 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production admin auth verified live after DB-session persistence deploy
+
+**Live production verification:**
+- Latest `backy-public` production deployment is Ready and aliased to `https://backy-public.vercel.app`.
+- Latest `backy-admin` production deployment is Ready and aliased to `https://backy-admin.vercel.app`.
+- Production owner login against `https://backy-public.vercel.app/api/admin/auth/login` returns `200`, role `owner`, and `authMode=supabase`.
+- Production session restore against `/api/admin/auth/session` returns `200` using the issued admin session cookie.
+- Production logout against `/api/admin/auth/logout` returns `200` and revokes the session.
+- Live production handoff/manifest/OpenAPI/render gate passes against `https://backy-public.vercel.app`.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color` reports no errors; the previous immutable `/var/task/apps/public/data/backy` write failure is not recurring.
+
+**Commands run:**
+- `git push` -> PASS, pushed `f13b1977` to `main`.
+- `npx vercel@latest inspect <latest backy-public production deployment> --no-color` -> Ready.
+- `npx vercel@latest inspect <latest backy-admin production deployment> --no-color` -> Ready.
+- Production owner login/session/logout smoke -> PASS without printing password or session token.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color` -> no logs found.
+
+**Next:**
+1. Continue Batch 5 with the next visible admin/editor friction point.
+2. Prefer an admin-editor UI issue over external provider certification artifacts, since production auth/deploy is now stable.
 
 ## 2026-06-01 05:05 IST
 
