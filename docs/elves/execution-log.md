@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 14:50 IST
+- **Last updated:** 2026-05-31 15:03 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 15:03 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in-app Help now mirrors the Vercel preview readiness/deployment topology gate
+
+**What changed:**
+- `apps/admin/src/routes/help.tsx`: updated the Deploy Backy and custom frontends topic to name `npm run test:vercel-release-config`, `npm run test:vercel-preview-readiness`, strict project-link readiness, and optional Vercel Agent Code Review setup from Project Settings -> AI.
+- `apps/admin/src/routes/help.tsx`: added a copyable Deploy topology starter so frontend/deploy agents can copy `agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness` from Help beside manifest/OpenAPI/render/component contract starters.
+- `apps/admin/scripts/help-smoke.mjs`: expanded source and rendered smoke coverage to verify the deployment topology starter renders, copies, and remains site-scoped with the rest of the frontend agent handoff.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `BACKY_HELP_RENDERED_SMOKE=1 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 npm run test:help-rendered --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this Help deployment-readiness alignment slice.
+2. Continue Batch 5 with either non-mutating deploy readiness/handoff polish or the next visible admin/editor UX issue.
 
 ## 2026-05-31 14:50 IST
 

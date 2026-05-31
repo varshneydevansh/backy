@@ -118,6 +118,8 @@ const HELP_TOPICS: HelpTopic[] = [
       'Use a public backy-public Vercel project for render, resolve, manifest, OpenAPI, forms, comments, newsletter signup, and protected admin API routes.',
       'Deploy each custom website as its own frontend project when it has a separate domain, team, release cadence, or framework. It should use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optionally BACKY_SITE_PUBLIC_HOST.',
       'Never put database URLs, provider secrets, cron secrets, admin API keys, session cookies, or copied Backy content into a custom frontend bundle.',
+      'Before preview deploy, run npm run test:vercel-release-config and npm run test:vercel-preview-readiness. Use strict readiness mode after linking apps/public to backy-public and apps/admin to backy-admin.',
+      'Optional Vercel Agent Code Review is enabled from each project Project Settings -> AI page; it is a Vercel platform setting, not a Backy runtime package or client-visible secret.',
       'For independent subdomains such as akriti.devanshvarshney.com, blog.devanshvarshney.com, or docs.devanshvarshney.com, create one Backy site per independent content/design/navigation model.',
     ],
     route: '/sites',
@@ -377,6 +379,12 @@ const FRONTEND_AGENT_STARTERS = [
     value: 'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api  |  BACKY_SITE_ID=:siteId  |  BACKY_SITE_PUBLIC_HOST=<custom-host>',
     detail: 'Use in each public website project. Keep admin URLs, sessions, provider keys, database URLs, and copied Backy content out.',
   },
+  {
+    id: 'deployment-topology',
+    label: 'Deploy topology',
+    value: 'agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness',
+    detail: 'Read before creating Vercel projects. It names backy-admin, backy-public, required/forbidden env, domain policy, and release checks.',
+  },
 ];
 
 const categoryById = new Map(HELP_CATEGORIES.map((category) => [category.id, category]));
@@ -415,6 +423,7 @@ const buildAgentCopyBrief = (siteId: string) => [
   '8. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
   '9. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
   '10. For Vercel release topology, deploy protected backy-admin, public backy-public, and separate custom frontend projects. Custom frontends use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST only.',
+  '11. Before preview deploy, run npm run test:vercel-release-config and npm run test:vercel-preview-readiness; after linking projects, strict mode can require apps/public/.vercel/project.json, apps/admin/.vercel/project.json, and remote backy-public/backy-admin projects.',
 ].join('\n');
 
 function HelpPage() {
@@ -636,7 +645,7 @@ function HelpPage() {
           >
             Use <span className="font-semibold text-foreground">{activeSiteId}</span> as the site id for the copied endpoints on this page.
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5" data-testid="help-agent-starter-grid" data-target-site-id={activeSiteId}>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" data-testid="help-agent-starter-grid" data-target-site-id={activeSiteId}>
             {FRONTEND_AGENT_STARTERS.map((item) => {
               const copied = copiedKey === item.id;
               const starterValue = starterValueForSite(item.value, activeSiteId);

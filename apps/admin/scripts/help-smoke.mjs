@@ -374,7 +374,9 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('GET /api/sites/:siteId/render?path=/...') &&
       helpSource.includes('GET /api/sites/:siteId/resolve?path=/...') &&
       helpSource.includes("id: 'component-contract'") &&
+      helpSource.includes("id: 'deployment-topology'") &&
       helpSource.includes('agent-handoff.componentApiContract.componentTypeContracts + componentApiContract.propertyMap') &&
+      helpSource.includes('agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness') &&
       helpSource.includes('Every canvas element is API-addressable by id, type, props, styles, responsive overrides, token refs, assets, actions, data bindings, binding slots, accessibility, metadata, and children.') &&
       helpSource.includes('specs/custom-frontend-agent-handoff.md') &&
       helpSource.includes('backy.canvas-component-api-contract.v1') &&
@@ -421,7 +423,12 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('protected backy-admin Vercel project') &&
       helpSource.includes('public backy-public Vercel project') &&
       helpSource.includes('BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optionally BACKY_SITE_PUBLIC_HOST') &&
+      helpSource.includes('npm run test:vercel-preview-readiness') &&
+      helpSource.includes('apps/public to backy-public and apps/admin to backy-admin') &&
+      helpSource.includes('Optional Vercel Agent Code Review') &&
+      helpSource.includes('Project Settings -> AI') &&
       helpSource.includes("id: 'frontend-env'") &&
+      helpSource.includes("id: 'deployment-topology'") &&
       helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
       helpSource.includes('Custom frontends use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST only.'),
     'Help route must explain protected Backy/admin-public/custom-frontend deployment topology and copyable frontend env.',
@@ -523,6 +530,7 @@ const runRenderedHelpSmoke = async () => {
       `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/...`,
       `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
       'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
+      'agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness',
     ]) {
       assert(endpointState.text.includes(expected), `Rendered Help starter endpoints are missing ${expected}`);
     }
@@ -570,6 +578,17 @@ const runRenderedHelpSmoke = async () => {
         clipboard: String(window.__backyHelpSmokeClipboard || ''),
       };
     })()`, 'Help copy component-contract starter action');
+
+    await evaluate(client, clickElement('help-copy-agent-starter-deployment-topology'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-agent-starter-deployment-topology"]');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          String(window.__backyHelpSmokeClipboard || '') === 'agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness',
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard: String(window.__backyHelpSmokeClipboard || ''),
+      };
+    })()`, 'Help copy deployment-topology starter action');
 
     const newsletterInput = await evaluate(client, setInputValue('help-search', 'newsletter'));
     assert(newsletterInput.ok, `Help search input could not be updated: ${JSON.stringify(newsletterInput)}`);
