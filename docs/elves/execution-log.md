@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 22:16 IST
+- **Last updated:** 2026-05-31 22:43 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 22:43 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Admin production shell no longer bakes localhost API URLs; public production still needs real runtime env
+
+**What changed:**
+- Added persistent production `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL` env names to the `backy-admin` Vercel project using the public Backy API origin.
+- Redeployed `backy-admin` production so the aliased admin shell picks up those non-secret API base URLs.
+- Verified `backy-public` production still returns `Internal server error` for public contract routes because real database/admin/cron/CORS env is not configured.
+
+**Commands run:**
+- `npx vercel@latest env add VITE_BACKY_PUBLIC_API_BASE_URL production --value <public-api-origin> --yes --force --no-sensitive --cwd apps/admin --no-color` -> PASS.
+- `npx vercel@latest env add VITE_BACKY_ADMIN_API_BASE_URL production --value <public-admin-api-origin> --yes --force --no-sensitive --cwd apps/admin --no-color` -> PASS.
+- `npx vercel@latest deploy --prod --yes --logs --no-color` for `backy-admin` -> PASS, READY and aliased to the admin project domain.
+- `npx vercel@latest curl <admin-production-url>/login` -> PASS; returned the Vite admin shell.
+- `npx vercel@latest curl <admin-production-asset>` -> PASS; verified the built asset includes the public Backy API origin and admin API origin.
+- `npx vercel@latest curl <public-production-url>/api/sites/site-demo/agent-handoff` -> PASS transport, returned `success: false` / `Internal server error`.
+- `npx vercel@latest logs <public-production-url> --level error --since 10m --expand` -> PASS; showed `Database mode requires BACKY_DATABASE_URL or DATABASE_URL`.
+- `npm run test:vercel-preview-readiness` -> PASS with warnings only for root link state and missing production `backy-public` env.
+
+**Review findings:**
+- [Medium] The admin production shell was build-ready but still had localhost fallback code paths. Resolved by setting persistent production Vite env and redeploying the admin project.
+- [High] The public production deployment cannot be called release-ready until real `backy-public` database/admin/cron/CORS env is configured. Left unresolved intentionally rather than enabling demo mode in production.
+
+**Next:**
+1. Configure `backy-public` production with real `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL` or `DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, `CRON_SECRET`, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and `BACKY_CORS_ALLOWED_ORIGINS`.
+2. Redeploy `backy-public`, run strict remote-env readiness, then run the live production contract gate against the final public domain.
 
 ## 2026-05-31 22:16 IST
 
