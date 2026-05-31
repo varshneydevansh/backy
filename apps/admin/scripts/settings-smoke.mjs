@@ -508,23 +508,24 @@ const assertSettingsSourceContracts = () => {
     'Settings workbar must keep tab navigation and save controls reachable below the app header while section jumps leave enough scroll margin.',
   );
   assert(
-    settingsRoute.includes('className="relative z-[130] flex flex-wrap items-center gap-2"') &&
+    settingsRoute.includes('className="relative z-[130] flex flex-wrap items-center gap-2 overflow-visible"') &&
       settingsRoute.includes('data-stack-layer="settings-header-actions-above-workbar"') &&
       settingsRoute.includes('className="group relative z-[140] w-full max-w-[18rem] sm:w-auto"') &&
       settingsRoute.includes('data-stack-layer="settings-header-more-actions-above-workbar"') &&
-      settingsRoute.includes('data-open-reserves-workbar-gap="in-flow"') &&
+      settingsRoute.includes('data-open-positioning="absolute-overlay"') &&
       settingsRoute.includes('data-stack-layer="settings-header-secondary-menu-above-workbar"') &&
       settingsRoute.includes('data-stack-layer="settings-workbar-under-header-actions"') &&
-      settingsRoute.includes('className="relative z-[160] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"') &&
+      settingsRoute.includes('className="absolute right-0 top-full z-[220] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] origin-top-right gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"') &&
       settingsRoute.includes('min-w-52 max-w-[calc(100vw-2rem)]') &&
       settingsRoute.includes('data-menu-lifted-above-tab-banner="true"') &&
       settingsRoute.includes('data-testid="settings-header-secondary-action-menu"') &&
       settingsSmokeSource.includes('const assertSettingsHeaderActionMenuLayer = async (client) =>') &&
       settingsSmokeSource.includes('state.topElementWithinMenu') &&
+      settingsSmokeSource.includes('state.overlapTopElementWithinMenu') &&
       settingsSmokeSource.includes("state.menuLiftedAboveTabBanner === 'true'") &&
-      settingsSmokeSource.includes("state.detailsReservesWorkbarGap === 'in-flow'") &&
-      settingsSmokeSource.includes('!state.overlapsWorkbar'),
-    'Settings header More actions menu must reserve space and stack above the sticky workbar instead of hiding behind the active-section banner.',
+      settingsSmokeSource.includes("state.detailsOpenPositioning === 'absolute-overlay'") &&
+      settingsSmokeSource.includes('(!state.overlapsWorkbar || state.overlapTopElementWithinMenu)'),
+    'Settings header More actions menu must render as an absolute overlay above the sticky workbar instead of hiding behind the active-section banner.',
   );
   assert(
     settingsRoute.includes("const settingsWorkbarActionStatusId = 'settings-workbar-action-status';") &&
@@ -1654,6 +1655,13 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       menuRect.bottom < workbarRect.top ||
       menuRect.top > workbarRect.bottom
     ));
+    const overlapSampleX = menuRect && workbarRect
+      ? Math.min(Math.max(Math.max(menuRect.left, workbarRect.left) + Math.min((Math.min(menuRect.right, workbarRect.right) - Math.max(menuRect.left, workbarRect.left)) / 2, 24), 1), window.innerWidth - 1)
+      : 0;
+    const overlapSampleY = menuRect && workbarRect
+      ? Math.min(Math.max(Math.max(menuRect.top, workbarRect.top) + 8, 1), window.innerHeight - 1)
+      : 0;
+    const overlapTopElement = overlapsWorkbar ? document.elementFromPoint(overlapSampleX, overlapSampleY) : null;
     return {
       open: details instanceof HTMLDetailsElement ? details.open : false,
       hasGroup: Boolean(group),
@@ -1673,8 +1681,9 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       viewportWidth: window.innerWidth,
       topTestId,
       topElementWithinMenu: Boolean(topElement && menu?.contains(topElement)),
+      overlapTopElementWithinMenu: !overlapsWorkbar || Boolean(overlapTopElement && menu?.contains(overlapTopElement)),
       overlapsWorkbar,
-      detailsReservesWorkbarGap: details?.getAttribute('data-open-reserves-workbar-gap') || '',
+      detailsOpenPositioning: details?.getAttribute('data-open-positioning') || '',
       detailsMarginBottom: details ? Number.parseFloat(getComputedStyle(details).marginBottom) || 0 : 0,
     };
   })()`);
@@ -1692,14 +1701,13 @@ const assertSettingsHeaderActionMenuLayer = async (client) => {
       state.detailsLayer === 'settings-header-more-actions-above-workbar' &&
       state.menuLayer === 'settings-header-secondary-menu-above-workbar' &&
       state.workbarLayer === 'settings-workbar-under-header-actions' &&
-      state.menuPosition === 'relative' &&
-      state.menuZIndex === '160' &&
+      state.menuPosition === 'absolute' &&
+      state.menuZIndex === '220' &&
       state.menuLiftedAboveTabBanner === 'true' &&
       state.workbarZIndex === '30' &&
-      state.detailsReservesWorkbarGap === 'in-flow' &&
+      state.detailsOpenPositioning === 'absolute-overlay' &&
       state.detailsMarginBottom === 0 &&
-      !state.overlapsWorkbar &&
-      state.menuBottom < state.workbarTop &&
+      (!state.overlapsWorkbar || state.overlapTopElementWithinMenu) &&
       state.menuRight <= state.viewportWidth + 1 &&
       state.topElementWithinMenu,
     `Settings header More actions menu is not layered above the sticky workbar: ${JSON.stringify(state)}`,

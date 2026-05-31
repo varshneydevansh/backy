@@ -4142,7 +4142,7 @@ function SettingsPage() {
         </div>
 
         <div
-          className="relative z-[130] flex flex-wrap items-center gap-2"
+          className="relative z-[130] flex flex-wrap items-center gap-2 overflow-visible"
           role="group"
           aria-label="Settings header actions"
           aria-describedby={settingsWorkbarActionStatusId}
@@ -4184,7 +4184,7 @@ function SettingsPage() {
             className="group relative z-[140] w-full max-w-[18rem] sm:w-auto"
             aria-describedby={settingsHeaderSecondaryActionStatusId}
             data-stack-layer="settings-header-more-actions-above-workbar"
-            data-open-reserves-workbar-gap="in-flow"
+            data-open-positioning="absolute-overlay"
             data-action-state={settingsHeaderSecondaryActionState}
             data-action-status={settingsHeaderSecondaryActionStatus}
             data-target-settings-tab={activeTab}
@@ -4202,7 +4202,7 @@ function SettingsPage() {
               <span className="sr-only">Copy handoff and Download JSON</span>
             </summary>
             <div
-              className="relative z-[160] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
+              className="absolute right-0 top-full z-[220] mt-2 grid min-w-52 max-w-[calc(100vw-2rem)] origin-top-right gap-2 rounded-lg border border-border bg-background p-2 shadow-xl ring-1 ring-border/60"
               data-stack-layer="settings-header-secondary-menu-above-workbar"
               data-menu-lifted-above-tab-banner="true"
               data-testid="settings-header-secondary-action-menu"

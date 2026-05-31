@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 07:34 IST
+- **Last updated:** 2026-05-31 07:48 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 07:48 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Settings header secondary actions now overlay the sticky workbar correctly; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/routes/settings.tsx`: the Settings header More actions menu now renders as an absolute, high-z overlay instead of relying on in-flow spacing above the sticky active-section workbar.
+- `apps/admin/scripts/settings-smoke.mjs`: source and rendered Settings smokes now guard the overlay positioning and prove that, if the menu intersects the workbar, the top hit-test element still belongs to the menu.
+
+**Commands run:**
+- `BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 npm run test:settings --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on the next highest-friction UI/editor gap: Pages table readability, responsive/mobile canvas behavior, layer-map ergonomics, or blog/newsletter authoring polish.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 07:34 IST
 
