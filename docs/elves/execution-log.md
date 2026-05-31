@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 12:43 IST
+- **Last updated:** 2026-05-31 13:39 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 13:39 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; responsive editor smoke is reliable again and validates saved/reloaded/public mobile-tablet geometry; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/scripts/editor-drag-smoke.mjs`: changed the default Chrome DevTools port from one shared fixed port to a per-process default while preserving `BACKY_CDP_PORT` overrides.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added a bounded CDP cleanup timeout around `Browser.close` and hardened client socket closing so a hung/closed CDP session cannot leave stale headless Chrome poisoning later editor smokes.
+
+**Commands run:**
+- `npm run test:blog-list --workspace @backy-cms/admin` -> PASS; confirmed Blog `New post` routes to `/blog/new?siteId=site-demo&templateSource=backy-canvas&focus=canvas` and opens the focused canvas shell.
+- `npm run test:editor-responsive --workspace @backy-cms/admin` -> FAIL first because a stale fixed-port headless Chrome from a previous run held CDP state.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_TRACE_SMOKE=1 BACKY_CDP_COMMAND_TIMEOUT_MS=90000 npm run test:editor-responsive --workspace @backy-cms/admin` -> PASS; verified mobile/tablet overrides, saved state, reloaded editor hydration, and public responsive render geometry.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+
+**Next:**
+1. Run `git diff --check`, commit, and push this editor-smoke reliability slice.
+2. Continue Batch 5 on the next focused release polish: deployment dry-run readiness, remaining responsive ergonomics, or Blog/Newsletter authoring UX.
 
 ## 2026-05-31 12:43 IST
 

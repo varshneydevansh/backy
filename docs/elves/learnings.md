@@ -41,6 +41,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Editor Preview should fit width and preserve vertical scroll, not fit the whole authored height. Rendered smoke should prove `scrollHeight > clientHeight` and that lower authored content becomes visible after scrolling, because source guards alone can miss a tiny, non-scrollable preview.
 - [2026-05-31] Navigation child layers should be directly selectable from the parent nav row. Visible label+href shortcut chips reduce layer-map ambiguity and should select the real child link layer, not only edit parent nav props.
 - [2026-05-31] Coordinate-less Mac wheel/pinch zoom should be active-editor gated. Keep canvas zoom interception for viewport/shell/recent-pointer/focused-editor events, but let inactive global browser gestures pass through so Backy does not steal page zoom outside the editor.
+- [2026-05-31] Editor CDP smokes should not share one fixed debug port by default. Use a per-process default port and bounded `Browser.close` cleanup so a hung Chrome does not poison the next responsive/editor validation.
 
 ## Product and Domain Invariants
 

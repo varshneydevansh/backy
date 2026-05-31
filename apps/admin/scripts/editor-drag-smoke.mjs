@@ -47,8 +47,10 @@ const TRACE_SMOKE = process.env.BACKY_EDITOR_TRACE_SMOKE === '1';
 const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
 const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
+const DEFAULT_CDP_PORT = 9365 + (process.pid % 1000);
+const PORT = Number(process.env.BACKY_CDP_PORT || DEFAULT_CDP_PORT);
 const CDP_COMMAND_TIMEOUT_MS = Math.max(5000, Number(process.env.BACKY_CDP_COMMAND_TIMEOUT_MS || 45000));
+const CDP_CLEANUP_TIMEOUT_MS = Math.max(1000, Number(process.env.BACKY_CDP_CLEANUP_TIMEOUT_MS || 2500));
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
 let currentSmokeStep = 'startup';
 
@@ -27032,11 +27034,18 @@ const launchChrome = () => {
 const cleanup = async ({ client, childProcess, userDataDir }) => {
   if (client) {
     try {
-      await client.send('Browser.close');
+      await Promise.race([
+        client.send('Browser.close'),
+        sleep(CDP_CLEANUP_TIMEOUT_MS),
+      ]);
     } catch {
       // Chrome may already be closing.
     }
-    client.close();
+    try {
+      client.close();
+    } catch {
+      // The socket may already be closed by the failed smoke.
+    }
   }
 
   if (childProcess.exitCode === null && childProcess.signalCode === null) {
