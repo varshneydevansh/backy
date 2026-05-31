@@ -832,6 +832,8 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
         })) : []),
         ...([
           { id: 'tool:sites', type: 'Tool' as const, title: 'Sites', detail: 'Site settings, readiness, routing, domains', action: { route: 'static' as const, to: '/sites' as const } },
+          { id: 'tool:custom-frontend-handoff', type: 'Tool' as const, title: 'Custom frontend handoff', detail: 'Agent handoff, manifest, OpenAPI, render, resolve, and frontend env', action: { route: 'static' as const, to: '/help' as const } },
+          { id: 'tool:component-api-contract', type: 'Tool' as const, title: 'Component API contract', detail: 'Every canvas element by id, type, props, styles, responsive overrides, assets, actions, bindings, and children', action: { route: 'static' as const, to: '/help' as const } },
           { id: 'tool:pages', type: 'Tool' as const, title: 'Pages', detail: 'Page tree, drafts, publishing', action: { route: 'static' as const, to: '/pages' as const } },
           { id: 'tool:blog', type: 'Tool' as const, title: 'Blog', detail: 'Posts, categories, authors', action: { route: 'static' as const, to: '/blog' as const } },
           { id: 'tool:forms', type: 'Tool' as const, title: 'Forms', detail: 'Registration, contact, submissions', action: { route: 'static' as const, to: '/forms' as const } },

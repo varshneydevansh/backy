@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 16:26 IST
+- **Last updated:** 2026-05-31 16:36 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 16:36 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** custom frontend handoff and component API contracts are now discoverable from global search
+
+**What changed:**
+- `apps/admin/src/components/layout/Header.tsx`: global search now includes first-class Tool results for Custom frontend handoff and Component API contract, both routing through the site-scoped Help surface.
+- `apps/admin/scripts/login-smoke.mjs`: expanded rendered global-search coverage to query `handoff` and `component api`, proving both results expose ready action status and the exact handoff/API detail text.
+
+**Commands run:**
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run test:login` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this global-search API handoff discoverability slice.
+2. Continue Batch 5 with the next visible admin/editor friction point, or Vercel project linkage if explicitly requested.
 
 ## 2026-05-31 16:26 IST
 

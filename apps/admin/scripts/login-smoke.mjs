@@ -739,6 +739,10 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('data-testid="header-global-search-empty"') &&
       headerSource.includes('data-empty-query={searchQuery.trim()}') &&
       headerSource.includes('data-testid="header-global-search-empty-clear"') &&
+      headerSource.includes("id: 'tool:custom-frontend-handoff'") &&
+      headerSource.includes('Agent handoff, manifest, OpenAPI, render, resolve, and frontend env') &&
+      headerSource.includes("id: 'tool:component-api-contract'") &&
+      headerSource.includes('Every canvas element by id, type, props, styles, responsive overrides, assets, actions, bindings, and children') &&
       headerSource.includes('data-search-result-id={result.id}') &&
       headerSource.includes('data-search-result-type={result.type}') &&
       headerSource.includes('data-testid={`header-global-search-result-${result.id}`}'),
@@ -1306,6 +1310,80 @@ const assertHeaderSearchHydration = async (client) => {
     `Header global search filtered result should preserve action status: ${JSON.stringify(filteredState)}`,
   );
 
+  await setInputValue(client, '[data-testid="header-global-search-input"]', 'handoff');
+  const handoffState = await waitForState(
+    client,
+    `(() => {
+      const shell = document.querySelector('[data-search-hydration]');
+      const status = document.querySelector('[data-testid="header-global-search-action-status"]');
+      const resultButtons = [...document.querySelectorAll('[data-testid^="header-global-search-result-"]')];
+      const handoffResult = document.querySelector('[data-testid="header-global-search-result-tool:custom-frontend-handoff"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        ready: shell?.getAttribute('data-search-hydration') === 'ready' &&
+          handoffResult instanceof HTMLButtonElement &&
+          handoffResult.getAttribute('aria-describedby') === status?.id &&
+          handoffResult.getAttribute('data-action-state') === 'ready' &&
+          handoffResult.getAttribute('data-action-status') === statusText &&
+          handoffResult.getAttribute('data-search-result-id') === 'tool:custom-frontend-handoff' &&
+          handoffResult.getAttribute('data-search-result-type') === 'Tool' &&
+          Boolean(handoffResult.textContent?.includes('Custom frontend handoff')) &&
+          Boolean(handoffResult.textContent?.includes('Agent handoff, manifest, OpenAPI, render, resolve, and frontend env')),
+        status: shell?.getAttribute('data-search-hydration') || '',
+        statusId: status?.id || '',
+        statusText,
+        resultCount: resultButtons.length,
+        handoffState: handoffResult?.getAttribute('data-action-state') || '',
+        handoffStatus: handoffResult?.getAttribute('data-action-status') || '',
+        handoffType: handoffResult?.getAttribute('data-search-result-type') || '',
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`,
+    'Header global search custom frontend handoff result',
+  );
+  assert(
+    handoffState.statusText.includes('for "handoff"') &&
+      handoffState.handoffStatus === handoffState.statusText &&
+      handoffState.handoffType === 'Tool',
+    `Header global search should expose custom frontend handoff as a ready Tool result: ${JSON.stringify(handoffState)}`,
+  );
+
+  await setInputValue(client, '[data-testid="header-global-search-input"]', 'component api');
+  const componentApiState = await waitForState(
+    client,
+    `(() => {
+      const shell = document.querySelector('[data-search-hydration]');
+      const status = document.querySelector('[data-testid="header-global-search-action-status"]');
+      const result = document.querySelector('[data-testid="header-global-search-result-tool:component-api-contract"]');
+      const statusText = status?.textContent?.replace(/\\s+/g, ' ').trim() || '';
+      return {
+        ready: shell?.getAttribute('data-search-hydration') === 'ready' &&
+          result instanceof HTMLButtonElement &&
+          result.getAttribute('aria-describedby') === status?.id &&
+          result.getAttribute('data-action-state') === 'ready' &&
+          result.getAttribute('data-action-status') === statusText &&
+          result.getAttribute('data-search-result-id') === 'tool:component-api-contract' &&
+          result.getAttribute('data-search-result-type') === 'Tool' &&
+          Boolean(result.textContent?.includes('Component API contract')) &&
+          Boolean(result.textContent?.includes('Every canvas element by id, type, props, styles, responsive overrides, assets, actions, bindings, and children')),
+        status: shell?.getAttribute('data-search-hydration') || '',
+        statusId: status?.id || '',
+        statusText,
+        resultState: result?.getAttribute('data-action-state') || '',
+        resultStatus: result?.getAttribute('data-action-status') || '',
+        resultType: result?.getAttribute('data-search-result-type') || '',
+        body: document.body?.innerText?.slice(0, 900) || '',
+      };
+    })()`,
+    'Header global search component API result',
+  );
+  assert(
+    componentApiState.statusText.includes('for "component api"') &&
+      componentApiState.resultStatus === componentApiState.statusText &&
+      componentApiState.resultType === 'Tool',
+    `Header global search should expose component API contract as a ready Tool result: ${JSON.stringify(componentApiState)}`,
+  );
+
   await setInputValue(client, '[data-testid="header-global-search-input"]', 'zz-no-result');
   const emptyState = await waitForState(
     client,
@@ -1390,7 +1468,7 @@ const assertHeaderSearchHydration = async (client) => {
     'Header global search empty clear recovery',
   );
 
-  return { initialState, hydratedState, filteredState, emptyState, clearedState };
+  return { initialState, hydratedState, filteredState, handoffState, componentApiState, emptyState, clearedState };
 };
 
 const assertHeaderNotificationsInteraction = async (client) => {
