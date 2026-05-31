@@ -60,7 +60,7 @@ const assertSitesRouteSourceContract = () => {
       source.includes('BACKY_SITE_ID: getSiteApiId(site)') &&
       source.includes('BACKY_SITE_PUBLIC_HOST: publicHost') &&
       source.includes("schemaVersion: 'backy.site-frontend-routing.v1'") &&
-      source.includes("examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com']") &&
+      source.includes("examples: ['blog.example.com', 'docs.example.com', 'studio.example.com']") &&
       source.includes('<SiteApiSnippet label="Agent handoff" value={publicAgentHandoffUrl} />') &&
       source.includes('<SiteApiSnippet label="Resolve with host" value={publicResolveWithHostUrl} />') &&
       source.includes('<SiteApiSnippet label="Render with host" value={publicRenderWithHostUrl} />') &&
@@ -187,7 +187,7 @@ const assertSitesRouteSourceContract = () => {
   );
   assert(
     createSource.includes('Subdomains are valid custom domains. Save the exact host') &&
-      createSource.includes('akriti.devanshvarshney.com') &&
+      createSource.includes('studio.example.com') &&
       createSource.includes('data-testid="site-create-agent-handoff-read-start"') &&
       createSource.includes('agentHandoff: `${publicApiBase}/sites/{siteId}/agent-handoff`') &&
       createSource.includes('publicManifest: `${publicApiBase}/sites/{siteId}/manifest`') &&

@@ -670,7 +670,7 @@ function NewSitePage() {
       schemaVersion: 'backy.site-create-routing-handoff.v1',
       customDomainRequiresVerifiedDns: Boolean(normalizedDomain),
       hostContext: 'Use domain={host} or request Host when rendering root domains and subdomains from a custom frontend.',
-      examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com'],
+      examples: ['blog.example.com', 'docs.example.com', 'studio.example.com'],
     },
     readiness: siteCreationReadiness,
     payloadPreview: createPayloadPreview,
@@ -1354,7 +1354,7 @@ function NewSitePage() {
                 />
               </div>
               <span className="mt-2 block text-xs leading-5 text-muted-foreground">
-                Subdomains are valid custom domains. Save the exact host, for example <code className="rounded bg-muted px-1 py-0.5 font-mono">akriti.devanshvarshney.com</code>, then verify DNS before public routing.
+                Subdomains are valid custom domains. Save the exact host, for example <code className="rounded bg-muted px-1 py-0.5 font-mono">studio.example.com</code>, then verify DNS before public routing.
               </span>
               {showSiteCreateInlineErrors && siteCreateInlineErrors.customDomain && (
                 <span id="site-create-custom-domain-error" data-testid="site-create-custom-domain-error" className="mt-2 block text-xs text-red-600">

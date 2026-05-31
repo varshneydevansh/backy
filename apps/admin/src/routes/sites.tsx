@@ -606,7 +606,7 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
       hostContext: 'Pass the browser Host as domain={host} when a custom frontend serves root domains or subdomains.',
       resolveWithHost: endpoints.public.resolveWithHost,
       renderWithHost: endpoints.public.renderWithHost,
-      examples: ['blog.example.com', 'docs.example.com', 'akriti.devanshvarshney.com'],
+      examples: ['blog.example.com', 'docs.example.com', 'studio.example.com'],
     },
     delivery: {
       hosting: 'Vercel-ready custom frontend or Backy managed preview',

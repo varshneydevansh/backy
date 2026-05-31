@@ -6424,6 +6424,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     previewReadinessSmoke: {
                       const: "npm run test:vercel-preview-readiness",
                     },
+                    productionReadinessSmoke: {
+                      const: "npm run test:vercel-production-readiness",
+                    },
                     frontendContractSmoke: {
                       const: "npm run test:frontend-contract-types",
                     },
@@ -6432,6 +6435,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     },
                     providerArtifactAdmission: {
                       const: "npm run ci:provider-artifact-admission",
+                    },
+                    promotionRule: {
+                      const: "Never promote demo-mode previews or production aliases.",
+                    },
+                    liveProof: {
+                      type: "string",
+                      minLength: 1,
                     },
                   },
                 },

@@ -91,12 +91,25 @@ assert(
 
 includesAll(
   rootPackage.scripts?.['test:partial-gate-preflights'] || '',
-  ['npm run test:vercel-release-config', 'npm run test:vercel-preview-readiness'],
+  [
+    'npm run test:vercel-release-config',
+    'npm run test:vercel-preview-readiness',
+    'npm run test:vercel-production-readiness',
+    'npm run test:repo-public-hygiene',
+  ],
   'Root Partial gate aggregate includes Vercel readiness checks',
 );
 assert(
   rootPackage.scripts?.['test:vercel-preview-readiness'] === 'node scripts/vercel-preview-readiness-smoke.mjs',
   'Root package exposes test:vercel-preview-readiness',
+);
+assert(
+  rootPackage.scripts?.['test:vercel-production-readiness'] === 'node scripts/vercel-production-readiness-smoke.mjs',
+  'Root package exposes test:vercel-production-readiness',
+);
+assert(
+  rootPackage.scripts?.['test:repo-public-hygiene'] === 'node scripts/repo-public-hygiene-smoke.mjs',
+  'Root package exposes test:repo-public-hygiene',
 );
 assert(
   rootPackage.scripts?.['build:vercel:public'] ===
@@ -183,6 +196,9 @@ includesAll(
     'Vercel Agent',
     'Project Settings -> AI',
     'npm run test:vercel-preview-readiness',
+    'npm run test:vercel-production-readiness',
+    'npm run test:repo-public-hygiene',
+    'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',
     'Do not use the current prebuilt standalone output as release proof for `backy-public`',
   ],
   'README Vercel runbook',
@@ -210,6 +226,8 @@ includesAll(
     'BACKY_PUBLIC_API_BASE_URL',
     'BACKY_SITE_ID',
     'npm run test:vercel-preview-readiness',
+    'npm run test:vercel-production-readiness',
+    'npm run test:repo-public-hygiene',
   ],
   'AGENTS deployment topology guidance',
 );
@@ -236,6 +254,8 @@ includesAll(
     "'BACKY_SITE_ID'",
     "'BACKY_SITE_PUBLIC_HOST'",
     "previewReadinessSmoke: 'npm run test:vercel-preview-readiness'",
+    "productionReadinessSmoke: 'npm run test:vercel-production-readiness'",
+    "promotionRule: 'Never promote demo-mode previews or production aliases.'",
   ],
   'Custom frontend deployment topology source',
 );
@@ -247,6 +267,8 @@ includesAll(
     '"backy.deployment-topology.v1"',
     '"releaseConfigSmoke": { "const": "npm run test:vercel-release-config" }',
     '"previewReadinessSmoke": { "const": "npm run test:vercel-preview-readiness" }',
+    '"productionReadinessSmoke": { "const": "npm run test:vercel-production-readiness" }',
+    '"promotionRule": { "const": "Never promote demo-mode previews or production aliases." }',
   ],
   'Frontend manifest deployment topology schema',
 );
@@ -259,6 +281,10 @@ includesAll(
     'const: "npm run test:vercel-release-config"',
     'previewReadinessSmoke: {',
     'const: "npm run test:vercel-preview-readiness"',
+    'productionReadinessSmoke: {',
+    'const: "npm run test:vercel-production-readiness"',
+    'promotionRule: {',
+    'const: "Never promote demo-mode previews or production aliases."',
   ],
   'OpenAPI deployment topology schema',
 );

@@ -68,7 +68,7 @@
           "label": "Team",
           "title": "Team",
           "slug": "team",
-          "path": "/team/devansh",
+          "path": "/team/alex",
           "status": "published",
           "isHomepage": false,
           "children": []
@@ -77,12 +77,12 @@
     },
     "route": {
       "type": "dynamicItem",
-      "path": "/team/devansh",
+      "path": "/team/alex",
       "status": "published",
-      "canonical": "/team/devansh",
+      "canonical": "/team/alex",
       "params": {
         "collection": "team",
-        "slug": "devansh"
+        "slug": "alex"
       }
     },
     "content": {
@@ -110,7 +110,7 @@
                 "kind": "collection",
                 "collectionId": "team",
                 "field": "name",
-                "recordId": "member_devansh"
+                "recordId": "member_alex"
               },
               "mode": "text"
             }
@@ -138,7 +138,7 @@
                 "kind": "collection",
                 "collectionId": "team",
                 "field": "photo",
-                "recordId": "member_devansh"
+                "recordId": "member_alex"
               },
               "mode": "image"
             }
@@ -162,9 +162,9 @@
       }
     },
     "seo": {
-      "title": "Devansh | Team",
+      "title": "Alex | Team",
       "description": "Team member profile rendered by a collection-backed template.",
-      "canonical": "/team/devansh",
+      "canonical": "/team/alex",
       "robots": {
         "index": true,
         "follow": true
@@ -178,7 +178,7 @@
           "id": "dataset_team_member",
           "collectionId": "team",
           "query": {
-            "slug": "devansh"
+            "slug": "alex"
           }
         }
       ],
@@ -191,7 +191,7 @@
             "kind": "collection",
             "collectionId": "team",
             "field": "name",
-            "recordId": "member_devansh"
+            "recordId": "member_alex"
           },
           "mode": "text"
         },
@@ -203,7 +203,7 @@
             "kind": "collection",
             "collectionId": "team",
             "field": "photo",
-            "recordId": "member_devansh"
+            "recordId": "member_alex"
           },
           "mode": "image"
         }

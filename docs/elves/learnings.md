@@ -12,7 +12,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 ## Validation and Tooling
 
 - [2026-05-30] Focused admin/editor gates are preferred before broad builds: admin typecheck, editor source/zoom smokes, pages/users/settings smokes, help/handoff smoke, release doctor, and `git diff --check`.
-- [2026-05-30] `gh auth status` reports a stale invalid `GITHUB_TOKEN`, but a keyring login for `varshneydevansh` exists. Avoid relying on the bad environment token; use keychain auth or unset the token for GitHub CLI operations.
+- [2026-05-30] `gh auth status` reports a stale invalid `GITHUB_TOKEN`, but a keyring login for `<github-or-vercel-user>` exists. Avoid relying on the bad environment token; use keychain auth or unset the token for GitHub CLI operations.
 - [2026-05-31] Sites rendered smokes that exercise create plus duplicate must temporarily relax blocked workspace site quotas with a cushion, because the admin-visible sites list is role/team scoped while create/duplicate billing enforcement counts the whole workspace.
 
 ## Review Heuristics
@@ -70,6 +70,8 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Vercel source builds for workspace apps must compile local package outputs before app builds. A local build can pass because `packages/*/dist` already exists, while a remote clean build fails unless `@backy-cms/core`, `@backy/db`, and `@backy/storage` are built first.
 - [2026-05-31] The current prebuilt standalone output is not valid release proof for `backy-public`. It can produce static-only output without the Next.js API routes Backy needs for agent handoff, manifest, OpenAPI, render, forms, and admin APIs.
 - [2026-05-31] Vercel preview protection can correctly hide direct preview URLs behind SSO. Use `vercel curl` for authenticated verification, and do not mistake protected preview 401 responses for missing routes when the authenticated curl returns JSON.
+- [2026-05-31] Vercel production promotion needs a live public-domain contract gate, not just project readiness. A Ready production alias that returns 404 for agent-handoff, manifest, OpenAPI, or render is not a Backy production deployment.
+- [2026-05-31] Public repos need a separate hygiene guard from secret scanning. Local handoff files, absolute paths, personal domains/emails, generated deployment URLs, and provider/account ids can leak identity without being secrets.
 
 ## Known Traps
 

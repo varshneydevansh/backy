@@ -69,6 +69,10 @@ tmp/
 .codex-tmp/
 .playwright-mcp/
 .vercel/
+.backy-public-hygiene.local.json
 docs/audit/
+BACKY_HANDOFF.md
+NEXT_CHAT_HANDOFF.md
+stash-diff-code.txt
 *.sqlite
 *.sqlite3

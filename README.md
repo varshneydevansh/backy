@@ -126,7 +126,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Keep `backy-admin` protected with Vercel Deployment Protection, team SSO, or an equivalent access-control layer. It is only the editor/admin shell; it must not receive server-only database, storage, provider, cron, or admin API keys.
 - Keep `backy-public` public for rendering, discovery, forms, comments, newsletter signup, and custom frontend API reads. Server-only admin APIs still require session cookies or admin API keys.
 - Run custom website frontends as separate Vercel projects when useful. Each frontend should set `BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api`, `BACKY_SITE_ID=<site-id-or-slug>`, and optionally `BACKY_SITE_PUBLIC_HOST=<custom-host>`.
-- Subdomains such as `akriti.devanshvarshney.com`, `blog.devanshvarshney.com`, or `docs.devanshvarshney.com` are modeled as site custom domains. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
+- Subdomains such as `studio.example.com`, `blog.example.com`, or `docs.example.com` are modeled as site custom domains. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
 - Frontend builders and AI agents should start with `GET /api/sites/:siteId/agent-handoff`, then read manifest, OpenAPI, render, and frontend-design before creating UI or templates. Do not copy Backy content into a frontend-local JSON source of truth.
 - Optional Vercel Agent: after the two projects are linked, enable Vercel Agent Code Review from each project's Project Settings -> AI page. It is a Vercel platform setting; Backy does not need a runtime package or client-visible secret for it.
 
@@ -134,11 +134,11 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 | --- | --- | --- | --- | --- |
 | `backy-public` | Public app with protected admin API routes | `content.<domain>` or the Backy API/rendering domain | `BACKY_DATA_MODE=database`, `BACKY_DATABASE_URL`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, provider/storage secrets, `CRON_SECRET`, `NEXT_PUBLIC_BACKY_ADMIN_APP_URL`, and exact custom-frontend origins in `BACKY_CORS_ALLOWED_ORIGINS` | Client-exposed copies of database, storage, provider, cron, or admin secrets |
 | `backy-admin` | Protected admin shell | `admin.<domain>` or private Vercel preview/production URL | `VITE_BACKY_PUBLIC_API_BASE_URL`, `VITE_BACKY_ADMIN_API_BASE_URL` | `BACKY_DATABASE_URL`, storage/provider secrets, `CRON_SECRET`, `BACKY_ADMIN_API_KEY`, `BACKY_ADMIN_SECRET_KEY`, and any `VITE_*` admin key |
-| Custom frontend | Public website/app | `www.<domain>`, `blog.<domain>`, `akriti.devanshvarshney.com`, or another site-specific domain | `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, optional `BACKY_SITE_PUBLIC_HOST` | Backy admin URLs, admin/session secrets, provider secrets, database URLs, or copied Backy content as a second source of truth |
+| Custom frontend | Public website/app | `www.<domain>`, `blog.<domain>`, `studio.example.com`, or another site-specific domain | `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, optional `BACKY_SITE_PUBLIC_HOST` | Backy admin URLs, admin/session secrets, provider secrets, database URLs, or copied Backy content as a second source of truth |
 
 Backy-hosted routes in `apps/public` currently support `/sites/<site-slug>` paths and custom-domain lookup through the public site APIs. For separate custom frontend projects, resolve the site by `BACKY_SITE_ID` first, then use `BACKY_SITE_PUBLIC_HOST` only as metadata for canonical URLs, SEO, and domain ownership until host-based rendering is promoted through the production-hardening gate.
 
-Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, packaging ignores, project linkage, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin`.
+Run `npm run test:vercel-release-config && npm run test:vercel-preview-readiness && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene` before release to verify the checked-in Vercel topology, launch homepage links, local Vercel CLI auth, packaging ignores, project linkage, production promotion rules, public repo hygiene, and expected remote project names. For strict operator validation, run `BACKY_VERCEL_REQUIRE_CLI=1 BACKY_VERCEL_REQUIRE_PROJECT_LINKS=1 BACKY_VERCEL_REQUIRE_REMOTE_PROJECTS=1 npm run test:vercel-preview-readiness` after creating/linking `backy-public` and `backy-admin`.
 
 Use Vercel CLI `47.2.2+` for preview deploys; the local global CLI may be older, so `npx vercel@latest` is the safest release command. The repo root and app roots include `.vercelignore` files so local `.next`, `dist`, cache, Vercel link, and `node_modules` folders are not uploaded as source.
 
@@ -155,6 +155,29 @@ npx vercel@latest deploy --target=preview --yes \
 ```
 
 Do not use the current prebuilt standalone output as release proof for `backy-public`; it can produce static assets without the Next.js API routes Backy needs for `/api/sites/:siteId/agent-handoff`, manifest, OpenAPI, render, forms, and admin API traffic.
+
+### Production promotion gate
+
+Never promote a preview or production alias while `BACKY_DATA_MODE=demo`, while database/provider/storage env is missing, or while the public production URL cannot serve Backy JSON contracts. A Vercel deployment can be marked Ready even when the public alias points at a stale static build, so production proof must hit the final public domain directly.
+
+Before promoting or sharing a production URL, set `BACKY_DATA_MODE=database` on `backy-public`, configure real Supabase/Postgres, storage/provider, admin/session, cron, and CORS env, then run:
+
+```bash
+BACKY_VERCEL_PRODUCTION_URL=https://<backy-public-production-domain> \
+BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 \
+npm run test:vercel-production-readiness
+```
+
+The live gate fetches:
+
+- `/api/sites/site-demo/agent-handoff`
+- `/api/sites/site-demo/manifest`
+- `/api/sites/site-demo/openapi`
+- `/api/sites/site-demo/render?path=/`
+
+All four must return JSON from the final public domain. A 401 Vercel protection page, 404 `NOT_FOUND`, static HTML, or missing production-readiness topology is a failed production proof. Use `BACKY_VERCEL_PRODUCTION_SITE_ID=<site-id-or-slug>` when certifying a non-demo production site.
+
+The public repository should also stay neutral: do not commit local absolute paths, personal email addresses, generated Vercel deployment URLs, Vercel project/team/deployment ids, or user-specific domains. `npm run test:repo-public-hygiene` guards the generic cases; local operators can add private marker checks with `BACKY_REPO_HYGIENE_PRIVATE_MARKERS` without committing those markers.
 
 ---
 

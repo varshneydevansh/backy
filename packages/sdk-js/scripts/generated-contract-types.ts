@@ -8286,14 +8286,17 @@ const customFrontendAgentHandoff = {
     domainPolicy: {
       verificationRequired: true,
       verificationStatusField: "site.settings.domainVerification.status",
-      examples: ["www.example.com", "blog.example.com", "docs.example.com", "akriti.devanshvarshney.com"],
+      examples: ["www.example.com", "blog.example.com", "docs.example.com", "studio.example.com"],
     },
     verification: {
       releaseConfigSmoke: "npm run test:vercel-release-config",
       previewReadinessSmoke: "npm run test:vercel-preview-readiness",
+      productionReadinessSmoke: "npm run test:vercel-production-readiness",
       frontendContractSmoke: "npm run test:frontend-contract-types",
       releaseDoctor: "npm run doctor:release-certification",
       providerArtifactAdmission: "npm run ci:provider-artifact-admission",
+      promotionRule: "Never promote demo-mode previews or production aliases.",
+      liveProof: "Live production proof must fetch agent-handoff, manifest, OpenAPI, and render JSON from the final public domain.",
     },
     secretHandling: "This topology exposes env names, project roles, and verification commands only.",
   },

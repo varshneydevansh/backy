@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 20:28 IST
+- **Last updated:** 2026-05-31 21:09 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,41 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 21:09 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production promotion now has a hard live-contract gate and public repo hygiene guard
+
+**What changed:**
+- Added `npm run test:vercel-production-readiness`, a source and optional live-domain gate that requires production Backy public URLs to serve JSON for agent-handoff, manifest, OpenAPI, and render before they can be treated as production proof.
+- Added `npm run test:repo-public-hygiene`, which scans tracked files for local absolute paths, personal email addresses, actual Vercel deployment URLs/ids, project/team ids, and optional operator-supplied private markers.
+- Updated README, AGENTS, Help, handoff, manifest schema, OpenAPI schema, and generated SDK contract fixtures so deploy/frontend agents see the production gate and public-repo hygiene boundary from the same machine-readable surfaces as preview readiness.
+- Removed stale root handoff/diff artifacts from tracking and ignored them for future local-only use.
+- Sanitized tracked docs/examples away from user-specific domains, local paths, account aliases, and unrelated project names.
+- Removed the stale Backy public production aliases and the leftover Backy admin preview alias from Vercel; current Backy production aliases no longer point at broken public URLs.
+
+**Commands run:**
+- `npm run test:repo-public-hygiene` -> PASS.
+- `BACKY_REPO_HYGIENE_PRIVATE_MARKERS=<local-private-markers> npm run test:repo-public-hygiene` -> PASS.
+- `npm run test:vercel-production-readiness` -> PASS with expected warning that no live production URL is set.
+- `BACKY_VERCEL_PRODUCTION_URL=<old-public-alias> BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 node scripts/vercel-production-readiness-smoke.mjs` -> FAIL as expected before alias removal because all required public contracts returned 404.
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:vercel-preview-readiness` -> PASS with the expected root-link warning.
+- `npm run test:frontend-contract-types` -> PASS.
+- `npm --workspace @backy/public run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run test:help` -> PASS.
+- `npm --workspace @backy-cms/admin run test:sites` -> PASS.
+- `git diff --check` -> PASS.
+
+**Review findings:**
+- [High] A Vercel production alias can be Ready while serving no Backy API routes. Resolved by adding a live-domain gate and removing stale Backy aliases until a database-mode production deployment is intentionally promoted.
+- [Medium] Public tracked files had local handoff artifacts and user-specific examples. Resolved by deleting local-only artifacts, replacing examples with neutral domains/placeholders, and adding a hygiene smoke with optional private markers.
+
+**Next:**
+1. Do not promote production until `backy-public` has real database/storage/provider/admin/cron/CORS env and the live `BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1` gate passes on the final public domain.
+2. Continue Batch 5 with the next visible admin/editor release friction point.
 
 ## 2026-05-31 20:28 IST
 
@@ -28,8 +63,8 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
   - `backy-admin`: `rootDirectory=apps/admin`, framework Vite, output `dist`, build command `npm --prefix=../.. run build:vercel:admin`, source files outside root enabled.
 
 **Preview deployments verified:**
-- `backy-public` preview: `https://backy-public-n1jid5uw9-varshneydevanshs-projects.vercel.app`, deployment `dpl_CQUdcrB8tocz2YR6aLTHCNSaA4ty`, status READY.
-- `backy-admin` preview: `https://backy-admin-6twzx9xff-varshneydevanshs-projects.vercel.app`, deployment `dpl_27gogqawQKKQyMnJXMcrtGg7CKA7`, status READY.
+- `backy-public` preview: `<backy-public-preview-url>`, deployment `<vercel-deployment-id>`, status READY.
+- `backy-admin` preview: `<backy-admin-preview-url>`, deployment `<vercel-deployment-id>`, status READY.
 - Public preview serves real Next API routes; `vercel curl` confirmed successful JSON for `/api/sites/site-demo/agent-handoff`, `/manifest`, `/openapi`, `/render`, and `/api/admin/auth/password-policy`.
 - Admin preview is protected by Vercel auth from unauthenticated fetches, serves `/login` through authenticated Vercel curl, and its built entry references the public preview API/admin base URLs.
 - `backy-admin.vercel.app/login` currently returns Vercel `DEPLOYMENT_NOT_FOUND`, so the old public admin alias remains removed.
@@ -68,7 +103,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - The production admin build now emits route chunks plus an isolated editor chunk. The previous single ~6.5 MB minified entry is now split into a ~0.87 MB main entry and a lazy ~2.18 MB editor chunk, with other admin routes split by route.
 
 **Commands run:**
-- `vercel whoami && vercel project ls` -> PASS as `varshneydevansh`; only `filtertube-website` currently exists, so `backy-public` and `backy-admin` are still not created/linked.
+- `vercel whoami && vercel project ls` -> PASS as `<github-or-vercel-user>`; only `<existing-unrelated-project>` currently exists, so `backy-public` and `backy-admin` are still not created/linked.
 - `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote projects `backy-public`/`backy-admin` are not created/linked yet.
 - `npm --workspace @backy-cms/admin run typecheck` -> PASS.
 - `npm --workspace @backy-cms/admin run build` -> PASS; route splitting is active, though Vite still warns because the editor chunk remains larger than 500 kB.
@@ -101,8 +136,8 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `npm run test:vercel-release-config` -> PASS.
 - `npm --workspace @backy-cms/admin run build` -> PASS with the existing large Vite bundle warning.
 - `npm --workspace @backy/public run build` -> PASS.
-- `vercel whoami` -> PASS as `varshneydevansh`.
-- `vercel project ls` -> PASS; only `filtertube-website` exists under `varshneydevanshs-projects`, so Backy project linkage is still pending.
+- `vercel whoami` -> PASS as `<github-or-vercel-user>`.
+- `vercel project ls` -> PASS; only `<existing-unrelated-project>` exists under `<vercel-team-slug>`, so Backy project linkage is still pending.
 - `git diff --check` -> PASS.
 
 **Next:**
@@ -128,8 +163,8 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote projects `backy-public`/`backy-admin` are not created/linked yet.
 - `npm --workspace @backy-cms/admin run build` -> PASS.
 - `npm --workspace @backy/public run build` -> PASS.
-- `vercel whoami` -> PASS as `varshneydevansh`.
-- `vercel project ls` -> PASS; only `filtertube-website` exists under `varshneydevanshs-projects`, so Backy project linkage is still pending.
+- `vercel whoami` -> PASS as `<github-or-vercel-user>`.
+- `vercel project ls` -> PASS; only `<existing-unrelated-project>` exists under `<vercel-team-slug>`, so Backy project linkage is still pending.
 - `git diff --check` -> PASS.
 
 **Next:**
@@ -298,9 +333,9 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - Updated the frontend manifest schema, OpenAPI schema, SDK generated type fixtures, SDK smoke, public frontend-contract smoke, custom frontend handoff spec, and `AGENTS.md` so deploy/frontend agents can read required/forbidden env, verified-domain policy, and release verification commands without relying on README prose.
 
 **Vercel readiness findings:**
-- Vercel MCP token is expired, but local Vercel CLI is authenticated as `varshneydevansh`.
-- Vercel team visible: `varshneydevanshs-projects`.
-- Existing Vercel projects visible from CLI: only `filtertube-website`; Backy is not yet linked as `backy-public` or `backy-admin`.
+- Vercel MCP token is expired, but local Vercel CLI is authenticated as `<github-or-vercel-user>`.
+- Vercel team visible: `<vercel-team-slug>`.
+- Existing Vercel projects visible from CLI: only `<existing-unrelated-project>`; Backy is not yet linked as `backy-public` or `backy-admin`.
 - Backy is deployable as preview once those two Vercel projects are created/linked and env is configured.
 
 **Commands run:**
@@ -616,7 +651,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Contract status:** in progress; Sites/New Site frontend handoff now exposes agent read-start and host-aware subdomain routing; four audit partials remain external live-provider artifact gated
 
 **What changed:**
-- `apps/admin/src/routes/sites.tsx`: the Site frontend API panel now surfaces `Agent handoff`, host-aware resolve/render URLs using `domain={host}`, and frontend env guidance for `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and `BACKY_SITE_PUBLIC_HOST`. The copied `backy.site.frontend.v1` contract now includes domain verification status, public host, environment variables, and a routing block with subdomain examples such as `akriti.devanshvarshney.com`.
+- `apps/admin/src/routes/sites.tsx`: the Site frontend API panel now surfaces `Agent handoff`, host-aware resolve/render URLs using `domain={host}`, and frontend env guidance for `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and `BACKY_SITE_PUBLIC_HOST`. The copied `backy.site.frontend.v1` contract now includes domain verification status, public host, environment variables, and a routing block with subdomain examples such as `studio.example.com`.
 - `apps/admin/src/routes/sites.new.tsx`: New Site creation now explicitly tells users that subdomains are valid exact custom domains, adds a visible frontend-agent read-start block, and includes `/agent-handoff`, manifest, host-aware resolve/render, frontend env, and routing metadata in the creation handoff manifest.
 - `apps/admin/scripts/sites-smoke.mjs`: Sites source guards now assert the new Sites/New Site handoff fields, and the rendered layout guard checks that the visible Sites API panel includes `/agent-handoff`, `Resolve with host`, `Render with host`, and `BACKY_SITE_PUBLIC_HOST`.
 
@@ -1114,8 +1149,8 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 5. Ongoing UX Scout And Polish - page-by-page small verified UI/UX fixes.
 
 **Preflight:**
-- Git remote: PASS, origin points to `https://github.com/varshneydevansh/backy.git`.
-- GitHub CLI: WARN, stale invalid `GITHUB_TOKEN` exists but keyring login for `varshneydevansh` is present.
+- Git remote: PASS, origin points to `https://github.com/<github-or-vercel-user>/backy.git`.
+- GitHub CLI: WARN, stale invalid `GITHUB_TOKEN` exists but keyring login for `<github-or-vercel-user>` is present.
 - Secret-history check: PASS for the previously reported blocked commit ids; they are not valid commits in current local history.
 - Validation gate dry run: deferred to Batch 1 focused gates because this setup is documentation/process-only.
 - Environment/sleep/notification checks: WARN/N/A, no Slack webhook or sleep-prevention process recorded.
