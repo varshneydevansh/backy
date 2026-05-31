@@ -34,6 +34,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] The first Sites/New Site handoff users copy must be as complete as Site Detail and Help. Include `/agent-handoff`, host-aware resolve/render, `BACKY_SITE_PUBLIC_HOST`, and subdomain examples anywhere a frontend AI agent may start.
 - [2026-05-31] Root section insertion must snap to the bottom of any containing root flow section before shifting later sections. A drop/add inside an existing band should create a new band after it, and rendered smokes should verify editor, persisted, and public-render geometry together.
 - [2026-05-31] Header action menus near sticky workbars should be absolute overlays with explicit stacking checks. In-flow details menus can pass source review but still disappear behind sticky active-section banners in real Chrome viewports.
+- [2026-05-31] Dense Pages-table fixes should prefer route-local column budgets before shared grid changes. Keep delivery/action cells clipped or in-flow, but reduce the total table width so the surface feels operational instead of horizontally hostile.
 
 ## Product and Domain Invariants
 

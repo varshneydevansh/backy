@@ -250,11 +250,11 @@ const assertPagesListSourceContract = () => {
     ? source.slice(actionColumnStart, actionColumnEnd)
     : '';
   assert(
-    source.includes('tableMinWidth="2580px"') &&
+    source.includes('tableMinWidth="2140px"') &&
       source.includes('stickyActionColumn={false}') &&
-      source.includes("width: '560px'") &&
-      source.includes("width: '280px'") &&
+      source.includes("width: '360px'") &&
       source.includes("width: '260px'") &&
+      source.includes("width: '220px'") &&
       deliveryColumnBlock &&
       !deliveryColumnBlock.includes("overflowMode: 'visible'") &&
       source.includes('break-words font-medium leading-5 text-foreground [overflow-wrap:anywhere]') &&
@@ -3470,8 +3470,8 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.cells.every((cell) => cell.contentFitsCell && cell.overflowingDescendantCount === 0), `Every dense DataGrid body cell wrapper and visible descendants must stay within its owning cell: ${JSON.stringify(state.cells)}`);
   assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content and descendants inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);
   assert(
-    state.requestedTableMinWidth === '2580px' &&
-      state.columnWidthTotal >= 2561 &&
+    state.requestedTableMinWidth === '2140px' &&
+      state.columnWidthTotal >= 2124 &&
       state.tableClientWidth >= state.columnWidthTotal &&
       state.hasHorizontalScroll,
     `Pages DataGrid must render as a horizontally scrollable dense table using at least its summed column width instead of compressing columns: ${JSON.stringify(state)}`,
@@ -3481,9 +3481,9 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
     `Pages DataGrid action column must be reachable at the right edge after horizontal scroll without covering delivery text at the left edge: ${JSON.stringify(state)}`,
   );
   assert(
-    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '560px') &&
-      state.columnWidths.some((column) => column.key === 'title' && column.width === '280px') &&
-      state.columnWidths.some((column) => column.key === 'actions' && column.width === '260px'),
+    state.columnWidths.some((column) => column.key === 'siteId' && column.width === '360px') &&
+      state.columnWidths.some((column) => column.key === 'title' && column.width === '260px') &&
+      state.columnWidths.some((column) => column.key === 'actions' && column.width === '220px'),
     `Pages DataGrid must render explicit column widths for dense delivery and action cells: ${JSON.stringify(state.columnWidths)}`,
   );
 

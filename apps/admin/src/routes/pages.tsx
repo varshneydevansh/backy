@@ -1892,7 +1892,7 @@ function PagesListView() {
     {
       key: 'id',
       label: 'Select',
-      width: '76px',
+      width: '64px',
       render: (page) => (
         <input
           type="checkbox"
@@ -1910,7 +1910,7 @@ function PagesListView() {
       key: 'title',
       label: 'Page Title',
       sortable: true,
-      width: '280px',
+      width: '260px',
       render: (page) => (
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -1930,7 +1930,7 @@ function PagesListView() {
     {
       key: 'slug',
       label: 'Route',
-      width: '220px',
+      width: '200px',
       render: (page) => (
         <PageRouteCell
           page={page}
@@ -1941,14 +1941,14 @@ function PagesListView() {
     {
       key: 'template',
       label: 'Template',
-      width: '220px',
+      width: '190px',
       render: (page) => <PageTemplateCell page={page} />,
     },
     {
       key: 'status',
       label: 'Status',
       sortable: true,
-      width: '135px',
+      width: '125px',
       render: (page) => (
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={page.status} />
@@ -1963,7 +1963,7 @@ function PagesListView() {
     {
       key: 'parentId',
       label: 'Hierarchy',
-      width: '210px',
+      width: '190px',
       render: (page) => (
         <PageHierarchyCell
           page={page}
@@ -1975,7 +1975,7 @@ function PagesListView() {
     {
       key: 'meta',
       label: 'Health',
-      width: '170px',
+      width: '160px',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const firstIssue = readiness?.checks.find((check) => check.status !== 'pass');
@@ -2002,7 +2002,7 @@ function PagesListView() {
     {
       key: 'content',
       label: 'Revisions',
-      width: '240px',
+      width: '210px',
       render: (page) => (
         <PageRevisionCell
           page={page}
@@ -2015,7 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
-      width: '560px',
+      width: '360px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2044,13 +2044,13 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
-      width: '190px',
+      width: '145px',
       render: (page) => <span className="block min-w-0 break-words leading-5 text-muted-foreground [overflow-wrap:anywhere]">{formatDate(page.lastUpdated)}</span>
     },
     {
       key: 'actions',
       label: '',
-      width: '260px',
+      width: '220px',
       overflowMode: 'visible',
       render: (page) => {
         const readiness = readinessMap[page.id];
@@ -4119,7 +4119,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          tableMinWidth="2580px"
+          tableMinWidth="2140px"
           stickyActionColumn={false}
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}

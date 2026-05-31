@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 07:48 IST
+- **Last updated:** 2026-05-31 08:01 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 08:01 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; Pages table column budget tightened while preserving clipping and header semantics; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/routes/pages.tsx`: reduced the Pages library table from a 2580px operating width to a 2140px route-local column budget, tightening title, route, template, delivery, date, and actions columns without changing shared `DataGrid`.
+- `apps/admin/scripts/pages-list-smoke.mjs`: updated source and rendered DataGrid header guards to enforce the smaller Pages table budget while still proving all visible cell content stays inside its owning column and actions remain in-flow.
+
+**Commands run:**
+- `BACKY_PAGES_LIST_SOURCE_ONLY=1 npm run test:pages-list --workspace @backy-cms/admin` -> PASS.
+- `BACKY_PAGES_LIST_DATAGRID_HEADER_SMOKE=1 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 npm run test:pages-list --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on the next highest-friction editor gap: responsive/mobile canvas behavior, layer-map ergonomics, or blog/newsletter authoring polish.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 07:48 IST
 
