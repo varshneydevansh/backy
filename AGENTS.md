@@ -44,6 +44,8 @@ Read order:
 8. Deployment topology
    - Machine-readable pointer: `data.handoff.deploymentTopology` or `manifest.data.contract.customFrontendAgentHandoff.deploymentTopology`.
    - Deploy Backy as protected `backy-admin` plus public `backy-public`; deploy each custom website as a separate frontend that only receives public Backy API/site env.
+   - `backy-admin` receives `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL` only. `backy-public` receives server-only database/admin/cron/provider env. Custom frontends receive `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST`.
+   - Before preview deploy, run `npm run test:vercel-release-config` and `npm run test:vercel-preview-readiness`.
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).
 

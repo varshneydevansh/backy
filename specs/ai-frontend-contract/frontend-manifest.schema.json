@@ -879,11 +879,12 @@
               "additionalProperties": true,
               "properties": {
                 "releaseConfigSmoke": { "const": "npm run test:vercel-release-config" },
+                "previewReadinessSmoke": { "const": "npm run test:vercel-preview-readiness" },
                 "frontendContractSmoke": { "const": "npm run test:frontend-contract-types" },
                 "releaseDoctor": { "const": "npm run doctor:release-certification" },
                 "providerArtifactAdmission": { "const": "npm run ci:provider-artifact-admission" }
               },
-              "required": ["releaseConfigSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission"]
+              "required": ["releaseConfigSmoke", "previewReadinessSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission"]
             },
             "secretHandling": { "type": "string", "minLength": 1 }
           },

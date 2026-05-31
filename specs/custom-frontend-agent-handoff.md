@@ -156,7 +156,7 @@ Agents should also read `customFrontendAgentHandoff.deploymentTopology` before d
 - `backy-admin` is the protected Vite admin/editor shell from `apps/admin`. It should receive only `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL`, and must not receive database URLs, cron secrets, provider secrets, or admin API keys.
 - `backy-public` is the public Next.js app from `apps/public`. It serves manifest, OpenAPI, agent-handoff, resolve/render, forms, comments, newsletter signup, and authenticated admin APIs. Server-only database, admin, cron, storage, commerce, and mail-provider secrets belong here or in CI/provider secret stores.
 - Custom websites should run as separate public frontend projects when they have their own domain, framework, team, or release cadence. They should use only `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST`.
-- The topology block names the release checks a deploy agent should run: `npm run test:vercel-release-config`, `npm run test:frontend-contract-types`, `npm run doctor:release-certification`, and provider artifact admission when live Settings/Commerce evidence exists.
+- The topology block names the release checks a deploy agent should run: `npm run test:vercel-release-config`, `npm run test:vercel-preview-readiness`, `npm run test:frontend-contract-types`, `npm run doctor:release-certification`, and provider artifact admission when live Settings/Commerce evidence exists.
 
 ## Creating new content
 

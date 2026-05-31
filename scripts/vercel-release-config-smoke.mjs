@@ -71,8 +71,10 @@ for (const snippet of [
   'GET /api/sites/:siteId/agent-handoff',
   'akriti.devanshvarshney.com',
   'Vercel Deployment Protection',
+  'Vercel Agent',
   'httpOnly `backy_admin_session` cookie',
   'Forbidden env',
+  'npm run test:vercel-preview-readiness',
 ]) {
   assert(readme.includes(snippet), `README release runbook is missing: ${snippet}`);
 }
@@ -85,6 +87,11 @@ assert(
 assert(
   rootPackage.scripts?.['test:vercel-release-config'] === 'node scripts/vercel-release-config-smoke.mjs',
   'Root package.json must expose test:vercel-release-config.',
+);
+
+assert(
+  rootPackage.scripts?.['test:vercel-preview-readiness'] === 'node scripts/vercel-preview-readiness-smoke.mjs',
+  'Root package.json must expose test:vercel-preview-readiness.',
 );
 
 assert(

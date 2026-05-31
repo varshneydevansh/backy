@@ -8290,6 +8290,7 @@ const customFrontendAgentHandoff = {
     },
     verification: {
       releaseConfigSmoke: "npm run test:vercel-release-config",
+      previewReadinessSmoke: "npm run test:vercel-preview-readiness",
       frontendContractSmoke: "npm run test:frontend-contract-types",
       releaseDoctor: "npm run doctor:release-certification",
       providerArtifactAdmission: "npm run ci:provider-artifact-admission",

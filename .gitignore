@@ -68,6 +68,7 @@ tmp/
 .codex/
 .codex-tmp/
 .playwright-mcp/
+.vercel/
 docs/audit/
 *.sqlite
 *.sqlite3

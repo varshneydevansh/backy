@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 14:13 IST
+- **Last updated:** 2026-05-31 14:50 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 14:50 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Vercel preview readiness gate added; source/config deploy readiness passes, operator project linkage still pending
+
+**What changed:**
+- Added `npm run test:vercel-preview-readiness`, a non-mutating Vercel preview readiness smoke that hard-fails checked-in topology, env-boundary, README/AGENTS, OpenAPI, manifest, and handoff drift while warning about missing local Vercel project links or remote `backy-public`/`backy-admin` projects unless strict flags are set.
+- Added `previewReadinessSmoke: "npm run test:vercel-preview-readiness"` to `backy.deployment-topology.v1` so deploy/frontend agents reading `/agent-handoff`, manifest, OpenAPI, or SDK fixtures see the preview-readiness gate.
+- Updated the README runbook with exact `BACKY_CORS_ALLOWED_ORIGINS`, strict readiness mode, and optional Vercel Agent Code Review setup from each project's Project Settings -> AI page.
+- Wired the new smoke into `test:partial-gate-preflights`, release preflight contract coverage, SDK generated contract type fixtures, and frontend contract smoke guards.
+- Added `.vercel/` to `.gitignore` so local project linkage metadata is available to the readiness smoke but not accidentally committed.
+
+**Commands run:**
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings that `apps/public/.vercel/project.json`, `apps/admin/.vercel/project.json`, and remote Vercel projects `backy-public`/`backy-admin` are not created/linked yet.
+- `npm run test:vercel-release-config` -> PASS.
+- `npm run test:frontend-contract-types` -> PASS.
+- `npm run test:release-certification-preflight-contract` -> PASS.
+- `npm run doctor:release-certification` -> PASS; still 41 Ready / 4 Partial / 0 Prototype / 0 Missing in default no-artifact mode.
+- `npm run typecheck` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this Vercel preview readiness slice.
+2. Continue Batch 5 with the next highest-value release task: actual preview deploy/linking if the user wants mutation now, or another admin/editor polish slice while Vercel projects/env remain operator-owned.
 
 ## 2026-05-31 14:13 IST
 

@@ -6421,6 +6421,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     releaseConfigSmoke: {
                       const: "npm run test:vercel-release-config",
                     },
+                    previewReadinessSmoke: {
+                      const: "npm run test:vercel-preview-readiness",
+                    },
                     frontendContractSmoke: {
                       const: "npm run test:frontend-contract-types",
                     },

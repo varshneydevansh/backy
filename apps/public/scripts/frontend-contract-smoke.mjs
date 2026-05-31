@@ -754,6 +754,7 @@ assert(
     customFrontendAgentHandoffLib.includes('VITE_BACKY_PUBLIC_API_BASE_URL') &&
     customFrontendAgentHandoffLib.includes('BACKY_ADMIN_API_KEY') &&
     customFrontendAgentHandoffLib.includes('npm run test:vercel-release-config') &&
+    customFrontendAgentHandoffLib.includes('npm run test:vercel-preview-readiness') &&
     customFrontendAgentHandoffLib.includes('subdomainRouting') &&
     customFrontendAgentHandoffLib.includes('BACKY_SITE_PUBLIC_HOST') &&
     customFrontendAgentHandoffLib.includes('resolveWithHost') &&

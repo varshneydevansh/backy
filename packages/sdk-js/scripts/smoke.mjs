@@ -2113,6 +2113,7 @@ assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.
 assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.optionalEnv?.includes('BACKY_SITE_PUBLIC_HOST'), 'manifest() deployment topology missing optional custom frontend host env');
 assert(customFrontendAgentHandoff.deploymentTopology?.domainPolicy?.verificationRequired === true, 'manifest() deployment topology must require verified domains');
 assert(customFrontendAgentHandoff.deploymentTopology?.verification?.releaseConfigSmoke === 'npm run test:vercel-release-config', 'manifest() deployment topology missing Vercel release smoke');
+assert(customFrontendAgentHandoff.deploymentTopology?.verification?.previewReadinessSmoke === 'npm run test:vercel-preview-readiness', 'manifest() deployment topology missing Vercel preview readiness smoke');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('content.elements'), 'manifest() custom frontend agent handoff missing elements round-trip field');
 assert(customFrontendAgentHandoff.designState?.roundTripFields?.includes('meta.frontendDesign*'), 'manifest() custom frontend agent handoff missing frontend design provenance round-trip field');
 assert(customFrontendAgentHandoff.designState?.siteStyleSources?.includes('manifest.data.site.frontendDesign'), 'manifest() custom frontend agent handoff missing site frontendDesign style source');
