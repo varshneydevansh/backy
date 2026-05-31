@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 07:00 IST
+- **Last updated:** 2026-05-31 07:34 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 07:34 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; root section insertion now respects section-flow boundaries; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: root section/header/footer/nav insertions now snap out of an overlapping root flow section before the existing flow algorithm pushes following root bands.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added a rendered section-flow smoke that inserts a new section inside an existing root section and verifies editor geometry, persisted canvas state, and public render payload all preserve the same snapped layout.
+- `apps/admin/package.json`: added `test:editor-section-flow` and wired it into the full editor workflow script.
+
+**Commands run:**
+- `BACKY_EDITOR_SECTION_FLOW_SMOKE=1 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 npm run test:editor-section-flow --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Continue Batch 5 on the next highest-friction release surface: responsive/mobile canvas layout, layer-map usability, blog/newsletter authoring polish, or remaining admin table overlap.
+2. Keep each slice verified, committed, and pushed.
 
 ## 2026-05-31 07:00 IST
 

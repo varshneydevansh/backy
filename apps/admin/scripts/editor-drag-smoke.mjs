@@ -13,6 +13,7 @@ const COMPONENT_SMOKE = process.env.BACKY_EDITOR_COMPONENT_SMOKE || '';
 const INSPECTOR_SMOKE = process.env.BACKY_EDITOR_INSPECTOR_SMOKE === '1';
 const INSPECTOR_ACTION_SMOKE = process.env.BACKY_EDITOR_INSPECTOR_ACTION_SMOKE === '1';
 const REUSABLE_SECTION_SMOKE = process.env.BACKY_EDITOR_REUSABLE_SECTION_SMOKE === '1';
+const SECTION_FLOW_SMOKE = process.env.BACKY_EDITOR_SECTION_FLOW_SMOKE === '1';
 const LIBRARY_SMOKE = process.env.BACKY_EDITOR_LIBRARY_SMOKE === '1';
 const CLIPBOARD_SMOKE = process.env.BACKY_EDITOR_CLIPBOARD_SMOKE === '1';
 const Z_ORDER_SMOKE = process.env.BACKY_EDITOR_Z_ORDER_SMOKE === '1';
@@ -1461,6 +1462,7 @@ const assertCanvasSelectionInfoSource = () => {
   const source = fs.readFileSync(new URL('../src/components/editor/Canvas.tsx', import.meta.url), 'utf8');
   const editorSource = fs.readFileSync(new URL('../src/components/editor/CanvasEditor.tsx', import.meta.url), 'utf8');
   const pageRendererSource = fs.readFileSync(new URL('../../../apps/public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
+  const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(source.includes('<SelectionInfo elements={elements} selectedId={selectedId} selectedIds={selectedIds} />'), 'Editor canvas selection HUD must receive the full selected id set');
   assert(source.includes('collectSelectionInfoMetrics') && source.includes('const selectionSet = new Set(selectedIds.length ? selectedIds : [selectedId]);'), 'Editor canvas selection HUD must collect metrics for every selected layer');
   assert(source.includes('data-testid="editor-selection-info"') && source.includes("data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}") && source.includes('data-selection-count={selectedMetrics.length}'), 'Editor canvas selection HUD must expose testable single/multi selection metadata');
@@ -1481,6 +1483,9 @@ const assertCanvasSelectionInfoSource = () => {
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
   assert(
     editorSource.includes('const applyRootSectionFlow = (') &&
+      editorSource.includes('const snapRootSectionInsertionsToFlowBoundary = (') &&
+      editorSource.includes('element.y < insertionTop && elementBottom(element) > insertionTop') &&
+      editorSource.includes('const boundarySnappedInsertedElements = snapRootSectionInsertionsToFlowBoundary(rootElements, insertedElements);') &&
       editorSource.includes('function applyRootSectionInsertionFlow(') &&
       editorSource.includes('const SECTION_FLOW_ELEMENT_TYPES = new Set') &&
       editorSource.includes('const flowedElements = applyRootSectionFlow(previousDisplayedElements, newElements);') &&
@@ -1493,8 +1498,14 @@ const assertCanvasSelectionInfoSource = () => {
       editorSource.includes('const insertedIds = new Set(insertedElements.map((element) => element.id));') &&
       editorSource.includes('return applyRootSectionInsertionFlow(') &&
       editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, newElements), newElements[0].id)') &&
-      editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id)'),
-    'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, inserted singly, or inserted as multi-root reusable sections.',
+      editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id)') &&
+      smokeSource.includes('const testRootSectionOverlapInsertionFlow = async (client, pageId) =>') &&
+      smokeSource.includes("const before = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after']);") &&
+      smokeSource.includes("await clickControlBySelector(client, '[data-component-add=\"section\"]', 'root section add');") &&
+      smokeSource.includes('expectedInsertedY = beforeAnchor.y + beforeAnchor.height') &&
+      smokeSource.includes('expectedAfterY = beforeAfter.y + insertedState.height') &&
+      smokeSource.includes('const publicInserted = findCanvasElement(publicElements, insertedId);'),
+    'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, inserted singly, inserted inside an existing flow section, or inserted as multi-root reusable sections.',
   );
 };
 
@@ -2968,10 +2979,70 @@ const createSmokePage = async () => {
               borderRadius: 8,
             },
           },
+          {
+            id: 'smoke-flow-anchor',
+            type: 'section',
+            x: 0,
+            y: 1440,
+            width: 1200,
+            height: 260,
+            zIndex: 1,
+            props: {
+              backgroundColor: '#ecfeff',
+              padding: 24,
+            },
+            children: [
+              {
+                id: 'smoke-flow-anchor-heading',
+                type: 'heading',
+                x: 80,
+                y: 64,
+                width: 460,
+                height: 64,
+                zIndex: 1,
+                props: {
+                  content: 'Flow anchor section',
+                  level: 'h2',
+                  fontSize: 34,
+                  color: '#155e75',
+                },
+              },
+            ],
+          },
+          {
+            id: 'smoke-flow-after',
+            type: 'section',
+            x: 0,
+            y: 1740,
+            width: 1200,
+            height: 180,
+            zIndex: 1,
+            props: {
+              backgroundColor: '#fff7ed',
+              padding: 24,
+            },
+            children: [
+              {
+                id: 'smoke-flow-after-heading',
+                type: 'heading',
+                x: 80,
+                y: 48,
+                width: 520,
+                height: 56,
+                zIndex: 1,
+                props: {
+                  content: 'Following flow section',
+                  level: 'h2',
+                  fontSize: 30,
+                  color: '#9a3412',
+                },
+              },
+            ],
+          },
         ],
         canvasSize: {
           width: 1200,
-          height: 1420,
+          height: 2100,
         },
       },
     }),
@@ -21023,6 +21094,135 @@ const testSyncedReusableSectionInstance = async (client, sectionId) => {
   };
 };
 
+const testRootSectionOverlapInsertionFlow = async (client, pageId) => {
+  const before = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after']);
+  const beforeAnchor = before['smoke-flow-anchor'];
+  const beforeAfter = before['smoke-flow-after'];
+  const expectedInsertedY = beforeAnchor.y + beforeAnchor.height;
+
+  await selectLayerById(client, 'smoke-heading');
+  await clickControlByTestId(client, 'editor-component-category-all');
+  await setFormControlByTestId(client, 'editor-component-search', 'Section');
+  await setCanvasZoomSlider(client, 100, 'before root section overlap insertion');
+
+  const centeredAnchor = await evaluate(client, `(() => {
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    const anchor = document.querySelector('[data-element-id="smoke-flow-anchor"]');
+    if (!(viewport instanceof HTMLElement) || !(anchor instanceof HTMLElement)) {
+      return {
+        ok: false,
+        reason: 'missing-anchor-or-viewport',
+        hasViewport: viewport instanceof HTMLElement,
+        hasAnchor: anchor instanceof HTMLElement,
+      };
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const delta = (anchorRect.top + anchorRect.height / 2) - (viewportRect.top + viewportRect.height / 2);
+    viewport.scrollTop += delta;
+
+    const nextAnchorRect = anchor.getBoundingClientRect();
+    const nextViewportRect = viewport.getBoundingClientRect();
+    return {
+      ok: true,
+      scrollTop: viewport.scrollTop,
+      anchorTop: nextAnchorRect.top,
+      anchorBottom: nextAnchorRect.bottom,
+      viewportTop: nextViewportRect.top,
+      viewportBottom: nextViewportRect.bottom,
+      anchorCenter: nextAnchorRect.top + nextAnchorRect.height / 2,
+      viewportCenter: nextViewportRect.top + nextViewportRect.height / 2,
+    };
+  })()`);
+  assert(centeredAnchor?.ok, `Unable to center flow anchor section before insertion: ${JSON.stringify(centeredAnchor)}`);
+  await sleep(150);
+
+  await clickControlBySelector(client, '[data-component-add="section"]', 'root section add');
+  await waitForEditorMutationReady(client, 'after root section overlap insertion');
+
+  let insertedState = null;
+  let insertedId = '';
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const selected = document.querySelector('[data-element-id][data-selected-ids]');
+      return {
+        id: selected?.getAttribute('data-element-id') || '',
+        selectedIds: selected?.getAttribute('data-selected-ids') || '',
+        text: selected?.textContent?.slice(0, 200) || '',
+      };
+    })()`);
+    if (selected?.id && !selected.id.startsWith('smoke-')) {
+      insertedId = selected.id;
+      insertedState = (await readEditorElementState(client, [insertedId]))[insertedId];
+      break;
+    }
+    await sleep(150);
+  }
+  assert(insertedId && insertedState, `Inserted root section did not become selected: ${JSON.stringify({ insertedId, insertedState })}`);
+
+  const after = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after', insertedId]);
+  const expectedAfterY = beforeAfter.y + insertedState.height;
+
+  assert(
+    Math.abs(insertedState.y - expectedInsertedY) <= 1 &&
+      Math.abs(after[insertedId].y - expectedInsertedY) <= 1,
+    `Inserted root section did not snap below overlapping flow section: ${JSON.stringify({ before, insertedId, insertedState, expectedInsertedY, centeredAnchor })}`,
+  );
+  assert(
+    Math.abs(after['smoke-flow-after'].y - expectedAfterY) <= 1,
+    `Following flow section was not pushed by inserted section height: ${JSON.stringify({ before, after, insertedId, insertedState, expectedAfterY })}`,
+  );
+
+  await clickSave(client);
+  const expectedState = {
+    [insertedId]: after[insertedId],
+    'smoke-flow-after': after['smoke-flow-after'],
+  };
+  const persistedState = await waitForPersistedCanvasState(pageId, expectedState);
+
+  const pagePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = pagePayload.data?.page || {};
+  assert(page.slug, `Unable to read page slug after root section flow save: ${JSON.stringify(pagePayload).slice(0, 500)}`);
+  const preview = await requestPagePreview(pageId);
+  const renderPayload = await requestPublicRenderPayload(`/${page.slug}`, preview.previewToken);
+  const publicElements = renderPayload.data?.content?.elements || [];
+  const publicInserted = findCanvasElement(publicElements, insertedId);
+  const publicAfter = findCanvasElement(publicElements, 'smoke-flow-after');
+
+  assert(publicInserted, `Public render payload missing inserted root section ${insertedId}: ${JSON.stringify(publicElements).slice(0, 1000)}`);
+  assert(publicAfter, `Public render payload missing following flow section: ${JSON.stringify(publicElements).slice(0, 1000)}`);
+  assert(
+    Math.abs(publicInserted.y - expectedInsertedY) <= 1 &&
+      Math.abs(publicAfter.y - expectedAfterY) <= 1,
+    `Public render did not preserve root section overlap insertion flow: ${JSON.stringify({ insertedId, publicInserted, publicAfter, expectedInsertedY, expectedAfterY })}`,
+  );
+
+  return {
+    before,
+    insertedId,
+    insertedState,
+    after,
+    expectedInsertedY,
+    expectedAfterY,
+    persistedState,
+    publicState: {
+      [insertedId]: {
+        x: publicInserted.x,
+        y: publicInserted.y,
+        width: publicInserted.width,
+        height: publicInserted.height,
+      },
+      'smoke-flow-after': {
+        x: publicAfter.x,
+        y: publicAfter.y,
+        width: publicAfter.width,
+        height: publicAfter.height,
+      },
+    },
+  };
+};
+
 const testCollectionDataBindingControls = async (client, collectionId) => {
   await selectLayerById(client, 'smoke-heading');
   const readDataBindingActions = async (testIds) => evaluate(client, `(() => {
@@ -26358,7 +26558,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -26520,6 +26720,19 @@ const main = async () => {
         mode: 'reusable-section',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         syncedReusableSection,
+      }, null, 2));
+      return;
+    }
+
+    if (SECTION_FLOW_SMOKE) {
+      assert(tempPageId, 'Section flow smoke requires an internally created smoke page');
+      const sectionFlow = await testRootSectionOverlapInsertionFlow(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'section-flow',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        sectionFlow,
       }, null, 2));
       return;
     }

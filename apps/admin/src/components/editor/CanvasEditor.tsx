@@ -1119,6 +1119,36 @@ const isRootSectionFlowElement = (element: CanvasElement): boolean => (
 
 const elementBottom = (element: CanvasElement): number => element.y + element.height;
 
+const snapRootSectionInsertionsToFlowBoundary = (
+  rootElements: CanvasElement[],
+  insertedElements: CanvasElement[],
+): CanvasElement[] => {
+  const insertedFlowElements = insertedElements.filter(isRootSectionFlowElement);
+  if (insertedFlowElements.length === 0) {
+    return insertedElements;
+  }
+
+  const insertionTop = Math.min(...insertedFlowElements.map((element) => element.y));
+  const overlappingFlowElement = rootElements
+    .filter(isRootSectionFlowElement)
+    .filter((element) => element.y < insertionTop && elementBottom(element) > insertionTop)
+    .sort((left, right) => elementBottom(right) - elementBottom(left))[0];
+
+  if (!overlappingFlowElement) {
+    return insertedElements;
+  }
+
+  const deltaY = Math.max(0, Math.round(elementBottom(overlappingFlowElement) - insertionTop));
+  if (deltaY === 0) {
+    return insertedElements;
+  }
+
+  return insertedElements.map((element) => ({
+    ...element,
+    y: Math.max(0, Math.round(element.y + deltaY)),
+  }));
+};
+
 const applyRootSectionFlow = (
   previousRootElements: CanvasElement[],
   nextRootElements: CanvasElement[],
@@ -1188,12 +1218,13 @@ function applyRootSectionInsertionFlow(
   rootElements: CanvasElement[],
   insertedElements: CanvasElement[],
 ): CanvasElement[] {
-  const insertedFlowElements = insertedElements
+  const boundarySnappedInsertedElements = snapRootSectionInsertionsToFlowBoundary(rootElements, insertedElements);
+  const insertedFlowElements = boundarySnappedInsertedElements
     .filter(isRootSectionFlowElement)
     .sort((left, right) => left.y - right.y);
 
   if (insertedFlowElements.length === 0) {
-    return [...rootElements, ...insertedElements];
+    return [...rootElements, ...boundarySnappedInsertedElements];
   }
 
   const shiftedRootElements = rootElements.map((element) => {
@@ -1215,7 +1246,7 @@ function applyRootSectionInsertionFlow(
     };
   });
 
-  return [...shiftedRootElements, ...insertedElements];
+  return [...shiftedRootElements, ...boundarySnappedInsertedElements];
 }
 
 const mapElementsById = (elements: CanvasElement[], map = new Map<string, CanvasElement>()) => {
