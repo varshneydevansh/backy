@@ -456,10 +456,16 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('() => activeSite?.id || activeSiteId') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-manage`}') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-domains`}') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-help`}') &&
       sidebarSource.includes('data-target-site-id={activeSiteRouteId}') &&
       sidebarSource.includes('const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`') &&
       sidebarSource.includes('const activeSiteSwitchStatus = `Switch active site without signing out. Currently ${activeSiteName}.`') &&
+      sidebarSource.includes('const activeSiteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`') &&
+      sidebarSource.includes("const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : 'managed-host';") &&
       sidebarSource.includes('data-site-switcher-discovery="visible-site-select-no-signout"') &&
+      sidebarSource.includes('data-active-site-domain-state={activeSiteDomainState}') &&
+      sidebarSource.includes('data-active-site-domain-label={activeSiteDomainLabel}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-site-switcher-label`}') &&
       sidebarSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
       sidebarSource.includes('const target = getSiteSwitchTarget({') &&
@@ -647,7 +653,10 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('data-testid="header-site-switcher-status"') &&
       headerSource.includes('data-testid="header-site-switcher-shell"') &&
       headerSource.includes('data-testid="header-site-switcher"') &&
+      headerSource.includes('data-testid="header-active-site-domains"') &&
       headerSource.includes('data-active-site-id={activeSiteId}') &&
+      headerSource.includes('data-active-site-domain-state={activeSiteDomainState}') &&
+      headerSource.includes('const siteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`') &&
       headerSource.includes('onChange={(event) => switchActiveSite(event.target.value)}') &&
       headerSource.includes('aria-controls="admin-mobile-sidebar-navigation"') &&
       headerSource.includes("const mobileNavigationStatusId = 'header-mobile-navigation-status';") &&
@@ -2559,6 +2568,11 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const activeSite = document.querySelector('[data-testid="admin-sidebar-active-site"]');
       const activeSiteSwitcher = document.querySelector('[data-testid="admin-sidebar-site-switcher"]');
       const activeSiteSwitcherLabel = document.querySelector('[data-testid="admin-sidebar-site-switcher-label"]');
+      const activeSiteDiscoveryLinks = document.querySelector('[data-testid="admin-sidebar-active-site-discovery-links"]');
+      const activeSiteDomains = document.querySelector('[data-testid="admin-sidebar-active-site-domains"]');
+      const activeSiteHelp = document.querySelector('[data-testid="admin-sidebar-active-site-help"]');
+      const headerSiteShell = document.querySelector('[data-testid="header-site-switcher-shell"]');
+      const headerSiteDomains = document.querySelector('[data-testid="header-active-site-domains"]');
       const shellRect = shell?.getBoundingClientRect();
       const sidebarRect = sidebar?.getBoundingClientRect();
       const navRect = nav?.getBoundingClientRect();
@@ -2584,6 +2598,11 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const quickCreatePermissionSource = quickCreate?.getAttribute('data-permission-source') || '';
       const quickCreatePermissionSyncState = quickCreate?.getAttribute('data-permission-sync-state') || '';
       const activeSiteSwitchStatus = activeSite?.getAttribute('data-action-status') || '';
+      const activeSiteDomainState = activeSite?.getAttribute('data-active-site-domain-state') || '';
+      const activeSiteDomainLabel = activeSite?.getAttribute('data-active-site-domain-label') || '';
+      const activeSiteDomainsStatus = activeSiteDomains?.getAttribute('data-action-status') || '';
+      const activeSiteHelpStatus = activeSiteHelp?.getAttribute('data-action-status') || '';
+      const headerSiteDomainStatus = headerSiteDomains?.getAttribute('data-action-status') || '';
       const permissionSyncStateReady = [
         'synced',
         'syncing-role-defaults',
@@ -2630,10 +2649,33 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           activeSite instanceof HTMLElement &&
           activeSite.getAttribute('data-site-switcher-discovery') === 'visible-site-select-no-signout' &&
           /Switch active site without signing out/.test(activeSiteSwitchStatus) &&
+          /Open domain and subdomain setup/.test(activeSiteSwitchStatus) &&
+          ['custom-domain', 'managed-host'].includes(activeSiteDomainState) &&
+          activeSiteDomainLabel.length > 0 &&
           activeSiteSwitcher instanceof HTMLSelectElement &&
           /Switch active site without signing out/.test(activeSiteSwitcher.getAttribute('aria-label') || '') &&
           activeSiteSwitcherLabel instanceof HTMLElement &&
           activeSiteSwitcherLabel.textContent?.trim() === 'Site' &&
+          activeSiteDiscoveryLinks instanceof HTMLElement &&
+          activeSiteDiscoveryLinks.getAttribute('data-active-site-domain-state') === activeSiteDomainState &&
+          activeSiteDomains instanceof HTMLAnchorElement &&
+          activeSiteDomains.href.includes('/sites/') &&
+          activeSiteDomains.href.includes('#site-domain') &&
+          activeSiteDomains.getAttribute('data-target-site-id') &&
+          activeSiteDomains.getAttribute('data-active-site-domain-state') === activeSiteDomainState &&
+          activeSiteDomains.textContent?.trim() === 'Domains' &&
+          /Open domain and subdomain setup/.test(activeSiteDomainsStatus) &&
+          activeSiteHelp instanceof HTMLAnchorElement &&
+          activeSiteHelp.href.includes('/help') &&
+          activeSiteHelp.href.includes('siteId=') &&
+          /Help available for site switching, domains, and subdomains/.test(activeSiteHelpStatus) &&
+          headerSiteShell instanceof HTMLElement &&
+          headerSiteShell.getAttribute('data-active-site-domain-state') === activeSiteDomainState &&
+          headerSiteDomains instanceof HTMLAnchorElement &&
+          headerSiteDomains.href.includes('/sites/') &&
+          headerSiteDomains.href.includes('#site-domain') &&
+          headerSiteDomains.getAttribute('data-active-site-domain-state') === activeSiteDomainState &&
+          /Open domain and subdomain setup/.test(headerSiteDomainStatus) &&
           quickCreate instanceof HTMLElement &&
           quickCreateStatus instanceof HTMLElement &&
           quickCreate.getAttribute('aria-describedby') === quickCreateStatus.id &&
@@ -2747,6 +2789,15 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         quickCreatePermissionSource,
         quickCreatePermissionSyncState,
         activeSiteSwitchStatus,
+        activeSiteDomainState,
+        activeSiteDomainLabel,
+        activeSiteDomainsHref: activeSiteDomains instanceof HTMLAnchorElement ? activeSiteDomains.href : '',
+        activeSiteDomainsStatus,
+        activeSiteHelpHref: activeSiteHelp instanceof HTMLAnchorElement ? activeSiteHelp.href : '',
+        activeSiteHelpStatus,
+        headerSiteDomainState: headerSiteShell?.getAttribute('data-active-site-domain-state') || '',
+        headerSiteDomainsHref: headerSiteDomains instanceof HTMLAnchorElement ? headerSiteDomains.href : '',
+        headerSiteDomainStatus,
         activeSiteSwitcherLabel: activeSiteSwitcherLabel?.textContent?.trim() || '',
         activeSiteSwitcherAria: activeSiteSwitcher?.getAttribute('aria-label') || '',
         quickCreateActionState: quickCreate?.getAttribute('data-action-state') || '',

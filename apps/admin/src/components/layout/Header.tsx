@@ -138,6 +138,11 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     () => activeSite?.id || activeSiteId,
     [activeSite?.id, activeSiteId],
   );
+  const activeSiteDetailHref = `/sites/${encodeURIComponent(activeSiteRouteId)}`;
+  const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : 'managed-host';
+  const activeSiteDomainLabel = activeSite?.customDomain
+    ? `Custom domain: ${activeSite.customDomain}`
+    : `Managed Backy host: ${activeSite?.slug || activeSiteId}.backy.app`;
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const profileUser = useMemo(
     () => {
@@ -631,6 +636,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     : 'Profile available. Settings available. Sign out unavailable: No signed-in admin session.';
   const siteSwitchStatusId = 'header-site-switcher-status';
   const siteSwitchStatus = `${activeSiteName} is active. Switch site from this control without signing out.`;
+  const siteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`;
 
   const loadGlobalSearch = useCallback(async () => {
     const loadKey = searchLoadKey;
@@ -1071,6 +1077,8 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
             data-active-site-name={activeSiteName}
             data-active-site-meta={activeSiteMeta}
             data-active-site-status={activeSiteStatus}
+            data-active-site-domain-state={activeSiteDomainState}
+            data-active-site-domain-label={activeSiteDomainLabel}
           >
             <span
               className={cn(
@@ -1115,6 +1123,20 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
                 <ChevronDown className="pointer-events-none absolute right-0 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               </div>
             </div>
+            <a
+              href={`${activeSiteDetailHref}#site-domain`}
+              aria-label={siteDomainStatus}
+              title={siteDomainStatus}
+              className="inline-flex min-h-8 shrink-0 items-center rounded-md border border-border px-2 text-xs font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground focus-ring"
+              data-testid="header-active-site-domains"
+              data-target-site-id={activeSiteRouteId}
+              data-active-site-id={activeSiteId}
+              data-active-site-domain-state={activeSiteDomainState}
+              data-action-state="ready"
+              data-action-status={siteDomainStatus}
+            >
+              Domains
+            </a>
           </div>
         )}
       </div>

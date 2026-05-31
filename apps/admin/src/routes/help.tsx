@@ -61,6 +61,7 @@ const HELP_TOPICS: HelpTopic[] = [
       'The active site id travels through Backy routes as siteId so Pages, Blog, Media, Forms, Products, and API handoff stay scoped to that website.',
       'The Site dropdown sits directly under the Backy logo in the left sidebar; choosing a different site keeps you on the equivalent workspace when that route supports site scope.',
       'Use the Manage link beside Backy to open the active site command center, readiness checks, domains, subdomains, and frontend handoff.',
+      'Use the Domains link under the sidebar Site selector, or the Domains shortcut beside the desktop header Site selector, to jump straight to domain and subdomain DNS setup for the active site.',
       'Opening Sites shows all workspaces. Selecting a site opens its command center, readiness checks, domain state, and frontend handoff.',
       'The Backy logo still returns to the dashboard for the currently selected site.',
     ],

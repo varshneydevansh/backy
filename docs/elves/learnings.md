@@ -45,6 +45,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Inspector bulk-selection UX should make parent scope explicit. When selection spans multiple parent scopes, command metadata should carry the exact reason instead of only disabling group/align/delete controls with generic same-parent wording.
 - [2026-05-31] Layer maps need selection visibility feedback beside filters. If selected layers are hidden by the active layer scope/search, the panel should say so and expose selected-visible/filtered counts for rendered smokes.
 - [2026-05-31] Every `BACKY_EDITOR_*_SMOKE` mode in the editor smoke runner should have a package script unless it is a debug-only modifier recorded in the coverage exclusions. Otherwise coverage can pass source ownership while the behavior is not runnable by name.
+- [2026-05-31] Site switching and domain setup should be one visible flow in shared chrome. Keep a no-signout site selector, a direct Domains/subdomains target, and machine-readable domain state together so users do not treat site switching, Sites, and DNS setup as separate hidden workflows.
 
 ## Product and Domain Invariants
 

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 16:00 IST
+- **Last updated:** 2026-05-31 16:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 16:26 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** active-site switching now visibly leads to domain/subdomain setup without logout
+
+**What changed:**
+- `apps/admin/src/components/layout/Sidebar.tsx`: the active-site selector now exposes domain state metadata, a visible Domains link to the active site domain panel, and a site-scoped Help link beside the no-signout switcher.
+- `apps/admin/src/components/layout/Header.tsx`: the desktop header site selector now includes a Domains shortcut with custom-domain/managed-host state metadata.
+- `apps/admin/src/routes/help.tsx`: the switch-sites Help topic now names the sidebar and header Domains shortcuts as the path for custom-domain and subdomain DNS setup.
+- `apps/admin/scripts/login-smoke.mjs` and `apps/admin/scripts/help-smoke.mjs`: expanded source/rendered coverage to prove the new controls are present, site-scoped, and describe domain/subdomain setup.
+
+**Commands run:**
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `npm --workspace @backy-cms/admin run test:help` -> PASS.
+- `npm --workspace @backy-cms/admin run test:help-rendered` -> PASS.
+- `npm --workspace @backy-cms/admin run test:sites` -> PASS.
+- `npm --workspace @backy-cms/admin run test:site-detail` -> PASS.
+- `npm --workspace @backy-cms/admin run test:login` -> PASS on rerun; first attempt hit an early local `fetch failed`/`ECONNRESET` before chrome assertions.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this site switcher/domain discoverability slice.
+2. Continue Batch 5 with the next visible admin/editor friction point, or Vercel project linkage if explicitly requested.
 
 ## 2026-05-31 16:00 IST
 

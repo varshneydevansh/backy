@@ -124,6 +124,11 @@ export function Sidebar({
     () => activeSite?.id || activeSiteId,
     [activeSite?.id, activeSiteId],
   );
+  const activeSiteDetailHref = `/sites/${encodeURIComponent(activeSiteRouteId)}`;
+  const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : 'managed-host';
+  const activeSiteDomainLabel = activeSite?.customDomain
+    ? `Custom domain: ${activeSite.customDomain}`
+    : `Managed Backy host: ${activeSite?.slug || activeSiteId}.backy.app`;
   const activeSiteSearch = useMemo(() => (
     { siteId: activeSiteId }
   ), [activeSiteId]);
@@ -260,6 +265,7 @@ export function Sidebar({
   const quickCreateActionStatus = `${quickCreateActions.length} create shortcut${quickCreateActions.length === 1 ? '' : 's'} available for ${activeSiteName}. ${hiddenQuickCreateCount} hidden by role or permissions.`;
   const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`;
   const activeSiteSwitchStatus = `Switch active site without signing out. Currently ${activeSiteName}.`;
+  const activeSiteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`;
   const getQuickCreateIntent = (action: (typeof SIDEBAR_QUICK_CREATE_ACTIONS)[number]) => action.search?.quickCreate || action.id;
   const getRailDescribedBy = (baseId: string) => (
     collapsed ? `${baseId} ${railTooltipId}` : baseId
@@ -478,6 +484,8 @@ export function Sidebar({
           data-active-site-id={activeSiteId}
           data-active-site-name={activeSiteName}
           data-active-site-meta={activeSiteMeta}
+          data-active-site-domain-state={activeSiteDomainState}
+          data-active-site-domain-label={activeSiteDomainLabel}
           data-site-switcher-mode={collapsed ? 'brand-link-only' : 'inline-select'}
         >
           {/* Logo Icon */}
@@ -523,7 +531,9 @@ export function Sidebar({
                 className="mt-1 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
                 data-site-switcher-discovery="visible-site-select-no-signout"
-                data-action-status={`${activeSiteSwitchStatus} ${activeSiteManageStatus}`}
+                data-active-site-domain-state={activeSiteDomainState}
+                data-active-site-domain-label={activeSiteDomainLabel}
+                data-action-status={`${activeSiteSwitchStatus} ${activeSiteManageStatus} ${activeSiteDomainStatus}`}
               >
                 <span
                   className={cn(
@@ -560,6 +570,40 @@ export function Sidebar({
                   })}
                 </select>
                 <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+              </div>
+              <div
+                className="mt-1 flex min-w-0 items-center justify-between gap-2 px-1 text-[11px] leading-4 text-muted-foreground"
+                data-testid={`${testIdPrefix}-active-site-discovery-links`}
+                data-active-site-domain-state={activeSiteDomainState}
+                data-active-site-domain-label={activeSiteDomainLabel}
+              >
+                <a
+                  href={`${activeSiteDetailHref}#site-domain`}
+                  aria-label={activeSiteDomainStatus}
+                  title={activeSiteDomainStatus}
+                  className="truncate rounded px-1 font-medium text-primary hover:bg-primary/10 focus-ring"
+                  data-testid={`${testIdPrefix}-active-site-domains`}
+                  data-target-site-id={activeSiteRouteId}
+                  data-active-site-id={activeSiteId}
+                  data-active-site-domain-state={activeSiteDomainState}
+                  data-action-state="ready"
+                  data-action-status={activeSiteDomainStatus}
+                >
+                  Domains
+                </a>
+                <Link
+                  to="/help"
+                  search={activeSiteSearch}
+                  onClick={onNavigate}
+                  aria-label={`Open Help for site switching, domains, and subdomains for ${activeSiteName}`}
+                  className="shrink-0 rounded px-1 font-medium hover:bg-accent focus-ring"
+                  data-testid={`${testIdPrefix}-active-site-help`}
+                  data-target-site-id={activeSiteId}
+                  data-action-state="ready"
+                  data-action-status={`Help available for site switching, domains, and subdomains for ${activeSiteName}.`}
+                >
+                  Help
+                </Link>
               </div>
             </div>
           )}
