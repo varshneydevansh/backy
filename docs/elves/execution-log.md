@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 10:25 IST
+- **Last updated:** 2026-05-31 11:08 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 11:08 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; the broad editor smoke is green again after the nav child-link layer check was made deterministic; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added gated `BACKY_EDITOR_TRACE_SMOKE=1` step labels and included the current smoke step in CDP timeout errors.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: changed the nav generated-child-link selection check from `requestAnimationFrame` waits inside `Runtime.evaluate` to bounded timer settles, preventing long default runs from hanging when Chrome throttles frame callbacks.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_TRACE_SMOKE=1 BACKY_CDP_COMMAND_TIMEOUT_MS=90000 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this broad editor-smoke determinism slice.
+2. Continue Batch 5 on the next highest-friction UX/editor surface.
 
 ## 2026-05-31 10:25 IST
 

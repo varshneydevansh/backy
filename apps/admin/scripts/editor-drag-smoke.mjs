@@ -42,12 +42,22 @@ const PRIMARY_ACTION_STATUS_SMOKE = process.env.BACKY_EDITOR_PRIMARY_ACTION_STAT
 const PREVIEW_LINK_SMOKE = process.env.BACKY_EDITOR_PREVIEW_LINK_SMOKE === '1';
 const REVISION_NAVIGATION_SMOKE = process.env.BACKY_EDITOR_REVISION_NAVIGATION_SMOKE === '1';
 const COMMAND_PALETTE_SMOKE = process.env.BACKY_EDITOR_COMMAND_PALETTE_SMOKE === '1';
+const TRACE_SMOKE = process.env.BACKY_EDITOR_TRACE_SMOKE === '1';
 const parsedStressIterations = Number(process.env.BACKY_EDITOR_STRESS_ITERATIONS || 10);
 const STRESS_ITERATIONS = Math.max(4, Math.min(Number.isFinite(parsedStressIterations) ? parsedStressIterations : 10, 40));
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_CDP_PORT || 9365);
 const CDP_COMMAND_TIMEOUT_MS = Math.max(5000, Number(process.env.BACKY_CDP_COMMAND_TIMEOUT_MS || 45000));
 const SCREENSHOT_PATH = process.env.BACKY_EDITOR_DRAG_SCREENSHOT || path.join(os.tmpdir(), 'backy-editor-drag-smoke.png');
+let currentSmokeStep = 'startup';
+
+const traceSmokeStep = (step) => {
+  currentSmokeStep = step;
+  if (TRACE_SMOKE) {
+    console.error(`[editor-smoke] ${new Date().toISOString()} ${step}`);
+  }
+};
+
 const EDITOR_SCREENSHOT_THRESHOLDS = {
   minClipWidth: 520,
   minClipHeight: 420,
@@ -3597,7 +3607,7 @@ const connectCdp = (webSocketDebuggerUrl) => {
         const commandDescription = describeCdpCommand(method, params);
         const timeout = setTimeout(() => {
           pending.delete(messageId);
-          reject(new Error(`CDP command ${commandDescription} timed out after ${CDP_COMMAND_TIMEOUT_MS}ms`));
+          reject(new Error(`CDP command ${commandDescription} timed out after ${CDP_COMMAND_TIMEOUT_MS}ms during ${currentSmokeStep}`));
         }, CDP_COMMAND_TIMEOUT_MS);
 
         pending.set(messageId, { resolve, reject, timeout });
@@ -5467,6 +5477,7 @@ const ensurePropertySectionExpanded = async (client, sectionTitle, expectedContr
 
 const selectLayerById = async (client, elementId) => {
   const layerSelector = `[data-layer-id="${elementId}"]`;
+  traceSmokeStep(`select-layer:${elementId}:open-layers`);
   const layersReady = await evaluate(client, `(() => {
     const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
     if (!(layersButton instanceof HTMLButtonElement)) {
@@ -5485,6 +5496,7 @@ const selectLayerById = async (client, elementId) => {
 
   let clicked = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
+    traceSmokeStep(`select-layer:${elementId}:click-row:${attempt + 1}`);
     const clickResult = await evaluate(client, `(() => {
     const layer = document.querySelector(${JSON.stringify(layerSelector)});
     if (!(layer instanceof HTMLElement)) {
@@ -5506,6 +5518,7 @@ const selectLayerById = async (client, elementId) => {
     }
 
     await sleep(100);
+    traceSmokeStep(`select-layer:${elementId}:verify-selection:${attempt + 1}`);
     clicked = await evaluate(client, `(() => {
     const layout = document.querySelector('[data-testid="editor-shell-layout"]');
     const selectedId = layout?.getAttribute('data-selected-id') || '';
@@ -5520,6 +5533,7 @@ const selectLayerById = async (client, elementId) => {
 
   assert(clicked?.ok, `Unable to select layer ${elementId}: ${JSON.stringify(clicked)}`);
   await sleep(250);
+  traceSmokeStep(`select-layer:${elementId}:properties-panel`);
   await switchToPropertiesPanel(client);
 };
 
@@ -24010,14 +24024,15 @@ const testNavBehaviorControls = async (client) => {
   assert(state.previewNavigationSource === 'site-primary' && state.previewNavigationBinding === 'site.navigation.primary', `Nav preview binding metadata mismatch: ${JSON.stringify(state)}`);
   assert(state.links.length === 3 && state.links[0].label === 'Docs' && state.links[1].label === 'Pricing', `Nav links mismatch: ${JSON.stringify(state)}`);
 
+  traceSmokeStep('nav-behavior:child-layer-selection');
   const navChildLayerSelection = await evaluate(client, `(async () => {
-    const raf = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
     const layersButton = document.querySelector('[data-testid="editor-tab-layers"]');
     if (!(layersButton instanceof HTMLButtonElement)) {
       return { ok: false, reason: 'missing-layers-tab' };
     }
     layersButton.click();
-    await raf();
+    await settle();
 
     const navRow = document.querySelector('[data-layer-id="smoke-nav"]');
     if (!(navRow instanceof HTMLElement)) {
@@ -24031,7 +24046,7 @@ const testNavBehaviorControls = async (client) => {
     const expandButton = document.querySelector('[data-layer-action="toggle-expand"][data-layer-action-id="smoke-nav"]');
     if (navRow.getAttribute('aria-expanded') === 'false' && expandButton instanceof HTMLButtonElement) {
       expandButton.click();
-      await raf();
+      await settle();
     }
 
     const rows = Array.from(document.querySelectorAll('[role="treeitem"][data-layer-id]'));
@@ -24074,8 +24089,8 @@ const testNavBehaviorControls = async (client) => {
     }
 
     targetRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await raf();
-    await raf();
+    await settle();
+    await settle();
 
     const selectedRows = Array.from(document.querySelectorAll('[data-layer-selected="true"]'))
       .map((node) => node.getAttribute('data-layer-id'))
