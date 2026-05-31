@@ -1497,14 +1497,21 @@ const assertCanvasSelectionInfoSource = () => {
       editorSource.includes('insertedFlowElements.length === changedFlowElements.length') &&
       editorSource.includes('const insertedIds = new Set(insertedElements.map((element) => element.id));') &&
       editorSource.includes('return applyRootSectionInsertionFlow(') &&
+      editorSource.includes('const resolveDerivedRootSectionFlowChange = (') &&
+      editorSource.includes('const derivedFlowChange = resolveDerivedRootSectionFlowChange(previousById, changedFlowElements);') &&
+      editorSource.includes('const baselineY = previousElement?.y ?? element.y;') &&
       editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, newElements), newElements[0].id)') &&
       editorSource.includes('updateElementsWithHistory(applyRootSectionInsertionFlow(elements, [newElement]), newElement.id)') &&
       smokeSource.includes('const testRootSectionOverlapInsertionFlow = async (client, pageId) =>') &&
+      smokeSource.includes('const testRootSectionResizeReflow = async (client, pageId) =>') &&
       smokeSource.includes("const before = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after']);") &&
       smokeSource.includes("await clickControlBySelector(client, '[data-component-add=\"section\"]', 'root section add');") &&
+      smokeSource.includes("await resizeElement(client, 'smoke-flow-anchor', 0, 80") &&
       smokeSource.includes('expectedInsertedY = beforeAnchor.y + beforeAnchor.height') &&
       smokeSource.includes('expectedAfterY = beforeAfter.y + insertedState.height') &&
-      smokeSource.includes('const publicInserted = findCanvasElement(publicElements, insertedId);'),
+      smokeSource.includes('expectedAfterY = beforeAfter.y + heightDelta') &&
+      smokeSource.includes('const publicInserted = findCanvasElement(publicElements, insertedId);') &&
+      smokeSource.includes("const publicAnchor = findCanvasElement(publicElements, 'smoke-flow-anchor');"),
     'Editor root sections, headers, footers, and nav bars must push following root layers when resized, moved, inserted singly, inserted inside an existing flow section, or inserted as multi-root reusable sections.',
   );
 };
@@ -21223,6 +21230,92 @@ const testRootSectionOverlapInsertionFlow = async (client, pageId) => {
   };
 };
 
+const testRootSectionResizeReflow = async (client, pageId) => {
+  await setCanvasZoomSlider(client, 100, 'before root section resize reflow');
+  const before = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after']);
+  const beforeAnchor = before['smoke-flow-anchor'];
+  const beforeAfter = before['smoke-flow-after'];
+
+  const resize = await resizeElement(client, 'smoke-flow-anchor', 0, 80, {
+    handle: 's',
+    assert: ({ before: visualBefore, after: visualAfter }) => {
+      assert(
+        visualAfter.height > visualBefore.height + 48,
+        `Root section south resize did not visibly increase height: before ${visualBefore.height}, after ${visualAfter.height}`,
+      );
+      assert(
+        Math.abs(visualAfter.width - visualBefore.width) < 3,
+        `Root section south resize should not change width: before ${visualBefore.width}, after ${visualAfter.width}`,
+      );
+    },
+  });
+  await waitForEditorMutationReady(client, 'after root section resize reflow');
+
+  const after = await readEditorElementState(client, ['smoke-flow-anchor', 'smoke-flow-after']);
+  const heightDelta = after['smoke-flow-anchor'].height - beforeAnchor.height;
+  const expectedAfterY = beforeAfter.y + heightDelta;
+
+  assert(
+    heightDelta > 48,
+    `Root section resize did not produce a meaningful authored height delta: ${JSON.stringify({ before, after, resize })}`,
+  );
+  assert(
+    Math.abs(after['smoke-flow-anchor'].y - beforeAnchor.y) <= 1,
+    `Root section south resize changed its top edge unexpectedly: ${JSON.stringify({ before, after, resize })}`,
+  );
+  assert(
+    Math.abs(after['smoke-flow-after'].y - expectedAfterY) <= 1,
+    `Following flow section was not pushed by resized root section height: ${JSON.stringify({ before, after, heightDelta, expectedAfterY, resize })}`,
+  );
+
+  await clickSave(client);
+  const expectedState = {
+    'smoke-flow-anchor': after['smoke-flow-anchor'],
+    'smoke-flow-after': after['smoke-flow-after'],
+  };
+  const persistedState = await waitForPersistedCanvasState(pageId, expectedState);
+
+  const pagePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const page = pagePayload.data?.page || {};
+  assert(page.slug, `Unable to read page slug after root section resize flow save: ${JSON.stringify(pagePayload).slice(0, 500)}`);
+  const preview = await requestPagePreview(pageId);
+  const renderPayload = await requestPublicRenderPayload(`/${page.slug}`, preview.previewToken);
+  const publicElements = renderPayload.data?.content?.elements || [];
+  const publicAnchor = findCanvasElement(publicElements, 'smoke-flow-anchor');
+  const publicAfter = findCanvasElement(publicElements, 'smoke-flow-after');
+
+  assert(publicAnchor, `Public render payload missing resized root section: ${JSON.stringify(publicElements).slice(0, 1000)}`);
+  assert(publicAfter, `Public render payload missing following flow section after resize: ${JSON.stringify(publicElements).slice(0, 1000)}`);
+  assert(
+    Math.abs(publicAnchor.height - after['smoke-flow-anchor'].height) <= 1 &&
+      Math.abs(publicAfter.y - expectedAfterY) <= 1,
+    `Public render did not preserve root section resize flow: ${JSON.stringify({ publicAnchor, publicAfter, expectedAfterY, after })}`,
+  );
+
+  return {
+    before,
+    resize,
+    after,
+    heightDelta,
+    expectedAfterY,
+    persistedState,
+    publicState: {
+      'smoke-flow-anchor': {
+        x: publicAnchor.x,
+        y: publicAnchor.y,
+        width: publicAnchor.width,
+        height: publicAnchor.height,
+      },
+      'smoke-flow-after': {
+        x: publicAfter.x,
+        y: publicAfter.y,
+        width: publicAfter.width,
+        height: publicAfter.height,
+      },
+    },
+  };
+};
+
 const testCollectionDataBindingControls = async (client, collectionId) => {
   await selectLayerById(client, 'smoke-heading');
   const readDataBindingActions = async (testIds) => evaluate(client, `(() => {
@@ -26726,13 +26819,17 @@ const main = async () => {
 
     if (SECTION_FLOW_SMOKE) {
       assert(tempPageId, 'Section flow smoke requires an internally created smoke page');
-      const sectionFlow = await testRootSectionOverlapInsertionFlow(client, tempPageId);
+      const resizeFlow = await testRootSectionResizeReflow(client, tempPageId);
+      const insertionFlow = await testRootSectionOverlapInsertionFlow(client, tempPageId);
 
       console.log(JSON.stringify({
         ok: true,
         mode: 'section-flow',
         url: `${ADMIN_BASE_URL}${editorPath}`,
-        sectionFlow,
+        sectionFlow: {
+          resizeFlow,
+          insertionFlow,
+        },
       }, null, 2));
       return;
     }

@@ -1118,6 +1118,10 @@ const isRootSectionFlowElement = (element: CanvasElement): boolean => (
 );
 
 const elementBottom = (element: CanvasElement): number => element.y + element.height;
+const roundedCanvasValue = (value: number): number => Math.round(Number.isFinite(value) ? value : 0);
+const canvasValuesMatch = (left: number, right: number): boolean => (
+  Math.abs(roundedCanvasValue(left) - roundedCanvasValue(right)) <= 1
+);
 
 const snapRootSectionInsertionsToFlowBoundary = (
   rootElements: CanvasElement[],
@@ -1147,6 +1151,58 @@ const snapRootSectionInsertionsToFlowBoundary = (
     ...element,
     y: Math.max(0, Math.round(element.y + deltaY)),
   }));
+};
+
+const resolveDerivedRootSectionFlowChange = (
+  previousById: Map<string, CanvasElement>,
+  changedFlowElements: CanvasElement[],
+): {
+  changedElement: CanvasElement;
+  previousElement: CanvasElement;
+  deltaY: number;
+  flowBoundary: number;
+} | null => {
+  const candidates = changedFlowElements
+    .map((changedElement) => {
+      const previousElement = previousById.get(changedElement.id);
+      if (!previousElement) {
+        return null;
+      }
+
+      const deltaY = roundedCanvasValue(elementBottom(changedElement) - elementBottom(previousElement));
+      if (deltaY === 0) {
+        return null;
+      }
+
+      const flowBoundary = elementBottom(previousElement) - 1;
+      const derivedChangesMatch = changedFlowElements.every((flowElement) => {
+        if (flowElement.id === changedElement.id) {
+          return true;
+        }
+
+        const previousFlowElement = previousById.get(flowElement.id);
+        if (!previousFlowElement || previousFlowElement.y < flowBoundary) {
+          return false;
+        }
+
+        return (
+          canvasValuesMatch(flowElement.y, previousFlowElement.y + deltaY) &&
+          canvasValuesMatch(flowElement.height, previousFlowElement.height)
+        );
+      });
+
+      return derivedChangesMatch
+        ? { changedElement, previousElement, deltaY, flowBoundary }
+        : null;
+    })
+    .filter((candidate): candidate is {
+      changedElement: CanvasElement;
+      previousElement: CanvasElement;
+      deltaY: number;
+      flowBoundary: number;
+    } => Boolean(candidate));
+
+  return candidates.length === 1 ? candidates[0] : null;
 };
 
 const applyRootSectionFlow = (
@@ -1181,6 +1237,28 @@ const applyRootSectionFlow = (
         nextRootElements.filter((element) => !insertedIds.has(element.id)),
         insertedElements,
       );
+    }
+
+    const derivedFlowChange = resolveDerivedRootSectionFlowChange(previousById, changedFlowElements);
+    if (derivedFlowChange) {
+      return nextRootElements.map((element) => {
+        if (element.id === derivedFlowChange.changedElement.id) {
+          return element;
+        }
+
+        const previousElement = previousById.get(element.id);
+        const baselineY = previousElement?.y ?? element.y;
+        if (baselineY < derivedFlowChange.flowBoundary) {
+          return element;
+        }
+
+        return {
+          ...element,
+          y: Math.max(0, roundedCanvasValue(
+            (previousElement?.y ?? element.y) + derivedFlowChange.deltaY,
+          )),
+        };
+      });
     }
 
     return nextRootElements;

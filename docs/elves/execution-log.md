@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 09:03 IST
+- **Last updated:** 2026-05-31 09:31 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 09:31 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; root section resize/reflow is now verified through editor save and public render; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: hardened root section/header/footer/nav flow when resize output arrives with already-derived sibling shifts, normalizing from the previous baseline instead of bailing out of the multi-change branch.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: extended the section-flow smoke to resize `smoke-flow-anchor`, assert `smoke-flow-after` moves by the height delta, save, reload persisted canvas state, and verify public render parity before re-running the existing overlapping insertion flow.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_SECTION_FLOW_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- Accidental `npm run test:editor-drag --workspace @backy-cms/admin -- --help` -> FAIL on default full-smoke keyboard nudge (`smoke-child-button` expected x 180, got x 170). This was not the targeted gate and should be revisited separately if the full smoke is required.
+
+**Next:**
+1. Commit and push this logical root-section resize/reflow slice.
+2. Continue Batch 5 on another high-friction release surface: layer-map/mobile behavior, preview scrolling, deployment readiness, or remaining blog/editor ergonomics.
 
 ## 2026-05-31 09:03 IST
 
