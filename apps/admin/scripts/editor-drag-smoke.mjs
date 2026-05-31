@@ -1648,6 +1648,12 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid="editor-component-category-rail"') &&
       source.includes("const ESSENTIALS_CATEGORY_ID = 'essentials'") &&
       source.includes("const SECTIONS_CATEGORY_ID = 'sections'") &&
+      source.includes("const SECTION_STARTER_ITEM_KEYS = ['hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];") &&
+      source.includes('const sectionStarterItems = useMemo(() => {') &&
+      source.includes('data-testid="editor-component-section-starter"') &&
+      source.includes('data-testid="editor-component-section-starter-browse"') &&
+      source.includes('data-testid="editor-component-section-starter-grid"') &&
+      source.includes('data-component-section-starter-item={itemKey}') &&
       source.includes("const RECENT_CATEGORY_ID = 'recent'") &&
       source.includes('const ESSENTIAL_ITEM_KEYS = new Set') &&
       source.includes('const isSectionLibraryItem = (item: ComponentLibraryItem): boolean =>') &&
@@ -1725,6 +1731,8 @@ const assertComponentLibraryEmptyStateSource = () => {
       smokeSource.includes('expandedCatalogMode') &&
       smokeSource.includes('restoredCompactCatalogMode') &&
       smokeSource.includes('viewModeControls') &&
+      smokeSource.includes('sectionStarter') &&
+      smokeSource.includes("editor-component-section-starter-add-hero-section") &&
       smokeSource.includes('lastAddHitTarget') &&
       smokeSource.includes('needsReusableSectionFixture') &&
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
@@ -15727,6 +15735,10 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
     const viewModeTiles = document.querySelector('[data-testid="editor-component-view-mode-tiles"]');
     const viewModeList = document.querySelector('[data-testid="editor-component-view-mode-list"]');
     const categoryRail = document.querySelector('[data-testid="editor-component-category-rail"]');
+    const sectionStarter = document.querySelector('[data-testid="editor-component-section-starter"]');
+    const sectionStarterGrid = document.querySelector('[data-testid="editor-component-section-starter-grid"]');
+    const sectionStarterBrowse = document.querySelector('[data-testid="editor-component-section-starter-browse"]');
+    const sectionStarterButtons = Array.from(document.querySelectorAll('[data-component-section-starter-item]'));
     const primaryCategories = document.querySelector('[data-testid="editor-component-primary-categories"]');
     const secondaryCategories = document.querySelector('[data-testid="editor-component-secondary-categories"]');
     const secondaryCategoryGrid = document.querySelector('[data-testid="editor-component-secondary-category-grid"]');
@@ -15858,6 +15870,28 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         listStatus: viewModeList?.getAttribute('data-action-status') || '',
         listDescribedBy: viewModeList?.getAttribute('aria-describedby') || '',
         storedMode: window.localStorage.getItem('backy.editor.componentLibrary.viewMode') || '',
+      },
+      sectionStarter: {
+        exists: sectionStarter instanceof HTMLElement,
+        count: sectionStarter?.getAttribute('data-component-section-starter-count') || '',
+        selected: sectionStarter?.getAttribute('data-component-section-starter-selected') || '',
+        itemIds: sectionStarterButtons.map((node) => node.getAttribute('data-component-section-starter-item') || ''),
+        browseExists: sectionStarterBrowse instanceof HTMLButtonElement,
+        browsePressed: sectionStarterBrowse?.getAttribute('aria-pressed') || '',
+        browseState: sectionStarterBrowse?.getAttribute('data-action-state') || '',
+        browseStatus: sectionStarterBrowse?.getAttribute('data-action-status') || '',
+        browseDescribedBy: sectionStarterBrowse?.getAttribute('aria-describedby') || '',
+        gridExists: sectionStarterGrid instanceof HTMLElement,
+        gridDisplay: sectionStarterGrid instanceof HTMLElement ? getComputedStyle(sectionStarterGrid).display : '',
+        buttonStates: sectionStarterButtons.map((node) => ({
+          itemId: node.getAttribute('data-component-section-starter-item') || '',
+          testId: node.getAttribute('data-testid') || '',
+          state: node.getAttribute('data-action-state') || '',
+          status: node.getAttribute('data-action-status') || '',
+          describedBy: node.getAttribute('aria-describedby') || '',
+          label: node.getAttribute('aria-label') || '',
+          text: node.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        })),
       },
       dividerAction: {
         itemExists: Boolean(dividerItem),
@@ -16676,9 +16710,40 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     `Component library action-status contract missing for library controls or divider item: ${JSON.stringify(initial)}`,
   );
   assert(
+    initial.sectionStarter.exists &&
+      initial.sectionStarter.gridExists &&
+      initial.sectionStarter.gridDisplay === 'grid' &&
+      Number(initial.sectionStarter.count) === Number(initial.summary.sections) &&
+      initial.sectionStarter.selected === 'false' &&
+      initial.sectionStarter.browseExists &&
+      initial.sectionStarter.browsePressed === 'false' &&
+      initial.sectionStarter.browseState === 'ready' &&
+      initial.sectionStarter.browseDescribedBy.includes('editor-component-library-action-status') &&
+      /quick section starters available/.test(initial.sectionStarter.browseStatus) &&
+      initial.sectionStarter.itemIds.includes('hero-section') &&
+      initial.sectionStarter.itemIds.includes('feature-grid-section') &&
+      initial.sectionStarter.itemIds.includes('latest-posts-section') &&
+      initial.sectionStarter.buttonStates.every((button) => (
+        button.state === 'ready' &&
+        button.describedBy.includes('editor-component-library-action-status') &&
+        /Add .* to canvas available from Page sections/.test(button.status)
+      )),
+    `Component library Page sections starter shelf missing visible browse/add affordances: ${JSON.stringify(initial.sectionStarter)}`,
+  );
+  assert(
     Number(initial.summary.saved) <= Number(initial.summary.savedTotal || initial.summary.saved) &&
       Number(initial.summary.savedHidden || 0) === Math.max(0, Number(initial.summary.savedTotal || 0) - Number(initial.summary.saved || 0)),
     `Saved reusable section dedupe metadata is inconsistent: ${JSON.stringify(initial.summary)}`,
+  );
+  await clickControlByTestId(client, 'editor-component-section-starter-add-hero-section');
+  await sleep(250);
+  const sectionStarterQuickAdd = await readComponentLibraryState(client, 'section starter quick add', targetReusableSectionId);
+  assert(
+    sectionStarterQuickAdd.storedRecent[0] === 'hero-section' &&
+      Number(sectionStarterQuickAdd.summary.recent) >= 1 &&
+      sectionStarterQuickAdd.summary.recentKeys.split(',').filter(Boolean)[0] === 'hero-section' &&
+      sectionStarterQuickAdd.sectionStarter.itemIds.includes('hero-section'),
+    `Page sections starter quick-add did not insert through the normal component add path: ${JSON.stringify(sectionStarterQuickAdd.sectionStarter)}`,
   );
   const dragPreview = await testComponentLibraryDragPreview(client, 'divider');
   assert(
@@ -16803,6 +16868,9 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     sectionsFiltered.summary.category === 'sections' &&
       sectionsFiltered.categories.length === 1 &&
       sectionsFiltered.categories[0].id === 'sections' &&
+      sectionsFiltered.sectionStarter.selected === 'true' &&
+      sectionsFiltered.sectionStarter.browsePressed === 'true' &&
+      sectionsFiltered.sectionStarter.browseState === 'selected' &&
       sectionsFiltered.itemIds.includes('section') &&
       sectionsFiltered.itemIds.includes('hero-section') &&
       sectionsFiltered.itemIds.includes('latest-posts-section') &&
@@ -17053,6 +17121,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
     restoredCompactCatalogMode,
     listMode,
     restoredTileMode,
+    sectionStarterQuickAdd,
     searchFiltered,
     layoutFiltered,
     allComponentsReachability,

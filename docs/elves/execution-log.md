@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 16:36 IST
+- **Last updated:** 2026-05-31 16:59 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 16:59 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** component-library section templates are now first-class editor starters
+
+**What changed:**
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`: added a persistent Page sections starter shelf above the category rail, with a direct browse action plus quick-add buttons for Hero section, Feature grid, and Latest posts section.
+- `apps/admin/src/components/editor/ComponentLibrary.tsx`: the starter shelf uses the normal component add path, recent tracking, action-status metadata, and selected-state metadata instead of a separate insertion path.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: expanded source and rendered component-library coverage to verify the shelf, section counts, action-status wiring, section selected state, and Hero quick-add behavior.
+
+**Commands run:**
+- `npm --workspace @backy-cms/admin run typecheck` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 node apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `npm --workspace @backy-cms/admin run test:editor-library` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this component-library sections discoverability slice.
+2. Continue Batch 5 with the next visible editor/admin friction point, or Vercel project linkage if explicitly requested.
 
 ## 2026-05-31 16:36 IST
 

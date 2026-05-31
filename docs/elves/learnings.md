@@ -47,6 +47,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Every `BACKY_EDITOR_*_SMOKE` mode in the editor smoke runner should have a package script unless it is a debug-only modifier recorded in the coverage exclusions. Otherwise coverage can pass source ownership while the behavior is not runnable by name.
 - [2026-05-31] Site switching and domain setup should be one visible flow in shared chrome. Keep a no-signout site selector, a direct Domains/subdomains target, and machine-readable domain state together so users do not treat site switching, Sites, and DNS setup as separate hidden workflows.
 - [2026-05-31] Custom frontend/API handoff should be discoverable from global admin search, not only from deep Help or site-detail panels. Search results should name the agent handoff and component API contract in the exact terms frontend agents need.
+- [2026-05-31] Section templates should not be discoverable only as a small category filter. Keep a persistent Page sections starter shelf with quick-add section presets that uses the same component add/recent/action-status path as normal library items.
 
 ## Product and Domain Invariants
 

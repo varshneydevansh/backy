@@ -61,6 +61,7 @@ const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
 const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';
 const SHELL_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.shellMode';
 const RECENT_ITEM_LIMIT = 6;
+const SECTION_STARTER_ITEM_KEYS = ['hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];
 const ESSENTIAL_ITEM_KEYS = new Set([
   'heading',
   'text',
@@ -441,6 +442,22 @@ export function ComponentLibrary({
     () => libraryItems.filter((item) => favoriteKeySet.has(getLibraryItemKey(item))),
     [favoriteKeySet, libraryItems],
   );
+  const sectionStarterItems = useMemo(() => {
+    const seen = new Set<string>();
+    const orderedItems = [
+      ...SECTION_STARTER_ITEM_KEYS.map((itemKey) => libraryItemByKey.get(itemKey)).filter((item): item is ComponentLibraryItem => Boolean(item)),
+      ...libraryItems.filter((item) => isSectionLibraryItem(item)),
+    ];
+
+    return orderedItems.filter((item) => {
+      const itemKey = getLibraryItemKey(item);
+      if (seen.has(itemKey) || !isSectionLibraryItem(item)) {
+        return false;
+      }
+      seen.add(itemKey);
+      return true;
+    }).slice(0, shellMode === 'expanded' ? 4 : 3);
+  }, [libraryItemByKey, libraryItems, shellMode]);
   const previewItem = useMemo(
     () => libraryItems.find((item) => getLibraryItemKey(item) === previewItemKey) || null,
     [libraryItems, previewItemKey],
@@ -584,6 +601,7 @@ export function ComponentLibrary({
     'Search components available.',
     shellMode === 'expanded' ? 'Expanded Add Elements browse mode selected.' : 'Compact Add Elements rail selected.',
     viewMode === 'tiles' ? 'Tile browse mode selected.' : 'List browse mode selected.',
+    sectionStarterItems.length > 0 ? `${sectionStarterItems.length} quick section starters available.` : 'No quick section starters available.',
     isComponentFilterActive ? 'Reset filters available.' : 'Filter reset hidden until filters are active.',
     saveSelectionDisabledReason ? `Save selection unavailable: ${saveSelectionDisabledReason}` : 'Save selection available.',
     refreshReusableSectionsDisabledReason ? `Refresh saved sections unavailable: ${refreshReusableSectionsDisabledReason}` : 'Refresh saved sections available.',
@@ -718,6 +736,86 @@ export function ComponentLibrary({
             )}
           />
         </div>
+
+        {sectionStarterItems.length > 0 && (
+          <div
+            className="mt-3 rounded-lg border border-teal-200 bg-teal-50/70 p-2"
+            data-testid="editor-component-section-starter"
+            data-component-section-starter-count={categoryItemCounts[SECTIONS_CATEGORY_ID] || 0}
+            data-component-section-starter-selected={selectedCategory === SECTIONS_CATEGORY_ID ? 'true' : 'false'}
+            data-component-section-starter-items={sectionStarterItems.map((item) => getLibraryItemKey(item)).join(',')}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(SECTIONS_CATEGORY_ID)}
+              data-testid="editor-component-section-starter-browse"
+              aria-describedby={componentLibraryActionStatusId}
+              aria-pressed={selectedCategory === SECTIONS_CATEGORY_ID}
+              data-action-state={selectedCategory === SECTIONS_CATEGORY_ID ? 'selected' : 'ready'}
+              data-action-status={componentLibraryActionStatus}
+              className={cn(
+                'mb-1.5 flex min-h-8 w-full min-w-0 items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
+                selectedCategory === SECTIONS_CATEGORY_ID
+                  ? 'border-teal-700 bg-teal-700 text-white shadow-sm'
+                  : 'border-teal-200 bg-white text-teal-900 hover:border-teal-300 hover:bg-teal-100/60',
+              )}
+              aria-label={`Browse page sections, ${categoryItemCounts[SECTIONS_CATEGORY_ID] || 0} available`}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Page sections</span>
+              </span>
+              <span className="shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold text-teal-800">
+                {categoryItemCounts[SECTIONS_CATEGORY_ID] || 0}
+              </span>
+            </button>
+            <div
+              className={cn(
+                'grid gap-1',
+                shellMode === 'expanded' ? 'grid-cols-4' : 'grid-cols-3',
+              )}
+              data-testid="editor-component-section-starter-grid"
+            >
+              {sectionStarterItems.map((item) => {
+                const itemKey = getLibraryItemKey(item);
+                const itemDomKey = getLibraryItemDomKey(item);
+                const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+                const starterActionStatus = disabled
+                  ? `Add unavailable: ${disabledReason || 'Editor changes are currently unavailable.'}`
+                  : `Add ${item.name} to canvas available from Page sections.`;
+
+                return (
+                  <button
+                    key={`section-starter-${itemKey}`}
+                    type="button"
+                    onClick={() => {
+                      if (disabled) return;
+                      handleAddItem(item);
+                    }}
+                    disabled={disabled}
+                    data-testid={`editor-component-section-starter-add-${itemDomKey}`}
+                    data-component-section-starter-item={itemKey}
+                    aria-label={`Add ${item.name} to canvas`}
+                    aria-describedby={componentLibraryActionStatusId}
+                    data-action-state={disabled ? 'blocked' : 'ready'}
+                    data-action-status={starterActionStatus}
+                    data-disabled-reason={disabled ? disabledReason || 'Editor changes are currently unavailable.' : undefined}
+                    className="group inline-flex min-h-14 min-w-0 flex-col items-start justify-between rounded-md border border-teal-100 bg-white px-2 py-1.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-colors hover:border-teal-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    title={item.description || item.name}
+                  >
+                    <span className="flex w-full min-w-0 items-center justify-between gap-1">
+                      <span className="truncate">{item.name}</span>
+                      <Plus className="h-3 w-3 shrink-0 text-teal-700" />
+                    </span>
+                    <span className="mt-1 truncate text-[10px] font-medium text-slate-500">
+                      {childCount > 0 ? `${childCount} layers` : `${item.defaultSize?.height || 0}px`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Category Filters */}
