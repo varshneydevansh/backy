@@ -5421,6 +5421,10 @@ function CanvasElementComponent({
       data-selected-ids={isSelected ? selectedIds.join(',') : undefined}
       data-backy-text-editor={isTextElement ? 'true' : undefined}
       data-backy-text-editor-editable={String(isTextElement && isEditingEnabled)}
+      data-canvas-x={Math.round(element.x)}
+      data-canvas-y={Math.round(element.y)}
+      data-canvas-width={Math.round(element.width)}
+      data-canvas-height={Math.round(element.height)}
       style={{
         ...sharedStyle,
         boxSizing: 'border-box',

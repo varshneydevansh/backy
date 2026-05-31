@@ -25,6 +25,7 @@ const RESPONSIVE_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
+const KEYBOARD_NUDGE_SMOKE = process.env.BACKY_EDITOR_KEYBOARD_NUDGE_SMOKE === '1';
 const VIEW_ONLY_SMOKE = process.env.BACKY_EDITOR_VIEW_ONLY_SMOKE === '1';
 const MULTI_SELECT_SMOKE = process.env.BACKY_EDITOR_MULTI_SELECT_SMOKE === '1';
 const MARQUEE_ORIGIN_SMOKE = process.env.BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE === '1';
@@ -649,7 +650,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes('data-testid="editor-pan-toggle"') && source.includes('data-pan-keyshortcuts="toggle:H;temporary:Space"') && source.includes('aria-keyshortcuts="H Space"'), 'Editor pan toggle must expose H and Space pan shortcut metadata');
   assert(source.includes("key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleGridVisibility();'), 'Editor keyboard handler must support G as a grid visibility shortcut');
   assert(source.includes("key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleSnap();'), 'Editor keyboard handler must support S as a snapping shortcut without intercepting Cmd/Ctrl+S save');
-  assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata and keep the floating shell hit-through for canvas selection');
+  assert(source.includes('data-testid="editor-grid-snap-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-keyboard-nudge-step={snapEnabled ? safeEditorGridSize : 10}') && source.includes('data-keyboard-nudge-policy="step-clamped"') && source.includes('data-grid-keyshortcuts="toggle:G"') && source.includes('data-snap-keyshortcuts="toggle:S"'), 'Editor grid/snap HUD must expose shortcut metadata, nudge step policy, and keep the floating shell hit-through for canvas selection');
   assert(source.includes('data-testid="editor-grid-visibility-toggle"') && source.includes('aria-keyshortcuts="G"') && source.includes('data-testid="editor-snap-toggle"') && source.includes('aria-keyshortcuts="S"'), 'Editor grid and snap toggle controls must expose keyboard shortcut metadata');
   assert(
     source.includes("const editorGridSnapActionStatusId = 'editor-grid-snap-action-status';") &&
@@ -681,6 +682,7 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasFocus();'), 'Editor keyboard handler must support F as a focus mode shortcut');
   assert(source.includes('data-testid="editor-shell-layout"') && source.includes('data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"'), 'Editor shell layout must expose panel shortcut metadata for custom admin clients');
   assert(source.includes('data-selected-id={selectedId ||') && source.includes("data-selected-ids={selectedIds.join(',')}"), 'Editor shell layout must expose current selection metadata for custom admin clients and smokes');
+  assert(source.includes('const targetMinX = deltaX === 0 ? minX : Math.round(minX + deltaX)') && source.includes('const targetMinY = deltaY === 0 ? minY : Math.round(minY + deltaY)'), 'Editor keyboard nudges must move by the selected step and clamp to bounds instead of snapping off-grid nested layers to a different target.');
   assert(
     canvasSource.includes('const hasTransformInteractionChanged = (') &&
       canvasSource.includes('geometryChanged(element.x, snapshot.x)') &&
@@ -1469,6 +1471,7 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('`${selectedMetrics.length} layers`') && source.includes('Math.round(maxX - minX)') && source.includes('Math.round(maxY - minY)'), 'Editor canvas selection HUD must show multi-selection bounds instead of only the primary layer size');
   assert(source.includes('const multiSelectionBounds = useMemo(() =>') && source.includes('data-testid="editor-multi-selection-bounds"') && source.includes('data-testid="editor-multi-selection-bounds-label"'), 'Editor canvas must render a visible multi-selection bounding frame');
   assert(source.includes('data-selection-count={multiSelectionBounds.count}') && source.includes('left: multiSelectionBounds.x') && source.includes('width: multiSelectionBounds.width'), 'Editor multi-selection bounding frame must expose count and use absolute selection geometry');
+  assert(source.includes('data-canvas-x={Math.round(element.x)}') && source.includes('data-canvas-width={Math.round(element.width)}'), 'Editor canvas elements must expose authored geometry data attributes for nested-layer smoke checks and custom admin clients.');
   assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
   assert(source.includes('const getMarqueeStyle = (selection: MarqueeSelection): CSSProperties =>') && source.includes('left: bounds.x') && source.includes('top: bounds.y') && source.includes('style={getMarqueeStyle(marqueeSelection)}'), 'Editor canvas marquee overlay must render from the pointer-down origin using CSS left/top rather than invalid div x/y coordinates.');
   assert(source.includes('const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) =>') && source.includes("getMeasuredCanvasScale('x')") && source.includes("getMeasuredCanvasScale('y')"), 'Editor canvas pointer math must derive coordinates from the actual transformed DOM scale so zoomed marquees start at the pointer-down point.');
@@ -3885,12 +3888,20 @@ const getElementBox = async (client, elementId) => (
     const cssHeight = Number.parseFloat(style.height);
     const scaleX = Number.isFinite(cssWidth) && cssWidth > 0 ? rect.width / cssWidth : 1;
     const scaleY = Number.isFinite(cssHeight) && cssHeight > 0 ? rect.height / cssHeight : 1;
+    const readAuthoredNumber = (name) => {
+      const value = Number.parseFloat(node.getAttribute(name) || '');
+      return Number.isFinite(value) ? value : null;
+    };
     return {
       id: node.getAttribute('data-element-id'),
       x: rect.x,
       y: rect.y,
       canvasX: canvasRect ? (rect.x - canvasRect.x) / scaleX : rect.x,
       canvasY: canvasRect ? (rect.y - canvasRect.y) / scaleY : rect.y,
+      authoredX: readAuthoredNumber('data-canvas-x'),
+      authoredY: readAuthoredNumber('data-canvas-y'),
+      authoredWidth: readAuthoredNumber('data-canvas-width'),
+      authoredHeight: readAuthoredNumber('data-canvas-height'),
       width: rect.width,
       height: rect.height,
       left: style.left,
@@ -4226,10 +4237,10 @@ const readEditorElementState = async (client, elementIds, options = {}) => {
     return [
       elementId,
       {
-        x: Math.round(options.visual ? getCanvasVisualX(box) : parseCssPixel(box.left) ?? box.x),
-        y: Math.round(options.visual ? getCanvasVisualY(box) : parseCssPixel(box.top) ?? box.y),
-        width: Math.round(parseCssPixel(box.cssWidth) ?? box.width),
-        height: Math.round(parseCssPixel(box.cssHeight) ?? box.height),
+        x: Math.round(options.visual ? getCanvasVisualX(box) : (box.authoredX ?? parseCssPixel(box.left) ?? box.x)),
+        y: Math.round(options.visual ? getCanvasVisualY(box) : (box.authoredY ?? parseCssPixel(box.top) ?? box.y)),
+        width: Math.round(box.authoredWidth ?? parseCssPixel(box.cssWidth) ?? box.width),
+        height: Math.round(box.authoredHeight ?? parseCssPixel(box.cssHeight) ?? box.height),
       },
     ];
   }));
@@ -4244,6 +4255,40 @@ const getCanvasVisualX = (box) => (
 const getCanvasVisualY = (box) => (
   typeof box?.canvasY === 'number' && Number.isFinite(box.canvasY) ? box.canvasY : box.y
 );
+
+const readEditorElementMovementBounds = async (client, elementId) => (
+  evaluate(client, `(() => {
+    const node = document.querySelector('[data-element-id="${elementId}"]');
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+
+    const readNumber = (target, name) => {
+      const value = Number.parseFloat(target?.getAttribute?.(name) || '');
+      return Number.isFinite(value) ? value : null;
+    };
+    const parent = node.parentElement?.closest?.('[data-element-id]');
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const canvasStyle = canvas instanceof HTMLElement ? window.getComputedStyle(canvas) : null;
+    const canvasWidth = canvasStyle ? Number.parseFloat(canvasStyle.width) : null;
+    const canvasHeight = canvasStyle ? Number.parseFloat(canvasStyle.height) : null;
+
+    return {
+      elementId: node.getAttribute('data-element-id') || '',
+      parentId: parent?.getAttribute?.('data-element-id') || null,
+      boundsWidth: readNumber(parent, 'data-canvas-width') ?? (Number.isFinite(canvasWidth) ? canvasWidth : null),
+      boundsHeight: readNumber(parent, 'data-canvas-height') ?? (Number.isFinite(canvasHeight) ? canvasHeight : null),
+    };
+  })()`)
+);
+
+const clampExpectedNudgeCoordinate = (value, size, limit) => {
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return value;
+  }
+
+  return Math.max(0, Math.min(value, Math.max(0, limit - size)));
+};
 
 const assertElementState = (actualState, expectedState, label) => {
   for (const [elementId, expected] of Object.entries(expectedState)) {
@@ -6512,22 +6557,29 @@ const testKeyboardNudge = async (client, elementId) => {
   await blurActiveElement(client);
   const gridState = await readGridSnapControlState(client, `${elementId} keyboard nudge`);
   const before = await readEditorElementState(client, [elementId]);
+  const movementBounds = await readEditorElementMovementBounds(client, elementId);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   await pressKey(client, 'ArrowDown', { shiftKey: true });
   const after = await readEditorElementState(client, [elementId]);
   const gridSize = Number.isFinite(gridState.gridSize) && gridState.gridSize > 0 ? gridState.gridSize : 10;
-  const nudgeStep = gridState.snapEnabled ? gridSize : 10;
-  const expectedX = gridState.snapEnabled
-    ? Math.round((before[elementId].x + nudgeStep) / gridSize) * gridSize
-    : before[elementId].x + nudgeStep;
-  const expectedY = gridState.snapEnabled
-    ? Math.round((before[elementId].y + nudgeStep) / gridSize) * gridSize
-    : before[elementId].y + nudgeStep;
+  const nudgeStep = Number.isFinite(gridState.keyboardNudgeStep) && gridState.keyboardNudgeStep > 0
+    ? gridState.keyboardNudgeStep
+    : gridState.snapEnabled ? gridSize : 10;
+  const expectedX = clampExpectedNudgeCoordinate(
+    before[elementId].x + nudgeStep,
+    before[elementId].width,
+    movementBounds?.boundsWidth,
+  );
+  const expectedY = clampExpectedNudgeCoordinate(
+    before[elementId].y + nudgeStep,
+    before[elementId].height,
+    movementBounds?.boundsHeight,
+  );
 
   assert(
     Math.abs(after[elementId].x - expectedX) <= 1 &&
       Math.abs(after[elementId].y - expectedY) <= 1,
-    `${elementId} keyboard nudge failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}, expected ${JSON.stringify({ x: expectedX, y: expectedY, gridState })}`,
+    `${elementId} keyboard nudge failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(after[elementId])}, expected ${JSON.stringify({ x: expectedX, y: expectedY, gridState, movementBounds })}`,
   );
 
   return {
@@ -6539,6 +6591,7 @@ const testKeyboardNudge = async (client, elementId) => {
       x: expectedX,
       y: expectedY,
     },
+    movementBounds,
     delta: {
       x: after[elementId].x - before[elementId].x,
       y: after[elementId].y - before[elementId].y,
@@ -7277,18 +7330,23 @@ const testUndoRedoAfterKeyboardNudge = async (client, elementId) => {
   await blurActiveElement(client);
   const gridState = await readGridSnapControlState(client, `${elementId} keyboard undo/redo nudge`);
   const before = await readEditorElementState(client, [elementId]);
+  const movementBounds = await readEditorElementMovementBounds(client, elementId);
   await pressKey(client, 'ArrowRight', { shiftKey: true });
   const nudged = await readEditorElementState(client, [elementId]);
   const gridSize = Number.isFinite(gridState.gridSize) && gridState.gridSize > 0 ? gridState.gridSize : 10;
-  const nudgeStep = gridState.snapEnabled ? gridSize : 10;
-  const expectedX = gridState.snapEnabled
-    ? Math.round((before[elementId].x + nudgeStep) / gridSize) * gridSize
-    : before[elementId].x + nudgeStep;
+  const nudgeStep = Number.isFinite(gridState.keyboardNudgeStep) && gridState.keyboardNudgeStep > 0
+    ? gridState.keyboardNudgeStep
+    : gridState.snapEnabled ? gridSize : 10;
+  const expectedX = clampExpectedNudgeCoordinate(
+    before[elementId].x + nudgeStep,
+    before[elementId].width,
+    movementBounds?.boundsWidth,
+  );
 
   assert(
     Math.abs(nudged[elementId].x - expectedX) <= 1 &&
       nudged[elementId].y === before[elementId].y,
-    `${elementId} keyboard nudge before undo failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(nudged[elementId])}, expected ${JSON.stringify({ x: expectedX, y: before[elementId].y, gridState })}`,
+    `${elementId} keyboard nudge before undo failed: before ${JSON.stringify(before[elementId])}, after ${JSON.stringify(nudged[elementId])}, expected ${JSON.stringify({ x: expectedX, y: before[elementId].y, gridState, movementBounds })}`,
   );
 
   await blurActiveElement(client);
@@ -13856,6 +13914,8 @@ const readGridSnapControlState = async (client, label) => {
       controlsDescribedBy: controls?.getAttribute('aria-describedby') || '',
       snapEnabled: controls?.getAttribute('data-snap-enabled') === 'true',
       gridVisible: controls?.getAttribute('data-grid-visible') === 'true',
+      keyboardNudgeStep: Number(controls?.getAttribute('data-keyboard-nudge-step') || 0),
+      keyboardNudgePolicy: controls?.getAttribute('data-keyboard-nudge-policy') || '',
       togglePressed: toggle?.getAttribute('aria-pressed') === 'true',
       gridTogglePressed: gridToggle?.getAttribute('aria-pressed') === 'true',
       groupActionStatus: controls?.getAttribute('data-action-status') || '',
@@ -26651,7 +26711,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -26960,6 +27020,22 @@ const main = async () => {
         mode: 'shortcuts',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         keyboardShortcuts,
+      }, null, 2));
+      return;
+    }
+
+    if (KEYBOARD_NUDGE_SMOKE) {
+      assert(!EDITOR_PATH, 'Keyboard nudge smoke currently requires an internally created smoke page');
+      await dragElement(client, 'smoke-child-button', 40, 20);
+      const nestedKeyboardNudge = await testKeyboardNudge(client, 'smoke-child-button');
+      const keyboardUndoRedo = await testUndoRedoAfterKeyboardNudge(client, 'smoke-top-edge');
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'keyboard-nudge',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        nestedKeyboardNudge,
+        keyboardUndoRedo,
       }, null, 2));
       return;
     }

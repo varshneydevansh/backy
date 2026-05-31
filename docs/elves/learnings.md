@@ -36,6 +36,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Root section insertion must snap to the bottom of any containing root flow section before shifting later sections. A drop/add inside an existing band should create a new band after it, and rendered smokes should verify editor, persisted, and public-render geometry together.
 - [2026-05-31] Header action menus near sticky workbars should be absolute overlays with explicit stacking checks. In-flow details menus can pass source review but still disappear behind sticky active-section banners in real Chrome viewports.
 - [2026-05-31] Dense Pages-table fixes should prefer route-local column budgets before shared grid changes. Keep delivery/action cells clipped or in-flow, but reduce the total table width so the surface feels operational instead of horizontally hostile.
+- [2026-05-31] Nested keyboard nudge tests must account for parent/canvas movement bounds. A child near the right edge may correctly move less than the nudge step on X while still moving a full step on Y, and authored geometry data attrs are more reliable than computed CSS for this assertion.
 
 ## Product and Domain Invariants
 

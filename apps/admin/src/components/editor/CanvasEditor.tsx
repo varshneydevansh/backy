@@ -5979,8 +5979,8 @@ export function CanvasEditor({
       const minY = Math.min(...nudgeEntries.map((entry) => entry.element.y));
       const maxX = Math.max(...nudgeEntries.map((entry) => entry.element.x + entry.element.width));
       const maxY = Math.max(...nudgeEntries.map((entry) => entry.element.y + entry.element.height));
-      const targetMinX = deltaX === 0 ? minX : snapEditorValue(minX + deltaX);
-      const targetMinY = deltaY === 0 ? minY : snapEditorValue(minY + deltaY);
+      const targetMinX = deltaX === 0 ? minX : Math.round(minX + deltaX);
+      const targetMinY = deltaY === 0 ? minY : Math.round(minY + deltaY);
       const clampedDeltaX = Math.max(0, Math.min(targetMinX, Math.max(0, boundsWidth - (maxX - minX)))) - minX;
       const clampedDeltaY = Math.max(0, Math.min(targetMinY, Math.max(0, boundsHeight - (maxY - minY)))) - minY;
 
@@ -6001,7 +6001,7 @@ export function CanvasEditor({
 
       return nextElements;
     }, selectedId);
-  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, snapEditorValue, updateElementsWithHistory]);
+  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
 
   const alignSelectedElement = useCallback((alignment: CanvasAlignment) => {
     if (!selectedId) {
@@ -9580,6 +9580,8 @@ export function CanvasEditor({
                 data-snap-enabled={snapEnabled ? 'true' : 'false'}
                 data-grid-visible={showGrid ? 'true' : 'false'}
                 data-grid-size={gridSize}
+                data-keyboard-nudge-step={snapEnabled ? safeEditorGridSize : 10}
+                data-keyboard-nudge-policy="step-clamped"
                 data-grid-keyshortcuts="toggle:G"
                 data-snap-keyshortcuts="toggle:S"
                 data-action-status={editorGridSnapActionStatus}

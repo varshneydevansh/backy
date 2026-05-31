@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 09:31 IST
+- **Last updated:** 2026-05-31 10:25 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 10:25 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; nested keyboard nudge behavior is now step-clamped and smoke-covered; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: keyboard nudges now move by the exposed nudge step and clamp to parent/canvas bounds instead of re-snapping off-grid nested layers to a different target.
+- `apps/admin/src/components/editor/Canvas.tsx`: canvas elements now expose authored geometry data attributes for stable nested-layer smoke checks and custom admin/editor clients.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added a focused `BACKY_EDITOR_KEYBOARD_NUDGE_SMOKE=1` path and updated nudge assertions to account for parent movement bounds.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_KEYBOARD_NUDGE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `git diff --check` -> PASS.
+- `CDP_COMMAND_TIMEOUT_MS=90000 npm run test:editor-drag --workspace @backy-cms/admin` -> FAIL in the later layer-panel `Runtime.evaluate` phase after the keyboard-nudge path; treat as the next broad-smoke stability slice, not part of this nudge fix.
+
+**Next:**
+1. Commit and push this keyboard nudge/geometry slice.
+2. Continue Batch 5 by isolating the later layer-panel broad-smoke timeout or the next visible editor UX issue.
 
 ## 2026-05-31 09:31 IST
 
