@@ -25,13 +25,20 @@ const deploymentCards = [
     {
         name: 'backy-public',
         root: 'apps/public',
-        role: 'Next.js public renderer, read APIs, form/comment writes, media delivery, provider webhooks, and scheduled reconciliation.',
+        role: 'Public Next.js runtime for page rendering, read APIs, form/comment writes, media delivery, provider webhooks, and scheduled reconciliation.',
     },
     {
         name: 'backy-admin',
         root: 'apps/admin',
-        role: 'Vite admin workspace for site, content, user, media, commerce, settings, and editor operations.',
+        role: 'Protected Vite editor shell for site, content, user, media, commerce, settings, and editor operations.',
     },
+];
+
+const adminSecurityChecklist = [
+    'Keep backy-admin behind Vercel Deployment Protection, team SSO, or an equivalent private access layer.',
+    'Store database, admin, cron, provider, and storage secrets only on backy-public server-side environment variables.',
+    'Use Supabase Auth or another provider-backed login for production admin users, with Backy user roles matched by email.',
+    'Keep MFA enabled and never ship BACKY_ADMIN_API_KEY, BACKY_ADMIN_SECRET_KEY, CRON_SECRET, database URLs, or provider keys to Vite or any NEXT_PUBLIC/VITE variable.',
 ];
 
 const apiLinks = [
@@ -83,9 +90,10 @@ export default function Home() {
 
                 <div className="hero-content">
                     <p className="eyebrow">Backy CMS</p>
+                    <p className="runtime-pill">You are viewing backy-public: the public API and render runtime.</p>
                     <h1 id="home-title">Visual website backend for teams shipping custom frontends.</h1>
                     <p className="hero-copy">
-                        Build content in a Wix-like editor, keep WordPress-style operations simple, and publish through stable APIs that any Vercel frontend can consume.
+                        Build content in the separate protected admin editor, keep WordPress-style operations simple, and publish through stable APIs that any Vercel frontend can consume.
                     </p>
                     <div className="hero-actions" aria-label="Primary links">
                         <a className="primary-link" href={adminHref}>Open admin</a>
@@ -101,6 +109,28 @@ export default function Home() {
                         </div>
                     ))}
                 </dl>
+            </section>
+
+            <section className="runtime-section" aria-labelledby="runtime-title">
+                <div>
+                    <p className="section-kicker">Runtime boundary</p>
+                    <h2 id="runtime-title">This page is not the private editor.</h2>
+                    <p>
+                        Localhost 3001 is the public Backy service: it renders hosted sites and exposes safe discovery, manifest, OpenAPI, media, form, blog, and commerce endpoints. The real admin workspace runs separately at the configured admin URL.
+                    </p>
+                </div>
+                <div className="runtime-cards" aria-label="Backy app boundary">
+                    <article>
+                        <span>Public</span>
+                        <h3>backy-public</h3>
+                        <p>Public routes, website render payloads, custom frontend APIs, and server-only admin API handlers.</p>
+                    </article>
+                    <article>
+                        <span>Protected</span>
+                        <h3>backy-admin</h3>
+                        <p>Private visual editor and dashboard shell. It should never receive database, provider, cron, or admin secret values.</p>
+                    </article>
+                </div>
             </section>
 
             <section className="section-grid" aria-labelledby="tracks-title">
@@ -134,6 +164,21 @@ export default function Home() {
                         </article>
                     ))}
                 </div>
+            </section>
+
+            <section className="security-section" aria-labelledby="security-title">
+                <div className="section-heading">
+                    <p className="section-kicker">Admin security</p>
+                    <h2 id="security-title">Production admin setup stays private by construction.</h2>
+                    <p>
+                        Demo accounts are only for local development. Production login should be backed by persistent auth, role-scoped Backy users, server-side sessions, and environment variables that never enter the browser bundle.
+                    </p>
+                </div>
+                <ol className="security-list">
+                    {adminSecurityChecklist.map((item) => (
+                        <li key={item}>{item}</li>
+                    ))}
+                </ol>
             </section>
 
             <section className="api-band" aria-labelledby="api-title">

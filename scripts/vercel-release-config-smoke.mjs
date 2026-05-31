@@ -48,6 +48,10 @@ assert(
 
 for (const snippet of [
   'NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
+  'You are viewing backy-public: the public API and render runtime.',
+  'This page is not the private editor.',
+  'Production admin setup stays private by construction.',
+  'Use Supabase Auth or another provider-backed login',
   '/api/sites/site-demo/manifest',
   '/api/sites/site-demo/openapi',
   'backy-public',
@@ -69,6 +73,10 @@ for (const snippet of [
   'BACKY_SITE_ID',
   'BACKY_SITE_PUBLIC_HOST',
   'GET /api/sites/:siteId/agent-handoff',
+  '### Secure admin account setup',
+  'Production admin access should not depend on committed emails, passwords, or client-visible keys.',
+  'BACKY_ADMIN_MFA_TOTP_SECRET',
+  'Do not enable `BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH`',
   'studio.example.com',
   'Vercel Deployment Protection',
   'Vercel Agent',

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 23:08 IST
+- **Last updated:** 2026-06-01 00:11 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 00:11 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Public root now explains the `backy-public`/`backy-admin` security boundary
+
+**What changed:**
+- `apps/public/src/app/page.tsx`: clarified that localhost/public production root is `backy-public`, the public API/render runtime, while the visual editor is the separate protected `backy-admin` shell.
+- `apps/public/src/app/globals.css`: added responsive runtime-boundary and admin-security sections without changing the existing public root app structure.
+- `README.md`: added a secure admin account setup runbook covering provider-backed auth, Backy role records, MFA, server-only env placement, demo-auth production rejection, and Vercel Deployment Protection.
+- `scripts/vercel-release-config-smoke.mjs` and `scripts/vercel-preview-readiness-smoke.mjs`: added source guards so the public root and release docs keep the admin-security boundary visible.
+
+**Commands run:**
+- `BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:vercel-release-config --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected warnings for root link state and missing production `backy-public` database/admin/cron/CORS env.
+- Previously in this slice: editor smoke coverage, help rendered smoke, public/admin typechecks, repo hygiene, public production env guard, production readiness source checks, public build, root curl/source checks, and `git diff --check` -> PASS.
+
+**Review findings:**
+- [Medium] `localhost:3001` looked like a new private Backy frontend even though it is the public runtime. Resolved by labeling it in the hero and adding a dedicated runtime-boundary section.
+- [High] Admin account setup guidance needed to make the secret boundary explicit before production deploys. Resolved by documenting provider-backed auth, MFA, and the rule that server-only admin/database/provider secrets belong on `backy-public`, never on `backy-admin` or custom frontend env.
+
+**Next:**
+1. Commit and push this public-root/admin-security clarity slice.
+2. Continue Batch 5 with the next highest-friction admin/editor surface while production `backy-public` env remains operator-deferred.
 
 ## 2026-05-31 23:08 IST
 

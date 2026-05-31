@@ -75,6 +75,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-05-31] Vercel preview deploys can be build-ready but runtime-broken when `backy-public` has no data-mode env. Absence of `BACKY_DATA_MODE` defaults to database mode and 500s without `BACKY_DATABASE_URL`; preview-only demo env can unblock protected previews, but production must use real database/admin/cron/CORS env and pass the live contract gate.
 - [2026-05-31] Manual admin preview `--build-env VITE_BACKY_*` values only prove that one deployment. Automatic Git previews still need persistent `backy-admin` project env for `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL`.
 - [2026-05-31] A missing-env `backy-public` production build should fail before Next.js builds, not deploy Ready and crash at runtime. Keep production env guards value-redacted and Vercel-production-scoped so local/preview builds still work while real releases require database/admin/cron/CORS env.
+- [2026-06-01] The public root must identify itself as `backy-public`, not as the private editor. Keep localhost/public-runtime copy explicit: public render/API service here, protected admin shell elsewhere, and all server-only admin/database/provider secrets on the public server env.
 
 ## Known Traps
 
