@@ -51,6 +51,7 @@ const adminVercel = readJson('apps/admin/vercel.json');
 const readme = read('README.md');
 const agents = read('AGENTS.md');
 const gitignore = read('.gitignore');
+const envExample = read('.env.example');
 const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
@@ -78,6 +79,30 @@ assert(
   'Root package exposes test:vercel-preview-readiness',
 );
 assert(gitignore.includes('.vercel/'), 'Git ignore keeps local Vercel project links out of commits');
+
+includesAll(
+  envExample,
+  [
+    'Vercel project env: backy-public',
+    'BACKY_DATA_MODE=database',
+    'BACKY_DATABASE_URL=postgres://...',
+    'BACKY_ADMIN_API_KEY=<server-only-admin-api-key>',
+    'BACKY_ADMIN_SECRET_KEY=<server-only-admin-session-secret>',
+    'CRON_SECRET=<same-server-only-admin-or-cron-secret>',
+    'NEXT_PUBLIC_BACKY_ADMIN_APP_URL=https://admin.example.com',
+    'BACKY_CORS_ALLOWED_ORIGINS=https://www.example.com,https://blog.example.com',
+    'Vercel project env: backy-admin',
+    'VITE_BACKY_PUBLIC_API_BASE_URL=https://content.example.com/api',
+    'VITE_BACKY_ADMIN_API_BASE_URL=https://content.example.com/api/admin',
+    'Forbidden here: BACKY_DATABASE_URL, DATABASE_URL, CRON_SECRET',
+    'and any production VITE_BACKY_ADMIN_API_KEY',
+    'Vercel project env: custom website frontend',
+    'BACKY_PUBLIC_API_BASE_URL=https://content.example.com/api',
+    'BACKY_SITE_ID=site-demo',
+    'BACKY_SITE_PUBLIC_HOST=www.example.com',
+  ],
+  '.env.example Vercel project env boundaries',
+);
 
 includesAll(
   readme,

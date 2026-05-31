@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 15:03 IST
+- **Last updated:** 2026-05-31 15:11 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 15:11 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Vercel env examples now match the protected-admin/public-api/custom-frontend topology
+
+**What changed:**
+- `.env.example`: added separate commented env templates for the `backy-public` Next.js project, protected `backy-admin` Vite shell, and custom website frontend projects.
+- `.env.example`: clarified that `VITE_BACKY_ADMIN_API_KEY` is local/demo-only and must not be configured for the production protected admin shell.
+- `scripts/vercel-preview-readiness-smoke.mjs`: now guards the `.env.example` deployment env boundary so README/Help/handoff and env templates cannot drift.
+
+**Commands run:**
+- `npm run test:vercel-preview-readiness` -> PASS with expected warnings that Vercel projects/links are not yet created.
+- `npm run test:vercel-release-config` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this Vercel env template alignment slice.
+2. Continue Batch 5 on the next release-facing editor/admin UX issue or actual Vercel project linkage if explicitly requested.
 
 ## 2026-05-31 15:03 IST
 
