@@ -894,7 +894,9 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('const lastEditorShellPointerRef = useRef') &&
       source.includes('const rememberEditorShellZoomPointer = useCallback') &&
       source.includes('const hasRecentEditorShellZoomPointer = useCallback') &&
-      source.includes('return isGlobalTarget && hasRecentEditorShellZoomPointer();') &&
+      source.includes('const hasEditorShellZoomFocus = useCallback') &&
+      source.includes('const hasActiveEditorZoomContext = hasRecentEditorShellZoomPointer() || hasEditorShellZoomFocus();') &&
+      source.includes('return isGlobalTarget && (hasRecentEditorShellZoomPointer() || hasEditorShellZoomFocus());') &&
       source.includes('data-canvas-zoom-pointer-memory="editor-shell-global-events"') &&
       source.includes('const surface = canvasScaleSurfaceRef.current;') &&
       source.includes('const visualViewport = window.visualViewport ?? null;') &&
@@ -915,7 +917,8 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('const isEditorCanvasZoomEvent = useCallback') &&
       source.includes('const getCanvasZoomAnchor = useCallback') &&
       source.includes('shell && path.includes(shell)') &&
-      source.includes('return isGlobalTarget && document.body.contains(viewport)') &&
+      source.includes('// macOS browser pinch events can arrive without usable client coordinates.') &&
+      source.includes('return false;') &&
       source.includes('isCanvasViewportEvent') &&
       source.includes('path.includes(viewport)') &&
       source.includes('clientX >= rect.left') &&
@@ -931,7 +934,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-canvas-zoom-page-guard="editor-active"') &&
       source.includes('data-canvas-zoom-anchor-fallback="viewport-center"') &&
       source.includes('const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0') &&
-      source.includes('data-canvas-zoom-global-fallback="zero-coordinate-window-events"') &&
+      source.includes('data-canvas-zoom-global-fallback="active-editor-zero-coordinate-window-events"') &&
       source.includes('data-canvas-zoom-recent-pointer-fallback="editor-shell-global-events"') &&
       source.includes('data-canvas-zoom-legacy-wheel-fallback="mousewheel"') &&
       source.includes('data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"') &&
@@ -953,6 +956,7 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('dispatchRecentPointerGlobalWheelZoom') &&
       smokeSource.includes('dispatchLegacyRootMouseWheelZoom') &&
       smokeSource.includes('dispatchCoordinateLessGlobalPinchZoom') &&
+      smokeSource.includes('dispatchInactiveCoordinateLessGlobalPinchZoom') &&
       smokeSource.includes('dispatchOutsideShellCoordinateLessGesture') &&
       smokeSource.includes('dispatchCanvasPinchZoom') &&
       smokeSource.includes("type: 'mouseWheel'") &&
@@ -13142,9 +13146,23 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
   const beforePageZoom = await readPageZoomState(client, `${label} page zoom before`);
   const beforeState = await readZoomControlState(client, `${label} before`);
   const dispatched = await evaluate(client, `(() => {
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
     const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
-    if (!(viewport instanceof HTMLElement)) {
-      return { ok: false, reason: 'missing-viewport' };
+    if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-shell-or-viewport' };
+    }
+
+    const shellRect = shell.getBoundingClientRect();
+    const pointerOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: Math.round(shellRect.left + Math.min(Math.max(shellRect.width / 2, 24), shellRect.width - 24)),
+      clientY: Math.round(shellRect.top + Math.min(Math.max(shellRect.height / 2, 24), shellRect.height - 24)),
+    };
+    shell.dispatchEvent(new MouseEvent('mousemove', pointerOptions));
+    if ('PointerEvent' in window) {
+      shell.dispatchEvent(new PointerEvent('pointermove', pointerOptions));
     }
 
     const event = new WheelEvent('wheel', {
@@ -13172,6 +13190,7 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
       zoomScope: viewport.getAttribute('data-zoom-scope'),
       clientX: event.clientX,
       clientY: event.clientY,
+      shellPointerMemory: shell.getAttribute('data-canvas-zoom-pointer-memory'),
     };
   })()`);
 
@@ -13184,11 +13203,12 @@ const dispatchCoordinateLessGlobalWheelZoom = async (client, deltaY, label) => {
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
-      dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.globalFallback === 'active-editor-zero-coordinate-window-events' &&
       dispatched.legacyWheel === 'mousewheel' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.zoomScope === 'canvas' &&
+      dispatched.shellPointerMemory === 'editor-shell-global-events' &&
       dispatched.clientX === 0 &&
       dispatched.clientY === 0,
     `Coordinate-less global wheel zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
@@ -13312,10 +13332,24 @@ const dispatchLegacyRootMouseWheelZoom = async (client, wheelDeltaY, label) => {
   const beforePageZoom = await readPageZoomState(client, `${label} page zoom before`);
   const beforeState = await readZoomControlState(client, `${label} before`);
   const dispatched = await evaluate(client, `(() => {
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
     const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
     const root = document.documentElement;
-    if (!(viewport instanceof HTMLElement) || !(root instanceof HTMLElement)) {
-      return { ok: false, reason: 'missing-viewport-or-root' };
+    if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement) || !(root instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-shell-viewport-or-root' };
+    }
+
+    const shellRect = shell.getBoundingClientRect();
+    const pointerOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: Math.round(shellRect.left + Math.min(Math.max(shellRect.width / 2, 24), shellRect.width - 24)),
+      clientY: Math.round(shellRect.top + Math.min(Math.max(shellRect.height / 2, 24), shellRect.height - 24)),
+    };
+    shell.dispatchEvent(new MouseEvent('mousemove', pointerOptions));
+    if ('PointerEvent' in window) {
+      shell.dispatchEvent(new PointerEvent('pointermove', pointerOptions));
     }
 
     const event = new Event('mousewheel', {
@@ -13347,6 +13381,7 @@ const dispatchLegacyRootMouseWheelZoom = async (client, wheelDeltaY, label) => {
       clientX: event.clientX,
       clientY: event.clientY,
       wheelDeltaY: event.wheelDeltaY,
+      shellPointerMemory: shell.getAttribute('data-canvas-zoom-pointer-memory'),
     };
   })()`);
 
@@ -13359,11 +13394,12 @@ const dispatchLegacyRootMouseWheelZoom = async (client, wheelDeltaY, label) => {
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
-      dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.globalFallback === 'active-editor-zero-coordinate-window-events' &&
       dispatched.legacyWheel === 'mousewheel' &&
       dispatched.modifier === 'meta-or-control' &&
       dispatched.preventsBrowserZoom === 'true' &&
       dispatched.zoomScope === 'canvas' &&
+      dispatched.shellPointerMemory === 'editor-shell-global-events' &&
       dispatched.clientX === 0 &&
       dispatched.clientY === 0 &&
       dispatched.wheelDeltaY === wheelDeltaY,
@@ -13463,9 +13499,22 @@ const dispatchCanvasPinchZoom = async (client, scale, label) => {
 
 const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
   const dispatched = await evaluate(client, `(() => {
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
     const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
-    if (!(viewport instanceof HTMLElement)) {
-      return { ok: false, reason: 'missing-viewport' };
+    if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-shell-or-viewport' };
+    }
+    const shellRect = shell.getBoundingClientRect();
+    const pointerOptions = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: Math.round(shellRect.left + Math.min(Math.max(shellRect.width / 2, 24), shellRect.width - 24)),
+      clientY: Math.round(shellRect.top + Math.min(Math.max(shellRect.height / 2, 24), shellRect.height - 24)),
+    };
+    shell.dispatchEvent(new MouseEvent('mousemove', pointerOptions));
+    if ('PointerEvent' in window) {
+      shell.dispatchEvent(new PointerEvent('pointermove', pointerOptions));
     }
     const createGestureEvent = (type, nextScale) => {
       const event = new Event(type, { bubbles: true, cancelable: true });
@@ -13495,6 +13544,7 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
       pageGuard: viewport.getAttribute('data-canvas-zoom-page-guard'),
       anchorFallback: viewport.getAttribute('data-canvas-zoom-anchor-fallback'),
       zoomScope: viewport.getAttribute('data-zoom-scope'),
+      shellPointerMemory: shell.getAttribute('data-canvas-zoom-pointer-memory'),
     };
   })()`);
 
@@ -13518,7 +13568,8 @@ const dispatchCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
       dispatched.hitTest === 'viewport-shell-or-active-editor' &&
       dispatched.pageGuard === 'editor-active' &&
       dispatched.anchorFallback === 'viewport-center' &&
-      dispatched.zoomScope === 'canvas',
+      dispatched.zoomScope === 'canvas' &&
+      dispatched.shellPointerMemory === 'editor-shell-global-events',
     `Coordinate-less global pinch zoom metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
   );
   await sleep(150);
@@ -13583,7 +13634,7 @@ const dispatchOutsideShellCoordinateLessGesture = async (client, scale, label) =
   );
   assert(
     dispatched.outsideShellGuard === 'non-editor-coordinate-less-events-pass-through' &&
-      dispatched.globalFallback === 'zero-coordinate-window-events' &&
+      dispatched.globalFallback === 'active-editor-zero-coordinate-window-events' &&
       dispatched.pinchZoom === 'enabled' &&
       dispatched.zoomScope === 'canvas',
     `Outside-shell coordinate-less gesture metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
@@ -13595,6 +13646,101 @@ const dispatchOutsideShellCoordinateLessGesture = async (client, scale, label) =
     Math.abs(afterState.scale - beforeState.scale) < 0.001 &&
       afterState.autoFit === beforeState.autoFit,
     `Outside-shell coordinate-less gesture should not change canvas zoom during ${label}: ${JSON.stringify({ beforeState, afterState, dispatched })}`,
+  );
+
+  return {
+    beforeState,
+    afterState,
+    dispatched,
+  };
+};
+
+const dispatchInactiveCoordinateLessGlobalPinchZoom = async (client, scale, label) => {
+  const beforeState = await readZoomControlState(client, `${label} before`);
+  const dispatched = await evaluate(client, `(() => {
+    const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    const outsideTarget = document.querySelector('[data-testid="admin-header-shell"]') ||
+      document.querySelector('[data-testid="admin-sidebar-shell"]') ||
+      document.body;
+    if (!(shell instanceof HTMLElement) || !(viewport instanceof HTMLElement) || !(outsideTarget instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-shell-viewport-or-outside-target' };
+    }
+
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    const leaveEvent = 'PointerEvent' in window
+      ? new PointerEvent('pointerout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: outsideTarget,
+      })
+      : new MouseEvent('pointerout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: outsideTarget,
+      });
+    shell.dispatchEvent(leaveEvent);
+
+    const createGestureEvent = (type, nextScale) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'scale', { configurable: true, value: nextScale });
+      return event;
+    };
+
+    const startEvent = createGestureEvent('gesturestart', 1);
+    const startReturned = window.dispatchEvent(startEvent);
+    const changeEvent = createGestureEvent('gesturechange', ${JSON.stringify(scale)});
+    const changeReturned = window.dispatchEvent(changeEvent);
+    const endEvent = createGestureEvent('gestureend', ${JSON.stringify(scale)});
+    const endReturned = window.dispatchEvent(endEvent);
+
+    return {
+      ok: true,
+      startReturned,
+      changeReturned,
+      endReturned,
+      startDefaultPrevented: startEvent.defaultPrevented,
+      changeDefaultPrevented: changeEvent.defaultPrevented,
+      endDefaultPrevented: endEvent.defaultPrevented,
+      globalFallback: viewport.getAttribute('data-canvas-zoom-global-fallback'),
+      outsideShellGuard: viewport.getAttribute('data-canvas-zoom-outside-shell-guard'),
+      pinchZoom: viewport.getAttribute('data-canvas-pinch-zoom'),
+      zoomScope: viewport.getAttribute('data-zoom-scope'),
+      activeElementInsideShell: document.activeElement instanceof Node && shell.contains(document.activeElement),
+    };
+  })()`);
+
+  assert(dispatched?.ok, `Unable to dispatch inactive coordinate-less global pinch zoom during ${label}: ${JSON.stringify(dispatched)}`);
+  assert(
+    dispatched.startDefaultPrevented === false &&
+      dispatched.changeDefaultPrevented === false &&
+      dispatched.endDefaultPrevented === false,
+    `Inactive coordinate-less global pinch should pass through without canvas interception during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  assert(
+    dispatched.startReturned === true &&
+      dispatched.changeReturned === true &&
+      dispatched.endReturned === true,
+    `Inactive coordinate-less global pinch dispatch should not be cancelled during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  assert(
+    dispatched.globalFallback === 'active-editor-zero-coordinate-window-events' &&
+      dispatched.outsideShellGuard === 'non-editor-coordinate-less-events-pass-through' &&
+      dispatched.pinchZoom === 'enabled' &&
+      dispatched.zoomScope === 'canvas' &&
+      dispatched.activeElementInsideShell === false,
+    `Inactive coordinate-less global pinch metadata is incomplete during ${label}: ${JSON.stringify(dispatched)}`,
+  );
+  await sleep(150);
+
+  const afterState = await readZoomControlState(client, label);
+  assert(
+    Math.abs(afterState.scale - beforeState.scale) < 0.001 &&
+      afterState.autoFit === beforeState.autoFit,
+    `Inactive coordinate-less global pinch should not change canvas zoom during ${label}: ${JSON.stringify({ beforeState, afterState, dispatched })}`,
   );
 
   return {
@@ -13997,6 +14143,12 @@ const testZoomControls = async (client) => {
   assert(
     Math.abs(afterOutsideShellGesture.afterState.scale - afterCoordinateLessPinchZoom.state.scale) < 0.001,
     `Header/sidebar coordinate-less gestures should not zoom the editor canvas: ${JSON.stringify({ afterCoordinateLessPinchZoom, afterOutsideShellGesture })}`,
+  );
+
+  const afterInactiveGlobalPinchZoom = await dispatchInactiveCoordinateLessGlobalPinchZoom(client, 1.2, 'after inactive coordinate-less global pinch zoom');
+  assert(
+    Math.abs(afterInactiveGlobalPinchZoom.afterState.scale - afterOutsideShellGesture.afterState.scale) < 0.001,
+    `Inactive global coordinate-less gestures should not zoom the editor canvas: ${JSON.stringify({ afterOutsideShellGesture, afterInactiveGlobalPinchZoom })}`,
   );
 
   await clickControlByTestId(client, 'editor-pan-toggle');

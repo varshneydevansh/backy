@@ -2475,6 +2475,13 @@ export function CanvasEditor({
     isEditorShellPointerInsideRef.current || Boolean(lastEditorShellPointerRef.current)
   ), []);
 
+  const hasEditorShellZoomFocus = useCallback(() => {
+    const shell = editorShellRef.current;
+    const activeElement = document.activeElement;
+
+    return Boolean(shell && activeElement instanceof HTMLElement && shell.contains(activeElement));
+  }, []);
+
   const isEditorCanvasZoomEvent = useCallback((event: Event) => {
     if (isCanvasViewportEvent(event)) {
       return true;
@@ -2518,22 +2525,18 @@ export function CanvasEditor({
 
       const isZeroCoordinateGlobalEvent = isGlobalTarget && clientX === 0 && clientY === 0;
       if (!isZeroCoordinateGlobalEvent) {
-        return isGlobalTarget && hasRecentEditorShellZoomPointer();
+        return isGlobalTarget && (hasRecentEditorShellZoomPointer() || hasEditorShellZoomFocus());
       }
     }
 
-    if (isGlobalTarget && hasRecentEditorShellZoomPointer()) {
-      return true;
-    }
-
-    const activeElement = document.activeElement;
-    if (shell && activeElement instanceof HTMLElement && shell.contains(activeElement)) {
+    const hasActiveEditorZoomContext = hasRecentEditorShellZoomPointer() || hasEditorShellZoomFocus();
+    if (isGlobalTarget && hasActiveEditorZoomContext) {
       return true;
     }
 
     // macOS browser pinch events can arrive without usable client coordinates.
-    return isGlobalTarget && document.body.contains(viewport);
-  }, [hasRecentEditorShellZoomPointer, isCanvasViewportEvent]);
+    return false;
+  }, [hasEditorShellZoomFocus, hasRecentEditorShellZoomPointer, isCanvasViewportEvent]);
 
   const handleZoomIn = useCallback(() => {
     zoomCanvasAtPoint((current) => current + CANVAS_ZOOM_STEP);
@@ -8983,7 +8986,7 @@ export function CanvasEditor({
             data-canvas-zoom-hit-test="viewport-shell-or-active-editor"
             data-canvas-zoom-page-guard="editor-active"
             data-canvas-zoom-anchor-fallback="viewport-center"
-            data-canvas-zoom-global-fallback="zero-coordinate-window-events"
+            data-canvas-zoom-global-fallback="active-editor-zero-coordinate-window-events"
             data-canvas-zoom-recent-pointer-fallback="editor-shell-global-events"
             data-canvas-zoom-legacy-wheel-fallback="mousewheel"
             data-canvas-zoom-outside-shell-guard="non-editor-coordinate-less-events-pass-through"

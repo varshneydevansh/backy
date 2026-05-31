@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-05-31 12:16 IST
+- **Last updated:** 2026-05-31 12:43 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-05-31 12:43 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** in progress; editor global zoom interception is now active-editor gated; four audit partials remain external live-provider artifact gated
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: tightened the last-resort coordinate-less Mac wheel/pinch zoom fallback so global events only become canvas zoom when the editor shell has recent pointer activity or focus.
+- `apps/admin/src/components/editor/CanvasEditor.tsx`: updated the zoom metadata from broad zero-coordinate fallback to `active-editor-zero-coordinate-window-events`.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: updated zoom source guards and rendered zoom smoke so coordinate-less global wheel/pinch still works with active editor context, while inactive global coordinate-less pinch passes through without changing canvas zoom.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin` -> PASS.
+- `npm run test:editor-zoom --workspace @backy-cms/admin` -> FAIL first on CDP startup timeout before zoom assertions.
+- `BACKY_CDP_COMMAND_TIMEOUT_MS=90000 npm run test:editor-zoom --workspace @backy-cms/admin` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin` -> PASS after adding the inactive global pinch smoke guard.
+- `BACKY_CDP_COMMAND_TIMEOUT_MS=90000 npm run test:editor-zoom --workspace @backy-cms/admin` -> PASS after adding the inactive global pinch smoke guard.
+
+**Next:**
+1. Run `git diff --check`, commit, and push this zoom fallback hardening slice.
+2. Continue Batch 5 with the fresh sidecar scout result or the next highest-friction editor/release UX gap.
 
 ## 2026-05-31 12:16 IST
 
