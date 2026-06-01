@@ -165,6 +165,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `331ebd18` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
+**Newest custom frontend alias polish:** Site identity now has shared host helpers for `customDomain`, `settings.domainVerification.domain`, `settings.domainAliases[].host`, and managed `{slug}.backy.app` hosts. Header, Sidebar, Dashboard, and Sites use those helpers so custom domains/subdomains are selectable, visible, searchable, exported, and copied into browser-safe/server-side custom frontend env handoffs consistently.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

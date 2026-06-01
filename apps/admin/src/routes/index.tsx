@@ -63,7 +63,7 @@ import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore, type BlogPost, type Page, type Site, type User, type MediaAsset } from '@/stores/mockStore';
-import { siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSitePrimaryHost, siteMatchesIdentifier } from '@/lib/siteSelection';
 
 export const Route = createFileRoute('/')({
   validateSearch: (search: Record<string, unknown>): { siteId?: string } => ({
@@ -1286,6 +1286,7 @@ function Index() {
     dashboard.settings?.apiKeys.publicApiKey && dashboard.settings?.apiKeys.adminApiKey
   );
   const canViewUsers = isDashboardPermissionAllowed(permissionMatrix, user, 'users.view');
+  const canViewSites = isDashboardPermissionAllowed(permissionMatrix, user, 'sites.view');
   const canViewSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.view');
   const canConfigureSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.configure');
   const canExportActivity = isDashboardPermissionAllowed(permissionMatrix, user, 'activity.export');
@@ -1303,9 +1304,7 @@ function Index() {
     total: permissionMatrix?.summary.total ?? null,
     source: permissionMatrix ? 'permission matrix' : 'unavailable',
   };
-  const activeSite = dashboard.sites.find((site) => (
-    site.id === selectedSiteId || site.publicSiteId === selectedSiteId
-  )) || dashboard.sites[0] || fallbackStore.sites[0];
+  const activeSite = dashboard.sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || dashboard.sites[0] || fallbackStore.sites[0];
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const publicBaseUrl = getPublicBaseUrl();
   const adminBaseUrl = getAdminBaseUrl();
@@ -1419,6 +1418,7 @@ function Index() {
     { label: 'New form', to: '/forms' as const, icon: ClipboardList, detail: 'Lead capture', visible: canCreateForms, search: { quickCreate: 'blank' as const } },
     { label: 'Media library', to: '/media' as const, icon: HardDrive, detail: 'Images, files, fonts', visible: canViewMedia },
     { label: 'Collections', to: '/collections' as const, icon: Database, detail: 'Structured data', visible: canViewCollections },
+    { label: 'Custom frontend', to: '/sites' as const, icon: Code2, detail: 'API handoff', visible: canViewSites },
     { label: 'API setup', to: '/settings' as const, icon: Settings, detail: 'Frontend control', visible: canViewSettings },
   ].filter((action) => action.visible);
   const visibleDashboardModules = DASHBOARD_MODULES.filter((module) => (
@@ -1455,7 +1455,7 @@ function Index() {
     if (to === '/blog/new') {
       return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
     }
-    return ['/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users'].includes(to)
+    return ['/sites', '/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users'].includes(to)
       ? { siteId: activeSiteId }
       : undefined;
   };
@@ -1557,7 +1557,11 @@ function Index() {
     deploymentRuns,
     vercel,
   ]);
-  const customFrontendPublicHost = activeSite?.customDomain || deploymentHealth.targetDomain || (activeSite?.slug ? `${activeSite.slug}.backy.app` : 'new-site.backy.app');
+  const customFrontendPublicHost = getSitePrimaryHost(activeSite, {
+    requestedIdentifier: search.siteId || selectedSiteId,
+    preferVerifiedAlias: true,
+    fallbackSiteId: activeSiteId,
+  });
   const customFrontendLaunch = useMemo(() => {
     const publicApiBase = `${publicBaseUrl}/api`;
     const encodedSiteId = encodeURIComponent(activeSiteId);

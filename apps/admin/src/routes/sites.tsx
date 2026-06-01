@@ -48,7 +48,13 @@ import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { getSiteRouteSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import {
+  getSiteDomainAliasHosts,
+  getSitePrimaryHost,
+  getSiteRouteSearch,
+  getSiteSecondaryHost,
+  siteMatchesIdentifier,
+} from '@/lib/siteSelection';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -256,6 +262,7 @@ const SITE_EXPORT_COLUMNS = [
   'slug',
   'description',
   'custom_domain',
+  'domain_aliases',
   'status',
   'page_count',
   'last_updated',
@@ -271,7 +278,15 @@ const SITE_EXPORT_COLUMNS = [
   'required_next_controls',
 ] as const;
 
-const getDisplayDomain = (site: Site) => site.customDomain || `${site.slug}.backy.app`;
+const getDisplayDomain = (site: Site) => getSitePrimaryHost(site);
+const getDisplayDomainAliasSummary = (site: Site) => {
+  const aliasHost = getSiteSecondaryHost(site);
+  const aliasCount = getSiteDomainAliasHosts(site).filter((host) => host !== getDisplayDomain(site)).length;
+
+  if (!aliasHost) return '';
+  return aliasCount > 1 ? `${aliasHost} +${aliasCount - 1} alias` : aliasHost;
+};
+const hasCustomSiteHost = (site: Site) => Boolean(site.customDomain || getSiteDomainAliasHosts(site).length > 0);
 
 type SiteDomainVerification = NonNullable<NonNullable<Site['settings']>['domainVerification']>;
 type SiteVercelDeployment = NonNullable<NonNullable<Site['settings']>['vercelDeployment']>;
@@ -298,7 +313,7 @@ const buildDomainVerificationToken = (site: Site): string => {
 
 const getDomainVerification = (site: Site): SiteDomainVerification => {
   const current = site.settings?.domainVerification;
-  const domain = site.customDomain || `${site.slug}.backy.app`;
+  const domain = site.customDomain || site.settings?.domainVerification?.domain || `${site.slug}.backy.app`;
   const token = current?.token || buildDomainVerificationToken(site);
 
   return {
@@ -447,7 +462,7 @@ const getBillingUsageSnapshot = (site: Site): SiteBillingQuota['usage'] => ({
   products: site.settings?.billingQuota?.usage.products || 0,
   collections: site.settings?.billingQuota?.usage.collections || 0,
   teamMembers: site.settings?.billingQuota?.usage.teamMembers || 1,
-  customDomains: site.customDomain ? 1 : 0,
+  customDomains: (site.customDomain ? 1 : 0) + getSiteDomainAliasHosts(site).length,
   updatedAt: new Date().toISOString(),
 });
 
@@ -505,7 +520,7 @@ const getPublicWebBaseUrl = (): string => (
 
 const getPublicPreviewHref = (site: Site) => {
   const domain = getDisplayDomain(site);
-  if (site.customDomain) {
+  if (hasCustomSiteHost(site)) {
     return `https://${domain}`;
   }
 
@@ -567,10 +582,16 @@ const getSiteEndpointMap = (site: Site, publicApiBase: string, adminApiBase: str
   };
 };
 
-const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBase: string) => {
+const buildSiteFrontendContract = (
+  site: Site,
+  publicApiBase: string,
+  adminApiBase: string,
+  options: { requestedIdentifier?: string } = {},
+) => {
   const endpoints = getSiteEndpointMap(site, publicApiBase, adminApiBase);
   const domainVerification = getDomainVerification(site);
-  const publicHost = domainVerification.domain || getDisplayDomain(site);
+  const publicHost = getSitePrimaryHost(site, { requestedIdentifier: options.requestedIdentifier, preferVerifiedAlias: true });
+  const domainAliases = getSiteDomainAliasHosts(site);
 
   return {
     contract: 'backy.site.frontend.v1',
@@ -586,6 +607,7 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
       lastUpdated: site.lastUpdated,
       previewUrl: getPublicPreviewHref(site),
       publicHost,
+      domainAliases,
       domainVerification: {
         domain: domainVerification.domain,
         status: domainVerification.status,
@@ -607,8 +629,9 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
     },
     routing: {
       schemaVersion: 'backy.site-frontend-routing.v1',
-      verifiedDomainRequired: Boolean(site.customDomain),
+      verifiedDomainRequired: Boolean(site.customDomain || domainAliases.length > 0),
       domainVerificationStatus: domainVerification.status,
+      domainAliases,
       hostContext: 'Pass the browser Host as domain={host} when a custom frontend serves root domains or subdomains.',
       resolveWithHost: endpoints.public.resolveWithHost,
       renderWithHost: endpoints.public.renderWithHost,
@@ -833,7 +856,7 @@ function SitesListView() {
     const draft = sites.filter((site) => site.status === 'draft').length;
     const archived = sites.filter((site) => site.status === 'archived').length;
     const pages = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
-    const customDomains = sites.filter((site) => site.customDomain).length;
+    const customDomains = sites.filter(hasCustomSiteHost).length;
 
     return [
       { label: 'Sites', value: sites.length, detail: `${published} public`, icon: Globe },
@@ -847,8 +870,8 @@ function SitesListView() {
   const filteredSites = useMemo(() => (
     sites.filter((site) => {
       if (statusFilter !== 'all' && site.status !== statusFilter) return false;
-      if (domainFilter === 'custom' && !site.customDomain) return false;
-      if (domainFilter === 'backy' && site.customDomain) return false;
+      if (domainFilter === 'custom' && !hasCustomSiteHost(site)) return false;
+      if (domainFilter === 'backy' && hasCustomSiteHost(site)) return false;
       if (pageCoverageFilter === 'with-pages' && (site.pageCount || 0) <= 0) return false;
       if (pageCoverageFilter === 'empty' && (site.pageCount || 0) > 0) return false;
       return true;
@@ -870,12 +893,12 @@ function SitesListView() {
   const publicResolveWithHostUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/resolve?path=/&domain={host}`;
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
   const publicRenderWithHostUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/...&domain={host}`;
-  const selectedPublicHost = selectedApiSite ? (getDomainVerification(selectedApiSite).domain || getDisplayDomain(selectedApiSite)) : '{host}';
+  const selectedPublicHost = selectedApiSite ? getSitePrimaryHost(selectedApiSite, { requestedIdentifier: requestedSiteId, preferVerifiedAlias: true }) : '{host}';
   const selectedBrowserSafeFrontendEnv = `NEXT_PUBLIC_BACKY_API_BASE_URL=${publicApiBase}\nNEXT_PUBLIC_BACKY_SITE_ID=${selectedApiSiteId}\nNEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`;
   const selectedServerSideFrontendEnv = `BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\nBACKY_SITE_ID=${selectedApiSiteId}\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`;
   const selectedFrontendContract = useMemo(() => (
-    selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
-  ), [adminApiBase, publicApiBase, selectedApiSite]);
+    selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase, { requestedIdentifier: requestedSiteId }) : null
+  ), [adminApiBase, publicApiBase, requestedSiteId, selectedApiSite]);
   const selectedSiteRouteSearch = useMemo(() => getSiteRouteSearch(selectedApiSite), [selectedApiSite]);
   const selectedDomainVerification = useMemo(() => (
     selectedApiSite ? getDomainVerification(selectedApiSite) : null
@@ -891,8 +914,14 @@ function SitesListView() {
     const draft = sites.filter((site) => site.status === 'draft').length;
     const archived = sites.filter((site) => site.status === 'archived').length;
     const pageTotal = sites.reduce((total, site) => total + (site.pageCount || 0), 0);
-    const customDomains = sites.filter((site) => site.customDomain).length;
-    const verifiedCustomDomains = sites.filter((site) => site.customDomain && getDomainVerification(site).status === 'verified').length;
+    const customDomainSites = sites.filter(hasCustomSiteHost);
+    const customDomains = customDomainSites.length;
+    const verifiedCustomDomains = customDomainSites.filter((site) => {
+      const primaryVerified = site.customDomain ? getDomainVerification(site).status === 'verified' : true;
+      const aliases = site.settings?.domainAliases || [];
+      const aliasesVerified = aliases.length === 0 || aliases.every((alias) => alias.status === 'verified');
+      return primaryVerified && aliasesVerified;
+    }).length;
     const checks = [
       {
         label: 'Workspace inventory',
@@ -1263,6 +1292,11 @@ function SitesListView() {
           <span className="min-w-0">
             <span className="block truncate font-semibold text-foreground group-hover:text-primary">{site.name}</span>
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{getDisplayDomain(site)}</span>
+            {getDisplayDomainAliasSummary(site) ? (
+              <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/80">
+                Alias: {getDisplayDomainAliasSummary(site)}
+              </span>
+            ) : null}
           </span>
         </button>
       ),
@@ -1463,6 +1497,13 @@ function SitesListView() {
     columns,
     initialSort: { key: 'lastUpdated', direction: 'desc' },
     pageSize: 8,
+    getSearchText: (site) => [
+      site.name,
+      site.slug,
+      site.customDomain || '',
+      getDisplayDomain(site),
+      ...getSiteDomainAliasHosts(site),
+    ].join(' '),
   });
 
   const hasActiveFilters = Boolean(searchQuery) || statusFilter !== 'all' || domainFilter !== 'all' || pageCoverageFilter !== 'all';
@@ -1493,6 +1534,7 @@ function SitesListView() {
         site.slug,
         site.description || '',
         site.customDomain || '',
+        getSiteDomainAliasHosts(site).join('; '),
         site.status,
         site.pageCount || 0,
         site.lastUpdated || '',
@@ -2286,7 +2328,7 @@ function SitesListView() {
             <SiteApiStat label="Selected site" value={selectedApiSite?.name || 'No site'} />
             <SiteApiStat label="Published" value={`${sites.filter((site) => site.status === 'published').length}`} />
             <SiteApiStat label="Draft" value={`${sites.filter((site) => site.status === 'draft').length}`} />
-            <SiteApiStat label="Custom domains" value={`${sites.filter((site) => site.customDomain).length}`} />
+            <SiteApiStat label="Custom domains" value={`${sites.filter(hasCustomSiteHost).length}`} />
           </div>
 
           <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">

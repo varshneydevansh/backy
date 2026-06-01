@@ -30,6 +30,7 @@ interface UseDataTableProps<T> {
     initialSearch?: string;
     initialPage?: number;
     pageSize?: number;
+    getSearchText?: (item: T) => string;
 }
 
 export function useDataTable<T>({
@@ -37,7 +38,8 @@ export function useDataTable<T>({
     initialSort = { key: 'createdAt' as keyof T, direction: 'desc' },
     initialSearch = '',
     initialPage = 1,
-    pageSize = 10
+    pageSize = 10,
+    getSearchText
 }: UseDataTableProps<T>) {
     // State
     const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -47,14 +49,19 @@ export function useDataTable<T>({
     // 1. Filter
     const filteredData = useMemo(() => {
         if (!searchQuery) return data;
+        const normalizedSearch = searchQuery.toLowerCase();
 
         return data.filter(item => {
+            if (getSearchText?.(item).toLowerCase().includes(normalizedSearch)) {
+                return true;
+            }
+
             // Simple search across all string values
             return Object.values(item as any).some(val =>
-                String(val).toLowerCase().includes(searchQuery.toLowerCase())
+                String(val).toLowerCase().includes(normalizedSearch)
             );
         });
-    }, [data, searchQuery]);
+    }, [data, getSearchText, searchQuery]);
 
     // 2. Sort
     const sortedData = useMemo(() => {

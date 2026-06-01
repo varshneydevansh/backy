@@ -26,6 +26,18 @@ const assertSitesRouteSourceContract = () => {
   const detailSource = fs.readFileSync(new URL('../src/routes/sites.$siteId.tsx', import.meta.url), 'utf8');
   assert(source.includes("import { EmptyState } from '@/components/ui/EmptyState';"), 'Sites route must use the shared EmptyState component');
   assert(source.includes('validateSearch') && source.includes('siteMatchesIdentifier(site, requestedSiteId)'), 'Sites route must allow selecting the API handoff site from the siteId search param');
+  assert(
+    source.includes('getSiteDomainAliasHosts') &&
+      source.includes('getSitePrimaryHost') &&
+      source.includes('getSiteSecondaryHost') &&
+      source.includes("const hasCustomSiteHost = (site: Site) => Boolean(site.customDomain || getSiteDomainAliasHosts(site).length > 0)") &&
+      source.includes("'domain_aliases'") &&
+      source.includes('getSearchText: (site) => [') &&
+      source.includes('...getSiteDomainAliasHosts(site)') &&
+      source.includes('const selectedPublicHost = selectedApiSite ? getSitePrimaryHost(selectedApiSite, { requestedIdentifier: requestedSiteId, preferVerifiedAlias: true }) :') &&
+      source.includes('selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase, { requestedIdentifier: requestedSiteId }) : null'),
+    'Sites route must make custom domains and same-site aliases searchable, exportable, selectable from siteId, and usable in custom frontend env handoff.',
+  );
   assert(source.includes('title="No site audit events yet"'), 'Sites audit panel must keep the empty audit title visible');
   assert(source.includes('Site creation, status changes, domain updates, quota refreshes, and delivery handoffs will appear here.'), 'Sites audit empty state must explain which actions populate activity');
   assert(source.includes('title="No deploy handoffs yet"'), 'Sites deploy history must keep the empty handoff title visible');

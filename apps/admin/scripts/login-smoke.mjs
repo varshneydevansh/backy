@@ -491,6 +491,7 @@ const assertAuthRecoverySource = () => {
     sidebarSource.includes('collapseLocked?: boolean') &&
       sidebarModelSource.includes('id: string;') &&
       sidebarSource.includes("import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
+      sidebarSource.includes("import { getSitePrimaryHost, getSiteSecondaryHost } from '@/lib/siteSelection';") &&
       sidebarSource.includes("import { useStore } from '@/stores/mockStore';") &&
       sidebarSource.includes('const selectedSiteId = getSiteSelectionFromSearch(sites)') &&
       sidebarSource.includes('sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0]') &&
@@ -498,6 +499,8 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
       sidebarSource.includes('const activeSiteRouteId = useMemo(') &&
       sidebarSource.includes('() => activeSite?.id || activeSiteId') &&
+      sidebarSource.includes('const activeSitePrimaryHost = getSitePrimaryHost(activeSite, { fallbackSiteId: activeSiteId })') &&
+      sidebarSource.includes('const activeSiteAliasHost = getSiteSecondaryHost(activeSite)') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-manage`}') &&
       sidebarSource.includes('data-testid={`${testIdPrefix}-active-site-domains`}') &&
@@ -506,7 +509,9 @@ const assertAuthRecoverySource = () => {
       sidebarSource.includes('const activeSiteManageStatus = `Manage ${activeSiteName} site workspace without signing out.`') &&
       sidebarSource.includes('const activeSiteSwitchStatus = `Switch active site without signing out. Currently ${activeSiteName}.`') &&
       sidebarSource.includes('const activeSiteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`') &&
-      sidebarSource.includes("const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : 'managed-host';") &&
+      sidebarSource.includes("const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : activeSiteAliasHost ? 'alias-domain' : 'managed-host';") &&
+      sidebarSource.includes('data-active-site-primary-host={activeSitePrimaryHost}') &&
+      sidebarSource.includes('data-active-site-alias-host={activeSiteAliasHost}') &&
       sidebarSource.includes('data-site-switcher-discovery="visible-site-select-no-signout"') &&
       sidebarSource.includes('data-active-site-domain-state={activeSiteDomainState}') &&
       sidebarSource.includes('data-active-site-domain-label={activeSiteDomainLabel}') &&
@@ -686,10 +691,13 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
-    headerSource.includes('aria-label="Open admin navigation"') &&
+      headerSource.includes('aria-label="Open admin navigation"') &&
       headerSource.includes("import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';") &&
+      headerSource.includes("import { getSitePrimaryHost, getSiteSecondaryHost } from '@/lib/siteSelection';") &&
       headerSource.includes('const activeSiteName = activeSite?.name || activeSiteId') &&
-      headerSource.includes('const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId') &&
+      headerSource.includes('const activeSitePrimaryHost = getSitePrimaryHost(activeSite, { fallbackSiteId: activeSiteId })') &&
+      headerSource.includes('const activeSiteAliasHost = getSiteSecondaryHost(activeSite)') &&
+      headerSource.includes('const activeSiteMeta = activeSiteAliasHost ? `${activeSitePrimaryHost} + ${activeSiteAliasHost}` : activeSitePrimaryHost') &&
       headerSource.includes('const activeSiteStatus = activeSite?.status ||') &&
       headerSource.includes('const switchActiveSite = (nextSiteId: string) =>') &&
       headerSource.includes('const target = getSiteSwitchTarget({') &&
@@ -699,6 +707,8 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('data-testid="header-site-switcher"') &&
       headerSource.includes('data-testid="header-active-site-domains"') &&
       headerSource.includes('data-active-site-id={activeSiteId}') &&
+      headerSource.includes('data-active-site-primary-host={activeSitePrimaryHost}') &&
+      headerSource.includes('data-active-site-alias-host={activeSiteAliasHost}') &&
       headerSource.includes('data-active-site-domain-state={activeSiteDomainState}') &&
       headerSource.includes('const siteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`') &&
       headerSource.includes('onChange={(event) => switchActiveSite(event.target.value)}') &&
@@ -2843,7 +2853,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
           activeSite.getAttribute('data-site-switcher-discovery') === 'visible-site-select-no-signout' &&
           /Switch active site without signing out/.test(activeSiteSwitchStatus) &&
           /Open domain and subdomain setup/.test(activeSiteSwitchStatus) &&
-          ['custom-domain', 'managed-host'].includes(activeSiteDomainState) &&
+          ['custom-domain', 'alias-domain', 'managed-host'].includes(activeSiteDomainState) &&
           activeSiteDomainLabel.length > 0 &&
           activeSiteSwitcher instanceof HTMLSelectElement &&
           /Switch active site without signing out/.test(activeSiteSwitcher.getAttribute('aria-label') || '') &&

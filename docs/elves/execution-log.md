@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 23:49 IST
+- **Last updated:** 2026-06-02 00:33 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 00:33 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Same-site domains and subdomains now feed site selection and handoff surfaces
+
+**What changed:**
+- `apps/admin/src/lib/siteSelection.ts` now normalizes host identifiers and matches sites by `customDomain`, `settings.domainVerification.domain`, `settings.domainAliases[].host`, and managed `{slug}.backy.app` hosts in addition to internal ids.
+- Header, Sidebar, Dashboard, and Sites now use the same primary-host/alias helpers, so site switching, Dashboard custom frontend launch env, Sites API handoff, exports, and visible domain labels stay aligned for `devanshvarshney.com` plus aliases such as `blog.devanshvarshney.com`.
+- `useDataTable` now supports route-specific searchable text, and Sites uses it so custom domains and alias hosts are searchable/exportable without leaking secrets.
+
+**Commands run:**
+- `BACKY_SITES_SOURCE_ONLY=1 npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:newsletter --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_BLOG_LIST_SOURCE_ONLY=1 npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS.
+
+**Notes:**
+- A full rendered `npm run test:blog-list --workspace @backy-cms/admin --silent` attempt hit `fetch failed` / `ECONNRESET` from the local API while waiting for taxonomy. The source guard passed; no product code was changed for blog taxonomy.
+- This is the critical pre-halt custom frontend path: the public website domain belongs on the separate custom frontend Vercel project, while Backy stores site/content/design state and serves the API/render contracts through `backy-public`.
+
+**Next:**
+1. Run diff/hygiene gates, commit, push, and then continue Batch 5 only if limits allow.
 
 ## 2026-06-01 23:49 IST
 

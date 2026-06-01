@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSiteSelectionFromSearch, getSiteSwitchTarget, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSitePrimaryHost, getSiteSecondaryHost } from '@/lib/siteSelection';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import {
@@ -118,17 +119,21 @@ export function Sidebar({
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteName = activeSite?.name || activeSiteId;
-  const activeSiteMeta = activeSite?.customDomain || activeSite?.slug || activeSiteId;
+  const activeSitePrimaryHost = getSitePrimaryHost(activeSite, { fallbackSiteId: activeSiteId });
+  const activeSiteAliasHost = getSiteSecondaryHost(activeSite);
+  const activeSiteMeta = activeSiteAliasHost ? `${activeSitePrimaryHost} + ${activeSiteAliasHost}` : activeSitePrimaryHost;
   const activeSiteStatus = activeSite?.status || 'draft';
   const activeSiteRouteId = useMemo(
     () => activeSite?.id || activeSiteId,
     [activeSite?.id, activeSiteId],
   );
   const activeSiteDetailHref = `/sites/${encodeURIComponent(activeSiteRouteId)}`;
-  const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : 'managed-host';
+  const activeSiteDomainState = activeSite?.customDomain ? 'custom-domain' : activeSiteAliasHost ? 'alias-domain' : 'managed-host';
   const activeSiteDomainLabel = activeSite?.customDomain
-    ? `Custom domain: ${activeSite.customDomain}`
-    : `Managed Backy host: ${activeSite?.slug || activeSiteId}.backy.app`;
+    ? `Custom domain: ${activeSitePrimaryHost}${activeSiteAliasHost ? `. Alias: ${activeSiteAliasHost}` : ''}`
+    : activeSiteAliasHost
+      ? `Domain alias: ${activeSitePrimaryHost}. Additional alias: ${activeSiteAliasHost}`
+      : `Managed Backy host: ${activeSitePrimaryHost}`;
   const activeSiteSearch = useMemo(() => (
     { siteId: activeSiteId }
   ), [activeSiteId]);
@@ -489,6 +494,8 @@ export function Sidebar({
           data-active-site-id={activeSiteId}
           data-active-site-name={activeSiteName}
           data-active-site-meta={activeSiteMeta}
+          data-active-site-primary-host={activeSitePrimaryHost}
+          data-active-site-alias-host={activeSiteAliasHost}
           data-active-site-domain-state={activeSiteDomainState}
           data-active-site-domain-label={activeSiteDomainLabel}
           data-site-switcher-mode={collapsed ? 'brand-link-only' : 'inline-select'}
@@ -566,11 +573,12 @@ export function Sidebar({
                 >
                   {sites.map((site) => {
                     const optionSiteId = site.publicSiteId || site.id;
-                    const optionMeta = site.customDomain || site.slug || optionSiteId;
+                    const optionMeta = getSitePrimaryHost(site, { fallbackSiteId: optionSiteId });
+                    const optionAlias = getSiteSecondaryHost(site);
 
                     return (
                       <option key={site.id} value={optionSiteId}>
-                        {site.name} / {optionMeta}
+                        {site.name} / {optionAlias ? `${optionMeta} + ${optionAlias}` : optionMeta}
                       </option>
                     );
                   })}
