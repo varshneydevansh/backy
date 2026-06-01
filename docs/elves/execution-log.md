@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 00:33 IST
+- **Last updated:** 2026-06-02 00:49 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 00:49 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Blog verification status:** Rendered Blog list smoke is stable again
+
+**What changed:**
+- `apps/admin/scripts/blog-list-smoke.mjs` now retries only idempotent GET API requests on short network failures.
+- POST/PUT/PATCH/DELETE smoke mutations remain single-attempt, so the harness does not duplicate created posts, categories, tags, or destructive cleanup operations.
+
+**Commands run:**
+- `npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS before the patch, proving the earlier `ECONNRESET` was transient.
+- `BACKY_BLOG_LIST_SOURCE_ONLY=1 npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS after the patch.
+
+**Notes:**
+- This closes the previous verification note from the custom-frontend alias handoff slice. Blog list, taxonomy management, command-create navigation, focused blog canvas entry, preview URL generation, and visual table containment all passed in the rendered smoke.
+
+**Next:**
+1. Run diff/hygiene gates, commit, push, and continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-06-02 00:33 IST
 

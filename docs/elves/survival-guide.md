@@ -169,6 +169,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `dd5a9ef5` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and the hosted admin login shell still exposes no demo credentials or dev MFA phrase.
 
+**Newest Blog verification polish:** The rendered Blog list smoke has been re-run successfully and its API helper now retries only idempotent GET requests on short local network resets, keeping taxonomy/post mutations single-attempt while reducing false-negative `fetch failed` failures.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

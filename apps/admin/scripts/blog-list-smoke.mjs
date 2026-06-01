@@ -259,10 +259,28 @@ const requestApi = async (endpoint, options = {}) => {
     headers.set('authorization', `Bearer ${apiAdminSessionToken}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  const method = (options.method || 'GET').toUpperCase();
+  const retryableAttempts = method === 'GET' ? 3 : 1;
+  let response;
+  let lastNetworkError;
+  for (let attempt = 0; attempt < retryableAttempts; attempt += 1) {
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+      break;
+    } catch (error) {
+      lastNetworkError = error;
+      if (attempt === retryableAttempts - 1) {
+        throw error;
+      }
+      await sleep(150 * (attempt + 1));
+    }
+  }
+  if (!response) {
+    throw lastNetworkError || new Error(`Unable to request ${endpoint}`);
+  }
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok || payload.success === false) {
