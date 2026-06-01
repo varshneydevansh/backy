@@ -278,8 +278,10 @@ export type {
 export { generatedBackyContractTypeSources } from "./generated-contract-types";
 
 export interface BackyClientOptions {
-  baseUrl: string;
+  baseUrl?: string;
+  apiBaseUrl?: string;
   siteId?: string;
+  sitePublicHost?: string;
   fetch?: typeof fetch;
   requestIdFactory?: () => string;
   defaultHeaders?: HeadersInit;
@@ -351,13 +353,34 @@ export interface BackyConditionalRequestOptions {
 
 export type BackyConditionalOptions = BackyConditionalRequestOptions;
 
+export interface BackyHostContextOptions {
+  /**
+   * Public host used by Backy route resolution. This becomes the domain query
+   * parameter because custom website projects cannot set the browser Host
+   * header when calling backy-public from client code.
+   */
+  domain?: string;
+  host?: string;
+  sitePublicHost?: string;
+}
+
+export interface BackyRouteResolveRequestOptions
+  extends BackyHostContextOptions {
+  previewToken?: string;
+  siteId?: string;
+}
+
 export interface BackyRenderRequestOptions {
   previewToken?: string;
   siteId?: string;
   schemaVersion?: string;
+  domain?: string;
+  host?: string;
+  sitePublicHost?: string;
 }
 
-export type BackyRenderConditionalOptions = BackyConditionalOptions & {
+export type BackyRenderConditionalOptions = BackyConditionalOptions &
+  BackyHostContextOptions & {
   previewToken?: string;
   schemaVersion?: string;
 };
@@ -377,6 +400,145 @@ export interface BackyListOptions {
 export const BACKY_MAX_LIST_LIMIT = 100;
 
 type BackyQueryValue = string | number | boolean | undefined;
+
+export const BACKY_CUSTOM_FRONTEND_BROWSER_ENV = [
+  "NEXT_PUBLIC_BACKY_API_BASE_URL",
+  "NEXT_PUBLIC_BACKY_SITE_ID",
+  "NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST",
+] as const;
+
+export const BACKY_CUSTOM_FRONTEND_SERVER_ENV = [
+  "BACKY_PUBLIC_API_BASE_URL",
+  "BACKY_SITE_ID",
+  "BACKY_SITE_PUBLIC_HOST",
+] as const;
+
+export const BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV = [
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "POSTGRES_URL_NON_POOLING",
+  "BACKY_DATABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_SECRET_KEY",
+  "SUPABASE_JWT_SECRET",
+  "BACKY_ADMIN_API_KEY",
+  "BACKY_ADMIN_SECRET_KEY",
+  "BACKY_BOOTSTRAP_TOKEN",
+  "CRON_SECRET",
+  "SMTP_PASSWORD",
+  "STRIPE_SECRET_KEY",
+] as const;
+
+type BackyCustomFrontendEnvKey =
+  | (typeof BACKY_CUSTOM_FRONTEND_BROWSER_ENV)[number]
+  | (typeof BACKY_CUSTOM_FRONTEND_SERVER_ENV)[number];
+
+export type BackyCustomFrontendEnv = Partial<
+  Record<BackyCustomFrontendEnvKey, string | null | undefined>
+> &
+  Record<string, string | null | undefined>;
+
+export interface BackyCustomFrontendConfigInput
+  extends Omit<
+    BackyClientOptions,
+    "apiBaseUrl" | "baseUrl" | "siteId" | "sitePublicHost"
+  > {
+  env?: BackyCustomFrontendEnv;
+  apiBaseUrl?: string | null;
+  baseUrl?: string | null;
+  siteId?: string | null;
+  sitePublicHost?: string | null;
+}
+
+export interface BackyCustomFrontendResolvedConfig {
+  baseUrl: string;
+  apiBaseUrl: string;
+  siteId: string;
+  sitePublicHost?: string;
+  browserSafeEnv: Record<(typeof BACKY_CUSTOM_FRONTEND_BROWSER_ENV)[number], string>;
+  serverSideEnv: Record<(typeof BACKY_CUSTOM_FRONTEND_SERVER_ENV)[number], string>;
+  forbiddenEnv: typeof BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV;
+}
+
+function normalizeBackyString(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeBackyBaseUrl(
+  value: string | null | undefined,
+  label: string,
+): string {
+  const trimmed = normalizeBackyString(value).replace(/\/+$/, "");
+  if (!trimmed) {
+    throw new Error(`BackyClient requires ${label}.`);
+  }
+  return trimmed.endsWith("/api") ? trimmed.slice(0, -4) : trimmed;
+}
+
+function backyApiBaseUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}/api`;
+}
+
+function resolveBackyHostContext(
+  options: BackyHostContextOptions | undefined,
+  fallbackHost?: string,
+): string | undefined {
+  return (
+    normalizeBackyString(options?.domain) ||
+    normalizeBackyString(options?.host) ||
+    normalizeBackyString(options?.sitePublicHost) ||
+    normalizeBackyString(fallbackHost) ||
+    undefined
+  );
+}
+
+export function resolveBackyCustomFrontendConfig(
+  input: BackyCustomFrontendConfigInput = {},
+): BackyCustomFrontendResolvedConfig {
+  const env = input.env || {};
+  const baseUrl = normalizeBackyBaseUrl(
+    normalizeBackyString(input.apiBaseUrl) ||
+      normalizeBackyString(input.baseUrl) ||
+      normalizeBackyString(env.NEXT_PUBLIC_BACKY_API_BASE_URL) ||
+      normalizeBackyString(env.BACKY_PUBLIC_API_BASE_URL),
+    "apiBaseUrl, baseUrl, NEXT_PUBLIC_BACKY_API_BASE_URL, or BACKY_PUBLIC_API_BASE_URL",
+  );
+  const siteId =
+    normalizeBackyString(input.siteId) ||
+    normalizeBackyString(env.NEXT_PUBLIC_BACKY_SITE_ID) ||
+    normalizeBackyString(env.BACKY_SITE_ID);
+  if (!siteId) {
+    throw new Error(
+      "Backy custom frontend bootstrap requires siteId, NEXT_PUBLIC_BACKY_SITE_ID, or BACKY_SITE_ID.",
+    );
+  }
+
+  const sitePublicHost =
+    normalizeBackyString(input.sitePublicHost) ||
+    normalizeBackyString(env.NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST) ||
+    normalizeBackyString(env.BACKY_SITE_PUBLIC_HOST) ||
+    undefined;
+  const apiBaseUrl = backyApiBaseUrl(baseUrl);
+  const hostValue = sitePublicHost || "";
+
+  return {
+    baseUrl,
+    apiBaseUrl,
+    siteId,
+    sitePublicHost,
+    browserSafeEnv: {
+      NEXT_PUBLIC_BACKY_API_BASE_URL: apiBaseUrl,
+      NEXT_PUBLIC_BACKY_SITE_ID: siteId,
+      NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: hostValue,
+    },
+    serverSideEnv: {
+      BACKY_PUBLIC_API_BASE_URL: apiBaseUrl,
+      BACKY_SITE_ID: siteId,
+      BACKY_SITE_PUBLIC_HOST: hostValue,
+    },
+    forbiddenEnv: BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV,
+  };
+}
 
 function normalizeListNumber(
   value: string | number | undefined,
@@ -14040,14 +14202,15 @@ export class BackyClient {
   private readonly defaultHeaders?: HeadersInit;
   private readonly defaultCredentials?: RequestCredentials;
   private siteId?: string;
+  private sitePublicHost?: string;
 
   constructor(options: BackyClientOptions) {
-    if (!options.baseUrl) {
-      throw new Error("BackyClient requires a baseUrl.");
-    }
-
-    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.baseUrl = normalizeBackyBaseUrl(
+      options.baseUrl ?? options.apiBaseUrl,
+      "baseUrl or apiBaseUrl",
+    );
     this.siteId = options.siteId;
+    this.sitePublicHost = normalizeBackyString(options.sitePublicHost) || undefined;
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.requestIdFactory =
       options.requestIdFactory ??
@@ -14067,6 +14230,22 @@ export class BackyClient {
 
   getSiteId(): string | undefined {
     return this.siteId;
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  getApiBaseUrl(): string {
+    return backyApiBaseUrl(this.baseUrl);
+  }
+
+  setSitePublicHost(sitePublicHost: string | undefined): void {
+    this.sitePublicHost = normalizeBackyString(sitePublicHost) || undefined;
+  }
+
+  getSitePublicHost(): string | undefined {
+    return this.sitePublicHost;
   }
 
   adminSites(
@@ -15378,12 +15557,16 @@ export class BackyClient {
 
   resolve(
     path: string,
-    options: { previewToken?: string; siteId?: string } = {},
+    options: BackyRouteResolveRequestOptions = {},
   ): Promise<BackyRouteResolveResult> {
     return this.requestRouteResolve(
       `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/resolve`,
       {
-        query: { path, previewToken: options.previewToken },
+        query: {
+          path,
+          previewToken: options.previewToken,
+          domain: resolveBackyHostContext(options, this.sitePublicHost),
+        },
       },
     );
   }
@@ -15399,6 +15582,7 @@ export class BackyClient {
           path,
           previewToken: options.previewToken,
           schemaVersion: options.schemaVersion,
+          domain: resolveBackyHostContext(options, this.sitePublicHost),
         },
       },
     );
@@ -15415,6 +15599,7 @@ export class BackyClient {
           path,
           previewToken: options.previewToken,
           schemaVersion: options.schemaVersion,
+          domain: resolveBackyHostContext(options, this.sitePublicHost),
         },
         ifNoneMatch: options.etag,
         requestId: options.requestId,
@@ -19648,6 +19833,36 @@ export class BackyClient {
 
 export const createBackyClient = (options: BackyClientOptions) =>
   new BackyClient(options);
+
+export function createBackyCustomFrontendClient(
+  input: BackyCustomFrontendConfigInput = {},
+): BackyClient {
+  const config = resolveBackyCustomFrontendConfig(input);
+  const {
+    env: _env,
+    apiBaseUrl: _apiBaseUrl,
+    baseUrl: _baseUrl,
+    siteId: _siteId,
+    sitePublicHost: _sitePublicHost,
+    ...clientOptions
+  } = input;
+
+  return new BackyClient({
+    ...clientOptions,
+    baseUrl: config.baseUrl,
+    siteId: config.siteId,
+    sitePublicHost: config.sitePublicHost,
+  });
+}
+
+export const createBackyCustomFrontendClientFromEnv = (
+  env: BackyCustomFrontendEnv,
+  options: Omit<BackyCustomFrontendConfigInput, "env"> = {},
+) =>
+  createBackyCustomFrontendClient({
+    ...options,
+    env,
+  });
 
 function isBackyEnvelope<TData>(value: unknown): value is BackyEnvelope<TData> {
   return Boolean(

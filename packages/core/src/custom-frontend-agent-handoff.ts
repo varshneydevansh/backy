@@ -813,6 +813,9 @@ export const buildCustomFrontendAgentHandoff = (
     package: 'packages/sdk-js',
     generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
     helpers: [
+      'createBackyCustomFrontendClient',
+      'createBackyCustomFrontendClientFromEnv',
+      'resolveBackyCustomFrontendConfig',
       'customFrontendAgentHandoff',
       'customFrontendAgentHandoffCached',
       'manifest',
@@ -884,6 +887,8 @@ export const buildCustomFrontendAgentHandoff = (
       sdkPackage: 'packages/sdk-js',
       generatedTypes: 'packages/sdk-js/src/generated-contract-types.ts',
       preferredHelpers: [
+        'createBackyCustomFrontendClient',
+        'resolveBackyCustomFrontendConfig',
         'customFrontendAgentHandoff',
         'manifest',
         'openapi',

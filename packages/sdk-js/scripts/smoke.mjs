@@ -30,6 +30,8 @@ import {
   buildBackyMediaSignedUrlInput,
   buildBackyMediaTransformPath,
   buildBackyMediaTransformUrl,
+  createBackyCustomFrontendClient,
+  createBackyCustomFrontendClientFromEnv,
   createBackyClient,
   deleteBackyContentElements,
   duplicateBackyContentElement,
@@ -44,6 +46,7 @@ import {
   patchBackyContentElement,
   patchBackyContentElements,
   transformBackyContentElements,
+  resolveBackyCustomFrontendConfig,
   ungroupBackyContentElements,
 } from '../dist/index.js';
 
@@ -77,6 +80,100 @@ const assert = (condition, message) => {
     throw new Error(message);
   }
 };
+
+async function assertCustomFrontendSdkBootstrap() {
+  const env = {
+    NEXT_PUBLIC_BACKY_API_BASE_URL: 'https://backy-public.example/api',
+    NEXT_PUBLIC_BACKY_SITE_ID: 'site_frontend',
+    NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: 'www.example.test',
+    BACKY_DATABASE_URL: 'must-not-be-read',
+  };
+  const requests = [];
+  const jsonResponse = (data, headers = {}) => new Response(JSON.stringify(data), {
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      ...headers,
+    },
+  });
+  const fetchImpl = async (input, init = {}) => {
+    requests.push({
+      url: String(input),
+      headers: new Headers(init.headers),
+    });
+    const url = new URL(String(input));
+    const envelope = {
+      success: true,
+      requestId: 'sdk-custom-frontend-bootstrap',
+      data: {
+        site: {
+          id: 'site_frontend',
+          slug: 'frontend',
+          name: 'Frontend',
+        },
+        route: {
+          type: 'page',
+          path: url.searchParams.get('path') || '/',
+        },
+        content: {
+          elements: [],
+        },
+      },
+    };
+    return jsonResponse(envelope, url.pathname.includes('/render') ? {
+      etag: '"sdk-custom-frontend"',
+      'x-backy-schema-version': url.searchParams.get('schemaVersion') || 'backy.content-payload.v1',
+    } : {});
+  };
+
+  const resolvedConfig = resolveBackyCustomFrontendConfig({ env });
+  assert(resolvedConfig.baseUrl === 'https://backy-public.example', 'custom frontend config did not strip /api from public API base URL');
+  assert(resolvedConfig.apiBaseUrl === 'https://backy-public.example/api', 'custom frontend config did not expose canonical API base URL');
+  assert(resolvedConfig.siteId === 'site_frontend', 'custom frontend config did not read browser-safe site id');
+  assert(resolvedConfig.sitePublicHost === 'www.example.test', 'custom frontend config did not read browser-safe public host');
+  assert(resolvedConfig.browserSafeEnv.NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST === 'www.example.test', 'custom frontend config did not return browser-safe env handoff');
+  assert(resolvedConfig.forbiddenEnv.includes('BACKY_DATABASE_URL'), 'custom frontend config did not advertise forbidden database env boundary');
+
+  const client = createBackyCustomFrontendClient({
+    env,
+    fetch: fetchImpl,
+    requestIdFactory: () => 'sdk-custom-frontend-request',
+  });
+  assert(client.getBaseUrl() === 'https://backy-public.example', 'custom frontend client base URL drifted');
+  assert(client.getApiBaseUrl() === 'https://backy-public.example/api', 'custom frontend client API base URL drifted');
+  assert(client.getSiteId() === 'site_frontend', 'custom frontend client did not retain site id');
+  assert(client.getSitePublicHost() === 'www.example.test', 'custom frontend client did not retain public host');
+
+  await client.resolve('/');
+  const resolveUrl = new URL(requests.at(-1).url);
+  assert(resolveUrl.pathname === '/api/sites/site_frontend/resolve', 'custom frontend resolve() used wrong API path');
+  assert(resolveUrl.searchParams.get('path') === '/', 'custom frontend resolve() did not pass route path');
+  assert(resolveUrl.searchParams.get('domain') === 'www.example.test', 'custom frontend resolve() did not pass default public host as domain');
+
+  await client.render('/blog', {
+    host: 'blog.example.test',
+    schemaVersion: 'backy.content-payload.v1',
+  });
+  const renderUrl = new URL(requests.at(-1).url);
+  assert(renderUrl.pathname === '/api/sites/site_frontend/render', 'custom frontend render() used wrong API path');
+  assert(renderUrl.searchParams.get('domain') === 'blog.example.test', 'custom frontend render() did not prefer host override');
+  assert(renderUrl.searchParams.get('schemaVersion') === 'backy.content-payload.v1', 'custom frontend render() dropped schema version');
+
+  const cachedRender = await client.renderCached('/docs', {
+    domain: 'docs.example.test',
+    etag: '"sdk-custom-frontend"',
+  });
+  const cachedRenderUrl = new URL(requests.at(-1).url);
+  assert(cachedRenderUrl.searchParams.get('domain') === 'docs.example.test', 'custom frontend renderCached() did not pass domain override');
+  assert(requests.at(-1).headers.get('if-none-match') === '"sdk-custom-frontend"', 'custom frontend renderCached() dropped ETag revalidation header');
+  assert(cachedRender.notModified === false, 'custom frontend renderCached() fake response should not be notModified');
+
+  const clientFromEnv = createBackyCustomFrontendClientFromEnv(env, {
+    fetch: fetchImpl,
+    requestIdFactory: () => 'sdk-custom-frontend-request',
+  });
+  assert(clientFromEnv.getSiteId() === 'site_frontend', 'createBackyCustomFrontendClientFromEnv() did not set site id');
+}
 
 const sleep = (ms) => new Promise((resolve) => {
   setTimeout(resolve, ms);
@@ -444,6 +541,8 @@ assert(sdkReusableSectionUpdateInput.expectedVersion === 2, 'buildBackyAdminReus
 assert(sdkReusableSectionUpdateInput.frontendDesignTemplateId === 'sdk-section-update-design-template', 'buildBackyAdminReusableSectionUpdateInput() did not infer template id');
 assert(sdkReusableSectionUpdateInput.content?.elements?.[0]?.id === 'sdk-design-hero', 'buildBackyAdminReusableSectionUpdateInput() did not hydrate section elements');
 assert(sdkReusableSectionUpdateInput.metadata?.frontendDesignAnimations?.[0]?.id === 'sdk-hero-intro', 'buildBackyAdminReusableSectionUpdateInput() did not preserve animation metadata');
+
+await assertCustomFrontendSdkBootstrap();
 
 async function startSmokeWebhookReceiver(pathname) {
   const requests = [];
@@ -1924,6 +2023,8 @@ assert(customFrontendAgentHandoff.readOrder?.[0]?.endpointKey === 'agentHandoff'
 assert(customFrontendAgentHandoff.readOrder?.some?.((entry) => entry.endpointKey === 'frontendDesignManagement'), 'manifest() custom frontend agent handoff missing frontend-design read-order step');
 assert(customFrontendAgentHandoff.readOrder?.some?.((entry) => entry.endpointKey === 'newsletterManagement'), 'manifest() custom frontend agent handoff missing newsletter read-order step');
 assert(customFrontendAgentHandoff.sdk?.package === 'packages/sdk-js', 'manifest() custom frontend agent handoff SDK package drifted');
+assert(customFrontendAgentHandoff.sdk?.helpers?.includes('createBackyCustomFrontendClient'), 'manifest() custom frontend agent handoff missing custom frontend SDK bootstrap helper');
+assert(customFrontendAgentHandoff.sdk?.helpers?.includes('resolveBackyCustomFrontendConfig'), 'manifest() custom frontend agent handoff missing custom frontend env resolver helper');
 assert(customFrontendAgentHandoff.sdk?.helpers?.includes('customFrontendAgentHandoff'), 'manifest() custom frontend agent handoff missing direct SDK helper');
 assert(customFrontendAgentHandoff.sdk?.helpers?.includes('customFrontendAgentHandoffCached'), 'manifest() custom frontend agent handoff missing cached SDK helper');
 assert(customFrontendAgentHandoff.sdk?.helpers?.includes('buildBackyContentDesignPayload'), 'manifest() custom frontend agent handoff missing design payload helper');
@@ -5935,6 +6036,9 @@ console.log(JSON.stringify({
     'manifestCached',
     'customFrontendAgentHandoff',
     'customFrontendAgentHandoffCached',
+    'createBackyCustomFrontendClient',
+    'createBackyCustomFrontendClientFromEnv',
+    'resolveBackyCustomFrontendConfig',
     'frontendDesign',
     'frontendDesignCached',
     'openapi',

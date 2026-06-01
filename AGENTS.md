@@ -54,6 +54,21 @@ Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-fronte
 
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 
+For separate website projects, prefer `@backy/sdk-js` helpers instead of hand-rolling the API glue:
+
+```ts
+import { createBackyCustomFrontendClient } from "@backy/sdk-js";
+
+const backy = createBackyCustomFrontendClient({ env: process.env });
+const [handoff, manifest, page] = await Promise.all([
+  backy.customFrontendAgentHandoff(),
+  backy.manifest(),
+  backy.render("/"),
+]);
+```
+
+The helper accepts browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL` values ending in `/api`, strips that suffix for internal SDK calls, keeps `NEXT_PUBLIC_BACKY_SITE_ID`, and passes `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST` as the `domain` query for `resolve()`, `render()`, and `renderCached()`. Server loaders may pass the matching `BACKY_*` names. Do not pass database, Supabase service-role, provider, admin, bootstrap, cron, or SMTP secrets into custom frontend env.
+
 In the admin app, the same contract is visible from the selected site workspace under **Frontend handoff** -> **Agent handoff**, and from the canvas editor **Composition handoff** panel as **Copy handoff**. Use those copyable blocks when handing Backy context to another AI/frontend agent.
 
 ## Design State Preservation

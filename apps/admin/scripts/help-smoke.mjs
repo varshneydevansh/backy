@@ -407,6 +407,8 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
       helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
       helpSource.includes('BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
+      helpSource.includes("id: 'sdk-bootstrap'") &&
+      helpSource.includes('createBackyCustomFrontendClient') &&
       helpSource.includes('GET /api/sites/${siteId}/resolve?path=/&domain=<your-domain.com>') &&
       helpSource.includes('GET /api/sites/${siteId}/render?path=/&domain=<your-domain.com>') &&
       helpSource.includes('SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY / SUPABASE_JWT_SECRET') &&
@@ -651,6 +653,7 @@ const runRenderedHelpSmoke = async () => {
       'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
       `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
       'BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
+      'createBackyCustomFrontendClient',
       `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/&domain=<your-domain.com>`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/&domain=<your-domain.com>`,
       'SUPABASE_SERVICE_ROLE_KEY',
@@ -688,6 +691,21 @@ const runRenderedHelpSmoke = async () => {
         clipboard,
       };
     })()`, 'Help copy custom frontend endpoint action');
+
+    await evaluate(client, clickElement('help-copy-custom-frontend-sdk-bootstrap'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-custom-frontend-sdk-bootstrap"]');
+      const clipboard = String(window.__backyHelpSmokeClipboard || '');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          clipboard.includes("createBackyCustomFrontendClient") &&
+          clipboard.includes("backy.customFrontendAgentHandoff()") &&
+          clipboard.includes("backy.render('/')") &&
+          !clipboard.includes('SUPABASE_SERVICE_ROLE_KEY'),
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard,
+      };
+    })()`, 'Help copy custom frontend SDK bootstrap action');
 
     const newsletterInput = await evaluate(client, setInputValue('help-search', 'newsletter'));
     assert(newsletterInput.ok, `Help search input could not be updated: ${JSON.stringify(newsletterInput)}`);

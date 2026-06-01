@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 01:09 IST
+- **Last updated:** 2026-06-02 01:36 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 01:36 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** SDK bootstrap now matches the browser-safe env handoff
+
+**What changed:**
+- `@backy/sdk-js` now accepts `apiBaseUrl` or browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL` values ending in `/api`, normalizes them to the Backy public origin for internal calls, and exposes `getApiBaseUrl()`.
+- `BackyClient` now carries `sitePublicHost` and sends it as `domain` for `resolve()`, `render()`, and `renderCached()` by default, with per-call `domain`/`host` overrides for subdomains.
+- New SDK helpers `resolveBackyCustomFrontendConfig`, `createBackyCustomFrontendClient`, and `createBackyCustomFrontendClientFromEnv` let a separate custom website project bootstrap from the safe `NEXT_PUBLIC_BACKY_*` or server-loader `BACKY_*` env block without hand-rolled URL glue.
+- Public `/agent-handoff`/manifest handoff metadata, `AGENTS.md`, `specs/custom-frontend-agent-handoff.md`, and in-app Help now advertise the helper path and keep forbidden database/Supabase/provider/admin/session/bootstrap/cron/SMTP secrets out of custom frontends.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy-cms/core --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run build --workspace @backy-cms/core --silent` -> PASS.
+- `npm run build --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_SDK_SKIP_WRITE_SMOKE=1 BACKY_SDK_MFA_CODE=backy-dev-mfa npm run test:smoke --workspace @backy/sdk-js --silent` -> PASS.
+- `BACKY_HELP_RENDERED_SMOKE=1 npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Run final hygiene, commit/push this SDK bootstrap slice, then re-read the survival guide.
+2. If continuing before halt, prioritize only launch-blocking backend/custom-frontend issues. The four remaining Partial rows are still external Settings/Commerce provider evidence gates.
 
 ## 2026-06-02 01:09 IST
 

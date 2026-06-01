@@ -173,9 +173,13 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest custom frontend Help polish:** Help now has a dedicated separate-custom-frontend connection checklist with copyable browser-safe `NEXT_PUBLIC_BACKY_*` env, optional server-loader `BACKY_*` env, host-aware agent-handoff/manifest/OpenAPI/resolve/render read order, and explicit Supabase/database/provider/admin/session/bootstrap/cron forbidden-secret boundaries. Source and rendered Help smokes are green.
 
+**Newest custom frontend SDK polish:** `@backy/sdk-js` now has `resolveBackyCustomFrontendConfig`, `createBackyCustomFrontendClient`, and `createBackyCustomFrontendClientFromEnv` so separate website projects can bootstrap directly from safe `NEXT_PUBLIC_BACKY_*` or server-loader `BACKY_*` env. The SDK accepts public API bases ending in `/api`, exposes `getApiBaseUrl()`, carries `sitePublicHost`, and sends the host as `domain` for `resolve()`, `render()`, and `renderCached()` unless a per-call `domain`/`host` override is provided. Public handoff metadata, Help, AGENTS, and the custom frontend spec advertise these helpers and keep database/Supabase/provider/admin/session/bootstrap/cron/SMTP secrets forbidden.
+
+**Newest verification:** Core typecheck, SDK typecheck/build, admin typecheck, Help source/rendered smokes, read-only SDK smoke with local dev MFA, diff check, and repo-public hygiene are green for the SDK bootstrap slice.
+
 **Newest deploy verification:** `a9778ab7` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
-**Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
+**Single next action:** Commit/push the custom frontend SDK bootstrap slice if not already pushed, then continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## Active Compute
 

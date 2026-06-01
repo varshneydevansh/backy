@@ -444,6 +444,21 @@ const CUSTOM_FRONTEND_ENV_CARDS = [
     ].join('\n'),
   },
   {
+    id: 'sdk-bootstrap',
+    label: 'SDK bootstrap',
+    description: 'Use this in a separate Next/Vercel website project instead of hand-rolling API URL and host glue.',
+    value: () => [
+      "import { createBackyCustomFrontendClient } from '@backy/sdk-js';",
+      '',
+      'const backy = createBackyCustomFrontendClient({ env: process.env });',
+      'const [handoff, manifest, page] = await Promise.all([',
+      '  backy.customFrontendAgentHandoff(),',
+      '  backy.manifest(),',
+      "  backy.render('/'),",
+      ']);',
+    ].join('\n'),
+  },
+  {
     id: 'forbidden-secrets',
     label: 'Never expose from frontend',
     description: 'These belong only in protected Backy projects, private workers, or provider dashboards.',
@@ -498,7 +513,8 @@ const buildAgentCopyBrief = (siteId: string) => [
   '8. Use authenticated /api/admin/sites/:siteId/* only for writes. Public endpoints are for discovery, rendering, visitor forms/comments/newsletter signup, and route resolution.',
   '9. Keep provider secrets, database URLs, mail credentials, webhook secrets, private orders/submissions, and admin sessions out of public frontend code.',
   '10. For Vercel release topology, deploy protected backy-admin, public backy-public, and separate custom frontend projects. Custom frontend browser bundles use NEXT_PUBLIC_BACKY_API_BASE_URL, NEXT_PUBLIC_BACKY_SITE_ID, and NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST only. Server-side loaders may use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and BACKY_SITE_PUBLIC_HOST.',
-  '11. Before preview deploy, run npm run test:vercel-release-config and npm run test:vercel-preview-readiness; after linking projects, strict mode can require apps/public/.vercel/project.json, apps/admin/.vercel/project.json, and remote backy-public/backy-admin projects.',
+  "11. In custom frontend code, prefer @backy/sdk-js createBackyCustomFrontendClient({ env: process.env }); it accepts the /api env base URL and passes the public host as domain for resolve/render calls.",
+  '12. Before preview deploy, run npm run test:vercel-release-config and npm run test:vercel-preview-readiness; after linking projects, strict mode can require apps/public/.vercel/project.json, apps/admin/.vercel/project.json, and remote backy-public/backy-admin projects.',
 ].join('\n');
 
 function HelpPage() {

@@ -31,6 +31,7 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 
 6. `packages/sdk-js`
    - Prefer SDK helpers when writing agents. The generated types in `packages/sdk-js/src/generated-contract-types.ts` are produced from the public schemas/OpenAPI and should stay aligned with the manifest.
+   - For separate frontend projects, start with `createBackyCustomFrontendClient({ env: process.env })` or `createBackyCustomFrontendClientFromEnv(process.env)`. The helper accepts browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api`, `NEXT_PUBLIC_BACKY_SITE_ID`, and `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST`, normalizes the SDK base URL, and passes the public host as `domain` for `resolve()`, `render()`, and `renderCached()`.
 
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
 
@@ -147,6 +148,7 @@ Agents should treat `customFrontendAgentHandoff.routing` as the machine-readable
 - Managed Backy preview uses `/sites/:slug`; custom hosts use `site.customDomain` and `site.settings.domainVerification.domain`.
 - Subdomains such as `blog.example.com`, `docs.example.com`, or `shop.example.com` are modeled as custom domain/verification hosts. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
 - Custom frontends should keep browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL`, `NEXT_PUBLIC_BACKY_SITE_ID`, and `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST` or server-side `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and `BACKY_SITE_PUBLIC_HOST` as routing inputs, then read Backy manifest/OpenAPI/render payloads instead of committing copied content JSON.
+- `@backy/sdk-js` exposes `createBackyCustomFrontendClient`, `createBackyCustomFrontendClientFromEnv`, and `resolveBackyCustomFrontendConfig` for that exact env block. Use those helpers to avoid `/api/api` URL mistakes and to keep custom domain/subdomain context attached to route reads.
 - DNS/provider credentials, Vercel tokens, and verification secrets stay in Settings/server-side deployment wiring, not in public handoff payloads.
 
 ## Deployment Topology
