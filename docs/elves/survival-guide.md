@@ -103,7 +103,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest production discovery polish:** The live production readiness gate now proves `GET /api/sites?identifier=<site>` and `GET /api/sites?limit=1` on the final public domain before site-scoped handoff/manifest/OpenAPI/render checks, so Supabase-backed public bootstrap discovery is part of release proof.
 
-**Single next action:** Commit and push the production-discovery readiness slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest hosted admin polish:** The login smoke now has a `BACKY_LOGIN_PRODUCTION_SHELL_SMOKE=1` mode plus `test:login-production-shell` script that proves hosted `backy-admin` renders credential-manager login controls without demo credentials or the dev MFA phrase.
+
+**Single next action:** Commit and push the hosted-login-shell smoke slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

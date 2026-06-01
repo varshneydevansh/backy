@@ -13,6 +13,7 @@ const SOURCE_ONLY_MODE = process.env.BACKY_LOGIN_SOURCE_ONLY === '1'
   || process.env.BACKY_AUTH_SOURCE_ONLY === '1'
   || process.env.BACKY_LOGIN_SMOKE_SOURCE_ONLY === '1';
 const LOGIN_FORM_STATUS_SMOKE = process.env.BACKY_LOGIN_FORM_STATUS_SMOKE === '1';
+const PRODUCTION_SHELL_SMOKE = process.env.BACKY_LOGIN_PRODUCTION_SHELL_SMOKE === '1';
 const SIDEBAR_CREATE_SMOKE = process.env.BACKY_LOGIN_SIDEBAR_CREATE_SMOKE === '1'
   || process.env.BACKY_SIDEBAR_CREATE_SMOKE === '1';
 const MOBILE_QUICK_CREATE_SMOKE = process.env.BACKY_LOGIN_MOBILE_QUICK_CREATE_SMOKE === '1'
@@ -806,6 +807,8 @@ const assertAuthRecoverySource = () => {
       loginSmokeSource.includes('assertSidebarFilterInteraction') &&
       loginSmokeSource.includes('assertSidebarLayoutControlsInteraction') &&
       loginSmokeSource.includes('assertSidebarLegacySectionStateMigration') &&
+      loginSmokeSource.includes('assertProductionLoginShell') &&
+      loginSmokeSource.includes('BACKY_LOGIN_PRODUCTION_SHELL_SMOKE') &&
       loginSmokeSource.includes('assertSidebarQuickCreateInteraction') &&
       loginSmokeSource.includes('BACKY_LOGIN_SIDEBAR_CREATE_SMOKE') &&
       loginSmokeSource.includes('assertMobileQuickCreateInteraction') &&
@@ -4157,6 +4160,56 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
   }
 };
 
+const assertProductionLoginShell = async (client) => {
+  const loginState = await navigate(
+    client,
+    `${ADMIN_BASE_URL}/login`,
+    `(() => {
+      const body = document.body?.innerText || '';
+      return {
+        ready: body.includes('Authenticated admin access') &&
+          body.includes('Sign in') &&
+          !body.includes('Demo access') &&
+          !body.includes('admin@backy.io / admin123') &&
+          !body.includes('jane@backy.io / editor123') &&
+          !body.includes('backy-dev-mfa'),
+        path: window.location.pathname,
+        hasDemoAccess: body.includes('Demo access'),
+        hasAdminSeed: body.includes('admin@backy.io / admin123'),
+        hasEditorSeed: body.includes('jane@backy.io / editor123'),
+        hasDevMfa: body.includes('backy-dev-mfa'),
+        body: body.slice(0, 900),
+      };
+    })()`,
+    'Production login shell',
+  );
+
+  const formState = await evaluate(client, `(() => {
+    const email = document.querySelector('#email');
+    const password = document.querySelector('#password');
+    const recovery = document.querySelector('[data-testid="login-password-recovery"]');
+    const submit = document.querySelector('[data-testid="login-submit"]');
+    return {
+      emailAutocomplete: email instanceof HTMLInputElement ? email.autocomplete : '',
+      passwordAutocomplete: password instanceof HTMLInputElement ? password.autocomplete : '',
+      hasRecovery: recovery instanceof HTMLButtonElement,
+      hasSubmit: submit instanceof HTMLButtonElement,
+      demoButtons: document.querySelectorAll('[data-testid^="login-demo-"]').length,
+    };
+  })()`);
+
+  assert(
+    formState.emailAutocomplete === 'username' &&
+      formState.passwordAutocomplete === 'current-password' &&
+      formState.hasRecovery &&
+      formState.hasSubmit &&
+      formState.demoButtons === 0,
+    `Production login shell should expose credential-manager fields and no demo controls: ${JSON.stringify(formState)}`,
+  );
+
+  return { ...loginState, formState };
+};
+
 const main = async () => {
   let client;
   let childProcess;
@@ -4169,9 +4222,11 @@ const main = async () => {
       return;
     }
 
-    await assertEditorCanReadOwnPermissionMatrix();
-    await assertHttpOnlySessionCookieFlow();
-    await assertAuthAuditEvents();
+    if (!PRODUCTION_SHELL_SMOKE) {
+      await assertEditorCanReadOwnPermissionMatrix();
+      await assertHttpOnlySessionCookieFlow();
+      await assertAuthAuditEvents();
+    }
 
     ({ childProcess, userDataDir } = launchChrome());
     const target = await waitForCdp();
@@ -4179,6 +4234,17 @@ const main = async () => {
     await client.opened;
     await client.send('Runtime.enable');
     await client.send('Page.enable');
+
+    if (PRODUCTION_SHELL_SMOKE) {
+      const productionLoginShell = await assertProductionLoginShell(client);
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'production-login-shell',
+        route: '/login',
+        productionLoginShell,
+      }, null, 2));
+      return;
+    }
 
     await navigate(
       client,

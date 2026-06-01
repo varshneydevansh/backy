@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 09:58 IST
+- **Last updated:** 2026-06-01 10:17 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 10:17 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Auth/deploy status:** Hosted admin login shell now has a no-demo-leak smoke
+
+**What changed:**
+- `apps/admin/scripts/login-smoke.mjs`: added `BACKY_LOGIN_PRODUCTION_SHELL_SMOKE=1`, a rendered smoke that opens the configured admin login shell, verifies credential-manager fields and forgot-password affordance, and fails if hosted production exposes `Demo access`, seeded account text, or the dev MFA phrase.
+- `apps/admin/package.json`: added `npm run test:login-production-shell --workspace @backy-cms/admin` as the reusable command for this proof.
+
+**Commands run:**
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_LOGIN_PRODUCTION_SHELL_SMOKE=1 BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9492 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9493 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- After the previous push's Vercel production builds reached Ready, `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `vercel logs --cwd apps/public --environment production --since 20m --level error --expand --no-follow` -> PASS, no logs.
+- `vercel logs --cwd apps/admin --environment production --since 20m --level error --expand --no-follow` -> PASS, no logs.
+
+**Account note:**
+- Hosted production should be accessed with the real owner account created through the one-time bootstrap path. Seeded `admin@backy.io` demo credentials stay local/dev-only and are intentionally hidden from hosted `backy-admin`.
+
+**Next:**
+1. Commit and push this hosted-login-shell smoke slice.
+2. Continue Batch 5 with the next editor/admin friction point after re-reading the survival guide.
 
 ## 2026-06-01 09:58 IST
 
