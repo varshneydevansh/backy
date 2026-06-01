@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 01:46 IST
+- **Last updated:** 2026-06-02 02:02 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 02:02 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate Next.js website starter is now checked and smoke-tested
+
+**What changed:**
+- Added `examples/custom-frontend-next`, a minimal separate custom website frontend that boots from safe Backy env, uses `createBackyCustomFrontendClient({ env: process.env })`, renders Backy public `render()` payloads with host context, and preserves `data-backy-element-id` / `data-backy-element-type` on rendered elements.
+- The starter includes a catch-all route, lightweight element renderer, newsletter signup route, and public form submission route. It does not call admin APIs or require database, provider, SMTP, cron, bootstrap, or service-role env.
+- Added `scripts/custom-frontend-starter-smoke.mjs` and root `npm run test:custom-frontend-starter` so the starter stays aligned with safe env, SDK bootstrap, public route rendering, element APIability attributes, newsletter signup, and public form submission.
+- Updated `.env.example`, `AGENTS.md`, `packages/sdk-js/README.md`, and `specs/custom-frontend-agent-handoff.md` to point frontend agents at the checked starter and the browser-safe custom frontend env block.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Run final hygiene after docs update, commit/push this custom frontend starter slice, then re-read the survival guide.
+2. If continuing before halt, prioritize only launch-blocking custom frontend production setup or verified-domain/site-control defects.
 
 ## 2026-06-02 01:46 IST
 

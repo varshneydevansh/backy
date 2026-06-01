@@ -179,6 +179,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `8e6fd479` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, deployed `/api/sites/site-demo/agent-handoff` exposes the new SDK bootstrap helpers, and recent Vercel error logs are empty.
 
+**Newest custom frontend starter polish:** `examples/custom-frontend-next` now gives frontend agents a checked Next.js launch shape for separate website projects: safe `NEXT_PUBLIC_BACKY_*` / server-loader `BACKY_*` env bootstrap, host-aware `render()` calls through `createBackyCustomFrontendClient`, API-addressable `data-backy-element-id` and `data-backy-element-type` attributes, newsletter signup, and public form submission. `npm run test:custom-frontend-starter` guards the starter against admin-boundary calls and private env drift.
+
+**Newest verification:** Starter source smoke, starter TypeScript smoke, SDK typecheck, diff check, and repo-public hygiene are green for the custom frontend starter slice.
+
 **Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## Active Compute

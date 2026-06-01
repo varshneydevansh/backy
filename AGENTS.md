@@ -52,6 +52,8 @@ Read order:
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).
 
+Minimal launch starter: [examples/custom-frontend-next](examples/custom-frontend-next). It is the smallest checked Next.js shape for a separate website project: safe env bootstrap, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submission.
+
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 
 For separate website projects, prefer `@backy/sdk-js` helpers instead of hand-rolling the API glue:
@@ -121,6 +123,7 @@ BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin
 npm run test:editor-smoke-coverage --workspace @backy-cms/admin
 BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-zoom --workspace @backy-cms/admin
 npm run doctor:release-certification
+npm run test:custom-frontend-starter
 ```
 
 Before claiming a custom frontend or editor path is complete, verify both the API contract and the rendered/admin UI path that exposes it.

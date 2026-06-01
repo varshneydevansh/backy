@@ -2,6 +2,8 @@
 
 Small TypeScript client for custom/generated frontends that consume Backy through public APIs.
 
+For a minimal separate website project, start from [../../examples/custom-frontend-next](../../examples/custom-frontend-next). It wires `createBackyCustomFrontendClient({ env: process.env })`, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submissions without placing admin/database/provider secrets in the frontend.
+
 ```ts
 import {
   buildBackyAdminBlogPostUpdateInput,

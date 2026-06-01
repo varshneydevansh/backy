@@ -34,6 +34,7 @@
     "test:vercel-preview-readiness": "node scripts/vercel-preview-readiness-smoke.mjs",
     "test:vercel-public-production-env-guard": "node scripts/vercel-public-production-env-guard-smoke.mjs",
     "test:vercel-production-readiness": "node scripts/vercel-production-readiness-smoke.mjs",
+    "test:custom-frontend-starter": "node scripts/custom-frontend-starter-smoke.mjs",
     "test:repo-public-hygiene": "node scripts/repo-public-hygiene-smoke.mjs",
     "build:vercel:public": "node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public",
     "build:vercel:admin": "npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy-cms/admin",
