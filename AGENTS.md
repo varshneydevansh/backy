@@ -52,7 +52,7 @@ Read order:
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).
 
-Minimal launch starter: [examples/custom-frontend-next](examples/custom-frontend-next). It is the smallest checked Next.js shape for a separate website project: safe env bootstrap, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submission.
+Minimal launch starter: [examples/custom-frontend-next](examples/custom-frontend-next). It is the smallest checked Next.js shape for a separate website project: safe env bootstrap, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submission. It is self-contained until `@backy/sdk-js` is published to a package registry.
 
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 

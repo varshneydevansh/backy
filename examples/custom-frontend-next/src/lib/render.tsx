@@ -1,5 +1,6 @@
-import type { BackyElement, BackyMediaAsset, BackyRenderPayload } from "@backy/sdk-js";
 import type { CSSProperties, ReactNode } from "react";
+
+import type { BackyElement, BackyMediaAsset, BackyRenderPayload } from "./backy-client";
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)

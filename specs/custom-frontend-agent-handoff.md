@@ -36,6 +36,7 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 7. `examples/custom-frontend-next`
    - Minimal separate website starter for Next.js custom frontends.
    - Shows safe env bootstrap, host-aware public route rendering, `data-backy-element-id` / `data-backy-element-type` preservation, newsletter signup, and public form submission without admin/database/provider env.
+   - Vendors a tiny public client with the same `createBackyCustomFrontendClient({ env: process.env })` shape so a separate Vercel project can install immediately even before `@backy/sdk-js` is published to a package registry.
 
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
 

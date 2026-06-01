@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import type { BackyApiError, BackyRenderPayload } from "@backy/sdk-js";
+import type { BackyApiError, BackyRenderPayload } from "../../lib/backy-client";
 
 import { backy, sitePublicHost } from "../../lib/backy";
 import { BackyPage } from "../../lib/render";

@@ -37,14 +37,17 @@ Before generating routes or UI, read:
 3. `GET /api/sites/:siteId/openapi`
 4. `GET /api/sites/:siteId/render?path=/`
 
-The starter uses `createBackyCustomFrontendClient({ env: process.env })`, so `/api` suffixes, site ids, and host-aware `domain=` route context stay aligned with Backy's public contract.
+The starter vendors a tiny public Backy client in `src/lib/backy-client.ts` so it can be copied into a new Vercel project without waiting for a package-registry publish. It uses the same `createBackyCustomFrontendClient({ env: process.env })` shape as `@backy/sdk-js`, so `/api` suffixes, site ids, and host-aware `domain=` route context stay aligned with Backy's public contract.
 
 ## Files
 
-- `src/lib/backy.ts`: Backy SDK bootstrap from safe env.
+- `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, and form APIs.
+- `src/lib/backy.ts`: Backy client bootstrap from safe env.
 - `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id` and `data-backy-element-type` on every element.
 - `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`.
 - `src/app/api/newsletter/route.ts`: public newsletter signup bridge.
 - `src/app/api/backy-form/route.ts`: public form-submission bridge.
 
 Replace the visual renderer with your own design system as needed, but keep the Backy element ids, element types, responsive/style metadata, and form/newsletter submit boundaries intact.
+
+When `@backy/sdk-js` is published to your package registry, you can replace the local client with the full SDK helper. Until then, this starter remains self-contained for production frontend deployment.

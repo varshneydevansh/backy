@@ -35,13 +35,14 @@ const files = {
   page: read('src/app/[[...path]]/page.tsx'),
   newsletter: read('src/app/api/newsletter/route.ts'),
   form: read('src/app/api/backy-form/route.ts'),
+  client: read('src/lib/backy-client.ts'),
 };
 
 const packageJson = JSON.parse(files.packageJson || '{}');
-if (packageJson.dependencies?.['@backy/sdk-js']) {
-  pass('Starter depends on @backy/sdk-js');
+if (!packageJson.dependencies?.['@backy/sdk-js']) {
+  pass('Starter does not require unpublished @backy/sdk-js package');
 } else {
-  fail('Starter must depend on @backy/sdk-js');
+  fail('Starter must not require unpublished @backy/sdk-js package for separate frontend install');
 }
 if (packageJson.dependencies?.next && packageJson.dependencies?.react && packageJson.dependencies?.['react-dom']) {
   pass('Starter declares Next/React runtime dependencies');
@@ -78,8 +79,11 @@ if (!files.env.includes('admin') && !files.env.includes('secret')) {
 }
 
 assertIncludes(files.backy, 'resolveBackyCustomFrontendConfig', 'Starter resolves safe Backy custom frontend config');
-assertIncludes(files.backy, 'createBackyCustomFrontendClient', 'Starter creates Backy custom frontend SDK client');
-assertIncludes(files.page, 'backy.render<BackyRenderPayload>', 'Catch-all route renders Backy payloads through SDK');
+assertIncludes(files.backy, 'createBackyCustomFrontendClient', 'Starter creates Backy custom frontend client');
+assertIncludes(files.client, 'BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV', 'Starter local client carries forbidden env boundary');
+assertIncludes(files.client, 'normalizeBackyBaseUrl', 'Starter local client normalizes /api public base URLs');
+assertIncludes(files.client, 'domain:', 'Starter local client passes host context as domain');
+assertIncludes(files.page, 'backy.render<BackyRenderPayload>', 'Catch-all route renders Backy payloads through the public client');
 assertIncludes(files.page, 'sitePublicHost', 'Catch-all route passes custom host context');
 assertIncludes(files.render, 'data-backy-element-id', 'Renderer preserves element API id attributes');
 assertIncludes(files.render, 'data-backy-element-type', 'Renderer preserves element API type attributes');
@@ -97,6 +101,9 @@ const allStarterText = Object.entries(files)
   .join('\n');
 for (const forbidden of ['adminSites(', 'createAdmin', '/api/admin/', 'VITE_BACKY_ADMIN_API_KEY']) {
   if (allStarterText.includes(forbidden)) fail(`Starter source must not call or configure admin boundary: ${forbidden}`);
+}
+if (allStarterText.includes('from "@backy/sdk-js"') || allStarterText.includes("from '@backy/sdk-js'")) {
+  fail('Starter source must be self-contained until @backy/sdk-js is published');
 }
 
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {

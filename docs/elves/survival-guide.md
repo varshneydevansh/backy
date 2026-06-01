@@ -183,6 +183,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter source smoke, starter TypeScript smoke, SDK typecheck, diff check, and repo-public hygiene are green for the custom frontend starter slice.
 
+**Newest installability polish:** `@backy/sdk-js` is not currently published on npm (`npm view @backy/sdk-js` returns `E404`), so the Next.js starter now vendors a tiny public Backy client in `examples/custom-frontend-next/src/lib/backy-client.ts` instead of depending on the unpublished package. The starter keeps the same safe env/bootstrap shape, host-aware render behavior, newsletter signup, and form submission boundary, while the full monorepo SDK remains packable for later publication.
+
+**Newest verification:** SDK npm lookup confirms the package is unpublished, local SDK dry-run pack is green, self-contained starter source/type smoke is green, SDK typecheck is green, and repo-public hygiene is green.
+
 **Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## Active Compute

@@ -1,7 +1,7 @@
 import {
   createBackyCustomFrontendClient,
   resolveBackyCustomFrontendConfig,
-} from "@backy/sdk-js";
+} from "./backy-client";
 
 export const backyConfig = resolveBackyCustomFrontendConfig({
   env: process.env,

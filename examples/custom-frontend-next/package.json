@@ -2,14 +2,13 @@
   "name": "backy-custom-frontend-next-starter",
   "version": "0.1.0",
   "private": true,
-  "description": "Minimal Next.js custom website frontend that consumes Backy public APIs through @backy/sdk-js.",
+  "description": "Minimal Next.js custom website frontend that consumes Backy public APIs.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@backy/sdk-js": "0.1.0",
     "next": "^16.1.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

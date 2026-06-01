@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { buildBackyFormSubmissionInput } from "@backy/sdk-js";
-
 import { backy } from "../../../lib/backy";
+import { buildBackyFormSubmissionInput } from "../../../lib/backy-client";
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)

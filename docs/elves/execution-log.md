@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 02:02 IST
+- **Last updated:** 2026-06-02 02:14 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 02:14 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Starter is now installable as a separate Vercel project without a published SDK package
+
+**What changed:**
+- Confirmed `npm view @backy/sdk-js version --json` currently returns `E404`, so a fresh custom frontend project would fail install if the starter depended on the unpublished SDK package.
+- Replaced the starter's runtime SDK dependency with `examples/custom-frontend-next/src/lib/backy-client.ts`, a tiny public client that preserves the same `createBackyCustomFrontendClient({ env: process.env })` bootstrap shape, strips `/api` from public API bases, passes public host context as `domain`, and exposes render, manifest, newsletter signup, form definition, and form submission calls.
+- Updated the starter package, docs, and smoke script so a separate Vercel project can install immediately with only Next/React dependencies while the full `@backy/sdk-js` remains the monorepo SDK path for generated/internal clients and later package-registry publication.
+
+**Commands run:**
+- `npm view @backy/sdk-js version --json` -> expected `E404`, package not published.
+- `npm pack --workspace @backy/sdk-js --dry-run --json` -> PASS, local SDK package remains packable.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Run final hygiene after docs update, commit/push this installability hardening slice, then re-read the survival guide.
+2. If continuing, prioritize live custom frontend setup proof or verified-domain/site-control defects before broad UI polish.
 
 ## 2026-06-02 02:02 IST
 
