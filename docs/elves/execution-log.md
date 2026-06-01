@@ -30,13 +30,19 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `npm run test:newsletter --workspace @backy-cms/admin --silent` -> PASS.
 - `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
 - `BACKY_BLOG_LIST_SOURCE_ONLY=1 npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `git push` -> PASS, `dd5a9ef5 feat(admin): honor site domain aliases in handoff` pushed to `main`.
+- Latest `backy-admin` production deployment -> Ready.
+- Latest `backy-public` production deployment -> Ready.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9547 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS.
 
 **Notes:**
 - A full rendered `npm run test:blog-list --workspace @backy-cms/admin --silent` attempt hit `fetch failed` / `ECONNRESET` from the local API while waiting for taxonomy. The source guard passed; no product code was changed for blog taxonomy.
 - This is the critical pre-halt custom frontend path: the public website domain belongs on the separate custom frontend Vercel project, while Backy stores site/content/design state and serves the API/render contracts through `backy-public`.
 
 **Next:**
-1. Run diff/hygiene gates, commit, push, and then continue Batch 5 only if limits allow.
+1. Continue Batch 5 with the next visible editor/admin friction point when limits allow.
 
 ## 2026-06-01 23:49 IST
 
