@@ -424,15 +424,16 @@ const assertHelpSourceContracts = () => {
     helpSource.includes('Run Backy admin, Backy public APIs, and each custom website as separate deployment surfaces.') &&
       helpSource.includes('protected backy-admin Vercel project') &&
       helpSource.includes('public backy-public Vercel project') &&
-      helpSource.includes('BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optionally BACKY_SITE_PUBLIC_HOST') &&
+      helpSource.includes('NEXT_PUBLIC_BACKY_API_BASE_URL, NEXT_PUBLIC_BACKY_SITE_ID, and NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
+      helpSource.includes('server-side loaders may use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and BACKY_SITE_PUBLIC_HOST') &&
       helpSource.includes('npm run test:vercel-preview-readiness') &&
       helpSource.includes('apps/public to backy-public and apps/admin to backy-admin') &&
       helpSource.includes('Optional Vercel Agent Code Review') &&
       helpSource.includes('Project Settings -> AI') &&
       helpSource.includes("id: 'frontend-env'") &&
       helpSource.includes("id: 'deployment-topology'") &&
-      helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
-      helpSource.includes('Custom frontends use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and optional BACKY_SITE_PUBLIC_HOST only.'),
+      helpSource.includes('NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api') &&
+      helpSource.includes('Custom frontend browser bundles use NEXT_PUBLIC_BACKY_API_BASE_URL, NEXT_PUBLIC_BACKY_SITE_ID, and NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST only.'),
     'Help route must explain protected Backy/admin-public/custom-frontend deployment topology and copyable frontend env.',
   );
 
@@ -541,8 +542,8 @@ const runRenderedHelpSmoke = async () => {
       `/api/sites/${HELP_SMOKE_SITE_ID}/openapi`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/...`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/...`,
-      `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
-      'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
+      `NEXT_PUBLIC_BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
+      'NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api',
       'agent-handoff.deploymentTopology.verification.previewReadinessSmoke = npm run test:vercel-preview-readiness',
     ]) {
       assert(endpointState.text.includes(expected), `Rendered Help starter endpoints are missing ${expected}`);

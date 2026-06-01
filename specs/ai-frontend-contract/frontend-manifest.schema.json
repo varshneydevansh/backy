@@ -774,6 +774,17 @@
                 "publicApiOriginEnv": { "const": "BACKY_PUBLIC_API_BASE_URL" },
                 "siteIdentifierEnv": { "const": "BACKY_SITE_ID" },
                 "hostContextEnv": { "const": "BACKY_SITE_PUBLIC_HOST" },
+                "browserSafeEnv": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "NEXT_PUBLIC_BACKY_API_BASE_URL" }
+                },
+                "serverSideEnv": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 },
+                  "contains": { "const": "BACKY_PUBLIC_API_BASE_URL" }
+                },
+                "domainOwner": { "const": "custom-frontend-vercel-project" },
                 "corsSetting": { "const": "BACKY_CORS_ALLOWED_ORIGINS" }
               }
             },
@@ -850,12 +861,24 @@
                       "items": { "type": "string", "minLength": 1 },
                       "contains": { "const": "BACKY_SITE_PUBLIC_HOST" }
                     },
+                    "browserSafeEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "NEXT_PUBLIC_BACKY_API_BASE_URL" }
+                    },
+                    "serverSideEnv": {
+                      "type": "array",
+                      "items": { "type": "string", "minLength": 1 },
+                      "contains": { "const": "BACKY_PUBLIC_API_BASE_URL" }
+                    },
+                    "domainAttachment": { "type": "string", "minLength": 1 },
+                    "apiOriginPolicy": { "type": "string", "minLength": 1 },
                     "forbiddenEnv": {
                       "type": "array",
                       "items": { "type": "string", "minLength": 1 }
                     }
                   },
-                  "required": ["publicStatus", "requiredEnv", "optionalEnv", "forbiddenEnv"]
+                  "required": ["publicStatus", "requiredEnv", "optionalEnv", "browserSafeEnv", "serverSideEnv", "domainAttachment", "apiOriginPolicy", "forbiddenEnv"]
                 }
               },
               "required": ["backyAdmin", "backyPublic", "customFrontend"]

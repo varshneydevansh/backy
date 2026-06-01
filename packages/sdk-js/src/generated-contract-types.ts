@@ -6057,6 +6057,9 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       publicApiOriginEnv?: "BACKY_PUBLIC_API_BASE_URL";
       siteIdentifierEnv?: "BACKY_SITE_ID";
       hostContextEnv?: "BACKY_SITE_PUBLIC_HOST";
+      browserSafeEnv?: Array<string>;
+      serverSideEnv?: Array<string>;
+      domainOwner?: "custom-frontend-vercel-project";
       corsSetting?: "BACKY_CORS_ALLOWED_ORIGINS";
       [key: string]: unknown;
     };
@@ -6088,6 +6091,10 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
         publicStatus: "public";
         requiredEnv: Array<string>;
         optionalEnv: Array<string>;
+        browserSafeEnv: Array<string>;
+        serverSideEnv: Array<string>;
+        domainAttachment: string;
+        apiOriginPolicy: string;
         forbiddenEnv: Array<string>;
         [key: string]: unknown;
       };

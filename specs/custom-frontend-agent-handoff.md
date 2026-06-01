@@ -146,7 +146,7 @@ Agents should treat `customFrontendAgentHandoff.routing` as the machine-readable
 - Route resolution/rendering accepts the site id plus `domain={host}` query context or the request Host/forwarded-host header.
 - Managed Backy preview uses `/sites/:slug`; custom hosts use `site.customDomain` and `site.settings.domainVerification.domain`.
 - Subdomains such as `blog.example.com`, `docs.example.com`, or `shop.example.com` are modeled as custom domain/verification hosts. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
-- Custom frontends should keep `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optionally `BACKY_SITE_PUBLIC_HOST` as routing inputs, then read Backy manifest/OpenAPI/render payloads instead of committing copied content JSON.
+- Custom frontends should keep browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL`, `NEXT_PUBLIC_BACKY_SITE_ID`, and `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST` or server-side `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and `BACKY_SITE_PUBLIC_HOST` as routing inputs, then read Backy manifest/OpenAPI/render payloads instead of committing copied content JSON.
 - DNS/provider credentials, Vercel tokens, and verification secrets stay in Settings/server-side deployment wiring, not in public handoff payloads.
 
 ## Deployment Topology
@@ -155,7 +155,7 @@ Agents should also read `customFrontendAgentHandoff.deploymentTopology` before d
 
 - `backy-admin` is the protected Vite admin/editor shell from `apps/admin`. It should receive only `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL`, and must not receive database URLs, cron secrets, provider secrets, or admin API keys.
 - `backy-public` is the public Next.js app from `apps/public`. It serves manifest, OpenAPI, agent-handoff, resolve/render, forms, comments, newsletter signup, and authenticated admin APIs. Server-only database, admin, cron, storage, commerce, and mail-provider secrets belong here or in CI/provider secret stores.
-- Custom websites should run as separate public frontend projects when they have their own domain, framework, team, or release cadence. They should use only `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST`.
+- Custom websites should run as separate public frontend projects when they have their own domain, framework, team, or release cadence. They should attach the public website domain to that custom frontend project, use `backy-public` as the API/render origin, and use only browser-safe `NEXT_PUBLIC_BACKY_*` env or server-side `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and `BACKY_SITE_PUBLIC_HOST`.
 - The topology block names the release checks a deploy agent should run: `npm run test:vercel-release-config`, `npm run test:vercel-preview-readiness`, `npm run test:frontend-contract-types`, `npm run doctor:release-certification`, and provider artifact admission when live Settings/Commerce evidence exists. Production promotion can also prove admin login/session/logout by running `npm run test:vercel-production-readiness` with `BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1` and admin credentials supplied from local shell or CI secrets only.
 
 ## Creating new content

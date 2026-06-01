@@ -2111,6 +2111,13 @@ assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyPublic?.pub
 assert(customFrontendAgentHandoff.deploymentTopology?.projects?.backyPublic?.serves?.includes('agent-handoff'), 'manifest() deployment topology missing public agent-handoff surface');
 assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.requiredEnv?.includes('BACKY_PUBLIC_API_BASE_URL'), 'manifest() deployment topology missing custom frontend public API env');
 assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.optionalEnv?.includes('BACKY_SITE_PUBLIC_HOST'), 'manifest() deployment topology missing optional custom frontend host env');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.browserSafeEnv?.includes('NEXT_PUBLIC_BACKY_API_BASE_URL'), 'manifest() deployment topology missing browser-safe custom frontend API env');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.serverSideEnv?.includes('BACKY_PUBLIC_API_BASE_URL'), 'manifest() deployment topology missing server-side custom frontend API env');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.domainAttachment?.includes('custom frontend Vercel project'), 'manifest() deployment topology missing custom frontend domain ownership rule');
+assert(customFrontendAgentHandoff.deploymentTopology?.projects?.customFrontend?.apiOriginPolicy?.includes('backy-public'), 'manifest() deployment topology missing custom frontend API origin policy');
+assert(customFrontendAgentHandoff.routing?.customFrontendDeployment?.browserSafeEnv?.includes('NEXT_PUBLIC_BACKY_API_BASE_URL'), 'manifest() routing handoff missing browser-safe custom frontend env');
+assert(customFrontendAgentHandoff.routing?.customFrontendDeployment?.serverSideEnv?.includes('BACKY_PUBLIC_API_BASE_URL'), 'manifest() routing handoff missing server-side custom frontend env');
+assert(customFrontendAgentHandoff.routing?.customFrontendDeployment?.domainOwner === 'custom-frontend-vercel-project', 'manifest() routing handoff missing custom frontend domain owner');
 assert(customFrontendAgentHandoff.deploymentTopology?.domainPolicy?.verificationRequired === true, 'manifest() deployment topology must require verified domains');
 assert(customFrontendAgentHandoff.deploymentTopology?.verification?.releaseConfigSmoke === 'npm run test:vercel-release-config', 'manifest() deployment topology missing Vercel release smoke');
 assert(customFrontendAgentHandoff.deploymentTopology?.verification?.previewReadinessSmoke === 'npm run test:vercel-preview-readiness', 'manifest() deployment topology missing Vercel preview readiness smoke');
@@ -2141,6 +2148,8 @@ assertComponentApiContractCoverage(agentHandoff.data.componentApiContract, 'cust
 assertComponentApiLayoutBehavior(agentHandoff.data.componentApiContract, 'customFrontendAgentHandoff()');
 assert(agentHandoff.data.deploymentTopology?.schemaVersion === 'backy.deployment-topology.v1', 'customFrontendAgentHandoff() missing top-level deployment topology');
 assert(agentHandoff.data.deploymentTopology?.projects?.backyAdmin?.publicStatus === 'protected', 'customFrontendAgentHandoff() deployment topology must mark admin protected');
+assert(agentHandoff.data.deploymentTopology?.projects?.customFrontend?.browserSafeEnv?.includes('NEXT_PUBLIC_BACKY_API_BASE_URL'), 'customFrontendAgentHandoff() deployment topology missing browser-safe custom frontend env');
+assert(agentHandoff.data.deploymentTopology?.projects?.customFrontend?.domainAttachment?.includes('custom frontend Vercel project'), 'customFrontendAgentHandoff() deployment topology missing custom frontend domain ownership rule');
 assert(agentHandoff.data.handoff?.deploymentTopology?.verification?.frontendContractSmoke === 'npm run test:frontend-contract-types', 'customFrontendAgentHandoff() handoff deployment topology missing frontend contract smoke');
 assert(agentHandoff.data.canvasFirst?.editor === 'Backy canvas editor', 'customFrontendAgentHandoff() missing canvas-first editor rule');
 assert(agentHandoff.data.designState?.roundTripFields?.includes('content.elements'), 'customFrontendAgentHandoff() missing design-state round-trip fields');

@@ -157,6 +157,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest custom frontend launch polish:** Site Detail now exposes a copyable `backy.custom-frontend-project-launch.v1` block that tells owners and frontend agents to attach the public website domain to the separate custom frontend Vercel project, use `backy-public` as the API/render origin, keep `backy-admin` protected, copy only public/read env values, and keep Supabase/database/provider/admin secrets out of the frontend. Site Detail smoke, typecheck, diff check, and repo-public hygiene are green.
 
+**Newest custom frontend env polish:** Public `/agent-handoff`, manifest schema, SDK generated contract types, Help, and AGENTS now distinguish browser-safe `NEXT_PUBLIC_BACKY_*` env from server-side `BACKY_*` env for separate custom website frontend projects, while naming the custom frontend Vercel project as the public-domain owner and keeping server/provider/admin secrets forbidden.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

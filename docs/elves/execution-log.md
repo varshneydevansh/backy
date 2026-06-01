@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 22:01 IST
+- **Last updated:** 2026-06-01 22:35 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 22:35 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Public handoff now advertises the browser-safe env boundary for separate website projects
+
+**What changed:**
+- `packages/core/src/custom-frontend-agent-handoff.ts` now exposes browser-safe `NEXT_PUBLIC_BACKY_*` env, server-side `BACKY_*` equivalents, custom frontend project domain ownership, API origin policy, and forbidden-secret boundaries in both routing handoff and deployment topology.
+- The frontend manifest schema, generated SDK contract types, SDK smoke, and public frontend-contract smoke now guard those fields so `/agent-handoff`, manifest, OpenAPI mirrors, and generated clients stay aligned.
+- Help, `AGENTS.md`, and custom frontend specs now tell frontend agents to attach the public website domain to the separate website Vercel project, use `backy-public` as the API/render origin, and keep Supabase/database/provider/admin secrets out of frontend bundles.
+
+**Commands run:**
+- `npm run test:frontend-contract-types --silent` -> PASS.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_MFA_CODE=backy-dev-mfa node packages/sdk-js/scripts/smoke.mjs` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This makes the custom website deployment flow machine-readable for AI/frontend agents: Backy remains the source of truth, `backy-admin` stays protected, `backy-public` serves API/render contracts, and a third Vercel project owns the public website domain.
+- The contract deliberately exposes env variable names and endpoint roles only; no secret values, provider tokens, database URLs, or admin/session material are included.
+
+**Next:**
+1. Commit and push this public handoff/env-boundary slice, then verify the production deployments.
 
 ## 2026-06-01 22:01 IST
 

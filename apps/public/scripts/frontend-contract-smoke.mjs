@@ -760,6 +760,12 @@ assert(
     customFrontendAgentHandoffLib.includes('npm run test:vercel-preview-readiness') &&
     customFrontendAgentHandoffLib.includes('subdomainRouting') &&
     customFrontendAgentHandoffLib.includes('BACKY_SITE_PUBLIC_HOST') &&
+    customFrontendAgentHandoffLib.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
+    customFrontendAgentHandoffLib.includes('browserSafeEnv') &&
+    customFrontendAgentHandoffLib.includes('serverSideEnv') &&
+    customFrontendAgentHandoffLib.includes('custom-frontend-vercel-project') &&
+    customFrontendAgentHandoffLib.includes('domainAttachment') &&
+    customFrontendAgentHandoffLib.includes('apiOriginPolicy') &&
     customFrontendAgentHandoffLib.includes('resolveWithHost') &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_COMPONENT_API_CONTRACT_SCHEMA = 'backy.canvas-component-api-contract.v1'") &&
     customFrontendAgentHandoffLib.includes('componentApiContract') &&
@@ -808,6 +814,12 @@ assert(
     frontendManifestSchema.includes('"VITE_BACKY_PUBLIC_API_BASE_URL"') &&
     frontendManifestSchema.includes('"subdomainRouting"') &&
     frontendManifestSchema.includes('"BACKY_SITE_PUBLIC_HOST"') &&
+    frontendManifestSchema.includes('"NEXT_PUBLIC_BACKY_API_BASE_URL"') &&
+    frontendManifestSchema.includes('"browserSafeEnv"') &&
+    frontendManifestSchema.includes('"serverSideEnv"') &&
+    frontendManifestSchema.includes('"custom-frontend-vercel-project"') &&
+    frontendManifestSchema.includes('"domainAttachment"') &&
+    frontendManifestSchema.includes('"apiOriginPolicy"') &&
     frontendManifestSchema.includes('"componentApiContract"') &&
     frontendManifestSchema.includes('"backy.canvas-component-api-contract.v1"') &&
     frontendManifestSchema.includes('"everyComponentApiAddressable"') &&
