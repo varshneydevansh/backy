@@ -21,6 +21,11 @@
       "import": "./dist/content-migrations.mjs",
       "require": "./dist/content-migrations.js"
     },
+    "./code-highlight": {
+      "types": "./dist/code-highlight.d.ts",
+      "import": "./dist/code-highlight.mjs",
+      "require": "./dist/code-highlight.js"
+    },
     "./repositories": {
       "types": "./dist/repositories.d.ts",
       "import": "./dist/repositories.mjs",
@@ -38,8 +43,8 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts --watch",
+    "build": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/code-highlight.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts src/content-contract.ts src/content-migrations.ts src/code-highlight.ts src/repositories.ts src/theme-tokens.ts --format cjs,esm --dts --watch",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
     "test:content-contract": "npm run build && node scripts/content-contract-smoke.mjs && node scripts/content-migrations-smoke.mjs",

@@ -1810,13 +1810,18 @@ const assertComponentLibraryEmptyStateSource = () => {
       canvasSource.includes("case 'codeBlock':") &&
       canvasSource.includes('data-backy-code-block') &&
       canvasSource.includes('data-backy-code-copy') &&
+      canvasSource.includes('tokenizeBackyCodeLine') &&
       propertyPanelSource.includes('hasCodeBlockContent') &&
       propertyPanelSource.includes('data-testid="editor-code-block-code"') &&
+      propertyPanelSource.includes('data-testid="editor-code-block-highlight-theme"') &&
       propertyPanelSource.includes("normalizedElementType === 'codeBlock'") &&
       pageRendererSource.includes('function CodeBlockElement') &&
       pageRendererSource.includes('codeBlock: CodeBlockElement') &&
       pageRendererSource.includes('data-backy-code-language') &&
+      pageRendererSource.includes('data-backy-code-highlight-theme') &&
+      pageRendererSource.includes('tokenizeBackyCodeLine') &&
       customFrontendHandoffSource.includes("componentTypeContract('codeBlock'") &&
+      customFrontendHandoffSource.includes("'props.highlightTheme'") &&
       customFrontendHandoffSource.includes("'props.showLineNumbers'") &&
       smokeSource.includes('smoke-code-block') &&
       smokeSource.includes('assertPersistedCodeBlockBehavior'),
@@ -26034,6 +26039,7 @@ const CODE_BLOCK_BEHAVIOR_SPEC = {
   language: 'typescript',
   filename: 'local-report.ts',
   caption: 'Smoke code snippet caption.',
+  highlightTheme: 'light',
   showLineNumbers: false,
   wrapLines: true,
   copyEnabled: false,
@@ -26045,6 +26051,7 @@ const testCodeBlockBehaviorControls = async (client) => {
   await setFormControlByTestId(client, 'editor-code-block-code', CODE_BLOCK_BEHAVIOR_SPEC.code);
   await setFormControlByTestId(client, 'editor-code-block-language', CODE_BLOCK_BEHAVIOR_SPEC.language);
   await setFormControlByTestId(client, 'editor-code-block-filename', CODE_BLOCK_BEHAVIOR_SPEC.filename);
+  await setFormControlByTestId(client, 'editor-code-block-highlight-theme', CODE_BLOCK_BEHAVIOR_SPEC.highlightTheme);
   await setFormControlByTestId(client, 'editor-code-block-caption', CODE_BLOCK_BEHAVIOR_SPEC.caption);
   await clickControlByTestId(client, 'editor-code-block-line-numbers');
   await clickControlByTestId(client, 'editor-code-block-wrap-lines');
@@ -26063,12 +26070,17 @@ const testCodeBlockBehaviorControls = async (client) => {
       code: value('editor-code-block-code'),
       language: value('editor-code-block-language'),
       filename: value('editor-code-block-filename'),
+      highlightTheme: value('editor-code-block-highlight-theme'),
       caption: value('editor-code-block-caption'),
       showLineNumbers: checked('editor-code-block-line-numbers'),
       wrapLines: checked('editor-code-block-wrap-lines'),
       copyEnabled: checked('editor-code-block-copy-enabled'),
       previewText: node?.textContent || '',
       languageAttr: codeBlock?.getAttribute('data-backy-code-language') || '',
+      highlightThemeAttr: codeBlock?.getAttribute('data-backy-code-highlight-theme') || '',
+      tokenTypes: Array.from(codeBlock?.querySelectorAll('[data-backy-code-token]') || [])
+        .map((token) => token.getAttribute('data-backy-code-token'))
+        .filter(Boolean),
       copyAttr: codeBlock?.getAttribute('data-backy-code-copy') || '',
       wrapAttr: codeBlock?.getAttribute('data-backy-code-wrap') || '',
     };
@@ -26077,11 +26089,14 @@ const testCodeBlockBehaviorControls = async (client) => {
   assert(state.code === CODE_BLOCK_BEHAVIOR_SPEC.code, `Code block code control mismatch: ${JSON.stringify(state)}`);
   assert(state.language === CODE_BLOCK_BEHAVIOR_SPEC.language, `Code block language control mismatch: ${JSON.stringify(state)}`);
   assert(state.filename === CODE_BLOCK_BEHAVIOR_SPEC.filename, `Code block filename control mismatch: ${JSON.stringify(state)}`);
+  assert(state.highlightTheme === CODE_BLOCK_BEHAVIOR_SPEC.highlightTheme, `Code block highlight theme control mismatch: ${JSON.stringify(state)}`);
   assert(state.caption === CODE_BLOCK_BEHAVIOR_SPEC.caption, `Code block caption control mismatch: ${JSON.stringify(state)}`);
   assert(state.showLineNumbers === CODE_BLOCK_BEHAVIOR_SPEC.showLineNumbers, `Code block line-number toggle mismatch: ${JSON.stringify(state)}`);
   assert(state.wrapLines === CODE_BLOCK_BEHAVIOR_SPEC.wrapLines, `Code block wrap toggle mismatch: ${JSON.stringify(state)}`);
   assert(state.copyEnabled === CODE_BLOCK_BEHAVIOR_SPEC.copyEnabled, `Code block copy toggle mismatch: ${JSON.stringify(state)}`);
   assert(state.previewText.includes('local-report') && state.languageAttr === 'typescript', `Code block preview did not render saved code metadata: ${JSON.stringify(state)}`);
+  assert(state.highlightThemeAttr === CODE_BLOCK_BEHAVIOR_SPEC.highlightTheme, `Code block preview did not expose highlight theme metadata: ${JSON.stringify(state)}`);
+  assert(state.tokenTypes.includes('keyword') && state.tokenTypes.includes('string') && state.tokenTypes.includes('function'), `Code block preview did not render syntax token spans: ${JSON.stringify(state)}`);
   assert(state.copyAttr === 'disabled' && state.wrapAttr === 'true', `Code block preview metadata mismatch: ${JSON.stringify(state)}`);
 
   return state;
@@ -26097,6 +26112,7 @@ const assertPersistedCodeBlockBehavior = async (pageId) => {
   assert(props.code === CODE_BLOCK_BEHAVIOR_SPEC.code, `Persisted code block code mismatch: ${JSON.stringify(props)}`);
   assert(props.language === CODE_BLOCK_BEHAVIOR_SPEC.language, `Persisted code block language mismatch: ${JSON.stringify(props)}`);
   assert(props.filename === CODE_BLOCK_BEHAVIOR_SPEC.filename, `Persisted code block filename mismatch: ${JSON.stringify(props)}`);
+  assert(props.highlightTheme === CODE_BLOCK_BEHAVIOR_SPEC.highlightTheme, `Persisted code block highlight theme mismatch: ${JSON.stringify(props)}`);
   assert(props.caption === CODE_BLOCK_BEHAVIOR_SPEC.caption, `Persisted code block caption mismatch: ${JSON.stringify(props)}`);
   assert(props.showLineNumbers === CODE_BLOCK_BEHAVIOR_SPEC.showLineNumbers, `Persisted code block line numbers mismatch: ${JSON.stringify(props)}`);
   assert(props.wrapLines === CODE_BLOCK_BEHAVIOR_SPEC.wrapLines, `Persisted code block wrap mismatch: ${JSON.stringify(props)}`);

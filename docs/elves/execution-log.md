@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 05:19 IST
+- **Last updated:** 2026-06-01 06:18 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,39 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 06:18 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Code snippet blocks now render highlighted safe text across editor, public renderer, and custom frontend metadata
+
+**What changed:**
+- `packages/core/src/code-highlight.ts`: added a shared no-dependency Backy code highlighter with normalized language aliases, dark/light token themes, and token metadata types.
+- `apps/admin/src/components/editor/Canvas.tsx` and `apps/public/src/components/PageRenderer.tsx`: `codeBlock` elements now render tokenized spans with `data-backy-code-token`, preserve line-number/copy/wrap metadata, and expose `data-backy-code-highlight-theme`.
+- `apps/admin/src/components/editor/PropertyPanel.tsx`: code blocks now have a persisted Syntax theme control so authors can choose dark or light highlighting.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: the code-block behavior smoke now verifies the theme control, persisted `props.highlightTheme`, public/editor metadata, and rendered keyword/string/function token spans.
+- `packages/core/package.json` and `packages/core/src/index.ts`: exported the shared highlighting helpers for admin, public render, and custom frontend consumers.
+
+**Commands run:**
+- `npm run build --workspace @backy-cms/core --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_EDITOR_COMPONENT_SMOKE=codeBlock node apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `npm run test:editor-responsive --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run build:vercel:public --silent` -> PASS.
+- `npm run build:vercel:admin --silent` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `git diff --check` -> PASS before docs; will rerun after docs.
+
+**Notes:**
+- The Browser in-app runtime was unavailable with `Browser is not available: iab`; rendered verification used Backy's existing CDP/editor smoke harness instead.
+- A stale local Next dev process briefly kept serving a parser error from an already-fixed transient syntax typo; restarting the local public dev server cleared it before the responsive smoke passed.
+
+**Next:**
+1. Commit and push this code-snippet authoring/rendering slice.
+2. Continue Batch 5 with the next visible admin/editor friction point rather than the external provider-certification partials.
 
 ## 2026-06-01 05:19 IST
 

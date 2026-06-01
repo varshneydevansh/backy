@@ -12,10 +12,14 @@
 'use client';
 
 import {
+  BACKY_CODE_HIGHLIGHT_THEMES,
   buildBackyThemeCssVariables,
   buildBackyThemeTokenReferences,
   buildBackyThemeTokenRefStyle,
   buildBackyThemeTokens,
+  normalizeBackyCodeHighlightTheme,
+  normalizeBackyCodeLanguage,
+  tokenizeBackyCodeLine,
   type BackyContentDocument,
 } from '@backy-cms/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -2611,7 +2615,9 @@ function HtmlElement({ element }: ElementRendererProps) {
 function CodeBlockElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const code = getCodeText(props.code) || getCodeText(props.content) || '';
-  const language = getNameClass(props.language).trim() || 'text';
+  const language = normalizeBackyCodeLanguage(props.language || 'text');
+  const highlightTheme = normalizeBackyCodeHighlightTheme(props.highlightTheme);
+  const tokenTheme = BACKY_CODE_HIGHLIGHT_THEMES[highlightTheme];
   const filename = getNameClass(props.filename).trim();
   const caption = getNameClass(props.caption).trim();
   const showLineNumbers = getBooleanWithFallback(props.showLineNumbers, true);
@@ -2620,6 +2626,22 @@ function CodeBlockElement({ element }: ElementRendererProps) {
   const lines = code.replace(/\n$/, '').split('\n');
   const backgroundColor = getNameClass(props.backgroundColor) || '#0f172a';
   const color = getNameClass(props.color) || '#e2e8f0';
+  const renderHighlightedCodeLine = (line: string, lineIndex: number) => {
+    const tokens = tokenizeBackyCodeLine(line, language);
+    if (tokens.length === 0 || (tokens.length === 1 && tokens[0]?.text === '')) {
+      return ' ';
+    }
+
+    return tokens.map((token, tokenIndex) => (
+      <span
+        key={`${element.id}-code-token-${lineIndex}-${tokenIndex}`}
+        data-backy-code-token={token.type}
+        style={token.type === 'plain' ? undefined : { color: tokenTheme[token.type] }}
+      >
+        {token.text}
+      </span>
+    ));
+  };
 
   return (
     <figure
@@ -2644,6 +2666,7 @@ function CodeBlockElement({ element }: ElementRendererProps) {
       data-backy-code-line-numbers={showLineNumbers ? 'true' : 'false'}
       data-backy-code-wrap={wrapLines ? 'true' : 'false'}
       data-backy-code-copy={copyEnabled ? 'enabled' : 'disabled'}
+      data-backy-code-highlight-theme={highlightTheme}
     >
       <div style={{
         minHeight: 34,
@@ -2710,12 +2733,19 @@ function CodeBlockElement({ element }: ElementRendererProps) {
                 }}
               >
                 <span style={{ userSelect: 'none', textAlign: 'right', color: 'rgba(148, 163, 184, 0.72)' }}>{index + 1}</span>
-                <span>{line || ' '}</span>
+                <span>{renderHighlightedCodeLine(line, index)}</span>
               </span>
             ))}
           </code>
         ) : (
-          <code>{code}</code>
+          <code>
+            {lines.map((line, index) => (
+              <React.Fragment key={`${element.id}-code-line-fragment-${index}`}>
+                {renderHighlightedCodeLine(line, index)}
+                {index < lines.length - 1 ? '\n' : null}
+              </React.Fragment>
+            ))}
+          </code>
         )}
       </pre>
       {caption && (

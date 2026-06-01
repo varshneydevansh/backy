@@ -20,6 +20,12 @@ import {
   createCanvasElementFromLibraryItem,
   createCanvasElementsFromReusableContent,
 } from '@/components/editor/editorCatalog';
+import {
+  BACKY_CODE_HIGHLIGHT_THEMES,
+  normalizeBackyCodeHighlightTheme,
+  normalizeBackyCodeLanguage,
+  tokenizeBackyCodeLine,
+} from '@backy-cms/core';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { ACTIVE_EDITOR_CONTENT_SYNC_EVENT, useActiveEditor } from './ActiveEditorContext';
 import {
@@ -3752,7 +3758,9 @@ function CanvasElementComponent({
 
       case 'codeBlock': {
         const code = sanitizeCodeText(p.code) || sanitizeCodeText(p.content) || "console.log('Backy code snippet');";
-        const language = sanitizeText(p.language) || 'text';
+        const language = normalizeBackyCodeLanguage(p.language || 'text');
+        const highlightTheme = normalizeBackyCodeHighlightTheme(p.highlightTheme);
+        const tokenTheme = BACKY_CODE_HIGHLIGHT_THEMES[highlightTheme];
         const filename = sanitizeText(p.filename);
         const caption = sanitizeText(p.caption);
         const showLineNumbers = getBooleanWithFallback(p.showLineNumbers, true);
@@ -3761,6 +3769,22 @@ function CanvasElementComponent({
         const lines = code.replace(/\n$/, '').split('\n');
         const backgroundColor = sanitizeText(p.backgroundColor) || String(sharedStyle.backgroundColor || '#0f172a');
         const color = sanitizeText(p.color) || String(sharedStyle.color || '#e2e8f0');
+        const renderHighlightedCodeLine = (line: string, lineIndex: number) => {
+          const tokens = tokenizeBackyCodeLine(line, language);
+          if (tokens.length === 0 || (tokens.length === 1 && tokens[0]?.text === '')) {
+            return ' ';
+          }
+
+          return tokens.map((token, tokenIndex) => (
+            <span
+              key={`${element.id}-code-token-${lineIndex}-${tokenIndex}`}
+              data-backy-code-token={token.type}
+              style={token.type === 'plain' ? undefined : { color: tokenTheme[token.type] }}
+            >
+              {token.text}
+            </span>
+          ));
+        };
 
         return (
           <figure
@@ -3784,6 +3808,7 @@ function CanvasElementComponent({
             data-backy-code-line-numbers={showLineNumbers ? 'true' : 'false'}
             data-backy-code-wrap={wrapLines ? 'true' : 'false'}
             data-backy-code-copy={copyEnabled ? 'enabled' : 'disabled'}
+            data-backy-code-highlight-theme={highlightTheme}
           >
             <div style={{
               minHeight: 34,
@@ -3852,12 +3877,19 @@ function CanvasElementComponent({
                       <span style={{ userSelect: 'none', textAlign: 'right', color: 'rgba(148, 163, 184, 0.72)' }}>
                         {index + 1}
                       </span>
-                      <span>{line || ' '}</span>
+                      <span>{renderHighlightedCodeLine(line, index)}</span>
                     </span>
                   ))}
                 </code>
               ) : (
-                <code>{code}</code>
+                <code>
+                  {lines.map((line, index) => (
+                    <React.Fragment key={`${element.id}-code-line-fragment-${index}`}>
+                      {renderHighlightedCodeLine(line, index)}
+                      {index < lines.length - 1 ? '\n' : null}
+                    </React.Fragment>
+                  ))}
+                </code>
               )}
             </pre>
             {caption && (

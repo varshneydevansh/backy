@@ -2764,7 +2764,7 @@ function ContentProperties({
       {hasCodeBlockContent && (
         <div className="space-y-3" data-testid="editor-code-block-controls">
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Code snippets render as safe text in the editor and public frontend. Use code components only for sandboxed execution.
+            Code snippets render as highlighted safe text in the editor and public frontend. Use code components only for sandboxed execution.
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
@@ -2816,6 +2816,23 @@ function ContentProperties({
                 placeholder="loader.ts"
               />
             </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Syntax theme
+            </label>
+            <select
+              value={element.props.highlightTheme === 'light' ? 'light' : 'dark'}
+              onChange={(e) => onChange({ highlightTheme: e.target.value })}
+              data-testid="editor-code-block-highlight-theme"
+              className={cn(
+                'w-full rounded-md border bg-background px-2 py-1.5 text-sm',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
