@@ -307,6 +307,7 @@ export type GeneratedBackyOpenApiCustomFrontendDeploymentTopology = {
     providerArtifactAdmission?: "npm run ci:provider-artifact-admission";
     promotionRule?: "Never promote demo-mode previews or production aliases.";
     liveProof?: string;
+    adminAuthProof?: string;
     [key: string]: unknown;
   };
   secretHandling: string;
@@ -6100,6 +6101,7 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       providerArtifactAdmission: "npm run ci:provider-artifact-admission";
       promotionRule: "Never promote demo-mode previews or production aliases.";
       liveProof: string;
+      adminAuthProof: string;
       [key: string]: unknown;
     };
     secretHandling: string;

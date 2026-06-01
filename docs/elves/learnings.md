@@ -89,6 +89,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Database-mode admin sessions must persist through repository `platform_settings.auth`, not the local `backyStore` admin-content writer. Creating a Supabase-backed session before MFA is fine only if local persistence is disabled and the DB session record is written after MFA passes.
 - [2026-06-01] When restoring sessions from externally supplied auth settings, stale-session cleanup must also use the same external repository or do nothing. Falling back to local cleanup in Vercel DB mode can reintroduce immutable `/var/task/.../data/backy` writes and leaves the database record unchanged.
 - [2026-06-01] Page-create and blog-create smokes that seed parent/template content must manage billing quota like a fixture. Lift the local site's page limit with a cushion, restore it in cleanup, and preserve backend error codes in the UI so real `BILLING_PAGE_LIMIT` blockers read as quota blockers rather than broken buttons.
+- [2026-06-01] Production readiness should separate public contract proof from optional admin-auth proof. Keep public handoff/manifest/OpenAPI/render checks mandatory for promotion, but let operators require login/session/logout with `BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1` and credentials supplied only through local shell or CI secrets.
 
 ## Known Traps
 

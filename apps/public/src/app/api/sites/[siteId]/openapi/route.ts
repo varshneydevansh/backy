@@ -6443,6 +6443,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       type: "string",
                       minLength: 1,
                     },
+                    adminAuthProof: {
+                      type: "string",
+                      minLength: 1,
+                    },
                   },
                 },
                 secretHandling: { type: "string" },

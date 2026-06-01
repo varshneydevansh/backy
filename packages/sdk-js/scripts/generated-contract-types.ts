@@ -8297,6 +8297,7 @@ const customFrontendAgentHandoff = {
       providerArtifactAdmission: "npm run ci:provider-artifact-admission",
       promotionRule: "Never promote demo-mode previews or production aliases.",
       liveProof: "Live production proof must fetch agent-handoff, manifest, OpenAPI, and render JSON from the final public domain.",
+      adminAuthProof: "Optional live admin proof must login, restore session, and logout through backy-public without exposing credentials or session tokens.",
     },
     secretHandling: "This topology exposes env names, project roles, and verification commands only.",
   },

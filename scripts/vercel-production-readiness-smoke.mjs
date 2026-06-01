@@ -17,6 +17,13 @@ const productionUrl =
   '';
 const siteId = process.env.BACKY_VERCEL_PRODUCTION_SITE_ID || 'site-demo';
 const requireLive = process.env.BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION === '1';
+const adminEmail = process.env.BACKY_VERCEL_ADMIN_EMAIL || '';
+const adminPassword = process.env.BACKY_VERCEL_ADMIN_PASSWORD || '';
+const adminMfaCode =
+  process.env.BACKY_VERCEL_ADMIN_MFA_CODE ||
+  process.env.BACKY_VERCEL_ADMIN_TWO_FACTOR_CODE ||
+  '';
+const requireLiveAdminAuth = process.env.BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH === '1';
 
 const rel = (file) => path.join(repoRoot, file);
 const read = (file) => fs.readFileSync(rel(file), 'utf8');
@@ -39,6 +46,7 @@ const includesAll = (text, snippets, label) => {
 const rootPackage = readJson('package.json');
 const readme = read('README.md');
 const agents = read('AGENTS.md');
+const productionReadinessSource = read('scripts/vercel-production-readiness-smoke.mjs');
 const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
@@ -81,6 +89,8 @@ includesAll(
     'Never promote a preview or production alias while `BACKY_DATA_MODE=demo`',
     'BACKY_VERCEL_PRODUCTION_URL',
     'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',
+    'BACKY_VERCEL_ADMIN_EMAIL',
+    'BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1',
     'Vercel production builds run a public env guard before Next.js builds',
     'npm run test:vercel-production-readiness',
     '/api/sites/site-demo/agent-handoff',
@@ -97,6 +107,7 @@ includesAll(
     'Before production promotion',
     'npm run test:vercel-production-readiness',
     'BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1',
+    'BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1',
     'BACKY_DATA_MODE=database',
   ],
   'AGENTS production promotion guidance',
@@ -108,6 +119,7 @@ includesAll(
     "productionReadinessSmoke: 'npm run test:vercel-production-readiness'",
     'Never promote demo-mode previews or production aliases.',
     'Live production proof must fetch agent-handoff, manifest, OpenAPI, and render JSON from the final public domain.',
+    'Optional live admin proof must login, restore session, and logout through backy-public without exposing credentials or session tokens.',
   ],
   'Custom frontend deployment topology production source',
 );
@@ -118,6 +130,7 @@ includesAll(
     '"productionReadinessSmoke": { "const": "npm run test:vercel-production-readiness" }',
     '"promotionRule": { "const": "Never promote demo-mode previews or production aliases." }',
     '"liveProof": { "type": "string", "minLength": 1 }',
+    '"adminAuthProof": { "type": "string", "minLength": 1 }',
   ],
   'Frontend manifest deployment topology production schema',
 );
@@ -130,8 +143,25 @@ includesAll(
     'promotionRule: {',
     'const: "Never promote demo-mode previews or production aliases."',
     'liveProof: {',
+    'adminAuthProof: {',
   ],
   'OpenAPI deployment topology production schema',
+);
+
+includesAll(
+  productionReadinessSource,
+  [
+    'BACKY_VERCEL_ADMIN_EMAIL',
+    'BACKY_VERCEL_ADMIN_PASSWORD',
+    'BACKY_VERCEL_ADMIN_MFA_CODE',
+    'BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH',
+    'checkLiveAdminAuth',
+    'MFA_REQUIRED',
+    '/api/admin/auth/login',
+    '/api/admin/auth/session',
+    '/api/admin/auth/logout',
+  ],
+  'Production readiness smoke supports optional live admin auth proof',
 );
 
 includesAll(
@@ -272,10 +302,129 @@ const parseJsonResponse = async (url) => {
   }
 };
 
+const requestJson = async (url, init = {}) => {
+  const expectedStatuses = Array.isArray(init.expectedStatuses)
+    ? init.expectedStatuses
+    : [init.expectedStatus || 200];
+  const label = init.label || url;
+  const response = await fetch(url, {
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
+    method: init.method || 'GET',
+    headers: {
+      accept: 'application/json',
+      ...(init.headers || {}),
+    },
+    body: init.body,
+  });
+  const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+
+  if (!expectedStatuses.includes(response.status)) {
+    fail(`${label} returned ${response.status}; body starts ${JSON.stringify(text.slice(0, 120))}`);
+    return { response, json: null };
+  }
+  if (!contentType.includes('application/json')) {
+    fail(`${label} returned non-JSON content-type ${contentType || '<missing>'}`);
+    return { response, json: null };
+  }
+
+  try {
+    return { response, json: JSON.parse(text) };
+  } catch (error) {
+    fail(`${label} did not return parseable JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return { response, json: null };
+  }
+};
+
+const getSessionCookieHeader = (response) => {
+  const cookies = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean);
+  return cookies
+    .map((cookie) => String(cookie).split(';')[0])
+    .find((cookie) => cookie.startsWith('backy_admin_session='))
+    || '';
+};
+
+const checkLiveAdminAuth = async (baseUrl) => {
+  if (!adminEmail || !adminPassword) {
+    const message = 'BACKY_VERCEL_ADMIN_EMAIL/PASSWORD not set; skipping live admin auth proof.';
+    if (requireLiveAdminAuth) fail(message);
+    else warn(message);
+    return;
+  }
+
+  const loginUrl = `${baseUrl}/api/admin/auth/login`;
+  const login = (twoFactorCode) => requestJson(loginUrl, {
+    method: 'POST',
+    label: 'production admin login',
+    expectedStatuses: [200, 401],
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: adminEmail,
+      password: adminPassword,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
+    }),
+  });
+
+  let loginResult = await login();
+  if (loginResult.json?.error?.code === 'MFA_REQUIRED') {
+    if (!adminMfaCode) {
+      fail('Production admin login requires MFA; set BACKY_VERCEL_ADMIN_MFA_CODE for the live admin auth proof.');
+      return;
+    }
+    loginResult = await login(adminMfaCode);
+  }
+
+  if (loginResult.response?.status !== 200 || loginResult.json?.success !== true) {
+    const code = loginResult.json?.error?.code || `HTTP_${loginResult.response?.status || 'UNKNOWN'}`;
+    fail(`Production admin login failed with ${code}; credential values were not printed.`);
+    return;
+  }
+
+  const sessionToken = loginResult.json?.data?.session?.token;
+  assert(Boolean(sessionToken), 'Production admin login returns a session token');
+  assert(Boolean(loginResult.json?.data?.user?.id), 'Production admin login returns user identity');
+  assert(
+    loginResult.json?.data?.session?.authMode === 'supabase',
+    'Production admin login uses the provider-backed auth mode',
+  );
+
+  const sessionCookie = getSessionCookieHeader(loginResult.response);
+  const authHeaders = {
+    authorization: `Bearer ${sessionToken}`,
+    ...(sessionCookie ? { cookie: sessionCookie } : {}),
+  };
+
+  const sessionResult = await requestJson(`${baseUrl}/api/admin/auth/session`, {
+    label: 'production admin session restore',
+    headers: authHeaders,
+  });
+  assert(sessionResult.json?.success === true, 'Production admin session restore returns success=true');
+  assert(
+    sessionResult.json?.data?.user?.email?.toLowerCase() === adminEmail.toLowerCase(),
+    'Production admin session restore matches the supplied admin identity',
+  );
+
+  const logoutResult = await requestJson(`${baseUrl}/api/admin/auth/logout`, {
+    method: 'POST',
+    label: 'production admin logout',
+    headers: authHeaders,
+  });
+  assert(logoutResult.json?.success === true, 'Production admin logout returns success=true');
+  assert(
+    logoutResult.json?.data && Object.prototype.hasOwnProperty.call(logoutResult.json.data, 'revoked'),
+    'Production admin logout returns revocation state',
+  );
+};
+
 const checkLiveProduction = async () => {
   if (!productionUrl) {
     const message = 'BACKY_VERCEL_PRODUCTION_URL is not set; skipping live production URL proof.';
-    if (requireLive) fail(message);
+    if (requireLive || requireLiveAdminAuth) fail(message);
     else warn(message);
     return;
   }
@@ -351,6 +500,8 @@ const checkLiveProduction = async () => {
     );
     assert(Boolean(render.data?.site?.id), 'Production render includes site identity');
   }
+
+  await checkLiveAdminAuth(baseUrl);
 };
 
 await checkLiveProduction();

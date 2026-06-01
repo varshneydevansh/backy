@@ -47,6 +47,7 @@ Read order:
    - `backy-admin` receives `VITE_BACKY_PUBLIC_API_BASE_URL` and `VITE_BACKY_ADMIN_API_BASE_URL` only. `backy-public` receives server-only database/admin/cron/provider env. Custom frontends receive `BACKY_PUBLIC_API_BASE_URL`, `BACKY_SITE_ID`, and optional `BACKY_SITE_PUBLIC_HOST`.
    - Before preview deploy, run `npm run test:vercel-release-config` and `npm run test:vercel-preview-readiness`. When the Vercel projects are linked and env is configured, add `BACKY_VERCEL_REQUIRE_REMOTE_ENV=1` to make missing or misplaced project env a hard failure.
    - Before production promotion, set `BACKY_DATA_MODE=database`, configure real database/storage/provider/admin/cron/CORS env on `backy-public`, then run `BACKY_VERCEL_PRODUCTION_URL=https://<public-domain> BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness`.
+   - To prove production admin auth too, run the same command with `BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1`, `BACKY_VERCEL_ADMIN_EMAIL`, `BACKY_VERCEL_ADMIN_PASSWORD`, and optional `BACKY_VERCEL_ADMIN_MFA_CODE` supplied from local shell or CI secrets only. The smoke logs in, restores the session, and logs out without printing credentials or tokens.
    - Public repo hygiene matters: do not commit local paths, personal email addresses, generated Vercel deployment URLs, Vercel deployment/project/team ids, or user-specific domains. Run `npm run test:repo-public-hygiene` before publishing.
 
 Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-frontend-agent-handoff.md).

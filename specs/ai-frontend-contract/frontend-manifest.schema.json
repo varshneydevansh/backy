@@ -885,9 +885,10 @@
                 "releaseDoctor": { "const": "npm run doctor:release-certification" },
                 "providerArtifactAdmission": { "const": "npm run ci:provider-artifact-admission" },
                 "promotionRule": { "const": "Never promote demo-mode previews or production aliases." },
-                "liveProof": { "type": "string", "minLength": 1 }
+                "liveProof": { "type": "string", "minLength": 1 },
+                "adminAuthProof": { "type": "string", "minLength": 1 }
               },
-              "required": ["releaseConfigSmoke", "previewReadinessSmoke", "productionReadinessSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission", "promotionRule", "liveProof"]
+              "required": ["releaseConfigSmoke", "previewReadinessSmoke", "productionReadinessSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission", "promotionRule", "liveProof", "adminAuthProof"]
             },
             "secretHandling": { "type": "string", "minLength": 1 }
           },

@@ -13,6 +13,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-01 08:24 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Production readiness can now prove live admin auth without exposing credentials
+
+**What changed:**
+- `scripts/vercel-production-readiness-smoke.mjs`: added an optional live admin auth proof gated by `BACKY_VERCEL_ADMIN_EMAIL`, `BACKY_VERCEL_ADMIN_PASSWORD`, optional MFA env, and `BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1`. The smoke logs in through `backy-public`, restores `/api/admin/auth/session`, and logs out without printing credential values, session tokens, or cookies.
+- `packages/core/src/custom-frontend-agent-handoff.ts`, OpenAPI, manifest schema, SDK generated contract types, `AGENTS.md`, README, and the custom frontend spec now advertise the admin-auth proof boundary beside the existing public-domain contract proof.
+- Production Supabase state was checked directly through the ignored Vercel-pulled production env: the requested Gmail owner exists as active `owner`, has owner team membership, and the one-time bootstrap token is absent from pulled production env.
+
+**Commands run:**
+- `npx vercel@latest env pull .env.production.local --environment=production --yes --cwd apps/public --no-color` -> PASS; confirmed the owner bootstrap token is absent from pulled production env.
+- Production Supabase row-count/owner checks through `psql "$POSTGRES_URL_NON_POOLING"` -> PASS; owner/profile/team/site/platform rows exist.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `npm run test:frontend-contract-types --silent` -> PASS and regenerated SDK contract types.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/core --silent` -> PASS.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected repo-root relink warning.
+- `npm run build:vercel:public --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push this deployment/auth-hardening slice.
+2. After Vercel deploys the commit, inspect production deployments/logs and continue Batch 5 with the next admin/editor friction point.
+
 ## 2026-06-01 07:39 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish

@@ -202,6 +202,19 @@ The live gate fetches:
 
 All four must return JSON from the final public domain. A 401 Vercel protection page, 404 `NOT_FOUND`, static HTML, or missing production-readiness topology is a failed production proof. Use `BACKY_VERCEL_PRODUCTION_SITE_ID=<site-id-or-slug>` when certifying a non-demo production site.
 
+When you need to certify that production admin auth is live too, provide credentials only through local shell/Vercel CI secrets and add the admin proof flag:
+
+```bash
+BACKY_VERCEL_PRODUCTION_URL=https://<backy-public-production-domain> \
+BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 \
+BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1 \
+BACKY_VERCEL_ADMIN_EMAIL=<owner-or-admin-email> \
+BACKY_VERCEL_ADMIN_PASSWORD=<private-password> \
+npm run test:vercel-production-readiness
+```
+
+If the account requires MFA, also set `BACKY_VERCEL_ADMIN_MFA_CODE` or `BACKY_VERCEL_ADMIN_TWO_FACTOR_CODE`. The readiness smoke posts to `/api/admin/auth/login`, restores `/api/admin/auth/session`, and logs out through `/api/admin/auth/logout` without printing credential values, session tokens, or cookies.
+
 The public repository should also stay neutral: do not commit local absolute paths, personal email addresses, generated Vercel deployment URLs, Vercel project/team/deployment ids, or user-specific domains. `npm run test:repo-public-hygiene` guards the generic cases; local operators can add private marker checks with `BACKY_REPO_HYGIENE_PRIVATE_MARKERS` without committing those markers.
 
 ---
