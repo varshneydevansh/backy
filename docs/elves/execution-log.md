@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 06:18 IST
+- **Last updated:** 2026-06-01 06:31 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -16,7 +16,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 ## 2026-06-01 06:18 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish
-**Contract status:** Code snippet blocks now render highlighted safe text across editor, public renderer, and custom frontend metadata
+**Contract status:** Code snippet blocks now render highlighted safe text across editor, public renderer, and custom frontend metadata; pushed and production-verified
 
 **What changed:**
 - `packages/core/src/code-highlight.ts`: added a shared no-dependency Backy code highlighter with normalized language aliases, dark/light token themes, and token metadata types.
@@ -36,15 +36,19 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `npm run build:vercel:admin --silent` -> PASS.
 - `npm run test:repo-public-hygiene --silent` -> PASS.
 - `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
-- `git diff --check` -> PASS before docs; will rerun after docs.
+- `git diff --check` -> PASS.
+- `git push` -> PASS; pushed `65ac645b` to `main`.
+- Vercel production deployment inspection for `backy-public` -> Ready and aliased to `https://backy-public.vercel.app`.
+- Vercel production deployment inspection for `backy-admin` -> Ready and aliased to `https://backy-admin.vercel.app`.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS; source/live checks passed.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color` -> no logs found.
 
 **Notes:**
 - The Browser in-app runtime was unavailable with `Browser is not available: iab`; rendered verification used Backy's existing CDP/editor smoke harness instead.
 - A stale local Next dev process briefly kept serving a parser error from an already-fixed transient syntax typo; restarting the local public dev server cleared it before the responsive smoke passed.
 
 **Next:**
-1. Commit and push this code-snippet authoring/rendering slice.
-2. Continue Batch 5 with the next visible admin/editor friction point rather than the external provider-certification partials.
+1. Continue Batch 5 with the next visible admin/editor friction point rather than the external provider-certification partials.
 
 ## 2026-06-01 05:19 IST
 
