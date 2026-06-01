@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 05:05 IST
+- **Last updated:** 2026-06-02 05:24 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 05:24 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Downloaded starter bundles can now be materialized into a repo
+
+**What changed:**
+- Added `npm run custom-frontend:materialize` backed by `scripts/materialize-custom-frontend-starter.mjs`.
+- The materializer reads the protected starter JSON, validates `backy.custom-frontend-starter-export.v1` plus `backy.custom-frontend-starter-project.v1`, rejects unsafe absolute/parent/drive paths, refuses non-empty target directories unless `--force`, writes every `files[].path`, and prints install/build/dev commands plus path-safety metadata.
+- The protected starter export now includes `starterProject.materializerCommand` and a top-level `materializer` block with the command, target-directory policy, and path-safety policy.
+- Help and Site Detail now point owners/frontend agents to the one-command materialization path instead of manual file copying.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> first run caught missing materializer path-safety summary, rerun PASS, 58 checks.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 18 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 59 checks.
+
+**Next:**
+1. Run `git diff --check` and repo-public hygiene.
+2. Commit/push this materializer slice.
+3. After deploy, verify live public/admin readiness again and use the materializer command for the real `devanshvarshney.com` separate frontend project.
 
 ## 2026-06-02 05:05 IST
 

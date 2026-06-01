@@ -409,6 +409,7 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('backy.custom-frontend-starter-project.v1') &&
       helpSource.includes('files[]=complete project file list') &&
       helpSource.includes('Write every files[].path') &&
+      helpSource.includes('materializer.command=npm run custom-frontend:materialize') &&
       helpSource.includes('examples/custom-frontend-next') &&
       helpSource.includes('BACKY_FRONTEND_STARTER.md') &&
       helpSource.includes('preserveFiles') &&
@@ -680,6 +681,7 @@ const runRenderedHelpSmoke = async () => {
       'backy.custom-frontend-starter-project.v1',
       'files[]=complete project file list',
       'Write every files[].path',
+      'materializer.command=npm run custom-frontend:materialize',
       'examples/custom-frontend-next',
       'BACKY_FRONTEND_STARTER.md',
       'preserveFiles',

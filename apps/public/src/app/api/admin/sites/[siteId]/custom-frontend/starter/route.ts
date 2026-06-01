@@ -81,6 +81,9 @@ const REQUIRED_DOM_ATTRIBUTES = [
   "data-backy-editable-map-pointer",
 ] as const;
 
+const MATERIALIZER_COMMAND =
+  "npm run custom-frontend:materialize -- --manifest <downloaded-starter-json> --out ../<website-frontend-repo>";
+
 type StarterExportFile = {
   path: string;
   role: string;
@@ -201,10 +204,17 @@ const starterReadme = ({
     "",
     "1. Create a new website frontend repository.",
     "2. Write every `files[].path` from this manifest into that repository, keeping paths unchanged.",
+    "   From the Backy repo you can do that in one command:",
+    "",
+    "   ```bash",
+    `   ${MATERIALIZER_COMMAND}`,
+    "   ```",
+    "",
     "3. Add the `.env.example` values from this manifest to the frontend project.",
-    "4. Attach the website domain to the custom frontend project, not to `backy-admin` or `backy-public`.",
-    "5. Deploy the frontend on Vercel.",
-    "6. Verify it from Backy Site Detail before moving production DNS.",
+    "4. Run `npm install` and `npm run build` in the materialized frontend project.",
+    "5. Attach the website domain to the custom frontend project, not to `backy-admin` or `backy-public`.",
+    "6. Deploy the frontend on Vercel.",
+    "7. Verify it from Backy Site Detail before moving production DNS.",
     "",
     "## Site Values",
     "",
@@ -307,6 +317,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           fileCount: starterProjectFiles.length,
           generatedFiles: siteSpecificFiles.map((file) => file.path),
           copiedFiles: CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES.map((file) => file.path),
+          materializerCommand: MATERIALIZER_COMMAND,
           installCommand: "npm install",
           buildCommand: "npm run build",
           devCommand: "npm run dev",
@@ -328,6 +339,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         files: starterProjectFiles,
         fileCount: starterProjectFiles.length,
+        materializer: {
+          command: MATERIALIZER_COMMAND,
+          targetDirectoryPolicy: "empty-directory-required-unless-force",
+          pathSafety: "rejects-absolute-parent-and-drive-paths",
+        },
         preserveFiles: [...STARTER_FILES_TO_PRESERVE],
         readOrder: [
           `/api/sites/${site.id}/agent-handoff`,

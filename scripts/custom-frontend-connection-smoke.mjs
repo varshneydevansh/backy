@@ -74,6 +74,11 @@ assert(
   'Root package exposes test:custom-frontend-connection',
 );
 assert(
+  rootPackage.scripts?.['custom-frontend:materialize'] ===
+    'node scripts/materialize-custom-frontend-starter.mjs',
+  'Root package exposes custom-frontend:materialize',
+);
+assert(
   (rootPackage.scripts?.['test:partial-gate-preflights'] || '').includes(
     'npm run test:custom-frontend-connection',
   ),
@@ -141,6 +146,10 @@ includesAll(
     'starterProjectFiles',
     'fileCount',
     'copiedFiles',
+    'materializerCommand',
+    'custom-frontend:materialize',
+    'targetDirectoryPolicy',
+    'pathSafety',
     'installCommand',
     'buildCommand',
     'forbiddenPrivateEnv',
@@ -186,6 +195,7 @@ includesAll(
     'backy.custom-frontend-starter-project.v1',
     'data-starter-project-format="file-list"',
     'Download starter project',
+    'File-list + materializer',
     '/api/backy-connection',
   ],
   'Site detail exposes an in-admin custom frontend starter project export and connection verifier',
@@ -201,6 +211,7 @@ includesAll(
     '/custom-frontend/starter',
     "schemaVersion: 'backy.custom-frontend-starter-project.v1'",
     'fileCount?: number',
+    'materializer?:',
   ],
   'Admin content API exposes the custom frontend starter export and connection verifier clients',
 );
@@ -248,6 +259,7 @@ includesAll(
     'backy.custom-frontend-starter-project.v1',
     'files[]=complete project file list',
     'Write every files[].path',
+    'materializer.command=npm run custom-frontend:materialize',
     'BACKY_FRONTEND_STARTER.md',
     'preserveFiles',
     'verification.cliCommand',

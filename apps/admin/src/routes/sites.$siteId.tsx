@@ -7071,7 +7071,7 @@ function EditSitePage() {
                   />
                   <SiteHandoffEndpoint
                     label="Starter bundle"
-                    value="File-list project export"
+                    value="File-list + materializer"
                   />
                 </div>
                 <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">

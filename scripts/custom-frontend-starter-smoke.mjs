@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -47,6 +48,7 @@ const files = {
   connection: read('src/app/api/backy-connection/route.ts'),
   client: read('src/lib/backy-client.ts'),
   generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
+  materializer: readRepo('scripts/materialize-custom-frontend-starter.mjs'),
   generatedTemplate: readRepo('apps/public/src/lib/customFrontendStarterProjectTemplate.ts'),
 };
 
@@ -127,6 +129,10 @@ assertIncludes(files.readme, 'separate custom frontend', 'Starter README documen
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
 assertIncludes(files.generator, 'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES', 'Starter bundle generator writes the public template file list');
 assertIncludes(files.generator, 'examples/custom-frontend-next', 'Starter bundle generator reads the checked starter project');
+assertIncludes(files.materializer, 'backy.custom-frontend-starter-project.v1', 'Starter materializer validates the project schema');
+assertIncludes(files.materializer, 'Target directory is not empty', 'Starter materializer refuses non-empty targets by default');
+assertIncludes(files.materializer, "startsWith('../')", 'Starter materializer rejects parent-path traversal');
+assertIncludes(files.materializer, 'pathSafety', 'Starter materializer reports path-safety metadata');
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
@@ -149,6 +155,44 @@ for (const forbidden of ['adminSites(', 'createAdmin', '/api/admin/', 'VITE_BACK
 }
 if (allStarterText.includes('from "@backy/sdk-js"') || allStarterText.includes("from '@backy/sdk-js'")) {
   fail('Starter source must be self-contained until @backy/sdk-js is published');
+}
+
+const materializerTempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'backy-starter-materialize-'));
+const materializerManifestPath = path.join(materializerTempRoot, 'starter.json');
+const materializerOutputPath = path.join(materializerTempRoot, 'frontend');
+const materializerManifest = {
+  success: true,
+  data: {
+    schemaVersion: 'backy.custom-frontend-starter-export.v1',
+    site: { id: 'site-smoke', primaryPublicHost: 'smoke.example.com' },
+    starterProject: {
+      schemaVersion: 'backy.custom-frontend-starter-project.v1',
+      exportFormat: 'file-list',
+      installCommand: 'npm install',
+      buildCommand: 'npm run build',
+      devCommand: 'npm run dev',
+    },
+    files: [
+      { path: '.env.example', role: 'site-specific-env', content: 'NEXT_PUBLIC_BACKY_SITE_ID=site-smoke\n' },
+      { path: 'src/app/page.tsx', role: 'page', content: 'export default function Page() { return null; }\n' },
+    ],
+  },
+};
+fs.writeFileSync(materializerManifestPath, JSON.stringify(materializerManifest, null, 2));
+const materializerRun = spawnSync(
+  'node',
+  ['scripts/materialize-custom-frontend-starter.mjs', '--manifest', materializerManifestPath, '--out', materializerOutputPath],
+  { cwd: repoRoot, encoding: 'utf8', timeout: 30000 },
+);
+if (
+  materializerRun.status === 0 &&
+  fs.existsSync(path.join(materializerOutputPath, '.env.example')) &&
+  fs.existsSync(path.join(materializerOutputPath, 'src/app/page.tsx')) &&
+  materializerRun.stdout.includes('"fileCount": 2')
+) {
+  pass('Starter materializer writes a valid file-list export into a target frontend directory');
+} else {
+  fail(`Starter materializer failed:\n${materializerRun.stdout}\n${materializerRun.stderr}`);
 }
 
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {

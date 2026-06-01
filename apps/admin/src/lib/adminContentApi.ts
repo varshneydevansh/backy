@@ -335,6 +335,7 @@ export interface AdminCustomFrontendStarterExport {
     fileCount: number;
     generatedFiles: string[];
     copiedFiles: string[];
+    materializerCommand?: string;
     installCommand: string;
     buildCommand: string;
     devCommand: string;
@@ -353,6 +354,11 @@ export interface AdminCustomFrontendStarterExport {
     source?: string;
   }>;
   fileCount?: number;
+  materializer?: {
+    command: string;
+    targetDirectoryPolicy: string;
+    pathSafety: string;
+  };
   preserveFiles: string[];
   readOrder: string[];
   verification: {

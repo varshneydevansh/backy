@@ -1572,7 +1572,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Custom frontend Vercel project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Download starter project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Starter bundle') &&
-      layout.customFrontendAgentHandoff.projectLaunch.text.includes('File-list project export') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('File-list + materializer') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Server-side equivalents') &&
