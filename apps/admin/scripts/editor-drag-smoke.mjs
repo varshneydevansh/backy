@@ -1521,7 +1521,14 @@ const assertCanvasSelectionInfoSource = () => {
   assert(source.includes('data-canvas-x={Math.round(element.x)}') && source.includes('data-canvas-width={Math.round(element.width)}'), 'Editor canvas elements must expose authored geometry data attributes for nested-layer smoke checks and custom admin clients.');
   assert(source.includes('type MarqueeSelection = {') && source.includes('const [marqueeSelection, setMarqueeSelection]') && source.includes('data-testid="editor-marquee-selection"'), 'Editor canvas must expose drag-marquee selection state and overlay');
   assert(source.includes('const getMarqueeStyle = (selection: MarqueeSelection): CSSProperties =>') && source.includes('left: bounds.x') && source.includes('top: bounds.y') && source.includes('style={getMarqueeStyle(marqueeSelection)}'), 'Editor canvas marquee overlay must render from the pointer-down origin using CSS left/top rather than invalid div x/y coordinates.');
-  assert(source.includes('const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) =>') && source.includes("getMeasuredCanvasScale('x')") && source.includes("getMeasuredCanvasScale('y')"), 'Editor canvas pointer math must derive coordinates from the actual transformed DOM scale so zoomed marquees start at the pointer-down point.');
+  assert(
+    source.includes('const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) =>') &&
+      source.includes("getMeasuredCanvasScale('x')") &&
+      source.includes("getMeasuredCanvasScale('y')") &&
+      source.includes('{ clamp: false }') &&
+      source.includes('data-marquee-anchor-clamp="unclamped"'),
+    'Editor canvas pointer math must derive coordinates from the actual transformed DOM scale, while marquee anchor reprojection must stay unclamped so layout shifts cannot collapse the selection box to the canvas origin.',
+  );
   assert(source.includes('data-marquee-start-x={Math.round(marqueeSelection.startX)}') && source.includes('data-marquee-bounds-x={activeMarqueeBounds ? Math.round(activeMarqueeBounds.x) : 0}'), 'Editor canvas marquee overlay must expose testable canvas-space start and bounds coordinates.');
   assert(source.includes('collectRootMarqueeCandidates') && source.includes('elementIntersectsRect(candidate, bounds)') && source.includes('onSelectMany?.(resolvedSelectedIds)'), 'Editor canvas marquee selection must select intersecting unlocked root elements in bulk');
   assert(source.includes("mode: event.shiftKey || event.metaKey || event.ctrlKey ? 'add' : 'replace'") && source.includes("activeMarqueeSelection.mode === 'add'") && source.includes('data-selection-mode={marqueeSelection.mode}'), 'Editor canvas marquee selection must support additive Shift/Cmd/Ctrl marquee selection');

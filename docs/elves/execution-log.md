@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 06:31 IST
+- **Last updated:** 2026-06-01 06:41 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 06:41 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Canvas marquee selection anchor no longer clamps to top-left during layout/scroll shifts
+
+**What changed:**
+- `apps/admin/src/components/editor/Canvas.tsx`: `getCanvasPoint` now supports unclamped coordinate conversion for marquee anchor reprojection while preserving clamped coordinates for active/current pointer positions.
+- `apps/admin/src/components/editor/Canvas.tsx`: marquee overlays now expose `data-marquee-anchor-clamp="unclamped"` so the anti-top-left behavior is testable.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: source guard now requires unclamped marquee anchor reprojection alongside transformed DOM scale math.
+
+**Why:**
+- The editor already stored the original client pointer and reprojected it during drag so zoom/scroll settling does not visually move the rectangle. That reprojection was using the clamped canvas-point path, so a layout shift that put the original client point outside the current canvas rect could reset the selection start to `0,0`.
+- The fix keeps scroll/zoom-stable visual anchoring but prevents the anchor from collapsing to the canvas origin.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 node apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-marquee-origin --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+
+**Next:**
+1. Run final hygiene, commit, and push this canvas marquee fix.
+2. Continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-06-01 06:18 IST
 

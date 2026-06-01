@@ -1667,6 +1667,10 @@ type CanvasPoint = {
   y: number;
 };
 
+type CanvasPointOptions = {
+  clamp?: boolean;
+};
+
 type CanvasInteractionInput = {
   clientX: number;
   clientY: number;
@@ -1989,15 +1993,21 @@ export function Canvas({
     initialHeight: number;
   } | null>(null);
 
-  const getCanvasPoint = useCallback((clientX: number, clientY: number): CanvasPoint | null => {
+  const getCanvasPoint = useCallback((clientX: number, clientY: number, options: CanvasPointOptions = {}): CanvasPoint | null => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) {
       return null;
     }
 
+    const x = (clientX - rect.left) / getMeasuredCanvasScale('x');
+    const y = (clientY - rect.top) / getMeasuredCanvasScale('y');
+    if (options.clamp === false) {
+      return { x, y };
+    }
+
     return {
-      x: Math.max(0, Math.min(size.width, (clientX - rect.left) / getMeasuredCanvasScale('x'))),
-      y: Math.max(0, Math.min(size.height, (clientY - rect.top) / getMeasuredCanvasScale('y'))),
+      x: Math.max(0, Math.min(size.width, x)),
+      y: Math.max(0, Math.min(size.height, y)),
     };
   }, [getMeasuredCanvasScale, size.height, size.width]);
 
@@ -2293,6 +2303,7 @@ export function Canvas({
       const anchoredStartPoint = getCanvasPoint(
         activeMarqueeSelection.anchorClientX,
         activeMarqueeSelection.anchorClientY,
+        { clamp: false },
       );
       const nextSelection = {
         ...activeMarqueeSelection,
@@ -2991,6 +3002,7 @@ export function Canvas({
           data-marquee-bounds-y={activeMarqueeBounds ? Math.round(activeMarqueeBounds.y) : 0}
           data-marquee-bounds-width={activeMarqueeBounds ? Math.round(activeMarqueeBounds.width) : 0}
           data-marquee-bounds-height={activeMarqueeBounds ? Math.round(activeMarqueeBounds.height) : 0}
+          data-marquee-anchor-clamp="unclamped"
           style={getMarqueeStyle(marqueeSelection)}
         />
       )}
