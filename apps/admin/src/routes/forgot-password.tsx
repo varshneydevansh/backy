@@ -17,7 +17,7 @@ const formatRecoveryDeliveryStatus = (
   if (!resetDelivery) return null;
   const provider = resetDelivery.provider.replace(/-/g, ' ');
   if (!resetDelivery.deliveryConfigured || resetDelivery.status === 'not_configured') {
-    return `Provider ${provider}: recovery email is not configured.`;
+    return `Provider ${provider}: no recovery email was sent. Configure delivery or use an owner-assisted reset.`;
   }
 
   const status = resetDelivery.status.replace(/_/g, ' ');

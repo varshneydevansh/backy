@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 10:17 IST
+- **Last updated:** 2026-06-01 10:30 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 10:30 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Auth/deploy status:** Forgot Password now states the no-email provider boundary clearly
+
+**What changed:**
+- `apps/public/src/app/api/admin/auth/password-recovery/route.ts`: local-outbox recovery now says no recovery email was sent while keeping the same neutral accepted envelope for every address.
+- `apps/admin/src/routes/forgot-password.tsx`: hosted admin recovery delivery status now tells operators to configure delivery or use an owner-assisted reset.
+- `README.md`: added the production access runbook for no transactional email provider: reset the owner credential in Supabase Authentication -> Users, then sign in through `backy-admin`; configure Resend/SMTP/HTTP delivery before relying on emailed recovery or invites.
+- `apps/admin/scripts/login-smoke.mjs` and `apps/public/scripts/admin-auth-smoke.mjs`: updated guards for the clearer recovery boundary copy.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:public-security --workspace @backy/public --silent` -> PASS.
+- Live `POST https://backy-public.vercel.app/api/admin/auth/password-recovery` spot check -> returned `deliveryConfigured:false`, `provider:"local-outbox"`, `status:"not_configured"`, confirming no production email provider is active.
+
+**Operational answer:**
+- The real owner account is the production access path. Because email delivery is not configured, the immediate safe reset path is Supabase Authentication -> Users -> owner email -> set password, then login at `backy-admin`.
+- Once logged in, account creation/invites live under Users, domains/sites under Sites, and custom frontends should consume `backy-public` agent-handoff/manifest/OpenAPI/render APIs.
+
+**Next:**
+1. Run final diff hygiene, commit, and push the recovery-boundary slice plus the pending hosted-login-shell smoke slice.
+2. Re-read the survival guide and continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-06-01 10:17 IST
 

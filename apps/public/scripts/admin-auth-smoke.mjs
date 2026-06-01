@@ -191,7 +191,7 @@ await record('password recovery does not enumerate local accounts', async () => 
     assert(known.json.data.deliveryConfigured === false, 'local-outbox recovery should not claim external delivery is configured');
     assert(known.json.data.resetDelivery.status === 'not_configured', 'local-outbox recovery should report not_configured status');
     assert(known.json.data.resetDelivery.deliveryConfigured === false, 'local-outbox reset delivery should not claim configured delivery');
-    assert(known.json.data.message.includes('password recovery needs a configured email provider'), 'local-outbox recovery message should require a configured email provider');
+    assert(known.json.data.message.includes('No recovery email was sent'), 'local-outbox recovery message should clearly say no email was sent');
   } else {
     assert(known.json.data.deliveryConfigured === true, 'configured recovery providers should report delivery configured');
     assert(known.json.data.resetDelivery?.status === 'queued', 'configured recovery providers should report queued status generically');

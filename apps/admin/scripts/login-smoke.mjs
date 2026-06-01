@@ -4363,8 +4363,8 @@ const main = async () => {
           body.includes('Provider ') &&
           body.includes('status queued');
         const needsProvider = body.includes('If recovery is available for this account') &&
-          body.includes('password recovery needs a configured email provider') &&
-          body.includes('Provider local outbox: recovery email is not configured.');
+          body.includes('No recovery email was sent') &&
+          body.includes('Provider local outbox: no recovery email was sent. Configure delivery or use an owner-assisted reset.');
         const rateLimited = body.includes('Too many recovery requests. Please wait before trying again.');
         return {
           ready: window.location.pathname === '/forgot-password' &&

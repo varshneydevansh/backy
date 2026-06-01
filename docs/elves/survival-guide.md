@@ -105,7 +105,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest hosted admin polish:** The login smoke now has a `BACKY_LOGIN_PRODUCTION_SHELL_SMOKE=1` mode plus `test:login-production-shell` script that proves hosted `backy-admin` renders credential-manager login controls without demo credentials or the dev MFA phrase.
 
-**Single next action:** Commit and push the hosted-login-shell smoke slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest production recovery polish:** Forgot Password now explicitly says no recovery email was sent when production is on `local-outbox`/no transactional provider, while keeping the neutral anti-enumeration envelope and documenting Supabase owner-assisted reset as the immediate access path.
+
+**Single next action:** Commit and push the hosted-login-shell smoke plus recovery-boundary slices, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

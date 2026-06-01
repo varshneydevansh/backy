@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
     ? 'Local recovery link generated. Open it to reset the password in this development environment.'
     : publicResetDelivery.deliveryConfigured
       ? 'If recovery is available for this account, reset instructions were queued through the configured recovery channel.'
-      : 'If recovery is available for this account, password recovery needs a configured email provider or an owner-assisted reset.';
+      : 'No recovery email was sent. If recovery is available for this account, configure an email provider or use an owner-assisted reset.';
 
   return NextResponse.json({
     success: true,
