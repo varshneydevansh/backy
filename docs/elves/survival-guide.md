@@ -115,7 +115,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `7071d8de` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
-**Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
+**Newest auth hardening:** Supabase/Auth-created identities now default to invited/inactive Backy profiles in `supabase/migrations/014_invite_only_auth_profile_defaults.sql`; production Supabase has had the trigger applied and verified. Existing active owners/admins are unchanged.
+
+**Single next action:** Commit and push the auth-trigger hardening slice, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

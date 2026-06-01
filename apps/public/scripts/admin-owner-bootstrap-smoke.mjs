@@ -6,12 +6,17 @@ import path from 'node:path';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const publicRoot = path.resolve(scriptDir, '..');
+const repoRoot = path.resolve(publicRoot, '../..');
 const routeSource = readFileSync(
   path.join(publicRoot, 'src/app/api/admin/auth/bootstrap-owner/route.ts'),
   'utf8',
 );
 const sitesRouteSource = readFileSync(
   path.join(publicRoot, 'src/app/api/admin/sites/route.ts'),
+  'utf8',
+);
+const authProfileTriggerSource = readFileSync(
+  path.join(repoRoot, 'supabase/migrations/014_invite_only_auth_profile_defaults.sql'),
   'utf8',
 );
 
@@ -63,6 +68,16 @@ assert(
     sitesRouteSource.includes('teams.items.length === 1') &&
     sitesRouteSource.includes('return teams.items[0].id;'),
   'Site creation must infer the single bootstrapped workspace team when no site exists yet.',
+);
+
+assert(
+  authProfileTriggerSource.includes("profile_role public.user_role := 'viewer'::public.user_role;") &&
+    authProfileTriggerSource.includes('INSERT INTO public.profiles AS profile (id, email, full_name, role, status, is_active)') &&
+    authProfileTriggerSource.includes("'invited'") &&
+    authProfileTriggerSource.includes('FALSE') &&
+    !authProfileTriggerSource.includes('status = EXCLUDED.status') &&
+    !authProfileTriggerSource.includes('is_active = EXCLUDED.is_active'),
+  'Supabase Auth profile trigger must create provider-only identities as invited/inactive until Backy activates them.',
 );
 
 console.log('Backy owner bootstrap source smoke passed.');

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 11:23 IST
+- **Last updated:** 2026-06-01 11:37 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 11:37 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Auth hardening status:** Provider-created identities now start inactive until Backy activates them
+
+**What changed:**
+- `supabase/migrations/014_invite_only_auth_profile_defaults.sql`: hardened `public.handle_new_user()` so Supabase/Auth-created identities default to `viewer` and are inserted as `status='invited'`, `is_active=false`; existing Backy role/status records are not overwritten on auth metadata changes.
+- `apps/public/scripts/admin-owner-bootstrap-smoke.mjs`: added a source guard requiring that provider-only identities stay invited/inactive while owner bootstrap and Backy Users workflows remain the activation path.
+
+**Commands run:**
+- `npm run test:admin-owner-bootstrap --workspace @backy/public --silent` -> PASS.
+- `npm run test:admin-auth-supabase --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- Production Supabase `psql ... -f supabase/migrations/014_invite_only_auth_profile_defaults.sql` -> PASS.
+- Production Supabase function verification query -> PASS (`t`).
+- `npm run test:admin-auth-production-policy --workspace @backy/public --silent` -> PASS.
+
+**Operational note:**
+- New Supabase Auth users created outside Backy now require Backy-side activation before hosted admin login can succeed. Existing active owners/admins are unchanged.
+
+**Next:**
+1. Run diff hygiene, commit, push, and verify Vercel source/deploy state.
 
 ## 2026-06-01 11:23 IST
 
@@ -51,7 +74,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `BACKY_DASHBOARD_CDP_PORT=9496 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
 
 **Operational note:**
-- The hosted UI remains role-aware. Refreshing or signing out/in after promoting the `varshney.devansh614@gmail.com` profile to owner should unlock Settings and owner-only navigation.
+- The hosted UI remains role-aware. Refreshing or signing out/in after promoting the production owner profile should unlock Settings and owner-only navigation.
 
 **Next:**
 1. Commit and push the Users identity-boundary plus sidebar clipping polish slice.
