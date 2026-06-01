@@ -195,12 +195,14 @@ npm run test:vercel-production-readiness
 
 The live gate fetches:
 
+- `/api/sites?identifier=site-demo`
+- `/api/sites?limit=1`
 - `/api/sites/site-demo/agent-handoff`
 - `/api/sites/site-demo/manifest`
 - `/api/sites/site-demo/openapi`
 - `/api/sites/site-demo/render?path=/`
 
-All four must return JSON from the final public domain. A 401 Vercel protection page, 404 `NOT_FOUND`, static HTML, or missing production-readiness topology is a failed production proof. Use `BACKY_VERCEL_PRODUCTION_SITE_ID=<site-id-or-slug>` when certifying a non-demo production site.
+All endpoints must return JSON from the final public domain. The discovery checks prove the production database exposes a published Backy site through public bootstrap, while the site-scoped checks prove handoff, manifest, OpenAPI, and render contracts. A 401 Vercel protection page, 404 `NOT_FOUND`, static HTML, empty public site discovery, or missing production-readiness topology is a failed production proof. Use `BACKY_VERCEL_PRODUCTION_SITE_ID=<site-id-or-slug>` when certifying a non-demo production site.
 
 When you need to certify that production admin auth is live too, provide credentials only through local shell/Vercel CI secrets and add the admin proof flag:
 

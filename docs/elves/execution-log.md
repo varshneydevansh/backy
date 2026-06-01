@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 09:26 IST
+- **Last updated:** 2026-06-01 09:58 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 09:58 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Production readiness now proves public site discovery
+
+**What changed:**
+- `scripts/vercel-production-readiness-smoke.mjs`: live production proof now checks `GET /api/sites?identifier=<site>` and `GET /api/sites?limit=1` before the site-scoped handoff/manifest/OpenAPI/render checks.
+- `README.md`: production promotion gate now documents those site-discovery probes and clarifies that the final public domain must expose a published database-backed site, not only direct site-scoped endpoints.
+
+**Commands run:**
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `npm run test:vercel-release-config --silent` -> PASS.
+- `BACKY_VERCEL_REQUIRE_REMOTE_ENV=1 npm run test:vercel-preview-readiness --silent` -> PASS with operator warnings for the local root Vercel link and old CLI project-list inspection.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Review notes:**
+- Strict code-quality review caught one false-negative risk: a `limit=1` list check must not require the readiness site to be the first published site. The final check only proves public list discovery is alive; the identifier check proves the requested readiness site.
+- Live endpoint spot checks showed production public discovery returns one published `site-demo` even if Supabase's table UI shows stale estimated row counts.
+
+**Next:**
+1. Commit and push this production-discovery readiness slice.
+2. Re-read the survival guide and continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 09:26 IST
 

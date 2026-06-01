@@ -101,7 +101,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest production auth polish:** Unauthenticated admin password recovery now reports `local-outbox` as `not_configured`, keeps known/unknown envelopes identical, and skips unreachable reset-token creation unless external email delivery or explicit local recovery exposure is configured.
 
-**Single next action:** Continue Batch 5 with the next visible admin/editor friction point after pushing the page-create quota/readiness slice.
+**Newest production discovery polish:** The live production readiness gate now proves `GET /api/sites?identifier=<site>` and `GET /api/sites?limit=1` on the final public domain before site-scoped handoff/manifest/OpenAPI/render checks, so Supabase-backed public bootstrap discovery is part of release proof.
+
+**Single next action:** Commit and push the production-discovery readiness slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

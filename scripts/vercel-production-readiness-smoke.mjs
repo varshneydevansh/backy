@@ -94,6 +94,8 @@ includesAll(
     'Vercel production builds run a public env guard before Next.js builds',
     'npm run test:vercel-production-readiness',
     '/api/sites/site-demo/agent-handoff',
+    '/api/sites?identifier=site-demo',
+    '/api/sites?limit=1',
     '/api/sites/site-demo/manifest',
     '/api/sites/site-demo/openapi',
     '/api/sites/site-demo/render?path=/',
@@ -357,6 +359,17 @@ const findOpenApiOperation = (openapi, requestedPath, suffix) => (
   || null
 );
 
+const normalizeIdentifier = (value) => String(value || '').trim().toLowerCase();
+
+const siteMatchesRequestedIdentifier = (site, requestedSiteId) => {
+  const requested = normalizeIdentifier(requestedSiteId);
+  return [
+    site?.id,
+    site?.slug,
+    site?.customDomain,
+  ].some((candidate) => normalizeIdentifier(candidate) === requested);
+};
+
 const checkLiveAdminAuth = async (baseUrl) => {
   if (!adminEmail || !adminPassword) {
     const message = 'BACKY_VERCEL_ADMIN_EMAIL/PASSWORD not set; skipping live admin auth proof.';
@@ -448,11 +461,33 @@ const checkLiveProduction = async () => {
   }
 
   const endpoints = {
+    siteDiscovery: `${baseUrl}/api/sites?identifier=${encodeURIComponent(siteId)}`,
+    siteList: `${baseUrl}/api/sites?limit=1`,
     agentHandoff: `${baseUrl}/api/sites/${encodeURIComponent(siteId)}/agent-handoff`,
     manifest: `${baseUrl}/api/sites/${encodeURIComponent(siteId)}/manifest`,
     openapi: `${baseUrl}/api/sites/${encodeURIComponent(siteId)}/openapi`,
     render: `${baseUrl}/api/sites/${encodeURIComponent(siteId)}/render?path=/`,
   };
+
+  const siteDiscovery = await parseJsonResponse(endpoints.siteDiscovery);
+  if (siteDiscovery) {
+    const site = siteDiscovery.data?.site || siteDiscovery.site;
+    assert(siteDiscovery.success === true, 'Production site discovery returns success=true');
+    assert(Boolean(site?.id), 'Production site discovery returns site identity');
+    assert(site?.status === 'published' || site?.isPublished === true, 'Production site discovery returns a published site');
+    assert(
+      siteMatchesRequestedIdentifier(site, siteId),
+      'Production site discovery resolves the requested site id, slug, or domain',
+    );
+  }
+
+  const siteList = await parseJsonResponse(endpoints.siteList);
+  if (siteList) {
+    const sites = Array.isArray(siteList.data?.sites) ? siteList.data.sites : siteList.sites;
+    assert(siteList.success === true, 'Production site list returns success=true');
+    assert(Array.isArray(sites), 'Production site list returns a sites array');
+    assert((sites || []).length > 0, 'Production site list exposes at least one published site');
+  }
 
   const agentHandoff = await parseJsonResponse(endpoints.agentHandoff);
   if (agentHandoff) {
