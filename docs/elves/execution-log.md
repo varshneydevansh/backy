@@ -13,6 +13,23 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-01 08:57 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Live OpenAPI host-context proof now handles canonical database site ids
+
+**What changed:**
+- `scripts/vercel-production-readiness-smoke.mjs`: live OpenAPI validation now finds resolve/render operations by path suffix when the requested identifier is an alias and the generated OpenAPI document uses the canonical database site id in path keys.
+
+**Commands run:**
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push the readiness-smoke canonical-path fix.
+2. Continue Batch 5 with the next visible admin/editor friction point.
+
 ## 2026-06-01 08:41 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish

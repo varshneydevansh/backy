@@ -350,6 +350,13 @@ const getSessionCookieHeader = (response) => {
     || '';
 };
 
+const findOpenApiOperation = (openapi, requestedPath, suffix) => (
+  openapi.paths?.[requestedPath]?.get
+  || Object.entries(openapi.paths || {})
+    .find(([pathKey]) => pathKey.endsWith(suffix))?.[1]?.get
+  || null
+);
+
 const checkLiveAdminAuth = async (baseUrl) => {
   if (!adminEmail || !adminPassword) {
     const message = 'BACKY_VERCEL_ADMIN_EMAIL/PASSWORD not set; skipping live admin auth proof.';
@@ -484,9 +491,11 @@ const checkLiveProduction = async () => {
         ?.productionReadinessSmoke === 'npm run test:vercel-production-readiness',
       'Production OpenAPI mirrors production readiness topology',
     );
-    const resolveParameters = (openapi.paths?.[`/api/sites/${siteId}/resolve`]?.get?.parameters || [])
+    const resolveOperation = findOpenApiOperation(openapi, `/api/sites/${siteId}/resolve`, '/resolve');
+    const renderOperation = findOpenApiOperation(openapi, `/api/sites/${siteId}/render`, '/render');
+    const resolveParameters = (resolveOperation?.parameters || [])
       .map((parameter) => `${parameter.in}:${parameter.name}`);
-    const renderParameters = (openapi.paths?.[`/api/sites/${siteId}/render`]?.get?.parameters || [])
+    const renderParameters = (renderOperation?.parameters || [])
       .map((parameter) => `${parameter.in}:${parameter.name}`);
     assert(resolveParameters.includes('query:domain'), 'Production OpenAPI resolve documents domain query context');
     assert(resolveParameters.includes('query:host'), 'Production OpenAPI resolve documents host query context');
