@@ -201,7 +201,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter source smoke, starter typecheck, production API connection smoke, Help source/rendered smokes, admin typecheck, SDK typecheck, diff check, env-backed starter production build, and a full 49-check local starter connection proof against production Backy are green. The full proof uses `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
 
-**Single next action:** Run final hygiene, commit/push the custom frontend self-probe slice, then create/connect the real separate custom website frontend project, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
+**Newest deploy verification:** `291c8b84` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live custom frontend connection gate passes 39 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes, and recent Vercel error logs are empty.
+
+**Single next action:** Create/connect the real separate custom website frontend project for `devanshvarshney.com`, point it at `https://backy-public.vercel.app/api` using only safe browser/server-loader env, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
 
 ## Active Compute
 
