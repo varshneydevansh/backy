@@ -123,6 +123,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest header role polish:** The account menu now shows the active Backy role and permission source, and its Settings shortcut is blocked with a clear reason when the signed-in role/permission matrix lacks `settings.view`.
 
+**Newest deploy verification:** `8ac88c33` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
