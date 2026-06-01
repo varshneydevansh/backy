@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 07:39 IST
+- **Last updated:** 2026-06-01 08:41 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 08:41 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** OpenAPI now documents host/domain context on resolve and render operations
+
+**What changed:**
+- `apps/public/src/app/api/sites/[siteId]/openapi/route.ts`: public `resolve` and `render` operations now explicitly document optional `domain`, `host`, and `x-forwarded-host` parameters, matching the route handlers and the existing custom frontend handoff extension.
+- `scripts/vercel-production-readiness-smoke.mjs`: production readiness now source-checks and live-checks that final production OpenAPI exposes those host/domain parameters.
+
+**Commands run:**
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Commit and push the host-aware OpenAPI contract slice.
+2. After production deploys, rerun the live production readiness gate so the new OpenAPI parameter checks prove against the final domain.
 
 ## 2026-06-01 08:24 IST
 

@@ -95,6 +95,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Latest add-on:** Production readiness now has an optional credential-redacted live admin login/session/logout proof, and the requested Gmail owner is verified active in production Supabase.
 
+**Newest contract polish:** OpenAPI now documents `domain`, `host`, and `x-forwarded-host` on public resolve/render operations so host-aware custom frontend routing is visible outside the `x-backy-*` extension.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point after pushing the page-create quota/readiness slice.
 
 ## Active Compute

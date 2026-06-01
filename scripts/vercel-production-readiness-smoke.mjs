@@ -144,6 +144,9 @@ includesAll(
     'const: "Never promote demo-mode previews or production aliases."',
     'liveProof: {',
     'adminAuthProof: {',
+    'name: "domain"',
+    'name: "host"',
+    'name: "x-forwarded-host"',
   ],
   'OpenAPI deployment topology production schema',
 );
@@ -481,6 +484,16 @@ const checkLiveProduction = async () => {
         ?.productionReadinessSmoke === 'npm run test:vercel-production-readiness',
       'Production OpenAPI mirrors production readiness topology',
     );
+    const resolveParameters = (openapi.paths?.[`/api/sites/${siteId}/resolve`]?.get?.parameters || [])
+      .map((parameter) => `${parameter.in}:${parameter.name}`);
+    const renderParameters = (openapi.paths?.[`/api/sites/${siteId}/render`]?.get?.parameters || [])
+      .map((parameter) => `${parameter.in}:${parameter.name}`);
+    assert(resolveParameters.includes('query:domain'), 'Production OpenAPI resolve documents domain query context');
+    assert(resolveParameters.includes('query:host'), 'Production OpenAPI resolve documents host query context');
+    assert(resolveParameters.includes('header:x-forwarded-host'), 'Production OpenAPI resolve documents forwarded host context');
+    assert(renderParameters.includes('query:domain'), 'Production OpenAPI render documents domain query context');
+    assert(renderParameters.includes('query:host'), 'Production OpenAPI render documents host query context');
+    assert(renderParameters.includes('header:x-forwarded-host'), 'Production OpenAPI render documents forwarded host context');
   }
 
   const render = await parseJsonResponse(endpoints.render);

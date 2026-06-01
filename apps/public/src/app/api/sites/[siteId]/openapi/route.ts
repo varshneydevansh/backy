@@ -3286,6 +3286,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   schema: { type: "string", example: "/about" },
                 },
                 {
+                  name: "domain",
+                  in: "query",
+                  required: false,
+                  description:
+                    "Verified public host context for custom domains or subdomains. Use this when the frontend cannot forward the browser Host header.",
+                  schema: { type: "string", example: "blog.example.com" },
+                },
+                {
+                  name: "host",
+                  in: "query",
+                  required: false,
+                  description:
+                    "Alias for domain. Backy normalizes host/domain values before applying locale or domain-aware routing.",
+                  schema: { type: "string", example: "blog.example.com" },
+                },
+                {
+                  name: "x-forwarded-host",
+                  in: "header",
+                  required: false,
+                  description:
+                    "Forwarded browser host used as domain context when the domain/host query parameter is not supplied.",
+                  schema: { type: "string", example: "blog.example.com" },
+                },
+                {
                   name: "previewToken",
                   in: "query",
                   required: false,
@@ -3328,6 +3352,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   in: "query",
                   required: true,
                   schema: { type: "string", example: "/about" },
+                },
+                {
+                  name: "domain",
+                  in: "query",
+                  required: false,
+                  description:
+                    "Verified public host context for custom domains or subdomains. Use the same host context that was used for route resolution.",
+                  schema: { type: "string", example: "blog.example.com" },
+                },
+                {
+                  name: "host",
+                  in: "query",
+                  required: false,
+                  description:
+                    "Alias for domain. Backy normalizes host/domain values before applying locale or domain-aware rendering.",
+                  schema: { type: "string", example: "blog.example.com" },
+                },
+                {
+                  name: "x-forwarded-host",
+                  in: "header",
+                  required: false,
+                  description:
+                    "Forwarded browser host used as domain context when the domain/host query parameter is not supplied.",
+                  schema: { type: "string", example: "blog.example.com" },
                 },
                 {
                   name: "previewToken",
