@@ -195,7 +195,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Source connection smoke, local live public API connection smoke against `http://127.0.0.1:3001/api`, Help source/rendered smokes, admin typecheck, SDK typecheck, frontend contract type generation, custom frontend starter smoke, and diff check are green for the connection gate slice. Production live proof must wait until this slice is pushed and Vercel redeploys.
 
-**Single next action:** Commit/push the custom frontend connection gate, then resume only with production custom frontend/domain connection proof and owner-controlled site setup before broad UI polish.
+**Newest deploy verification:** `7ea5c3aa` is pushed. Latest `backy-public` and `backy-admin` production deployments are Ready, the new live custom frontend connection gate passes 38 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes, and recent Vercel error logs are empty.
+
+**Single next action:** Create/connect the real separate custom website frontend project, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>` plus `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` before broad UI polish.
 
 ## Active Compute
 

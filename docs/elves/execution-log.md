@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 02:53 IST
+- **Last updated:** 2026-06-02 03:03 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 03:03 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Custom frontend connection gate is production-verified
+
+**Verification:**
+- `7ea5c3aa feat(scripts): add custom frontend connection gate` is pushed to `main`.
+- Latest `backy-public` production deployment is Ready.
+- Latest `backy-admin` production deployment is Ready.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 38 checks; deployed custom frontend DOM proof skipped because no separate frontend URL exists yet.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; live admin auth proof skipped because credential env is intentionally unset.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9550 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS; hosted login shell still has no demo credentials or dev MFA phrase.
+- Recent `backy-public` Vercel error logs -> PASS, no logs found.
+- Recent `backy-admin` Vercel error logs -> PASS, no logs found.
+
+**Next:**
+1. Create/connect the real separate custom website frontend project, point its safe env at `https://backy-public.vercel.app/api`, and attach the public website domain to that frontend project.
+2. After the frontend deploy exists, rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>` and `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` so DOM control attributes are release-proven.
+3. Keep the four remaining Partial audit rows as external Settings/Commerce provider certification artifacts; do not fake them.
 
 ## 2026-06-02 02:53 IST
 
