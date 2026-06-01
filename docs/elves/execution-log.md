@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 11:14 IST
+- **Last updated:** 2026-06-01 11:23 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 11:23 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Sidebar/auth clarity slice pushed and verified on Vercel
+
+**What changed:**
+- Pushed `7071d8de fix(admin): clarify hosted access and sidebar site switcher` to `origin/main`.
+- Vercel deployed both `backy-public` and `backy-admin` production from the pushed commit.
+
+**Commands run:**
+- `git push` -> PASS.
+- `npx vercel@latest ls backy-admin --no-color` -> latest production deployment Ready.
+- `npx vercel@latest ls backy-public --no-color` -> latest production deployment Ready.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9497 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs.
+- `npx vercel@latest logs backy-admin.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs.
+
+**Next:**
+1. Continue Batch 5 with the next admin/editor friction point.
 
 ## 2026-06-01 11:14 IST
 

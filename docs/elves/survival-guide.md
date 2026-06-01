@@ -113,7 +113,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest shell UX polish:** The expanded sidebar brand/site switcher now reserves a 120px stacked header for Backy, Manage, Site select, Domains, and Help, with dashboard smoke coverage proving it does not clip into quick-create controls.
 
-**Single next action:** Commit and push the Users identity-boundary plus sidebar clipping polish slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest deploy verification:** `7071d8de` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
+**Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 
