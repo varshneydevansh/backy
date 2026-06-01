@@ -532,19 +532,51 @@ function UsersListView() {
     const active = users.filter((user) => user.status === 'active').length;
     const invited = users.filter((user) => user.status === 'invited').length;
     const admins = users.filter((user) => user.role === 'owner' || user.role === 'admin').length;
+    const activeOwners = users.filter((user) => user.status === 'active' && user.role === 'owner').length;
     const suspended = users.filter((user) => user.status === 'suspended').length;
 
     return [
       { label: 'Total people', value: users.length, detail: 'Accounts with Backy access', icon: Users },
       { label: 'Active seats', value: active, detail: `${invited} invite${invited === 1 ? '' : 's'} pending`, icon: CheckCircle2 },
-      { label: 'Admin authority', value: admins, detail: 'Owners and admins', icon: Shield },
+      { label: 'Admin authority', value: admins, detail: `${activeOwners} active owner${activeOwners === 1 ? '' : 's'}`, icon: Shield },
       { label: 'Needs review', value: suspended, detail: 'Suspended accounts', icon: AlertTriangle },
     ];
   }, [users]);
+  const userAuthority = useMemo(() => {
+    const activeUsers = users.filter((user) => user.status === 'active');
+    const activeOwners = activeUsers.filter((user) => user.role === 'owner');
+    const activeAdmins = activeUsers.filter((user) => user.role === 'admin');
+    const invitedOwners = users.filter((user) => user.status === 'invited' && user.role === 'owner');
+    const currentBackyUser = users.find((user) => isCurrentUser(user));
+    const state = activeOwners.length === 0
+      ? 'blocked'
+      : activeOwners.length > 1
+        ? 'review'
+        : 'ready';
+    const message = activeOwners.length === 0
+      ? 'No active owner is visible. Restore owner access before changing roles, domains, or production settings.'
+      : activeOwners.length > 1
+        ? 'Multiple active owners are available. Keep only intentional production owners after setup.'
+        : 'One active owner is available for protected workspace changes.';
+    const signedInSummary = currentBackyUser
+      ? `${roleLabel(currentBackyUser.role)} · ${currentBackyUser.status}`
+      : currentAdmin
+        ? `${roleLabel(currentAdmin.role as UserRole)} · provider session`
+        : 'No signed-in Backy session';
+
+    return {
+      activeUsers,
+      activeOwners,
+      activeAdmins,
+      invitedOwners,
+      currentBackyUser,
+      state,
+      message,
+      signedInSummary,
+      activePrivilegedCount: activeOwners.length + activeAdmins.length,
+    };
+  }, [currentAdmin, isCurrentUser, users]);
   const accessReadiness = useMemo(() => {
-    const activeAdmins = users.filter((user) => (
-      user.status === 'active' && (user.role === 'owner' || user.role === 'admin')
-    )).length;
     const invited = users.filter((user) => user.status === 'invited').length;
     const suspended = users.filter((user) => user.status === 'suspended').length;
     const knownRoles = new Set(ROLE_OPTIONS.map((role) => role.value));
@@ -552,10 +584,17 @@ function UsersListView() {
     const checks = [
       {
         label: 'Admin continuity',
-        detail: activeAdmins > 0
-          ? `${activeAdmins} active owner/admin account${activeAdmins === 1 ? '' : 's'}`
+        detail: userAuthority.activePrivilegedCount > 0
+          ? `${userAuthority.activeOwners.length} active owner${userAuthority.activeOwners.length === 1 ? '' : 's'} · ${userAuthority.activeAdmins.length} active admin${userAuthority.activeAdmins.length === 1 ? '' : 's'}`
           : 'Add at least one active owner or admin before handoff.',
-        ready: activeAdmins > 0,
+        ready: userAuthority.activePrivilegedCount > 0,
+      },
+      {
+        label: 'Owner continuity',
+        detail: userAuthority.activeOwners.length > 0
+          ? `${userAuthority.activeOwners.length} active owner${userAuthority.activeOwners.length === 1 ? '' : 's'} can control protected settings.`
+          : 'Keep at least one active owner for production-safe workspace control.',
+        ready: userAuthority.activeOwners.length > 0,
       },
       {
         label: 'Role model',
@@ -608,7 +647,7 @@ function UsersListView() {
         { label: 'Protect', detail: 'Backend guards prevent removing the final active owner/admin.' },
       ],
     };
-  }, [currentAdmin, users]);
+  }, [currentAdmin, userAuthority.activeAdmins.length, userAuthority.activeOwners.length, userAuthority.activePrivilegedCount, users]);
 
   const filteredUsers = useMemo(() => (
     users.filter((user) => {
@@ -1490,6 +1529,11 @@ function UsersListView() {
       inactive: users.filter((user) => user.status === 'inactive').length,
       suspended: users.filter((user) => user.status === 'suspended').length,
       adminAuthority: users.filter((user) => user.role === 'owner' || user.role === 'admin').length,
+      activeOwners: userAuthority.activeOwners.length,
+      activeAdmins: userAuthority.activeAdmins.length,
+      activePrivileged: userAuthority.activePrivilegedCount,
+      authorityState: userAuthority.state,
+      signedInRole: userAuthority.currentBackyUser?.role || currentAdmin?.role || null,
     },
     filters: {
       search: searchQuery,
@@ -1551,10 +1595,16 @@ function UsersListView() {
     totalItems,
     totalPages,
     userDetailUrl,
+    currentAdmin?.role,
     publicContactsUrl,
     publicFormsUrl,
     publicRegistrationDefinitionUrl,
     publicRegistrationSubmitUrl,
+    userAuthority.activeAdmins.length,
+    userAuthority.activeOwners.length,
+    userAuthority.activePrivilegedCount,
+    userAuthority.currentBackyUser?.role,
+    userAuthority.state,
     users,
     usersListUrl,
   ]);
@@ -1843,6 +1893,81 @@ function UsersListView() {
                 Hosted login validates the configured identity provider first. Backy stores role, status, permissions, and invite state here; keep the provider user email and Backy user email aligned. Do not add rows to <span className="font-mono text-xs">admin_user_credentials</span> for hosted access.
               </p>
             </div>
+          </div>
+        </div>
+
+        <div
+          className="mt-4 rounded-lg border border-border bg-background p-4"
+          data-testid="users-account-authority"
+          data-owner-count={userAuthority.activeOwners.length}
+          data-admin-count={userAuthority.activeAdmins.length}
+          data-active-user-count={userAuthority.activeUsers.length}
+          data-authority-state={userAuthority.state}
+          data-current-role={userAuthority.currentBackyUser?.role || currentAdmin?.role || 'unknown'}
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground">Workspace authority</h3>
+                <span
+                  className={cn(
+                    'rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                    userAuthority.state === 'ready'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : userAuthority.state === 'review'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-red-50 text-red-700',
+                  )}
+                >
+                  {userAuthority.state === 'review' ? 'Review owners' : userAuthority.state}
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                Use this before changing roles or removing accounts. Provider identities prove login first; this Backy directory controls who can operate Settings, Users, domains, and protected admin actions.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRoleFilter('owner');
+                  setStatusFilter('active');
+                  setReviewFilter('all');
+                  setCurrentPage(1);
+                }}
+                disabled={isUsersBusy}
+                data-testid="users-authority-filter-owners"
+              >
+                Show active owners
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRoleFilter('all');
+                  setStatusFilter('active');
+                  setReviewFilter('admin-authority');
+                  setCurrentPage(1);
+                }}
+                disabled={isUsersBusy}
+                data-testid="users-authority-filter-admins"
+              >
+                Show admin authority
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <UserAuthorityStat label="Signed-in role" value={userAuthority.signedInSummary} />
+            <UserAuthorityStat label="Active owners" value={`${userAuthority.activeOwners.length}`} />
+            <UserAuthorityStat label="Active admins" value={`${userAuthority.activeAdmins.length}`} />
+            <UserAuthorityStat label="Invited owners" value={`${userAuthority.invitedOwners.length}`} />
+          </div>
+          <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {userAuthority.message} Backend guardrails still block deleting or demoting the final active owner/admin.
           </div>
         </div>
 
@@ -2969,6 +3094,15 @@ function UserApiStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-3">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="mt-1 truncate font-mono text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function UserAuthorityStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-3">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      <div className="mt-1 min-w-0 break-words text-sm font-semibold text-foreground [overflow-wrap:anywhere]">{value}</div>
     </div>
   );
 }

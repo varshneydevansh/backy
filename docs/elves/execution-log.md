@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 16:19 IST
+- **Last updated:** 2026-06-01 16:52 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 16:52 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Users authority status:** Users page now surfaces active owner/admin safety before account mutations
+
+**What changed:**
+- `apps/admin/src/routes/users.tsx`: added a **Workspace authority** panel to the Users command center with signed-in role/status, active owner/admin/user counts, invited owner count, authority state, and direct filters for active owners/admin authority.
+- The Users readiness model now distinguishes owner continuity from broader admin continuity, so workspaces can see whether they have an active owner before changing roles, domains, Settings, or protected admin controls.
+- The users handoff manifest now includes non-PII owner/admin authority counts and state for frontend/admin agents.
+- `apps/admin/scripts/users-smoke.mjs`: source and rendered smoke coverage now proves the authority panel, counts, review filters, provider boundary, and final owner/admin guardrail copy remain visible.
+
+**Commands run:**
+- `BACKY_USERS_SOURCE_ONLY=1 npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_USERS_CDP_PORT=9527 npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+
+**Next:**
+1. Run diff hygiene and public repo hygiene.
+2. Commit, push, and verify production deployments.
 
 ## 2026-06-01 16:19 IST
 

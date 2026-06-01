@@ -137,7 +137,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `8819f704` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
-**Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
+**Newest Users authority polish:** Users now exposes a Workspace authority panel with signed-in role/status, active owner/admin/user counts, invited owner count, active-owner/admin filters, owner-continuity readiness, and non-PII handoff metadata so account changes happen with production owner safety visible.
+
+**Single next action:** Commit and push the Users authority slice, verify production deployments, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

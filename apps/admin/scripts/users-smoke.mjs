@@ -103,6 +103,23 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes('for hosted access'),
     'Users command center must explain that hosted production login is provider-backed and local credential rows are not the access path.',
   );
+  assert(
+    source.includes('data-testid="users-account-authority"') &&
+      source.includes('data-owner-count={userAuthority.activeOwners.length}') &&
+      source.includes('data-admin-count={userAuthority.activeAdmins.length}') &&
+      source.includes('data-authority-state={userAuthority.state}') &&
+      source.includes('Workspace authority') &&
+      source.includes('Provider identities prove login first; this Backy directory controls who can operate Settings, Users, domains, and protected admin actions.') &&
+      source.includes('Show active owners') &&
+      source.includes("setRoleFilter('owner')") &&
+      source.includes("setStatusFilter('active')") &&
+      source.includes('Show admin authority') &&
+      source.includes("setReviewFilter('admin-authority')") &&
+      source.includes('Backend guardrails still block deleting or demoting the final active owner/admin.') &&
+      source.includes('activeOwners: userAuthority.activeOwners.length') &&
+      source.includes('authorityState: userAuthority.state'),
+    'Users command center must expose active owner/admin authority, current role, and review filters before account mutations.',
+  );
   {
     const commandCenterBlockStart = source.indexOf('data-testid="users-command-center"');
     const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
@@ -3454,6 +3471,22 @@ const assertLayout = async (client, expectedName) => {
       hasControlMap: Boolean(document.querySelector('[data-testid="users-control-map"]')) &&
         (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Users control map') &&
         (document.querySelector('[data-testid="users-control-map-details"]')?.textContent || '').includes('Show map'),
+      hasAccountAuthority: (() => {
+        const authority = document.querySelector('[data-testid="users-account-authority"]');
+        const text = authority?.textContent || '';
+        return Boolean(authority) &&
+          authority?.getAttribute('data-authority-state') &&
+          authority?.getAttribute('data-owner-count') !== null &&
+          authority?.getAttribute('data-admin-count') !== null &&
+          text.includes('Workspace authority') &&
+          text.includes('Signed-in role') &&
+          text.includes('Active owners') &&
+          text.includes('Active admins') &&
+          text.includes('Show active owners') &&
+          text.includes('Show admin authority') &&
+          text.includes('Provider identities prove login first') &&
+          text.includes('Backend guardrails still block deleting or demoting the final active owner/admin.');
+      })(),
       hasDirectory: document.body?.innerText?.includes('People directory') || document.body?.innerText?.includes(${JSON.stringify(expectedName)}) || false,
       hasApi: document.body?.innerText?.includes('User access API') || false,
       hasMembership: document.body?.innerText?.includes('Membership registration') || false,
@@ -3479,6 +3512,7 @@ const assertLayout = async (client, expectedName) => {
       layout.controlMapCollapsed &&
       layout.apiDetailsCollapsed &&
       layout.hasControlMap &&
+      layout.hasAccountAuthority &&
       layout.hasDirectory &&
       layout.hasApi &&
       layout.hasMembership &&

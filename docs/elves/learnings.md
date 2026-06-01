@@ -104,6 +104,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Account chrome must not claim privileged controls are available for every role. Show the active role and permission source near the user menu, and gate account-level Settings shortcuts through the same permission matrix as sidebar/navigation.
 - [2026-06-01] Same-site public hosts need a separate model from independent subdomain sites. Use `site.settings.domainAliases` for verified hosts that should render the same Backy site, and create separate Backy sites when content, navigation, SEO, or design tokens differ.
 - [2026-06-01] First-run production dashboards should make owner/admin authority visible inside Backy. Supabase/Auth identities and Backy RBAC records are separate layers, so operators need active owner/admin counts, signed-in role/source, and review actions near readiness status instead of only in the Users table.
+- [2026-06-01] Account-mutation pages should show owner continuity before destructive or role-changing controls. Users can safely edit access only when the page surfaces active owner/admin counts, the signed-in Backy role/status, and quick filters for active owners/admin authority beside the provider-auth boundary.
 
 ## Known Traps
 
