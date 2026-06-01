@@ -678,8 +678,8 @@ export function ComponentLibrary({
       className={cn(
         'relative flex h-full flex-col overflow-hidden border-r border-slate-200 bg-white transition-[width,min-width,max-width] duration-200 ease-out',
         shellMode === 'expanded'
-          ? 'w-[clamp(22rem,28vw,32rem)] min-w-[22rem] max-w-[32rem]'
-          : 'w-[clamp(15rem,16vw,18rem)] min-w-[15rem] max-w-[18rem]',
+          ? 'w-[min(32rem,100vw)] min-w-0 max-w-full lg:w-[clamp(22rem,28vw,32rem)] lg:min-w-[22rem] lg:max-w-[32rem]'
+          : 'w-[min(18rem,100vw)] min-w-0 max-w-full lg:w-[clamp(15rem,16vw,18rem)] lg:min-w-[15rem] lg:max-w-[18rem]',
       )}
       data-testid="editor-component-library"
       data-component-library-density={shellMode}

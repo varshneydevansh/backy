@@ -1697,7 +1697,9 @@ export function LayersPanel({
 
     return (
         <div
-            className={embedded ? 'layers-panel w-full' : 'layers-panel w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0'}
+            className={embedded
+                ? 'layers-panel w-full'
+                : 'layers-panel w-[min(30rem,100vw)] min-w-0 max-w-full shrink-0 lg:w-[clamp(18rem,24vw,30rem)] lg:min-w-[18rem] lg:max-w-[30rem]'}
             aria-describedby={LAYER_PANEL_ACTION_STATUS_ID}
             data-action-status={layerPanelActionStatus}
             data-action-state={getLayerActionState(undefined)}

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 20:28 IST
+- **Last updated:** 2026-06-01 21:33 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 21:33 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Editor status:** Compact editor viewports no longer squeeze the canvas with fixed side rails
+
+**What changed:**
+- `apps/admin/src/components/editor/CanvasEditor.tsx` now detects compact editor shell widths (`max-width: 1023px`) and auto-collapses Components/Inspector/Layers rails into overlay panels instead of docking both rails beside the canvas.
+- Compact Components and Layers/Inspector overlays expose responsive mode metadata, close via a backdrop, and preserve the canvas viewport width while open.
+- `ComponentLibrary` and `LayersPanel` now allow `min-w-0` compact widths and keep their larger docked width contracts on `lg` and wider screens.
+- `apps/admin/scripts/editor-drag-smoke.mjs` now proves compact shell auto-collapse, overlay open/close behavior, unchanged canvas width while overlays are open, and desktop docked-panel restoration.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-responsive --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-responsive --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-preview-scroll --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This follows the subagent finding that the editor route is a separate canvas surface from ordinary admin pages: the route shell was contained, but compact editor widths still needed panel behavior that gives canvas work the primary space.
+- The user asked how to connect `devanshvarshney.com` as a separate custom frontend; answer after this commit should describe Backy as API/backend, `backy-admin` as protected editor, `backy-public` as public API/runtime, and the actual site as a third Vercel frontend project.
+
+**Next:**
+1. Commit and push this editor compact-shell slice, then answer the custom frontend/domain wiring question clearly.
 
 ## 2026-06-01 20:28 IST
 

@@ -153,6 +153,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest all-route verification polish:** The login smoke now verifies ordinary route containment across Dashboard, Sites, Site Detail, New Site, Pages, New Page, Blog, Media, Collections, Reusable Sections, Forms, Contacts, Comments, Newsletter, Products, Orders, Users, New User, User Detail, Teams, Settings, and Help, while preserving editor routes on their separate unframed canvas contract.
 
+**Newest compact editor shell polish:** The editor shell now detects compact widths and auto-collapses Components/Inspector/Layers into overlay panels instead of docking fixed side rails beside the canvas. Responsive smoke proves compact auto-collapse, overlay Components/Layers open/close, canvas width preservation while overlays are open, and docked panel restoration on desktop; preview-scroll remains green.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

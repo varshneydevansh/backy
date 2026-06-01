@@ -397,6 +397,7 @@ const CANVAS_ZOOM_PERCENT_STEP = 5;
 const CANVAS_WHEEL_ZOOM_STEP = 0.08;
 const CANVAS_WHEEL_DELTA_LINE_MULTIPLIER = 16;
 const CANVAS_WHEEL_DELTA_PAGE_MULTIPLIER = 800;
+const EDITOR_COMPACT_SHELL_MEDIA_QUERY = '(max-width: 1023px)';
 const MIN_GRID_SIZE = 1;
 const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
@@ -2122,7 +2123,28 @@ export function CanvasEditor({
   const [isPreview, setIsPreview] = useState(false);
   const [showComponentPanel, setShowComponentPanel] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(true);
+  const [compactEditorPanel, setCompactEditorPanel] = useState<'components' | 'inspector' | null>(null);
+  const [isCompactEditorShellViewport, setIsCompactEditorShellViewport] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+
+    return window.matchMedia(EDITOR_COMPACT_SHELL_MEDIA_QUERY).matches;
+  });
   const [isCanvasFocusMode, setIsCanvasFocusMode] = useState(Boolean(initialCanvasFocusMode));
+  const isEditorPanelChromeSuppressed = isPreview || isCanvasFocusMode;
+  const isComponentPanelVisible = !isEditorPanelChromeSuppressed &&
+    showComponentPanel &&
+    (!isCompactEditorShellViewport || compactEditorPanel === 'components');
+  const isInspectorPanelVisible = !isEditorPanelChromeSuppressed &&
+    showInspectorPanel &&
+    (!isCompactEditorShellViewport || compactEditorPanel === 'inspector');
+  const isCompactEditorPanelOverlayVisible = isCompactEditorShellViewport &&
+    (isComponentPanelVisible || isInspectorPanelVisible);
+  const areCompactEditorPanelsAutoCollapsed = isCompactEditorShellViewport &&
+    !isEditorPanelChromeSuppressed &&
+    !isComponentPanelVisible &&
+    !isInspectorPanelVisible;
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<EditorSaveStatus>('saved');
@@ -2811,23 +2833,72 @@ export function CanvasEditor({
     setIsCanvasFocusMode(Boolean(initialCanvasFocusMode));
   }, [initialCanvasFocusMode]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(EDITOR_COMPACT_SHELL_MEDIA_QUERY);
+    const handleChange = () => {
+      setIsCompactEditorShellViewport(mediaQuery.matches);
+    };
+
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isCompactEditorShellViewport) {
+      setCompactEditorPanel(null);
+    }
+  }, [isCompactEditorShellViewport]);
+
   const handleToggleComponentPanel = useCallback(() => {
     setIsCanvasFocusMode(false);
+    if (isCompactEditorShellViewport) {
+      setShowComponentPanel(true);
+      setCompactEditorPanel((current) => (
+        current === 'components' && !isCanvasFocusMode ? null : 'components'
+      ));
+      return;
+    }
+
     setShowComponentPanel((current) => (isCanvasFocusMode ? true : !current));
-  }, [isCanvasFocusMode]);
+  }, [isCanvasFocusMode, isCompactEditorShellViewport]);
 
   const handleToggleInspectorPanel = useCallback(() => {
     setIsCanvasFocusMode(false);
+    if (isCompactEditorShellViewport) {
+      setShowInspectorPanel(true);
+      setCompactEditorPanel((current) => (
+        current === 'inspector' && !isCanvasFocusMode ? null : 'inspector'
+      ));
+      return;
+    }
+
     setShowInspectorPanel((current) => (isCanvasFocusMode ? true : !current));
-  }, [isCanvasFocusMode]);
+  }, [isCanvasFocusMode, isCompactEditorShellViewport]);
 
   const handleToggleLayersPanel = useCallback(() => {
     setIsCanvasFocusMode(false);
+    if (isCompactEditorShellViewport) {
+      setShowInspectorPanel(true);
+      setCompactEditorPanel('inspector');
+      setRightPanel((current) => (
+        current === 'layers' && compactEditorPanel === 'inspector' && !isCanvasFocusMode
+          ? 'properties'
+          : 'layers'
+      ));
+      return;
+    }
+
     setShowInspectorPanel(true);
     setRightPanel((current) => (
-      current === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'properties' : 'layers'
+      current === 'layers' && isInspectorPanelVisible ? 'properties' : 'layers'
     ));
-  }, [isCanvasFocusMode, showInspectorPanel]);
+  }, [compactEditorPanel, isCanvasFocusMode, isCompactEditorShellViewport, isInspectorPanelVisible]);
 
   const applyCanvasSize = useCallback((nextSize: CanvasSize, nextBreakpoint = breakpoint) => {
     if (isCanvasMutationDisabled) {
@@ -5155,38 +5226,38 @@ export function CanvasEditor({
       }),
       command({
         id: 'toggle-component-panel',
-        label: showComponentPanel && !isCanvasFocusMode ? 'Hide components panel' : 'Show components panel',
+        label: isComponentPanelVisible ? 'Hide components panel' : 'Show components panel',
         category: 'shell',
         targetScope: 'shell',
         shortcut: 'B',
         ariaKeyshortcuts: 'B',
         testId: 'editor-toggle-component-panel',
         enabled: true,
-        reason: showComponentPanel && !isCanvasFocusMode ? 'Components panel is visible.' : 'Components panel can be opened.',
+        reason: isComponentPanelVisible ? 'Components panel is visible.' : 'Components panel can be opened.',
         disabledReason: 'Components panel command is unavailable.',
       }),
       command({
         id: 'toggle-layers-panel',
-        label: rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel' : 'Show layers panel',
+        label: rightPanel === 'layers' && isInspectorPanelVisible ? 'Show properties panel' : 'Show layers panel',
         category: 'shell',
         targetScope: 'shell',
         shortcut: 'L',
         ariaKeyshortcuts: 'L',
         testId: 'editor-toggle-layers-panel',
         enabled: true,
-        reason: rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Layers panel is active.' : 'Layers panel can be opened.',
+        reason: rightPanel === 'layers' && isInspectorPanelVisible ? 'Layers panel is active.' : 'Layers panel can be opened.',
         disabledReason: 'Layers panel command is unavailable.',
       }),
       command({
         id: 'toggle-inspector-panel',
-        label: showInspectorPanel && !isCanvasFocusMode ? 'Hide inspector panel' : 'Show inspector panel',
+        label: isInspectorPanelVisible ? 'Hide inspector panel' : 'Show inspector panel',
         category: 'shell',
         targetScope: 'shell',
         shortcut: 'I',
         ariaKeyshortcuts: 'I',
         testId: 'editor-toggle-inspector-panel',
         enabled: true,
-        reason: showInspectorPanel && !isCanvasFocusMode
+        reason: isInspectorPanelVisible
           ? `Inspector panel is visible for ${INSPECTOR_PANEL_PURPOSE}.`
           : `Inspector panel can be opened for ${INSPECTOR_PANEL_PURPOSE}.`,
         disabledReason: 'Inspector panel command is unavailable.',
@@ -5398,9 +5469,11 @@ export function CanvasEditor({
     hideSettings,
     history.length,
     historyIndex,
+    isComponentPanelVisible,
     isCanvasFocusMode,
     isCanvasMutationDisabled,
     isCanvasPanMode,
+    isInspectorPanelVisible,
     isPreview,
     isSaving,
     mode,
@@ -7329,9 +7402,9 @@ export function CanvasEditor({
     applyFitCanvas,
     isCanvasAutoFit,
     isCanvasFocusMode,
+    isComponentPanelVisible,
+    isInspectorPanelVisible,
     isPreview,
-    showComponentPanel,
-    showInspectorPanel,
   ]);
 
   useEffect(() => {
@@ -7344,7 +7417,7 @@ export function CanvasEditor({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [handleFitCanvas, isCanvasFocusMode, showComponentPanel, showInspectorPanel]);
+  }, [handleFitCanvas, isCanvasFocusMode, isComponentPanelVisible, isInspectorPanelVisible]);
 
   useEffect(() => {
     if (isPreview) {
@@ -7588,7 +7661,7 @@ export function CanvasEditor({
     .filter((command) => command.state === 'ready')
     .length;
   const editorSecondaryToolbarStatus = `Secondary editor toolbar ready. ${editorSecondaryToolbarReadyCount} of ${editorSecondaryToolbarCommands.length} actions ready for the current selection.`;
-  const inspectorPanelToggleActionStatus = showInspectorPanel && !isCanvasFocusMode
+  const inspectorPanelToggleActionStatus = isInspectorPanelVisible
     ? `Hide inspector panel available for ${INSPECTOR_PANEL_PURPOSE}.`
     : `Show inspector panel available for ${INSPECTOR_PANEL_PURPOSE}.`;
   const contextInspectorPanelActionStatus = isCanvasFocusMode
@@ -8744,16 +8817,17 @@ export function CanvasEditor({
               onClick={handleToggleComponentPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                showComponentPanel && !isCanvasFocusMode
+                isComponentPanelVisible
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showComponentPanel && !isCanvasFocusMode ? 'Hide components panel (B)' : 'Show components panel (B)'}
-              aria-label={showComponentPanel && !isCanvasFocusMode ? 'Hide components panel' : 'Show components panel'}
-              aria-pressed={showComponentPanel && !isCanvasFocusMode}
+              title={isComponentPanelVisible ? 'Hide components panel (B)' : 'Show components panel (B)'}
+              aria-label={isComponentPanelVisible ? 'Hide components panel' : 'Show components panel'}
+              aria-pressed={isComponentPanelVisible}
               aria-keyshortcuts="B"
               data-testid="editor-toggle-component-panel"
-              data-panel-visible={showComponentPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              data-panel-visible={isComponentPanelVisible ? 'true' : 'false'}
+              data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
               {...editorSecondaryToolbarCommandProps('toggle-component-panel')}
             >
               <PanelLeft className="w-4 h-4" />
@@ -8765,17 +8839,18 @@ export function CanvasEditor({
               onClick={handleToggleLayersPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode
+                rightPanel === 'layers' && isInspectorPanelVisible
                   ? 'bg-slate-950 text-white'
                   : 'hover:bg-slate-100'
               )}
-              title={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel (L)' : 'Show layers panel (L)'}
-              aria-label={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode ? 'Show properties panel' : 'Show layers panel'}
-              aria-pressed={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode}
+              title={rightPanel === 'layers' && isInspectorPanelVisible ? 'Show properties panel (L)' : 'Show layers panel (L)'}
+              aria-label={rightPanel === 'layers' && isInspectorPanelVisible ? 'Show properties panel' : 'Show layers panel'}
+              aria-pressed={rightPanel === 'layers' && isInspectorPanelVisible}
               aria-keyshortcuts="L"
               data-testid="editor-toggle-layers-panel"
               data-right-panel={rightPanel}
-              data-inspector-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              data-inspector-visible={isInspectorPanelVisible ? 'true' : 'false'}
+              data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
               {...editorSecondaryToolbarCommandProps('toggle-layers-panel')}
             >
               <Layers className="w-4 h-4" />
@@ -8787,18 +8862,19 @@ export function CanvasEditor({
               onClick={handleToggleInspectorPanel}
               className={cn(
                 'flex items-center gap-2 px-2 py-1.5 rounded-md text-sm font-medium',
-                showInspectorPanel && !isCanvasFocusMode
+                isInspectorPanelVisible
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'hover:bg-slate-100'
               )}
-              title={showInspectorPanel && !isCanvasFocusMode ? `Hide inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)` : `Show inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)`}
-              aria-label={showInspectorPanel && !isCanvasFocusMode ? `Hide inspector panel for ${INSPECTOR_PANEL_PURPOSE}` : `Show inspector panel for ${INSPECTOR_PANEL_PURPOSE}`}
-              aria-pressed={showInspectorPanel && !isCanvasFocusMode}
+              title={isInspectorPanelVisible ? `Hide inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)` : `Show inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)`}
+              aria-label={isInspectorPanelVisible ? `Hide inspector panel for ${INSPECTOR_PANEL_PURPOSE}` : `Show inspector panel for ${INSPECTOR_PANEL_PURPOSE}`}
+              aria-pressed={isInspectorPanelVisible}
               aria-keyshortcuts="I"
               data-testid="editor-toggle-inspector-panel"
-              data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+              data-panel-visible={isInspectorPanelVisible ? 'true' : 'false'}
               data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
               data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
+              data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
               {...editorSecondaryToolbarCommandProps('toggle-inspector-panel')}
               data-action-status={inspectorPanelToggleActionStatus}
             >
@@ -8981,13 +9057,17 @@ export function CanvasEditor({
         {/* Main Content */}
         <div
           ref={editorShellRef}
-          className="flex min-h-0 flex-1 overflow-hidden"
+          className="relative flex min-h-0 flex-1 overflow-hidden"
           data-testid="editor-shell-layout"
           data-canvas-zoom-pointer-memory="editor-shell-global-events"
           data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
-          data-component-panel-visible={!isPreview && !isCanvasFocusMode && showComponentPanel ? 'true' : 'false'}
-          data-inspector-panel-visible={!isPreview && !isCanvasFocusMode && showInspectorPanel ? 'true' : 'false'}
+          data-component-panel-visible={isComponentPanelVisible ? 'true' : 'false'}
+          data-inspector-panel-visible={isInspectorPanelVisible ? 'true' : 'false'}
           data-right-panel={rightPanel}
+          data-editor-shell-responsive-mode={isCompactEditorShellViewport ? 'compact' : 'desktop'}
+          data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
+          data-compact-panel={compactEditorPanel || 'none'}
+          data-compact-panels-auto-collapsed={areCompactEditorPanelsAutoCollapsed ? 'true' : 'false'}
           data-selected-id={selectedId || ''}
           data-selected-ids={selectedIds.join(',')}
           data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"
@@ -8998,25 +9078,46 @@ export function CanvasEditor({
           onPointerOutCapture={clearEditorShellZoomPointer}
         >
           {/* Left Sidebar - Component Library */}
-          {!isPreview && !isCanvasFocusMode && showComponentPanel && (
-            <ComponentLibrary
-              onDragStart={handleDragStart}
-              onDragEnd={handleLibraryDragEnd}
-              onAddItem={handleAddLibraryItem}
-              reusableSections={reusableSections}
-              reusableSectionsLoading={reusableSectionsLoading}
-              reusableSectionsError={reusableSectionsError}
-              canSaveSelection={Boolean(activeSiteId && selectedId)}
-              canDeleteReusableSections={canDeleteReusableSections}
-              isSavingReusableSection={isSavingReusableSection}
-              disabled={isCanvasMutationDisabled}
-              disabledReason={editDisabledReason}
-              deleteDisabledReason={reusableDeleteDisabledReason}
-              onRefreshReusableSections={loadReusableSections}
-              onSaveSelectionAsReusableSection={handleSaveSelectionAsReusableSection}
-              onRenameReusableSection={handleRenameReusableSection}
-              onDeleteReusableSection={handleDeleteReusableSection}
+          {isCompactEditorPanelOverlayVisible && (
+            <button
+              type="button"
+              className="absolute inset-0 z-30 cursor-default bg-slate-950/20"
+              aria-label="Close compact editor panel"
+              data-testid="editor-compact-panel-backdrop"
+              onClick={() => setCompactEditorPanel(null)}
             />
+          )}
+
+          {isComponentPanelVisible && (
+            <div
+              className={cn(
+                'flex h-full min-h-0',
+                isCompactEditorShellViewport
+                  ? 'absolute inset-y-0 left-0 z-40 w-[min(24rem,calc(100%-1rem))] max-w-full shadow-2xl'
+                  : 'contents',
+              )}
+              data-testid="editor-component-panel-shell"
+              data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
+            >
+              <ComponentLibrary
+                onDragStart={handleDragStart}
+                onDragEnd={handleLibraryDragEnd}
+                onAddItem={handleAddLibraryItem}
+                reusableSections={reusableSections}
+                reusableSectionsLoading={reusableSectionsLoading}
+                reusableSectionsError={reusableSectionsError}
+                canSaveSelection={Boolean(activeSiteId && selectedId)}
+                canDeleteReusableSections={canDeleteReusableSections}
+                isSavingReusableSection={isSavingReusableSection}
+                disabled={isCanvasMutationDisabled}
+                disabledReason={editDisabledReason}
+                deleteDisabledReason={reusableDeleteDisabledReason}
+                onRefreshReusableSections={loadReusableSections}
+                onSaveSelectionAsReusableSection={handleSaveSelectionAsReusableSection}
+                onRenameReusableSection={handleRenameReusableSection}
+                onDeleteReusableSection={handleDeleteReusableSection}
+              />
+            </div>
           )}
 
           {/* Center - Canvas */}
@@ -9095,8 +9196,8 @@ export function CanvasEditor({
                 data-selection-y={selectedGeometrySummary?.y ?? ''}
                 data-selection-width={selectedGeometrySummary?.width ?? ''}
                 data-selection-height={selectedGeometrySummary?.height ?? ''}
-                data-component-panel-visible={!isCanvasFocusMode && showComponentPanel ? 'true' : 'false'}
-                data-inspector-panel-visible={!isCanvasFocusMode && showInspectorPanel ? 'true' : 'false'}
+                data-component-panel-visible={isComponentPanelVisible ? 'true' : 'false'}
+                data-inspector-panel-visible={isInspectorPanelVisible ? 'true' : 'false'}
                 data-right-panel={rightPanel}
                 data-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
                 data-quick-add-count={CANVAS_CONTEXT_QUICK_ADD_ITEMS.length}
@@ -9368,17 +9469,18 @@ export function CanvasEditor({
                     onClick={handleToggleComponentPanel}
                     className={cn(
                       'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
-                      showComponentPanel && !isCanvasFocusMode
+                      isComponentPanelVisible
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                     )}
                     title={isCanvasFocusMode ? 'Show components and exit focus mode (B)' : 'Toggle components panel (B)'}
                     aria-label={isCanvasFocusMode ? 'Show components and exit focus mode' : 'Toggle components panel'}
-                    aria-pressed={showComponentPanel && !isCanvasFocusMode}
+                    aria-pressed={isComponentPanelVisible}
                     aria-keyshortcuts="B"
                     data-testid="editor-context-components"
-                    data-panel-visible={showComponentPanel && !isCanvasFocusMode ? 'true' : 'false'}
+                    data-panel-visible={isComponentPanelVisible ? 'true' : 'false'}
                     data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                    data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
                   >
                     <PanelLeft className="h-4 w-4" />
                     <span className="hidden sm:inline">Components</span>
@@ -9388,17 +9490,18 @@ export function CanvasEditor({
                     onClick={handleToggleLayersPanel}
                     className={cn(
                       'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
-                      rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode
+                      rightPanel === 'layers' && isInspectorPanelVisible
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                     )}
                     title={isCanvasFocusMode ? 'Show layers and exit focus mode (L)' : 'Toggle layers panel (L)'}
                     aria-label={isCanvasFocusMode ? 'Show layers and exit focus mode' : 'Toggle layers panel'}
-                    aria-pressed={rightPanel === 'layers' && showInspectorPanel && !isCanvasFocusMode}
+                    aria-pressed={rightPanel === 'layers' && isInspectorPanelVisible}
                     aria-keyshortcuts="L"
                     data-testid="editor-context-layers"
                     data-right-panel={rightPanel}
                     data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                    data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
                   >
                     <Layers className="h-4 w-4" />
                     <span className="hidden sm:inline">Layers</span>
@@ -9408,20 +9511,21 @@ export function CanvasEditor({
                     onClick={handleToggleInspectorPanel}
                     className={cn(
                       'inline-flex h-8 items-center gap-1.5 rounded-md px-2 font-medium transition-colors',
-                      showInspectorPanel && !isCanvasFocusMode
+                      isInspectorPanelVisible
                         ? 'bg-slate-900 text-white'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                     )}
                     title={isCanvasFocusMode ? `Show inspector and exit focus mode: ${INSPECTOR_PANEL_PURPOSE} (I)` : `Toggle inspector panel: ${INSPECTOR_PANEL_PURPOSE} (I)`}
                     aria-label={isCanvasFocusMode ? `Show inspector and exit focus mode for ${INSPECTOR_PANEL_PURPOSE}` : `Toggle inspector panel for ${INSPECTOR_PANEL_PURPOSE}`}
-                    aria-pressed={showInspectorPanel && !isCanvasFocusMode}
+                    aria-pressed={isInspectorPanelVisible}
                     aria-keyshortcuts="I"
                     data-testid="editor-context-inspector"
-                    data-panel-visible={showInspectorPanel && !isCanvasFocusMode ? 'true' : 'false'}
+                    data-panel-visible={isInspectorPanelVisible ? 'true' : 'false'}
                     data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
                     data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
                     data-action-status={contextInspectorPanelActionStatus}
                     data-exits-focus-mode={isCanvasFocusMode ? 'true' : 'false'}
+                    data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
                   >
                     <PanelRight className="h-4 w-4" />
                     <span className="hidden sm:inline">Inspector</span>
@@ -9852,15 +9956,21 @@ export function CanvasEditor({
           </div>
 
           {/* Right Sidebar - Inspector */}
-          {!isPreview && !isCanvasFocusMode && showInspectorPanel && (
+          {isInspectorPanelVisible && (
             <aside
-              className="flex h-full min-h-0 w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0 flex-col border-l border-slate-200 bg-white"
+              className={cn(
+                'flex h-full min-h-0 flex-col border-l border-slate-200 bg-white',
+                isCompactEditorShellViewport
+                  ? 'absolute inset-y-0 right-0 z-40 w-[min(24rem,calc(100%-1rem))] min-w-0 max-w-full shrink-0 shadow-2xl'
+                  : 'w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0',
+              )}
               data-testid="editor-inspector"
               aria-label={`Inspector panel: ${INSPECTOR_PANEL_PURPOSE}`}
               aria-describedby={editorInspectorActionStatusId}
               data-panel-purpose={INSPECTOR_PANEL_PURPOSE_KEY}
               data-panel-purpose-label={INSPECTOR_PANEL_PURPOSE}
               data-action-status={editorInspectorActionStatus}
+              data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
             >
               <div className="border-b border-slate-200 p-3">
                 <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-medium">

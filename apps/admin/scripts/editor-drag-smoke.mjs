@@ -693,7 +693,17 @@ const assertCanvasEditorShortcutSource = () => {
   assert(source.includes("key === 'i' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleInspectorPanel();'), 'Editor keyboard handler must support I as an inspector panel shortcut');
   assert(source.includes("key === 'l' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleLayersPanel();'), 'Editor keyboard handler must support L as a layers panel shortcut');
   assert(source.includes("key === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey") && source.includes('handleToggleCanvasFocus();'), 'Editor keyboard handler must support F as a focus mode shortcut');
-  assert(source.includes('data-testid="editor-shell-layout"') && source.includes('data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"'), 'Editor shell layout must expose panel shortcut metadata for custom admin clients');
+  assert(
+    source.includes('EDITOR_COMPACT_SHELL_MEDIA_QUERY') &&
+      source.includes('data-testid="editor-shell-layout"') &&
+      source.includes('data-shell-keyshortcuts="components:B;inspector:I;layers:L;focus:F"') &&
+      source.includes('data-editor-shell-responsive-mode={isCompactEditorShellViewport ?') &&
+      source.includes('data-responsive-panel-mode={isCompactEditorShellViewport ?') &&
+      source.includes('data-compact-panels-auto-collapsed={areCompactEditorPanelsAutoCollapsed ?') &&
+      source.includes('data-testid="editor-compact-panel-backdrop"') &&
+      source.includes('data-testid="editor-component-panel-shell"'),
+    'Editor shell layout must expose responsive compact-panel metadata and overlay rails for custom admin clients',
+  );
   assert(source.includes('data-selected-id={selectedId ||') && source.includes("data-selected-ids={selectedIds.join(',')}"), 'Editor shell layout must expose current selection metadata for custom admin clients and smokes');
   assert(source.includes('const targetMinX = deltaX === 0 ? minX : Math.round(minX + deltaX)') && source.includes('const targetMinY = deltaY === 0 ? minY : Math.round(minY + deltaY)'), 'Editor keyboard nudges must move by the selected step and clamp to bounds instead of snapping off-grid nested layers to a different target.');
   assert(
@@ -11527,6 +11537,180 @@ const assertCompactCanvasSizeControls = async (client) => {
     opened,
     mobileState: compactMobileState,
     customState: compactCustomState,
+  };
+};
+
+const readCompactEditorShellLayoutState = async (client, label) => evaluate(client, `(() => {
+  const rectFor = (selector) => {
+    const node = document.querySelector(selector);
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+    const rect = node.getBoundingClientRect();
+    return {
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      left: Math.round(rect.left),
+      right: Math.round(rect.right),
+      visible: rect.width > 0 && rect.height > 0 && window.getComputedStyle(node).display !== 'none' && window.getComputedStyle(node).visibility !== 'hidden',
+      position: window.getComputedStyle(node).position,
+      zIndex: window.getComputedStyle(node).zIndex,
+    };
+  };
+  const shell = document.querySelector('[data-testid="editor-shell-layout"]');
+  const componentToggle = document.querySelector('[data-testid="editor-toggle-component-panel"]');
+  const layersToggle = document.querySelector('[data-testid="editor-toggle-layers-panel"]');
+  const inspectorToggle = document.querySelector('[data-testid="editor-toggle-inspector-panel"]');
+  return {
+    label: ${JSON.stringify(label)},
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    shellExists: Boolean(shell),
+    responsiveMode: shell?.getAttribute('data-editor-shell-responsive-mode') || '',
+    panelMode: shell?.getAttribute('data-responsive-panel-mode') || '',
+    compactPanel: shell?.getAttribute('data-compact-panel') || '',
+    autoCollapsed: shell?.getAttribute('data-compact-panels-auto-collapsed') || '',
+    componentVisible: shell?.getAttribute('data-component-panel-visible') || '',
+    inspectorVisible: shell?.getAttribute('data-inspector-panel-visible') || '',
+    rightPanel: shell?.getAttribute('data-right-panel') || '',
+    shellRect: rectFor('[data-testid="editor-shell-layout"]'),
+    canvasRect: rectFor('[data-testid="editor-canvas-viewport"]'),
+    componentShellRect: rectFor('[data-testid="editor-component-panel-shell"]'),
+    componentLibraryRect: rectFor('[data-testid="editor-component-library"]'),
+    inspectorRect: rectFor('[data-testid="editor-inspector"]'),
+    backdropRect: rectFor('[data-testid="editor-compact-panel-backdrop"]'),
+    componentPressed: componentToggle?.getAttribute('aria-pressed') || '',
+    componentToggleMode: componentToggle?.getAttribute('data-responsive-panel-mode') || '',
+    componentToggleVisible: componentToggle?.getAttribute('data-panel-visible') || '',
+    layersPressed: layersToggle?.getAttribute('aria-pressed') || '',
+    layersToggleMode: layersToggle?.getAttribute('data-responsive-panel-mode') || '',
+    layersToggleInspectorVisible: layersToggle?.getAttribute('data-inspector-visible') || '',
+    inspectorPressed: inspectorToggle?.getAttribute('aria-pressed') || '',
+    inspectorToggleMode: inspectorToggle?.getAttribute('data-responsive-panel-mode') || '',
+    inspectorToggleVisible: inspectorToggle?.getAttribute('data-panel-visible') || '',
+    bodyOverflowX: document.documentElement.scrollWidth - window.innerWidth,
+  };
+})()`);
+
+const assertCompactEditorShellLayout = async (client) => {
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: 900,
+    height: 760,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await sleep(400);
+
+  const collapsed = await readCompactEditorShellLayoutState(client, 'compact auto-collapsed');
+  assert(
+    collapsed.shellExists &&
+      collapsed.viewportWidth === 900 &&
+      collapsed.responsiveMode === 'compact' &&
+      collapsed.panelMode === 'overlay' &&
+      collapsed.compactPanel === 'none' &&
+      collapsed.autoCollapsed === 'true' &&
+      collapsed.componentVisible === 'false' &&
+      collapsed.inspectorVisible === 'false' &&
+      collapsed.componentLibraryRect === null &&
+      collapsed.inspectorRect === null &&
+      collapsed.backdropRect === null &&
+      collapsed.componentPressed === 'false' &&
+      collapsed.inspectorPressed === 'false' &&
+      collapsed.componentToggleMode === 'overlay' &&
+      collapsed.layersToggleMode === 'overlay' &&
+      collapsed.inspectorToggleMode === 'overlay' &&
+      collapsed.canvasRect?.visible &&
+      collapsed.canvasRect.width >= 760 &&
+      collapsed.bodyOverflowX <= 0,
+    `Compact editor shell should auto-collapse fixed rails without squeezing the canvas: ${JSON.stringify(collapsed)}`,
+  );
+
+  await clickEditorButtonByTestId(client, 'editor-toggle-component-panel');
+  const componentsOpen = await readCompactEditorShellLayoutState(client, 'compact components overlay');
+  assert(
+    componentsOpen.responsiveMode === 'compact' &&
+      componentsOpen.panelMode === 'overlay' &&
+      componentsOpen.compactPanel === 'components' &&
+      componentsOpen.autoCollapsed === 'false' &&
+      componentsOpen.componentVisible === 'true' &&
+      componentsOpen.inspectorVisible === 'false' &&
+      componentsOpen.componentLibraryRect?.visible &&
+      componentsOpen.componentShellRect?.position === 'absolute' &&
+      componentsOpen.backdropRect?.visible &&
+      componentsOpen.componentPressed === 'true' &&
+      componentsOpen.inspectorPressed === 'false' &&
+      componentsOpen.canvasRect?.width === collapsed.canvasRect.width,
+    `Compact Components panel should overlay the canvas instead of changing canvas width: ${JSON.stringify({ collapsed, componentsOpen })}`,
+  );
+
+  await clickEditorButtonByTestId(client, 'editor-toggle-layers-panel');
+  const layersOpen = await readCompactEditorShellLayoutState(client, 'compact layers overlay');
+  assert(
+    layersOpen.responsiveMode === 'compact' &&
+      layersOpen.compactPanel === 'inspector' &&
+      layersOpen.componentVisible === 'false' &&
+      layersOpen.inspectorVisible === 'true' &&
+      layersOpen.rightPanel === 'layers' &&
+      layersOpen.inspectorRect?.visible &&
+      layersOpen.inspectorRect?.position === 'absolute' &&
+      layersOpen.backdropRect?.visible &&
+      layersOpen.layersPressed === 'true' &&
+      layersOpen.layersToggleInspectorVisible === 'true' &&
+      layersOpen.componentPressed === 'false' &&
+      layersOpen.canvasRect?.width === collapsed.canvasRect.width,
+    `Compact Layers panel should replace Components with an overlay inspector: ${JSON.stringify({ componentsOpen, layersOpen })}`,
+  );
+
+  const backdropClosed = await evaluate(client, `(() => {
+    const backdrop = document.querySelector('[data-testid="editor-compact-panel-backdrop"]');
+    if (!(backdrop instanceof HTMLButtonElement)) {
+      return false;
+    }
+    backdrop.click();
+    return true;
+  })()`);
+  assert(backdropClosed, `Compact panel backdrop could not be clicked: ${JSON.stringify(layersOpen)}`);
+  await sleep(250);
+
+  const closedAgain = await readCompactEditorShellLayoutState(client, 'compact overlay closed');
+  assert(
+    closedAgain.compactPanel === 'none' &&
+      closedAgain.autoCollapsed === 'true' &&
+      closedAgain.componentVisible === 'false' &&
+      closedAgain.inspectorVisible === 'false' &&
+      closedAgain.backdropRect === null &&
+      closedAgain.canvasRect?.width === collapsed.canvasRect.width,
+    `Compact overlay backdrop should return to a full-canvas collapsed state: ${JSON.stringify(closedAgain)}`,
+  );
+
+  await client.send('Emulation.setDeviceMetricsOverride', {
+    width: 1440,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await sleep(400);
+
+  const desktopRestored = await readCompactEditorShellLayoutState(client, 'desktop panels restored');
+  assert(
+    desktopRestored.responsiveMode === 'desktop' &&
+      desktopRestored.panelMode === 'docked' &&
+      desktopRestored.compactPanel === 'none' &&
+      desktopRestored.autoCollapsed === 'false' &&
+      desktopRestored.componentVisible === 'true' &&
+      desktopRestored.inspectorVisible === 'true' &&
+      desktopRestored.componentLibraryRect?.visible &&
+      desktopRestored.inspectorRect?.visible &&
+      desktopRestored.backdropRect === null,
+    `Desktop editor shell should keep docked side panels after leaving compact layout: ${JSON.stringify(desktopRestored)}`,
+  );
+
+  return {
+    collapsed,
+    componentsOpen,
+    layersOpen,
+    closedAgain,
+    desktopRestored,
   };
 };
 
@@ -27927,6 +28111,7 @@ const main = async () => {
 
     if (RESPONSIVE_SMOKE) {
       assert(!EDITOR_PATH, 'Responsive smoke currently requires an internally created smoke page');
+      const compactShellLayout = await assertCompactEditorShellLayout(client);
       const responsiveEditing = {
         mobile: await assertResponsiveBreakpointEditing(client, tempPageId, 'smoke-heading', {
           breakpoint: 'mobile',
@@ -29025,6 +29210,7 @@ const main = async () => {
         ok: true,
         mode: 'responsive',
         url: `${ADMIN_BASE_URL}${editorPath}`,
+        compactShellLayout,
         responsiveEditing,
         reloadedResponsiveEditing,
         publicResponsiveRendering,
