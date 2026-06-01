@@ -1829,6 +1829,23 @@ function UsersListView() {
           </div>
         )}
 
+        <div
+          className="mt-5 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900"
+          data-testid="users-provider-auth-boundary"
+        >
+          <div className="flex gap-3">
+            <span className="mt-0.5 rounded-md bg-white/70 p-2 text-sky-700">
+              <LockKeyhole className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="font-semibold">Production identity boundary</div>
+              <p className="mt-1 leading-6">
+                Hosted login validates the configured identity provider first. Backy stores role, status, permissions, and invite state here; keep the provider user email and Backy user email aligned. Do not add rows to <span className="font-mono text-xs">admin_user_credentials</span> for hosted access.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
           <div className="rounded-lg border border-border bg-background p-4">
             <h3 className="text-sm font-semibold">Access readiness</h3>

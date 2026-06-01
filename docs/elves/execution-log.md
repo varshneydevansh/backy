@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 10:30 IST
+- **Last updated:** 2026-06-01 11:14 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,50 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 11:14 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Shell UX status:** Sidebar site switcher no longer clips the expanded workspace identity
+
+**What changed:**
+- `apps/admin/src/components/layout/Sidebar.tsx`: the expanded Backy/site switcher header now reserves 120px and aligns the stacked Backy, Manage, Site selector, Domains, and Help controls from the top instead of forcing them into the collapsed 64px brand height.
+- `apps/admin/scripts/dashboard-smoke.mjs`: dashboard smoke now source-checks the expanded site-switcher layout contract and rendered-checks that the site switcher stays inside the brand header without overlapping quick-create controls.
+
+**Commands run:**
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_USERS_SOURCE_ONLY=1 npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_DASHBOARD_CDP_PORT=9496 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+
+**Operational note:**
+- The hosted UI remains role-aware. Refreshing or signing out/in after promoting the `varshney.devansh614@gmail.com` profile to owner should unlock Settings and owner-only navigation.
+
+**Next:**
+1. Commit and push the Users identity-boundary plus sidebar clipping polish slice.
+2. Re-read the survival guide and continue Batch 5.
+
+## 2026-06-01 10:52 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Auth UX status:** Users now exposes the hosted identity-provider boundary
+
+**What changed:**
+- `apps/admin/src/routes/users.tsx`: added a production identity boundary note in the Users command center explaining that hosted login validates the configured identity provider first, while Backy stores roles, status, permissions, and invite state; it explicitly warns not to add `admin_user_credentials` rows for hosted access.
+- `apps/admin/scripts/users-smoke.mjs`: added a source guard so the provider-backed production login note cannot regress silently.
+
+**Commands run:**
+- `BACKY_USERS_SOURCE_ONLY=1 npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Operational note:**
+- The correct immediate access path is Supabase project -> Authentication -> Users -> selected owner -> Supabase password recovery or Auth Admin password update. The Supabase dashboard account settings page and Backy `admin_user_credentials` table are not the hosted Backy login path.
+
+**Next:**
+1. Commit and push the Users identity-boundary slice.
+2. Continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 10:30 IST
 

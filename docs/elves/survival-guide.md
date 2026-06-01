@@ -109,7 +109,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `d8f56617` and `a188a7b6` are pushed. `backy-public` and `backy-admin` production deployments are Ready, live production readiness and hosted login-shell smokes pass, the deployed recovery endpoint reports no email sent/local-outbox not configured, and recent Vercel error logs are empty.
 
-**Single next action:** Continue Batch 5 with the next visible admin/editor friction point after the user's current access question is answered.
+**Newest Users auth UX polish:** The Users command center now explains the hosted identity-provider boundary: production login validates Supabase/Auth credentials first, Backy stores role/status/invite state, and `admin_user_credentials` rows are not the hosted access path.
+
+**Newest shell UX polish:** The expanded sidebar brand/site switcher now reserves a 120px stacked header for Backy, Manage, Site select, Domains, and Help, with dashboard smoke coverage proving it does not clip into quick-create controls.
+
+**Single next action:** Commit and push the Users identity-boundary plus sidebar clipping polish slice, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

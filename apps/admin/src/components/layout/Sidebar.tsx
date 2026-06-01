@@ -470,14 +470,19 @@ export function Sidebar({
         {permissionSyncStatus}
       </span>
       {/* Logo Area */}
-      <div className={cn(
-        'flex h-16 shrink-0 items-center border-b border-border px-3',
-        collapsed ? 'justify-center' : 'justify-start',
-      )}>
+      <div
+        className={cn(
+          'flex shrink-0 border-b border-border px-3',
+          collapsed ? 'h-16 items-center justify-center' : 'min-h-[120px] items-start justify-start py-3',
+        )}
+        data-testid={`${testIdPrefix}-brand-header`}
+        data-brand-header-layout={collapsed ? 'compact-brand' : 'expanded-site-controls'}
+        data-brand-header-min-height={collapsed ? '64' : '120'}
+      >
         <div
           className={cn(
-            'flex min-w-0 items-center gap-3 rounded-md',
-            collapsed ? 'justify-center' : 'w-full',
+            'flex min-w-0 gap-3 rounded-md',
+            collapsed ? 'items-center justify-center' : 'w-full items-start',
           )}
           title={collapsed ? `Backy - ${activeSiteName}` : undefined}
           data-testid={`${testIdPrefix}-site-switcher-shell`}
@@ -487,6 +492,7 @@ export function Sidebar({
           data-active-site-domain-state={activeSiteDomainState}
           data-active-site-domain-label={activeSiteDomainLabel}
           data-site-switcher-mode={collapsed ? 'brand-link-only' : 'inline-select'}
+          data-expanded-site-switcher-layout={collapsed ? 'compact-brand' : 'stacked-site-controls'}
         >
           {/* Logo Icon */}
           <Link

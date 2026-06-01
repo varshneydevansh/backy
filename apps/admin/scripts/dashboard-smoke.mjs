@@ -24,6 +24,7 @@ const assert = (condition, message) => {
 
 const assertDashboardSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/index.tsx', import.meta.url), 'utf8');
+  const sidebarSource = fs.readFileSync(new URL('../src/components/layout/Sidebar.tsx', import.meta.url), 'utf8');
   for (const snippet of [
     "schemaVersion: 'backy.dashboard-handoff.v1'",
     'generatedAt: new Date().toISOString()',
@@ -120,6 +121,13 @@ const assertDashboardSourceContracts = () => {
   assert(
     !source.includes('setInfrastructureDiagnostics([]);'),
     'Dashboard refresh/hydration must not clear completed infrastructure diagnostics after the check succeeds.',
+  );
+  assert(
+    sidebarSource.includes('data-testid={`${testIdPrefix}-brand-header`}') &&
+      sidebarSource.includes("data-brand-header-layout={collapsed ? 'compact-brand' : 'expanded-site-controls'}") &&
+      sidebarSource.includes("collapsed ? 'h-16 items-center justify-center' : 'min-h-[120px] items-start justify-start py-3'") &&
+      sidebarSource.includes("data-expanded-site-switcher-layout={collapsed ? 'compact-brand' : 'stacked-site-controls'}"),
+    'Sidebar expanded site switcher must reserve enough vertical space for Backy, Manage, Site, Domains, and Help controls.',
   );
 };
 
@@ -1206,6 +1214,11 @@ const assertDashboardSidebarNavigation = async (client) => {
     initial = await evaluate(client, `(() => {
       const sidebar = document.querySelector('[data-testid="admin-sidebar"]');
       const sidebarShell = document.querySelector('[data-testid="admin-sidebar-shell"]');
+      const brandHeader = document.querySelector('[data-testid="admin-sidebar-brand-header"]');
+      const siteSwitcherShell = document.querySelector('[data-testid="admin-sidebar-site-switcher-shell"]');
+      const activeSite = document.querySelector('[data-testid="admin-sidebar-active-site"]');
+      const discoveryLinks = document.querySelector('[data-testid="admin-sidebar-active-site-discovery-links"]');
+      const quickCreate = document.querySelector('[data-testid="admin-sidebar-quick-create"]');
       const sidebarNav = document.querySelector('[data-testid="admin-sidebar-nav"]');
       const workspace = document.querySelector('[data-nav-section="workspace"]');
       const content = document.querySelector('[data-nav-section="content"]');
@@ -1227,6 +1240,14 @@ const assertDashboardSidebarNavigation = async (client) => {
           expandAllButton instanceof HTMLButtonElement,
         collapsed: sidebar?.getAttribute('data-collapsed') || '',
         activeSection: sidebar?.getAttribute('data-active-nav-section') || '',
+        brandHeaderLayout: brandHeader?.getAttribute('data-brand-header-layout') || '',
+        brandHeaderMinHeight: brandHeader?.getAttribute('data-brand-header-min-height') || '',
+        brandHeaderHeight: brandHeader instanceof HTMLElement ? brandHeader.getBoundingClientRect().height : 0,
+        brandHeaderBottom: brandHeader instanceof HTMLElement ? brandHeader.getBoundingClientRect().bottom : 0,
+        siteSwitcherLayout: siteSwitcherShell?.getAttribute('data-expanded-site-switcher-layout') || '',
+        activeSiteBottom: activeSite instanceof HTMLElement ? activeSite.getBoundingClientRect().bottom : 0,
+        discoveryLinksBottom: discoveryLinks instanceof HTMLElement ? discoveryLinks.getBoundingClientRect().bottom : 0,
+        quickCreateTop: quickCreate instanceof HTMLElement ? quickCreate.getBoundingClientRect().top : 0,
         shellScrollContract: sidebarShell?.getAttribute('data-scroll-contract') || '',
         scrollContract: sidebar?.getAttribute('data-scroll-contract') || '',
         scrollScope: sidebar?.getAttribute('data-scroll-scope') || '',
@@ -1270,6 +1291,16 @@ const assertDashboardSidebarNavigation = async (client) => {
   assert(initial?.ready, `Dashboard sidebar did not become ready: ${JSON.stringify(initial)}`);
   assert(initial.collapsed === 'false', `Dashboard sidebar should be expanded on dashboard: ${JSON.stringify(initial)}`);
   assert(initial.activeSection === 'workspace', `Dashboard sidebar should keep workspace active: ${JSON.stringify(initial)}`);
+  assert(
+    initial.brandHeaderLayout === 'expanded-site-controls' &&
+      initial.brandHeaderMinHeight === '120' &&
+      initial.brandHeaderHeight >= 116 &&
+      initial.siteSwitcherLayout === 'stacked-site-controls' &&
+      initial.activeSiteBottom <= initial.brandHeaderBottom + 1 &&
+      initial.discoveryLinksBottom <= initial.brandHeaderBottom + 1 &&
+      initial.quickCreateTop >= initial.brandHeaderBottom - 1,
+    `Dashboard sidebar brand/site switcher must not clip or overlap quick-create controls: ${JSON.stringify(initial)}`,
+  );
   assert(
     initial.shellScrollContract === 'sidebar-independent-from-main' &&
       initial.scrollContract === 'viewport-bounded-sidebar' &&

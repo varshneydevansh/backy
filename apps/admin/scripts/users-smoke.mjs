@@ -94,6 +94,15 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes('Jump links for access health, API contracts, directory controls, people, and role permissions.'),
     'Users command center must keep the low-frequency control map and API handoff packet behind default-collapsed progressive disclosure',
   );
+  assert(
+    source.includes('data-testid="users-provider-auth-boundary"') &&
+      source.includes('Production identity boundary') &&
+      source.includes('Hosted login validates the configured identity provider first.') &&
+      source.includes('keep the provider user email and Backy user email aligned') &&
+      source.includes('admin_user_credentials') &&
+      source.includes('for hosted access'),
+    'Users command center must explain that hosted production login is provider-backed and local credential rows are not the access path.',
+  );
   {
     const commandCenterBlockStart = source.indexOf('data-testid="users-command-center"');
     const commandCenterBlockEnd = source.indexOf('<div className="mt-5 grid gap-3', commandCenterBlockStart);
