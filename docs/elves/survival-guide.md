@@ -163,6 +163,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Dashboard launch polish:** Dashboard API consumer readiness now includes a first-class `backy.dashboard-custom-frontend-launch.v1` panel with browser-safe env, server-loader env, public host, agent-handoff read start, and a Sites handoff shortcut so owners can start a separate Vercel website project from the cockpit.
 
+**Newest deploy verification:** `331ebd18` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

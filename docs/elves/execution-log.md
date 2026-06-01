@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 23:36 IST
+- **Last updated:** 2026-06-01 23:49 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 23:49 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Dashboard custom frontend launch slice is production-verified
+
+**Verification:**
+- `331ebd18 feat(admin): surface custom frontend launch on dashboard` is pushed to `main`.
+- Latest `backy-public` and `backy-admin` production deployments are Ready on Vercel.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9546 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS.
+- `npx vercel@latest logs backy-admin.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs found.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs found.
+
+**Notes:**
+- The production admin shell remains protected: no demo credentials, no seeded admin/editor copy, and no dev MFA phrase.
+- The public production readiness gate still warns when live admin credentials are not provided for the optional admin auth proof; the shell and public contract checks are green.
+
+**Next:**
+1. Continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 23:36 IST
 
