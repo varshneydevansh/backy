@@ -131,9 +131,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor/APIability polish:** The selected-layer Inspector now exposes a copyable `backy.editor-selected-component-api-contract.v1` Element API payload with selected element id/type, props, styles, responsive overrides, tokens, media asset ids, motion, bindings, child summaries, and the canonical `agent-handoff.componentApiContract.componentTypeContracts` plus `render.data.content.elements[]` pointers. Source and rendered Inspector smokes are green.
 
-**Newest deploy verification:** `732a7ed1` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+**Newest deploy verification:** `732a7ed1` and `a0f84af7` are pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
-**Single next action:** Commit and push the deploy-verification record, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest dashboard authority polish:** Dashboard RBAC now exposes an Account authority panel with signed-in role/source, active owner/admin/user counts, access state, and direct Users/Settings review actions, so Supabase/Auth identity state and Backy role-gated admin controls are visible from the cockpit.
+
+**Single next action:** Commit and push the dashboard account-authority slice, verify production deployments, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 

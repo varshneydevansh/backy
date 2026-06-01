@@ -88,6 +88,13 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-control-map-details"',
     'aria-label={`${area.title}: ${area.detail}`}',
     'data-dashboard-disclosure="workspace-context"',
+    'data-testid="dashboard-account-authority"',
+    'data-owner-count={activeOwnerUsers.length}',
+    'data-access-state={ownerAccessState}',
+    'Multiple active owners. Review access if any setup account should be demoted or removed.',
+    'Signed-in role',
+    'Active owners',
+    'Review users',
     'data-testid="dashboard-module-map-details"',
   ]) {
     assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
@@ -659,6 +666,9 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Connect APIs and infrastructure'),
     hasRbacScope: Boolean(document.querySelector('[data-testid="dashboard-rbac-scope"]')) &&
       document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Workspace RBAC scope') &&
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Account authority') &&
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Signed-in role') &&
+      document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Active owners') &&
       document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Settings') &&
       document.querySelector('[data-testid="dashboard-rbac-scope"]')?.textContent?.includes('Users'),
     compactCommandCenter: {

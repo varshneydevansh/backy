@@ -1428,6 +1428,24 @@ function Index() {
         ? canViewSettings
         : true
   ));
+  const activeUsers = dashboard.users.filter((item) => item.status === 'active');
+  const activeOwnerUsers = activeUsers.filter((item) => item.role === 'owner');
+  const activeAdminUsers = activeUsers.filter((item) => item.role === 'admin');
+  const activePrivilegedUserCount = activeOwnerUsers.length + activeAdminUsers.length;
+  const ownerAccessState = !canViewUsers
+    ? 'hidden'
+    : activeOwnerUsers.length === 0
+      ? 'blocked'
+      : activeOwnerUsers.length > 1
+        ? 'review'
+        : 'ready';
+  const ownerAccessMessage = !canViewUsers
+    ? 'Owner/admin counts are hidden for this role.'
+    : activeOwnerUsers.length === 0
+      ? 'No active owner is visible. Restore owner access before production changes.'
+      : activeOwnerUsers.length > 1
+        ? 'Multiple active owners. Review access if any setup account should be demoted or removed.'
+        : 'One active owner is available for protected workspace changes.';
   const getDashboardRouteSearch = (
     to: DashboardRouteTarget,
   ) => {
@@ -1733,10 +1751,6 @@ function Index() {
     return { ready, warning, blocked, total: infrastructureDiagnostics.length };
   }, [infrastructureDiagnostics]);
   const platformReadiness = useMemo(() => {
-    const activeUsers = dashboard.users.filter((item) => item.status === 'active').length;
-    const activeAdmins = dashboard.users.filter((item) => (
-      item.status === 'active' && (item.role === 'owner' || item.role === 'admin')
-    )).length;
     const hasPublicContent = publishedSites > 0 && (
       dashboard.pages.some((page) => page.status === 'published') ||
       dashboard.posts.some((post) => post.status === 'published') ||
@@ -1816,8 +1830,10 @@ function Index() {
       },
       {
         label: 'Team access',
-        detail: activeAdmins > 0 ? `${activeUsers} active users, ${activeAdmins} active admins.` : 'Keep at least one active owner/admin.',
-        ready: activeAdmins > 0,
+        detail: activePrivilegedUserCount > 0
+          ? `${activeUsers.length} active users · ${activeOwnerUsers.length} owner · ${activeAdminUsers.length} admin.`
+          : 'Keep at least one active owner/admin.',
+        ready: activePrivilegedUserCount > 0,
         to: '/users' as const,
         visible: canViewUsers,
       },
@@ -1852,6 +1868,10 @@ function Index() {
     canViewMedia,
     canViewSettings,
     canViewUsers,
+    activeAdminUsers.length,
+    activeOwnerUsers.length,
+    activePrivilegedUserCount,
+    activeUsers.length,
     dashboard.collections.length,
     dashboard.contacts,
     dashboard.forms.length,
@@ -2655,6 +2675,65 @@ function Index() {
                   <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Activity</div>
                   <div className={cn('mt-1 text-sm font-medium', canExportActivity ? 'text-success' : 'text-muted-foreground')}>
                     {canExportActivity ? 'Visible' : 'Hidden'}
+                  </div>
+                </div>
+              </div>
+              <div
+                className="mt-4 rounded-lg border border-border bg-card/75 px-3 py-3"
+                data-testid="dashboard-account-authority"
+                data-owner-count={activeOwnerUsers.length}
+                data-admin-count={activeAdminUsers.length}
+                data-active-user-count={activeUsers.length}
+                data-access-state={ownerAccessState}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">Account authority</div>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                      Signed-in session: {user?.email || 'unknown'} as {rbacSummary.role}. Backy gates Settings, Users, owner cleanup, and admin endpoints through this same permission matrix.
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'w-fit rounded-full px-2.5 py-1 text-xs font-semibold capitalize',
+                    ownerAccessState === 'ready'
+                      ? 'bg-success/10 text-success'
+                      : ownerAccessState === 'review'
+                        ? 'bg-warning/10 text-warning'
+                        : ownerAccessState === 'blocked'
+                          ? 'bg-destructive/10 text-destructive'
+                          : 'bg-muted text-muted-foreground',
+                  )}>
+                    {ownerAccessState === 'review' ? 'Review owner access' : ownerAccessState}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <SignalMetric label="Signed-in role" value={rbacSummary.role} />
+                  <SignalMetric label="Active owners" value={canViewUsers ? String(activeOwnerUsers.length) : 'Hidden'} />
+                  <SignalMetric label="Active admins" value={canViewUsers ? String(activeAdminUsers.length) : 'Hidden'} />
+                  <SignalMetric label="Access source" value={rbacSummary.source} />
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs leading-5 text-muted-foreground">{ownerAccessMessage}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {canViewUsers && (
+                      <Link
+                        to="/users"
+                        search={getDashboardRouteSearch('/users')}
+                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                      >
+                        Review users
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    )}
+                    {canViewSettings && (
+                      <Link
+                        to="/settings"
+                        className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                      >
+                        Review security
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

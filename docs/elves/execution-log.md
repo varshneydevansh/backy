@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 15:26 IST
+- **Last updated:** 2026-06-01 16:04 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 16:04 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Dashboard access status:** Dashboard now surfaces owner/admin authority and role-gated access state
+
+**What changed:**
+- `apps/admin/src/routes/index.tsx`: the Dashboard RBAC section now exposes an **Account authority** panel with signed-in role/source, active owner/admin/user counts, access state, and direct Users/Settings review actions when the current role permits them.
+- The Team access readiness signal now distinguishes active owners from active admins instead of collapsing both into one admin count.
+- `apps/admin/scripts/dashboard-smoke.mjs`: source and rendered smoke coverage now proves the authority panel, role copy, owner count, and review actions remain visible in the Dashboard RBAC disclosure.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+
+**Operational answer:**
+- Backy is production-reachable and role-aware. Supabase/Auth proves identity first; Backy profile role/status controls Settings, Users, shortcuts, and admin actions. This Dashboard slice makes that separation visible so owner cleanup and editor/admin differences are understandable without leaving Backy.
+
+**Next:**
+1. Run public repo hygiene, commit, push, and verify Vercel production deployments.
+2. Continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-06-01 15:26 IST
 
