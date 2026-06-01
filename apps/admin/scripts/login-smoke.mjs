@@ -697,11 +697,19 @@ const assertAuthRecoverySource = () => {
       headerSource.includes("const accountActionStatusId = 'header-account-action-status';") &&
       headerSource.includes('data-testid="header-account-action-status"') &&
       headerSource.includes('data-testid="header-account-toggle"') &&
+      headerSource.includes('data-testid="header-account-role-badge"') &&
+      headerSource.includes('data-testid="header-account-summary"') &&
+      headerSource.includes('data-testid="header-account-menu-role"') &&
+      headerSource.includes('data-testid="header-account-permission-source"') &&
       headerSource.includes('aria-controls={accountMenuId}') &&
       headerSource.includes('aria-describedby={accountActionStatusId}') &&
       headerSource.includes('data-testid="header-account-menu"') &&
       headerSource.includes('data-testid="header-account-settings-action"') &&
       headerSource.includes('data-testid="header-account-sign-out-action"') &&
+      headerSource.includes('const canOpenAccountSettings = canAccessArea') &&
+      headerSource.includes('Settings unavailable: ${accountRoleLabel} role or backend permissions do not include settings.view.') &&
+      headerSource.includes('disabled={!canOpenAccountSettings}') &&
+      headerSource.includes('data-disabled-reason={canOpenAccountSettings ? undefined : accountSettingsDisabledReason}') &&
       headerSource.includes("const profileRouteUserId = user?.id || profileUser?.id || '';") &&
       headerSource.includes("navigate({ to: '/users/$userId', params: { userId: profileRouteUserId } });") &&
       headerSource.includes('data-profile-user-id={profileRouteUserId}') &&
@@ -1812,6 +1820,7 @@ const assertHeaderAccountMenuInteraction = async (client) => {
   const initialState = await evaluate(client, `(() => {
     const toggle = document.querySelector('[data-testid="header-account-toggle"]');
     const status = document.querySelector('[data-testid="header-account-action-status"]');
+    const roleBadge = document.querySelector('[data-testid="header-account-role-badge"]');
     const menu = document.querySelector('[data-testid="header-account-menu"]');
     return {
       hasToggle: toggle instanceof HTMLButtonElement,
@@ -1820,6 +1829,9 @@ const assertHeaderAccountMenuInteraction = async (client) => {
       describedBy: toggle?.getAttribute('aria-describedby') || '',
       actionState: toggle?.getAttribute('data-action-state') || '',
       actionStatus: toggle?.getAttribute('data-action-status') || '',
+      roleBadgeText: roleBadge?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      roleBadgeRole: roleBadge?.getAttribute('data-role') || '',
+      roleBadgeSource: roleBadge?.getAttribute('data-permission-source') || '',
       statusId: status?.id || '',
       statusText: status?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       hasMenu: menu instanceof HTMLElement,
@@ -1833,6 +1845,11 @@ const assertHeaderAccountMenuInteraction = async (client) => {
       initialState.describedBy === initialState.statusId &&
       initialState.actionState === 'ready' &&
       initialState.actionStatus === initialState.statusText &&
+      ['Admin', 'Owner'].includes(initialState.roleBadgeText) &&
+      ['admin', 'owner'].includes(initialState.roleBadgeRole) &&
+      ['role defaults', 'permission matrix'].includes(initialState.roleBadgeSource) &&
+      initialState.statusText.includes(`Role ${initialState.roleBadgeText}.`) &&
+      initialState.statusText.includes('Permissions from') &&
       initialState.statusText.includes('Profile available.') &&
       initialState.statusText.includes('Settings available.') &&
       initialState.statusText.includes('Sign out available') &&
@@ -1870,6 +1887,9 @@ const assertHeaderAccountMenuInteraction = async (client) => {
       const toggle = document.querySelector('[data-testid="header-account-toggle"]');
       const status = document.querySelector('[data-testid="header-account-action-status"]');
       const menu = document.querySelector('[data-testid="header-account-menu"]');
+      const summary = document.querySelector('[data-testid="header-account-summary"]');
+      const menuRole = document.querySelector('[data-testid="header-account-menu-role"]');
+      const menuPermissionSource = document.querySelector('[data-testid="header-account-permission-source"]');
       const profile = document.querySelector('[data-testid="header-profile-link"]');
       const settings = document.querySelector('[data-testid="header-account-settings-action"]');
       const signOut = document.querySelector('[data-testid="header-account-sign-out-action"]');
@@ -1887,6 +1907,11 @@ const assertHeaderAccountMenuInteraction = async (client) => {
           menu.getAttribute('role') === 'menu' &&
           menu.getAttribute('aria-describedby') === status?.id &&
           menu.getAttribute('data-action-status') === statusText &&
+          summary instanceof HTMLElement &&
+          ['admin', 'owner'].includes(summary.getAttribute('data-role') || '') &&
+          ['role defaults', 'permission matrix'].includes(summary.getAttribute('data-permission-source') || '') &&
+          ['Admin', 'Owner'].includes(menuRole?.textContent?.trim() || '') &&
+          ['role defaults', 'permission matrix'].includes(menuPermissionSource?.textContent?.trim() || '') &&
           !(searchPopover instanceof HTMLElement) &&
           !(notificationPanel instanceof HTMLElement) &&
           readyAction(profile) &&
@@ -1898,6 +1923,10 @@ const assertHeaderAccountMenuInteraction = async (client) => {
         menuId: menu?.id || '',
         menuDescribedBy: menu?.getAttribute('aria-describedby') || '',
         menuStatus: menu?.getAttribute('data-action-status') || '',
+        summaryRole: summary?.getAttribute('data-role') || '',
+        summarySource: summary?.getAttribute('data-permission-source') || '',
+        menuRoleText: menuRole?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        menuPermissionSource: menuPermissionSource?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         hasSearchPopover: searchPopover instanceof HTMLElement,
         hasNotificationPanel: notificationPanel instanceof HTMLElement,
         profileState: profile?.getAttribute('data-action-state') || '',
@@ -1905,6 +1934,8 @@ const assertHeaderAccountMenuInteraction = async (client) => {
         profileUserId: profile?.getAttribute('data-profile-user-id') || '',
         settingsState: settings?.getAttribute('data-action-state') || '',
         settingsStatus: settings?.getAttribute('data-action-status') || '',
+        settingsDisabled: settings instanceof HTMLButtonElement ? settings.disabled : null,
+        settingsDisabledReason: settings?.getAttribute('data-disabled-reason') || '',
         signOutState: signOut?.getAttribute('data-action-state') || '',
         signOutStatus: signOut?.getAttribute('data-action-status') || '',
         itemCount: document.querySelectorAll('[data-testid="header-account-menu"] [role="menuitem"]').length,
@@ -1922,8 +1953,14 @@ const assertHeaderAccountMenuInteraction = async (client) => {
       openedState.profileState === 'ready' &&
       openedState.profileStatus === openedState.statusText &&
       openedState.profileUserId === 'user-admin' &&
+      ['admin', 'owner'].includes(openedState.summaryRole) &&
+      ['role defaults', 'permission matrix'].includes(openedState.summarySource) &&
+      ['Admin', 'Owner'].includes(openedState.menuRoleText) &&
+      ['role defaults', 'permission matrix'].includes(openedState.menuPermissionSource) &&
       openedState.settingsState === 'ready' &&
       openedState.settingsStatus === openedState.statusText &&
+      openedState.settingsDisabled === false &&
+      openedState.settingsDisabledReason === '' &&
       openedState.signOutState === 'ready' &&
       openedState.signOutStatus === openedState.statusText,
     `Header account menu actions should expose shared ready status and route profile by the signed-in admin id: ${JSON.stringify(openedState)}`,

@@ -13,6 +13,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-01 12:26 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Header UX status:** Account menu now exposes and respects the active role
+
+**What changed:**
+- `apps/admin/src/components/layout/Header.tsx`: the account toggle and menu now show the active Backy role plus permission source, so owners/admins/editors/viewers can see why controls differ.
+- The account Settings action now uses the same role/permission matrix gate as the rest of navigation. Users without `settings.view` see a blocked Settings action with a precise reason instead of clicking through to an unavailable page.
+- `apps/admin/scripts/login-smoke.mjs`: rendered header/account-menu smoke now checks the role badge, permission source, and Settings action state.
+
+**Commands run:**
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_LOGIN_CDP_PORT=9503 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npx vercel@latest ls backy-admin --no-color` -> latest pushed deployment Ready.
+- `npx vercel@latest ls backy-public --no-color` -> latest pushed deployment Ready.
+
+**Next:**
+1. Run public repo hygiene, commit, push, then continue Batch 5.
+
 ## 2026-06-01 12:04 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish

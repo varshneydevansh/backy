@@ -100,6 +100,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Supabase/Auth-created identities should not become active Backy users by trigger default. The auth profile trigger should seed provider-only identities as invited/inactive and leave activation to owner bootstrap, Backy invites, or explicit Users role/status changes.
 - [2026-06-01] Production readiness should prove public site discovery in addition to site-scoped contracts. `GET /api/sites?identifier=...` confirms the requested database-backed site is published and resolvable, while `GET /api/sites?limit=1` confirms public bootstrap list discovery is alive without assuming the readiness site is first.
 - [2026-06-01] Help must explain role-aware admin UI directly. Users should be able to search why Settings/Users/quick-create/navigation controls are hidden or disabled and see that Backy combines signed-in identity, profile role/status, invite state, and the backend permission matrix.
+- [2026-06-01] Account chrome must not claim privileged controls are available for every role. Show the active role and permission source near the user menu, and gate account-level Settings shortcuts through the same permission matrix as sidebar/navigation.
 
 ## Known Traps
 

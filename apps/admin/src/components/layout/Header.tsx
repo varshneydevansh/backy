@@ -631,9 +631,16 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
   const accountMenuId = 'header-account-menu';
   const accountActionStatusId = 'header-account-action-status';
   const accountDisplayName = user?.fullName || user?.email || 'Guest';
+  const accountRole = permissionMatrix?.role || user?.role || 'guest';
+  const accountRoleLabel = accountRole.charAt(0).toUpperCase() + accountRole.slice(1);
+  const accountPermissionSource = permissionMatrix ? 'permission matrix' : user ? 'role defaults' : 'anonymous';
+  const canOpenAccountSettings = canAccessArea('settings');
+  const accountSettingsDisabledReason = user
+    ? `Settings unavailable: ${accountRoleLabel} role or backend permissions do not include settings.view.`
+    : 'Settings unavailable: no signed-in admin session.';
   const accountActionStatus = user
-    ? `Profile available. Settings available. Sign out available for ${accountDisplayName}.`
-    : 'Profile available. Settings available. Sign out unavailable: No signed-in admin session.';
+    ? `Signed in as ${accountDisplayName}. Role ${accountRoleLabel}. Permissions from ${accountPermissionSource}. Profile available. ${canOpenAccountSettings ? 'Settings available.' : accountSettingsDisabledReason} Sign out available.`
+    : `Signed in as Guest. Role ${accountRoleLabel}. Permissions from ${accountPermissionSource}. Profile available. ${accountSettingsDisabledReason} Sign out unavailable: No signed-in admin session.`;
   const siteSwitchStatusId = 'header-site-switcher-status';
   const siteSwitchStatus = `${activeSiteName} is active. Switch site from this control without signing out.`;
   const siteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`;
@@ -1693,6 +1700,14 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
             <span className="hidden sm:block text-sm font-medium">
               {user?.fullName || 'Guest'}
             </span>
+            <span
+              className="hidden rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground lg:inline-flex"
+              data-testid="header-account-role-badge"
+              data-role={accountRole}
+              data-permission-source={accountPermissionSource}
+            >
+              {accountRoleLabel}
+            </span>
             <ChevronDown className="w-4 h-4 text-muted-foreground" />
           </button>
 
@@ -1712,6 +1727,23 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
                 data-action-status={accountActionStatus}
                 data-testid="header-account-menu"
               >
+                <div
+                  className="border-b border-border px-4 py-3"
+                  data-testid="header-account-summary"
+                  data-role={accountRole}
+                  data-permission-source={accountPermissionSource}
+                >
+                  <div className="truncate text-sm font-semibold text-foreground">{accountDisplayName}</div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className="rounded-full border border-border bg-muted px-2 py-0.5 font-semibold uppercase tracking-[0.08em]"
+                      data-testid="header-account-menu-role"
+                    >
+                      {accountRoleLabel}
+                    </span>
+                    <span data-testid="header-account-permission-source">{accountPermissionSource}</span>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
@@ -1737,14 +1769,21 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!canOpenAccountSettings) return;
                     setUserMenuOpen(false);
                     navigate({ to: '/settings' });
                   }}
                   aria-describedby={accountActionStatusId}
-                  data-action-state="ready"
+                  disabled={!canOpenAccountSettings}
+                  title={canOpenAccountSettings ? 'Open Settings' : accountSettingsDisabledReason}
+                  data-action-state={canOpenAccountSettings ? 'ready' : 'blocked'}
                   data-action-status={accountActionStatus}
+                  data-disabled-reason={canOpenAccountSettings ? undefined : accountSettingsDisabledReason}
                   data-testid="header-account-settings-action"
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent focus-ring"
+                  className={cn(
+                    'flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-50',
+                    !canOpenAccountSettings && 'text-muted-foreground',
+                  )}
                   role="menuitem"
                 >
                   <Settings className="w-4 h-4" />
