@@ -197,7 +197,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `7ea5c3aa` is pushed. Latest `backy-public` and `backy-admin` production deployments are Ready, the new live custom frontend connection gate passes 38 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes, and recent Vercel error logs are empty.
 
-**Single next action:** Create/connect the real separate custom website frontend project, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>` plus `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` before broad UI polish.
+**Newest custom frontend self-probe polish:** `examples/custom-frontend-next` now exposes `GET /api/backy-connection` with schema `backy.custom-frontend-connection.v1`. The endpoint returns only public configuration and booleans: Backy API base, site id, public host, manifest reachability, required DOM control attributes, and forbidden private env names present by name only, with `includesSecretValues: false`.
+
+**Newest verification:** Starter source smoke, starter typecheck, production API connection smoke, Help source/rendered smokes, admin typecheck, SDK typecheck, diff check, env-backed starter production build, and a full 49-check local starter connection proof against production Backy are green. The full proof uses `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
+
+**Single next action:** Run final hygiene, commit/push the custom frontend self-probe slice, then create/connect the real separate custom website frontend project, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
 
 ## Active Compute
 

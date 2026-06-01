@@ -25,6 +25,7 @@ const agents = read('AGENTS.md');
 const helpRoute = read('apps/admin/src/routes/help.tsx');
 const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
+const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
 const handoffSource = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
@@ -50,6 +51,7 @@ const frontendUrlInput =
   '';
 const requireLiveApi = process.env.BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE === '1';
 const requireFrontend = process.env.BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND === '1';
+const requireProbe = process.env.BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE === '1';
 
 const assert = (condition, message) => {
   if (condition) pass(message);
@@ -79,10 +81,23 @@ includesAll(
     'data-backy-element-type',
     'data-backy-component-contract-pointer',
     'data-backy-editable-map-pointer',
+    '/api/backy-connection',
     'subscribeNewsletter',
     'submitForm',
   ],
   'Starter smoke preserves API-addressable DOM, newsletter, and form boundaries',
+);
+includesAll(
+  starterConnectionProbe,
+  [
+    'backy.custom-frontend-connection.v1',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1',
+    'forbiddenEnvPresent',
+    'includesSecretValues: false',
+    'data-backy-component-contract-pointer',
+    'data-backy-editable-map-pointer',
+  ],
+  'Starter exposes a public custom frontend connection probe without secret values',
 );
 includesAll(
   readme,
@@ -90,6 +105,7 @@ includesAll(
     'npm run test:custom-frontend-connection',
     'BACKY_CUSTOM_FRONTEND_API_BASE_URL',
     'BACKY_CUSTOM_FRONTEND_URL',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
   ],
   'README documents the custom frontend connection gate',
 );
@@ -99,6 +115,7 @@ includesAll(
     'npm run test:custom-frontend-connection',
     'BACKY_CUSTOM_FRONTEND_API_BASE_URL',
     'BACKY_CUSTOM_FRONTEND_URL',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
   ],
   'AGENTS documents the custom frontend connection gate',
 );
@@ -108,6 +125,7 @@ includesAll(
     'npm run test:custom-frontend-connection',
     'BACKY_CUSTOM_FRONTEND_API_BASE_URL',
     'BACKY_CUSTOM_FRONTEND_URL',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
   ],
   'Custom frontend handoff spec documents the connection gate',
 );
@@ -117,6 +135,7 @@ includesAll(
     'test:custom-frontend-connection',
     'BACKY_CUSTOM_FRONTEND_API_BASE_URL',
     'BACKY_CUSTOM_FRONTEND_URL',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
   ],
   'Help route exposes the custom frontend connection gate',
 );
@@ -344,6 +363,79 @@ const checkFrontendDom = async (frontendUrl) => {
   );
 };
 
+const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
+  const probeUrl = new URL('/api/backy-connection', frontendUrl);
+  const response = await fetch(probeUrl, {
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15000),
+    headers: { accept: 'application/json' },
+  });
+  const text = await response.text();
+  if (response.status === 404) {
+    const message = 'Custom frontend does not expose /api/backy-connection probe.';
+    if (requireProbe) fail(message);
+    else warn(message);
+    return;
+  }
+  if (response.status !== 200) {
+    fail(`Custom frontend probe returned ${response.status}; body starts ${JSON.stringify(text.slice(0, 120))}`);
+    return;
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    fail(`Custom frontend probe returned non-JSON content-type ${contentType || '<missing>'}`);
+    return;
+  }
+
+  let probe;
+  try {
+    probe = JSON.parse(text);
+  } catch (error) {
+    fail(`Custom frontend probe did not return parseable JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  const requiredAttributes = probe.domContract?.requiredAttributes || [];
+  assert(probe.success === true, 'Custom frontend probe returns success=true');
+  assert(
+    probe.schemaVersion === 'backy.custom-frontend-connection.v1',
+    'Custom frontend probe exposes the connection schema',
+  );
+  assert(probe.configured?.siteId === siteId, 'Custom frontend probe reports the expected Backy site id');
+  if (expectedApiBaseUrl) {
+    assert(
+      String(probe.configured?.apiBaseUrl || '').replace(/\/+$/u, '') === expectedApiBaseUrl,
+      'Custom frontend probe reports the expected Backy API base URL',
+    );
+  }
+  if (sitePublicHost) {
+    assert(
+      probe.configured?.sitePublicHost === sitePublicHost,
+      'Custom frontend probe reports the expected public host',
+    );
+  }
+  assert(probe.backy?.manifestReachable === true, 'Custom frontend probe can reach Backy manifest');
+  assert(probe.backy?.hasCustomFrontendHandoff === true, 'Custom frontend probe sees the Backy custom frontend handoff');
+  assert(probe.boundaries?.includesSecretValues === false, 'Custom frontend probe declares no secret values');
+  assert(
+    Array.isArray(probe.boundaries?.forbiddenEnvPresent) &&
+      probe.boundaries.forbiddenEnvPresent.length === 0,
+    'Custom frontend probe reports no forbidden private env in the frontend deployment',
+  );
+  includesAll(
+    requiredAttributes.join('\n'),
+    [
+      'data-backy-site-id',
+      'data-backy-route',
+      'data-backy-element-id',
+      'data-backy-element-type',
+      'data-backy-component-contract-pointer',
+      'data-backy-editable-map-pointer',
+    ],
+    'Custom frontend probe documents Backy DOM control attributes',
+  );
+};
+
 if (apiBaseInput) {
   try {
     await checkPublicApi(normalizeApiBaseUrl(apiBaseInput));
@@ -359,14 +451,15 @@ if (apiBaseInput) {
 
 if (frontendUrlInput) {
   try {
+    await checkFrontendProbe(frontendUrlInput, apiBaseInput ? normalizeApiBaseUrl(apiBaseInput) : '');
     await checkFrontendDom(frontendUrlInput);
   } catch (error) {
-    fail(`Custom frontend DOM check failed: ${error instanceof Error ? error.message : String(error)}`);
+    fail(`Custom frontend deployed check failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 } else {
   const message =
     'BACKY_CUSTOM_FRONTEND_URL is not set; skipped deployed custom frontend DOM proof.';
-  if (requireFrontend) fail(message);
+  if (requireFrontend || requireProbe) fail(message);
   else warn(message);
 }
 

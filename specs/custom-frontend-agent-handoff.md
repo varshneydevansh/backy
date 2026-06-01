@@ -42,6 +42,7 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
    - Connection proof for separate custom frontend projects.
    - Set `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api` and `BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug>` to prove public site discovery, agent-handoff, manifest, OpenAPI, resolve, and render contracts.
    - After deploying the public website, set `BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>` and `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` to prove the DOM still exposes Backy site, route, element, component-contract, and editable-map attributes.
+   - If the custom frontend follows the starter, also set `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` so the smoke requires `GET /api/backy-connection` to return `backy.custom-frontend-connection.v1`, Backy manifest reachability, and no forbidden private env names.
 
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
 
@@ -93,10 +94,11 @@ BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api \
 BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> \
 BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> \
 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 \
+BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 \
 npm run test:custom-frontend-connection
 ```
 
-This gate validates the public Backy contracts first, then verifies the custom frontend page keeps `data-backy-site-id`, `data-backy-route`, `data-backy-element-id`, `data-backy-element-type`, `data-backy-component-contract-pointer`, and `data-backy-editable-map-pointer`. A frontend that renders visually but drops those attributes is not fully connected to Backy control.
+This gate validates the public Backy contracts first, then verifies the custom frontend page keeps `data-backy-site-id`, `data-backy-route`, `data-backy-element-id`, `data-backy-element-type`, `data-backy-component-contract-pointer`, and `data-backy-editable-map-pointer`. With `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`, it also requires the deployed frontend to expose `GET /api/backy-connection` with public API/site/host configuration, manifest reachability, required DOM attributes, and a forbidden-private-env report without any secret values. A frontend that renders visually but drops those attributes or cannot self-describe its Backy connection is not fully connected to Backy control.
 
 ## Component API contract
 

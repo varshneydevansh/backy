@@ -411,8 +411,8 @@ const FRONTEND_AGENT_STARTERS = [
   {
     id: 'connection-smoke',
     label: 'Connection smoke',
-    value: 'BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=:siteId npm run test:custom-frontend-connection  |  BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 npm run test:custom-frontend-connection',
-    detail: 'Run this in the Backy repo to prove the public API contract is reachable, then add the frontend URL to prove the deployed custom website keeps Backy DOM control attributes.',
+    value: 'BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=:siteId npm run test:custom-frontend-connection  |  BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection',
+    detail: 'Run this in the Backy repo to prove the public API contract is reachable, then add the frontend URL to prove the deployed custom website keeps Backy DOM control attributes and exposes a secret-free /api/backy-connection probe.',
   },
 ];
 

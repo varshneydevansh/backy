@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 03:03 IST
+- **Last updated:** 2026-06-02 03:29 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,36 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 03:29 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Starter now has a deployed self-probe for full Backy control verification
+
+**What changed:**
+- Added `examples/custom-frontend-next/src/app/api/backy-connection/route.ts`, a public, secret-free `backy.custom-frontend-connection.v1` endpoint for separate custom frontend deployments.
+- The probe reports public Backy API base, site id, public host, manifest reachability, required DOM control attributes, and forbidden private env names present by name only. It never returns secret values.
+- `npm run test:custom-frontend-connection` now checks the deployed frontend probe when a frontend URL is supplied and can require it with `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
+- Starter docs, README, AGENTS, Help, and the custom frontend handoff spec now tell frontend agents to require both DOM attributes and the probe before handing a separate website to users.
+- Kept Next 16's required starter `tsconfig` shape so the standalone custom frontend starter builds cleanly.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS, 43 checks.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 11 source checks; live API/frontend URL skipped by unset env.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 44 checks.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 39 checks.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `git diff --check` -> PASS.
+- Initial `npm --prefix examples/custom-frontend-next run build --silent` without env failed as expected because the separate frontend requires a Backy public API base.
+- `NEXT_PUBLIC_BACKY_API_BASE_URL=https://backy-public.vercel.app/api NEXT_PUBLIC_BACKY_SITE_ID=site-demo BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api BACKY_SITE_ID=site-demo npm --prefix examples/custom-frontend-next run build --silent` -> PASS; `/api/backy-connection` listed as dynamic.
+- Local starter dev server on `127.0.0.1:4317` plus `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_URL=http://127.0.0.1:4317 BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection --silent` -> PASS, 49 checks.
+
+**Next:**
+1. Run final hygiene, commit/push this probe slice, then re-read the survival guide.
+2. When the real website frontend exists, run the same 49-check class of proof against its deployed URL and public domain.
 
 ## 2026-06-02 03:03 IST
 

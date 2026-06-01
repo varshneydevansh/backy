@@ -39,12 +39,30 @@ Before generating routes or UI, read:
 
 The starter vendors a tiny public Backy client in `src/lib/backy-client.ts` so it can be copied into a new Vercel project without waiting for a package-registry publish. It uses the same `createBackyCustomFrontendClient({ env: process.env })` shape as `@backy/sdk-js`, so `/api` suffixes, site ids, and host-aware `domain=` route context stay aligned with Backy's public contract.
 
+## Deployed Connection Probe
+
+The starter exposes `GET /api/backy-connection` with schema `backy.custom-frontend-connection.v1`.
+
+It returns only public configuration and booleans: the Backy public API base, site id, public host, Backy manifest reachability, required DOM control attributes, and whether forbidden private env names are present in the frontend deployment. It never returns secret values.
+
+After deploying a separate website frontend, run the Backy repo smoke with the probe required:
+
+```bash
+BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api \
+BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> \
+BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> \
+BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 \
+BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 \
+npm run test:custom-frontend-connection
+```
+
 ## Files
 
 - `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, and form APIs.
 - `src/lib/backy.ts`: Backy client bootstrap from safe env.
 - `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id`, `data-backy-element-type`, component-contract pointers, prop/style keys, responsive breakpoints, token refs, asset ids, action/binding counts, animation metadata, and editable-map pointers on every element.
 - `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`.
+- `src/app/api/backy-connection/route.ts`: public, secret-free connection probe for deployed frontend verification.
 - `src/app/api/newsletter/route.ts`: public newsletter signup bridge.
 - `src/app/api/backy-form/route.ts`: public form-submission bridge.
 

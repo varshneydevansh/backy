@@ -35,6 +35,7 @@ const files = {
   page: read('src/app/[[...path]]/page.tsx'),
   newsletter: read('src/app/api/newsletter/route.ts'),
   form: read('src/app/api/backy-form/route.ts'),
+  connection: read('src/app/api/backy-connection/route.ts'),
   client: read('src/lib/backy-client.ts'),
 };
 
@@ -85,6 +86,13 @@ assertIncludes(files.client, 'normalizeBackyBaseUrl', 'Starter local client norm
 assertIncludes(files.client, 'domain:', 'Starter local client passes host context as domain');
 assertIncludes(files.page, 'backy.render<BackyRenderPayload>', 'Catch-all route renders Backy payloads through the public client');
 assertIncludes(files.page, 'sitePublicHost', 'Catch-all route passes custom host context');
+assertIncludes(files.connection, 'backy.custom-frontend-connection.v1', 'Starter exposes a public custom frontend connection probe');
+assertIncludes(files.connection, 'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1', 'Connection probe documents the strict probe smoke flag');
+assertIncludes(files.connection, 'forbiddenEnvPresent', 'Connection probe reports forbidden env presence without values');
+assertIncludes(files.connection, 'includesSecretValues: false', 'Connection probe declares that it does not include secret values');
+assertIncludes(files.connection, 'data-backy-component-contract-pointer', 'Connection probe documents component contract DOM attributes');
+assertIncludes(files.connection, 'data-backy-editable-map-pointer', 'Connection probe documents editable-map DOM attributes');
+assertIncludes(files.connection, 'backy.manifest()', 'Connection probe verifies Backy manifest reachability');
 assertIncludes(files.render, 'data-backy-element-id', 'Renderer preserves element API id attributes');
 assertIncludes(files.render, 'data-backy-element-type', 'Renderer preserves element API type attributes');
 assertIncludes(files.render, 'data-backy-component-contract-pointer', 'Renderer exposes component contract pointers');
@@ -105,6 +113,7 @@ assertIncludes(files.form, 'buildBackyFormSubmissionInput', 'Starter normalizes 
 assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form submissions');
 assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter README begins with agent handoff read path');
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
+assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
 
 const allStarterText = Object.entries(files)
   .filter(([name]) => name !== 'readme')

@@ -98,6 +98,7 @@ export type BackyRenderPayload = {
 };
 
 export type BackyManifest = {
+  schemaVersion?: string;
   site: {
     id: string;
     name?: string;
