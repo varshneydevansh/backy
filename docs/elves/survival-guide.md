@@ -177,9 +177,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Core typecheck, SDK typecheck/build, admin typecheck, Help source/rendered smokes, read-only SDK smoke with local dev MFA, diff check, and repo-public hygiene are green for the SDK bootstrap slice.
 
-**Newest deploy verification:** `a9778ab7` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+**Newest deploy verification:** `8e6fd479` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, deployed `/api/sites/site-demo/agent-handoff` exposes the new SDK bootstrap helpers, and recent Vercel error logs are empty.
 
-**Single next action:** Commit/push the custom frontend SDK bootstrap slice if not already pushed, then continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
+**Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## Active Compute
 

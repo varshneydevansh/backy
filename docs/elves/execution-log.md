@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 01:36 IST
+- **Last updated:** 2026-06-02 01:46 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 01:46 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Custom frontend SDK bootstrap slice is production-verified
+
+**Verification:**
+- `8e6fd479 feat(sdk): bootstrap custom frontends from safe env` is pushed to `main`.
+- Latest `backy-admin` production deployment is Ready.
+- Latest `backy-public` production deployment is Ready.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; live admin auth proof skipped because credential env is intentionally unset.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9549 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS; hosted login shell still has no demo credentials or dev MFA phrase.
+- Direct `https://backy-public.vercel.app/api/sites/site-demo/agent-handoff` assertion -> PASS; deployed `handoff.sdk.helpers` includes `createBackyCustomFrontendClient`, `createBackyCustomFrontendClientFromEnv`, and `resolveBackyCustomFrontendConfig`.
+- Recent `backy-admin` Vercel error logs -> PASS, no logs found.
+- Recent `backy-public` Vercel error logs -> PASS, no logs found.
+
+**Next:**
+1. Continue Batch 5 only with release-critical backend/custom-frontend gaps if work continues before halt.
+2. Do not spend remaining limits on broad UI polish unless it blocks creating/controlling a custom frontend-backed site.
 
 ## 2026-06-02 01:36 IST
 
