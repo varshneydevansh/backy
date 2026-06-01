@@ -119,6 +119,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `efe19571` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, the production Supabase trigger still verifies hardened, and recent Vercel error logs are empty.
 
+**Newest Help polish:** Help now explains role-aware admin UI filtering: Backy combines signed-in profile role, profile status/invite state, and the backend permission matrix to decide visible/enabled navigation, quick-create actions, dashboard shortcuts, Settings, and Users controls.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

@@ -359,6 +359,7 @@ const assertHelpSourceContracts = () => {
     'frontend-design-state',
     'newsletter-subscribers',
     'newsletter-mail-boundary',
+    'roles',
     'provider-certification-partials',
   ];
 
@@ -440,6 +441,17 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('subscriptionStatus for audience state and newsletterStatus for provider lifecycle states') &&
       newsletterSmokeSource.includes('Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.'),
     'Help route must document the newsletter management and mail-provider boundary.',
+  );
+
+  assert(
+    helpSource.includes('signed-in Backy profile role plus the backend permission matrix') &&
+      helpSource.includes('navigation groups, quick-create buttons, dashboard shortcuts, Settings panels, and Users controls') &&
+      helpSource.includes('role-default navigation active') &&
+      helpSource.includes('Hosted login validates the identity provider first') &&
+      helpSource.includes('New provider-created identities start invited and inactive') &&
+      helpSource.includes('If Settings unavailable appears') &&
+      helpSource.includes("routeLabel: 'Open Users'"),
+    'Help route must explain role-aware UI filtering, permission-matrix fallback, and provider identity activation boundaries.',
   );
 
   assert(

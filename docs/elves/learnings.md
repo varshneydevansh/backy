@@ -99,6 +99,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Sidebar brand headers must reserve space for the expanded controls they contain. Once the site switcher includes Backy, Manage, Site select, Domains, and Help, it needs an expanded stacked layout and rendered smoke coverage against clipping into quick-create.
 - [2026-06-01] Supabase/Auth-created identities should not become active Backy users by trigger default. The auth profile trigger should seed provider-only identities as invited/inactive and leave activation to owner bootstrap, Backy invites, or explicit Users role/status changes.
 - [2026-06-01] Production readiness should prove public site discovery in addition to site-scoped contracts. `GET /api/sites?identifier=...` confirms the requested database-backed site is published and resolvable, while `GET /api/sites?limit=1` confirms public bootstrap list discovery is alive without assuming the readiness site is first.
+- [2026-06-01] Help must explain role-aware admin UI directly. Users should be able to search why Settings/Users/quick-create/navigation controls are hidden or disabled and see that Backy combines signed-in identity, profile role/status, invite state, and the backend permission matrix.
 
 ## Known Traps
 

@@ -13,6 +13,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-01 12:04 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Help UX status:** Role-aware admin controls are now searchable in Help
+
+**What changed:**
+- `apps/admin/src/routes/help.tsx`: the workspace access topic now explains that Backy gates navigation, quick-create buttons, dashboard shortcuts, Settings panels, and Users controls from the signed-in Backy profile role plus the backend permission matrix.
+- The same topic now distinguishes hosted identity-provider login from Backy profile role/status/invite state and explains why provider-created identities start invited/inactive until activated.
+- `apps/admin/scripts/help-smoke.mjs`: added source guards so the role-aware UI, permission-matrix fallback, and provider identity activation copy cannot regress silently.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Operational answer:**
+- Yes. Backy UI is role-aware: owner/admin/editor/viewer profiles see different navigation, shortcuts, settings/users access, and privileged actions according to the backend permission matrix. Hosted login proves identity first; Backy profile role/status decides what the signed-in user can operate.
+
+**Next:**
+1. Commit and push the Help role-access clarity slice.
+2. Continue Batch 5 with the next visible admin/editor friction point.
+
 ## 2026-06-01 11:52 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish
