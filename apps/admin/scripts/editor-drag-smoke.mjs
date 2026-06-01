@@ -1390,6 +1390,27 @@ const assertPropertyPanelColorControlsSource = () => {
     'Editor property panel delete control must expose action-state/status metadata and blocked reasons for locked/read-only elements',
   );
   assert(
+    source.includes("schemaVersion: 'backy.editor-selected-component-api-contract.v1'") &&
+      source.includes("componentContractPointer: 'agent-handoff.componentApiContract.componentTypeContracts'") &&
+      source.includes("publicRenderPointer: 'render.data.content.elements[]'") &&
+      source.includes("propertyField: 'component.props'") &&
+      source.includes("responsiveField: 'component.responsive'") &&
+      source.includes("bindingSlotField: 'component.bindingSlots'") &&
+      source.includes("const copySelectedComponentApiContract = async () =>") &&
+      source.includes('navigator.clipboard.writeText(JSON.stringify(selectedComponentApiContract, null, 2))') &&
+      source.includes('data-testid="editor-selected-component-api-contract"') &&
+      source.includes('data-schema-version={selectedComponentApiContract.schemaVersion}') &&
+      source.includes('data-component-prop-keys={selectedComponentPropKeys.join') &&
+      source.includes('data-responsive-breakpoints={selectedComponentResponsiveKeys.join') &&
+      source.includes('data-component-contract-pointer={selectedComponentApiContract.componentContractPointer}') &&
+      source.includes('data-public-render-pointer={selectedComponentApiContract.publicRenderPointer}') &&
+      source.includes('data-testid="editor-copy-selected-component-api-contract"') &&
+      source.includes('data-action-status={selectedComponentApiCopyStatus}') &&
+      source.includes('data-target-element-id={element.id}') &&
+      source.includes('Copy component API'),
+    'Editor property panel must expose a copyable selected-component API contract with id/type/props/styles/responsive/tokens/assets/bindings/motion metadata for custom frontend agents.',
+  );
+  assert(
     actionStatusSource.includes("export type EditorActionState = 'ready' | 'selected' | 'blocked' | 'busy';") &&
       actionStatusSource.includes('export const buildEditorActionStatus =') &&
       formBuilderActionSource.includes("from './editorActionStatus';") &&
@@ -14835,6 +14856,9 @@ const readInspectorState = async (client) => {
       const singleVisibilityAction = document.querySelector('[data-testid="editor-inspector-single-toggle-selection-visibility"]');
       const singleLockAction = document.querySelector('[data-testid="editor-inspector-single-toggle-selection-lock"]');
       const singleSendBackAction = document.querySelector('[data-testid="editor-inspector-single-send-to-back"]');
+      const componentApi = document.querySelector('[data-testid="editor-selected-component-api-contract"]');
+      const componentApiCopy = document.querySelector('[data-testid="editor-copy-selected-component-api-contract"]');
+      const componentApiStatus = document.querySelector('[data-testid="editor-selected-component-api-contract-status"]');
       const workflow = document.querySelector('[data-testid="page-workflow-panel"]');
       const inspectorRect = inspector?.getBoundingClientRect();
       const workflowRect = workflow?.getBoundingClientRect();
@@ -14876,6 +14900,34 @@ const readInspectorState = async (client) => {
           sendBackCommandId: singleSendBackAction?.getAttribute('data-command-id') || '',
           sendBackActionStatus: singleSendBackAction?.getAttribute('data-action-status') || '',
         },
+        componentApi: componentApi
+          ? {
+            exists: true,
+            schemaVersion: componentApi.getAttribute('data-schema-version') || '',
+            source: componentApi.getAttribute('data-source') || '',
+            elementId: componentApi.getAttribute('data-element-id') || '',
+            componentType: componentApi.getAttribute('data-component-type') || '',
+            propKeys: componentApi.getAttribute('data-component-prop-keys') || '',
+            responsiveBreakpoints: componentApi.getAttribute('data-responsive-breakpoints') || '',
+            tokenRefCount: Number(componentApi.getAttribute('data-token-ref-count') || 0),
+            assetCount: Number(componentApi.getAttribute('data-asset-count') || 0),
+            bindingCount: Number(componentApi.getAttribute('data-binding-count') || 0),
+            bindingSlotCount: Number(componentApi.getAttribute('data-binding-slot-count') || 0),
+            childLayerCount: Number(componentApi.getAttribute('data-child-layer-count') || 0),
+            componentContractPointer: componentApi.getAttribute('data-component-contract-pointer') || '',
+            publicRenderPointer: componentApi.getAttribute('data-public-render-pointer') || '',
+            text: componentApi.textContent?.replace(/\\s+/g, ' ').trim() || '',
+            statusId: componentApiStatus?.id || '',
+            statusText: componentApiStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+            copyExists: componentApiCopy instanceof HTMLButtonElement,
+            copyLabel: componentApiCopy?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+            copyActionState: componentApiCopy?.getAttribute('data-action-state') || '',
+            copyActionStatus: componentApiCopy?.getAttribute('data-action-status') || '',
+            copyTargetElementId: componentApiCopy?.getAttribute('data-target-element-id') || '',
+            copyTargetElementType: componentApiCopy?.getAttribute('data-target-element-type') || '',
+            copyDescribedBy: componentApiCopy?.getAttribute('aria-describedby') || '',
+          }
+          : { exists: false, schemaVersion: '', source: '', elementId: '', componentType: '', propKeys: '', responsiveBreakpoints: '', tokenRefCount: 0, assetCount: 0, bindingCount: 0, bindingSlotCount: 0, childLayerCount: 0, componentContractPointer: '', publicRenderPointer: '', text: '', statusId: '', statusText: '', copyExists: false, copyLabel: '', copyActionState: '', copyActionStatus: '', copyTargetElementId: '', copyTargetElementType: '', copyDescribedBy: '' },
         propertyRail: propertyRail
           ? {
             exists: true,
@@ -15040,6 +15092,27 @@ const assertInspectorSelection = async (client, elementId) => {
       state.inspectorActions.sendBackCommandId === 'send-to-back' &&
       state.inspectorActions.sendBackActionStatus.includes('Send to back'),
     `Inspector selection action metadata missing for ${elementId}: ${JSON.stringify(state.inspectorActions)}`,
+  );
+  assert(
+    state.componentApi?.exists &&
+      state.componentApi.schemaVersion === 'backy.editor-selected-component-api-contract.v1' &&
+      state.componentApi.source === 'editor-inspector-selected-layer' &&
+      state.componentApi.elementId === elementId &&
+      state.componentApi.componentType.length > 0 &&
+      state.componentApi.componentContractPointer === 'agent-handoff.componentApiContract.componentTypeContracts' &&
+      state.componentApi.publicRenderPointer === 'render.data.content.elements[]' &&
+      state.componentApi.text.includes('Element API') &&
+      state.componentApi.statusId === 'editor-selected-component-api-contract-status' &&
+      state.componentApi.statusText.includes('Copy selected') &&
+      state.componentApi.statusText.includes('component API contract available') &&
+      state.componentApi.copyExists &&
+      state.componentApi.copyLabel.includes('Copy component API') &&
+      state.componentApi.copyActionState === 'ready' &&
+      state.componentApi.copyActionStatus === state.componentApi.statusText &&
+      state.componentApi.copyTargetElementId === elementId &&
+      state.componentApi.copyTargetElementType === state.componentApi.componentType &&
+      state.componentApi.copyDescribedBy === state.componentApi.statusId,
+    `Selected component API contract is not rendered for ${elementId}: ${JSON.stringify(state.componentApi)}`,
   );
   assert(
     state.propertyRail?.exists &&

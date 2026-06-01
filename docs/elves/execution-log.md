@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 14:34 IST
+- **Last updated:** 2026-06-01 15:11 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 15:11 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Editor handoff status:** Selected canvas layers now expose copyable component API contracts in Inspector
+
+**What changed:**
+- `apps/admin/src/components/editor/PropertyPanel.tsx`: added an Inspector **Element API** disclosure for the selected layer with machine-readable schema/source metadata, selected element id/type, prop/responsive/binding counts, the canonical component-contract pointer, the public render pointer, and a copyable JSON contract.
+- `apps/admin/scripts/editor-drag-smoke.mjs`: added source and rendered Inspector smoke coverage that proves the selected layer API card and copy action are present for a real canvas selection.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_EDITOR_INSPECTOR_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit and push the selected-component API Inspector handoff slice.
+2. Verify Vercel production deployments after the push, then continue Batch 5.
 
 ## 2026-06-01 14:34 IST
 
