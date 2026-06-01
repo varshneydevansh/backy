@@ -356,6 +356,7 @@ const assertHelpSourceContracts = () => {
     'navigation-shared-chrome',
     'apiable-elements',
     'custom-frontend-agent-start',
+    'connect-custom-frontend',
     'frontend-design-state',
     'newsletter-subscribers',
     'newsletter-mail-boundary',
@@ -390,6 +391,30 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('data-testid="help-agent-starter-grid"') &&
       helpSource.includes('data-testid="help-agent-human-guide"'),
     'Help route must expose canonical custom frontend agent endpoints, schema, copy controls, site-scoped values, and human guide.',
+  );
+
+  assert(
+    helpSource.includes("id: 'connect-custom-frontend'") &&
+      helpSource.includes('Host the public website as its own frontend project and keep Backy as the CMS/API source of truth.') &&
+      helpSource.includes('Attach the production domain to the custom frontend Vercel project, not to backy-admin.') &&
+      helpSource.includes('Backy-public remains the public API/render origin.') &&
+      helpSource.includes('customDomain or domainAliases host') &&
+      helpSource.includes('Create a separate Backy site when a subdomain needs independent content, navigation, SEO, design tokens, or launch state.') &&
+      helpSource.includes('data-testid="help-custom-frontend-checklist"') &&
+      helpSource.includes('data-testid="help-custom-frontend-steps"') &&
+      helpSource.includes('data-testid="help-custom-frontend-env-grid"') &&
+      helpSource.includes('NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api') &&
+      helpSource.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
+      helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
+      helpSource.includes('BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
+      helpSource.includes('GET /api/sites/${siteId}/resolve?path=/&domain=<your-domain.com>') &&
+      helpSource.includes('GET /api/sites/${siteId}/render?path=/&domain=<your-domain.com>') &&
+      helpSource.includes('SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY / SUPABASE_JWT_SECRET') &&
+      helpSource.includes('BACKY_ADMIN_BOOTSTRAP_TOKEN / BACKY_ADMIN_SESSION_SECRET / BACKY_CRON_SECRET') &&
+      helpSource.includes('Admin API keys, session cookies, provider secrets, SMTP passwords, webhook secrets, and raw subscriber/order exports') &&
+      helpSource.includes('data-testid={`help-copy-custom-frontend-${card.id}`}') &&
+      helpSource.includes('data-target-site-id={activeSiteId}'),
+    'Help route must expose a copyable separate-custom-frontend checklist with safe env, host-aware endpoints, and forbidden secret boundaries.',
   );
 
   assert(
@@ -603,6 +628,66 @@ const runRenderedHelpSmoke = async () => {
         clipboard: String(window.__backyHelpSmokeClipboard || ''),
       };
     })()`, 'Help copy deployment-topology starter action');
+
+    const customFrontendState = await evaluate(client, `(() => {
+      const checklist = document.querySelector('[data-testid="help-custom-frontend-checklist"]');
+      const envGrid = document.querySelector('[data-testid="help-custom-frontend-env-grid"]');
+      const text = checklist?.textContent || '';
+      return {
+        targetSiteId: envGrid?.getAttribute('data-target-site-id') || '',
+        text,
+        stepCount: document.querySelectorAll('[data-testid^="help-custom-frontend-step-"]').length,
+      };
+    })()`);
+    assert(customFrontendState.targetSiteId === HELP_SMOKE_SITE_ID, `Custom frontend checklist used wrong site id: ${JSON.stringify(customFrontendState)}`);
+    assert(customFrontendState.stepCount === 5, `Custom frontend checklist should expose five steps: ${JSON.stringify(customFrontendState)}`);
+    for (const expected of [
+      'Connect a separate custom frontend',
+      'custom frontend Vercel project',
+      'customDomain or domainAliases',
+      'NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api',
+      `NEXT_PUBLIC_BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
+      'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
+      'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
+      `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
+      'BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
+      `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/&domain=<your-domain.com>`,
+      `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/&domain=<your-domain.com>`,
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'BACKY_ADMIN_BOOTSTRAP_TOKEN',
+      'BACKY_CRON_SECRET',
+    ]) {
+      assert(customFrontendState.text.includes(expected), `Custom frontend checklist is missing ${expected}: ${JSON.stringify(customFrontendState)}`);
+    }
+
+    await evaluate(client, clickElement('help-copy-custom-frontend-browser-env'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-custom-frontend-browser-env"]');
+      const clipboard = String(window.__backyHelpSmokeClipboard || '');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          clipboard.includes('NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api') &&
+          clipboard.includes('NEXT_PUBLIC_BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}') &&
+          clipboard.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
+          !clipboard.includes('SUPABASE_SERVICE_ROLE_KEY'),
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard,
+      };
+    })()`, 'Help copy browser frontend env action');
+
+    await evaluate(client, clickElement('help-copy-custom-frontend-frontend-endpoints'));
+    await waitForRenderedState(client, `(() => {
+      const button = document.querySelector('[data-testid="help-copy-custom-frontend-frontend-endpoints"]');
+      const clipboard = String(window.__backyHelpSmokeClipboard || '');
+      return {
+        ready: button?.getAttribute('data-action-state') === 'copied' &&
+          clipboard.includes('GET /api/sites/${HELP_SMOKE_SITE_ID}/agent-handoff') &&
+          clipboard.includes('GET /api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/&domain=<your-domain.com>') &&
+          clipboard.includes('GET /api/sites/${HELP_SMOKE_SITE_ID}/render?path=/&domain=<your-domain.com>'),
+        actionState: button?.getAttribute('data-action-state') || '',
+        clipboard,
+      };
+    })()`, 'Help copy custom frontend endpoint action');
 
     const newsletterInput = await evaluate(client, setInputValue('help-search', 'newsletter'));
     assert(newsletterInput.ok, `Help search input could not be updated: ${JSON.stringify(newsletterInput)}`);

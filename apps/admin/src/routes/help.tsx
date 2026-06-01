@@ -221,6 +221,21 @@ const HELP_TOPICS: HelpTopic[] = [
     routeLabel: 'Open Sites',
   },
   {
+    id: 'connect-custom-frontend',
+    category: 'api',
+    title: 'Connect a separate custom frontend',
+    summary: 'Host the public website as its own frontend project and keep Backy as the CMS/API source of truth.',
+    details: [
+      'Attach the production domain to the custom frontend Vercel project, not to backy-admin. Backy-public remains the public API/render origin.',
+      'In Backy, create or select the site, save the exact customDomain or domainAliases host, and verify DNS before relying on public host discovery.',
+      'Use aliases for multiple hosts that should show the same site. Create a separate Backy site when a subdomain needs independent content, navigation, SEO, design tokens, or launch state.',
+      'Frontend agents should read agent-handoff, manifest, OpenAPI, resolve, and render before writing routes or components; the render payload keeps content, fonts, colors, assets, responsive overrides, motion, and component metadata structured.',
+      'Only browser-safe public env belongs in the custom frontend bundle. Supabase, database, provider, admin session, bootstrap, cron, and transactional mail secrets stay on backy-public/admin or private delivery workers.',
+    ],
+    route: '/sites',
+    routeLabel: 'Open frontend setup',
+  },
+  {
     id: 'frontend-handoff',
     category: 'api',
     title: 'Copy frontend and AI handoff data',
@@ -394,6 +409,58 @@ const FRONTEND_AGENT_STARTERS = [
     detail: 'Read before creating Vercel projects. It names backy-admin, backy-public, required/forbidden env, domain policy, and release checks.',
   },
 ];
+
+const CUSTOM_FRONTEND_ENV_CARDS = [
+  {
+    id: 'browser-env',
+    label: 'Browser-safe frontend env',
+    description: 'Put only these public values in the separate website frontend project.',
+    value: (siteId: string) => [
+      'NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api',
+      `NEXT_PUBLIC_BACKY_SITE_ID=${siteId}`,
+      'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
+    ].join('\n'),
+  },
+  {
+    id: 'server-env',
+    label: 'Optional server loader env',
+    description: 'Use these only in server-side loaders, route handlers, or build-time fetch code.',
+    value: (siteId: string) => [
+      'BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api',
+      `BACKY_SITE_ID=${siteId}`,
+      'BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
+    ].join('\n'),
+  },
+  {
+    id: 'frontend-endpoints',
+    label: 'Agent/API read order',
+    description: 'Give this read order to any AI agent or custom frontend repository.',
+    value: (siteId: string) => [
+      `GET /api/sites/${siteId}/agent-handoff`,
+      `GET /api/sites/${siteId}/manifest`,
+      `GET /api/sites/${siteId}/openapi`,
+      `GET /api/sites/${siteId}/resolve?path=/&domain=<your-domain.com>`,
+      `GET /api/sites/${siteId}/render?path=/&domain=<your-domain.com>`,
+    ].join('\n'),
+  },
+  {
+    id: 'forbidden-secrets',
+    label: 'Never expose from frontend',
+    description: 'These belong only in protected Backy projects, private workers, or provider dashboards.',
+    value: () => [
+      'POSTGRES_URL / POSTGRES_PRISMA_URL / POSTGRES_URL_NON_POOLING',
+      'BACKY_DATABASE_URL / DATABASE_URL',
+      'SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEY / SUPABASE_JWT_SECRET',
+      'BACKY_ADMIN_BOOTSTRAP_TOKEN / BACKY_ADMIN_SESSION_SECRET / BACKY_CRON_SECRET',
+      'Admin API keys, session cookies, provider secrets, SMTP passwords, webhook secrets, and raw subscriber/order exports',
+    ].join('\n'),
+  },
+] satisfies Array<{
+  id: string;
+  label: string;
+  description: string;
+  value: (siteId: string) => string;
+}>;
 
 const categoryById = new Map(HELP_CATEGORIES.map((category) => [category.id, category]));
 const SITE_SCOPED_HELP_ROUTES = new Set<HelpRoute>([
@@ -683,6 +750,62 @@ function HelpPage() {
           </div>
           <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-3 text-sm leading-6 text-muted-foreground" data-testid="help-agent-human-guide">
             Human review guide: <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">specs/custom-frontend-agent-handoff.md</code>. Require agents to preserve Backy ids, component props, responsive overrides, token refs, assets, animation metadata, data bindings, and newsletter sync boundaries.
+          </div>
+        </PanelContent>
+      </Panel>
+
+      <Panel data-testid="help-custom-frontend-checklist">
+        <PanelHeader
+          title="Connect a separate custom frontend"
+          description="Use this when your public website is a separate Vercel project and Backy is the CMS/API control plane."
+          icon={<Globe2 className="h-4 w-4" />}
+        />
+        <PanelContent>
+          <div className="grid gap-3 lg:grid-cols-5" data-testid="help-custom-frontend-steps">
+            {[
+              ['1', 'Create/select site', 'Create the Backy site, pick the starter or imported design source, then keep authoring content in Backy.'],
+              ['2', 'Attach domain to frontend', 'Put the root domain or subdomain on the custom frontend Vercel project. Keep backy-admin protected.'],
+              ['3', 'Verify host in Backy', 'Save the exact host as customDomain or domainAliases, then verify DNS before public host discovery.'],
+              ['4', 'Configure safe env', 'Use only public API/site/host env in browser bundles; optional server loaders can use non-NEXT_PUBLIC mirrors.'],
+              ['5', 'Render from APIs', 'Read agent-handoff, manifest, OpenAPI, resolve, and render so content/design stays controlled by Backy.'],
+            ].map(([step, title, description]) => (
+              <div key={step} className="rounded-lg border border-border bg-muted/20 p-3" data-testid={`help-custom-frontend-step-${step}`}>
+                <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{step}</span>
+                <p className="mt-3 text-sm font-semibold text-foreground">{title}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="help-custom-frontend-env-grid" data-target-site-id={activeSiteId}>
+            {CUSTOM_FRONTEND_ENV_CARDS.map((card) => {
+              const copied = copiedKey === card.id;
+              const value = card.value(activeSiteId);
+
+              return (
+                <div key={card.id} className="rounded-lg border border-border bg-card p-3 shadow-sm" data-testid={`help-custom-frontend-card-${card.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{card.label}</p>
+                      <p className="mt-1 text-sm leading-5 text-muted-foreground">{card.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void copyHelpText(card.id, value)}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-ring"
+                      aria-label={`Copy ${card.label}`}
+                      data-testid={`help-copy-custom-frontend-${card.id}`}
+                      data-action-state={copied ? 'copied' : 'ready'}
+                    >
+                      {copied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                  <pre className="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-muted/30 p-2 font-mono text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+                    {value}
+                  </pre>
+                </div>
+              );
+            })}
           </div>
         </PanelContent>
       </Panel>

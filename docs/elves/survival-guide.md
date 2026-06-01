@@ -171,7 +171,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Blog verification polish:** The rendered Blog list smoke has been re-run successfully and its API helper now retries only idempotent GET requests on short local network resets, keeping taxonomy/post mutations single-attempt while reducing false-negative `fetch failed` failures.
 
-**Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
+**Newest custom frontend Help polish:** Help now has a dedicated separate-custom-frontend connection checklist with copyable browser-safe `NEXT_PUBLIC_BACKY_*` env, optional server-loader `BACKY_*` env, host-aware agent-handoff/manifest/OpenAPI/resolve/render read order, and explicit Supabase/database/provider/admin/session/bootstrap/cron forbidden-secret boundaries. Source and rendered Help smokes are green.
+
+**Single next action:** Run repo public hygiene, commit/push the Help custom-frontend checklist slice, then continue Batch 5 only with release-critical custom frontend/backend gaps.
 
 ## Active Compute
 

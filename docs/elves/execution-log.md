@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 00:49 IST
+- **Last updated:** 2026-06-02 00:59 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 00:59 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Help now has a guarded separate-frontend connection checklist
+
+**What changed:**
+- `apps/admin/src/routes/help.tsx` now has a dedicated "Connect a separate custom frontend" topic and checklist.
+- The checklist tells owners/frontend agents to attach the production domain to the separate custom frontend Vercel project, keep `backy-admin` protected, keep `backy-public` as API/render origin, configure only browser-safe `NEXT_PUBLIC_BACKY_*` env in the frontend bundle, and keep Supabase/database/provider/admin/session/bootstrap/cron secrets out of the frontend.
+- It exposes copyable browser env, optional server-loader env, host-aware read endpoints, and forbidden-secret boundaries for the active `siteId`.
+- `apps/admin/scripts/help-smoke.mjs` now source-guards and rendered-smoke-guards the checklist, copy controls, host-aware resolve/render URLs, and secret boundary text.
+
+**Commands run:**
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_HELP_RENDERED_SMOKE=1 npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+
+**Next:**
+1. Run repo public hygiene, commit/push this Help handoff slice, then continue only with release-critical custom frontend/backend gaps.
 
 ## 2026-06-02 00:49 IST
 
