@@ -9,6 +9,7 @@ import {
   Mail,
   Newspaper,
   RefreshCw,
+  Search,
   Send,
   ShieldCheck,
   UserPlus,
@@ -48,6 +49,7 @@ interface NewsletterSearch {
 }
 
 type NewsletterPermissionKey = 'forms.view' | 'forms.manage' | 'forms.export' | 'pages.edit';
+type NewsletterAudienceFilter = 'all' | 'send-ready' | 'held' | 'unsubscribed';
 
 interface NewsletterSubscriber {
   contact: AdminContact;
@@ -57,6 +59,12 @@ interface NewsletterSubscriber {
 const NEWSLETTER_SCHEMA_VERSION = 'backy.newsletter-management-handoff.v1';
 const NEWSLETTER_SYNC_POLICY_VERSION = 'backy.newsletter-sync-boundary.v1';
 const NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.newsletter-issue-handoff.v1';
+const NEWSLETTER_AUDIENCE_FILTERS: Array<{ id: NewsletterAudienceFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'send-ready', label: 'Send-ready' },
+  { id: 'held', label: 'Held' },
+  { id: 'unsubscribed', label: 'Unsubscribed' },
+];
 
 const NEWSLETTER_PERMISSION_ROLE_DEFAULTS: Record<NewsletterPermissionKey, Array<User['role']>> = {
   'forms.view': ['owner', 'admin', 'editor', 'viewer'],
@@ -147,6 +155,8 @@ function NewsletterRoute() {
   const [contactSegments, setContactSegments] = useState<ContactSegmentAnalytics | null>(null);
   const [recentPosts, setRecentPosts] = useState<BlogPost[]>([]);
   const [selectedFormId, setSelectedFormId] = useState(routeSearch.formId || 'all');
+  const [subscriberAudienceFilter, setSubscriberAudienceFilter] = useState<NewsletterAudienceFilter>('all');
+  const [subscriberSearch, setSubscriberSearch] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isMutating, setIsMutating] = useState<string | null>(null);
   const [newsletterIssueDraft, setNewsletterIssueDraft] = useState<NewsletterIssueDraftHandoff | null>(null);
@@ -184,12 +194,23 @@ function NewsletterRoute() {
     ))
   ), [contactsByForm, selectedNewsletterForms]);
   const metrics = useMemo(() => buildNewsletterMetrics(subscribers), [subscribers]);
+  const audienceFilterCounts = useMemo(() => buildAudienceFilterCounts(subscribers), [subscribers]);
   const topicRows = useMemo(() => buildTopicRows(subscribers), [subscribers]);
+  const normalizedSubscriberSearch = subscriberSearch.trim().toLowerCase();
+  const filteredSubscribers = useMemo(() => (
+    subscribers.filter((subscriber) => {
+      if (!subscriberMatchesAudienceFilter(subscriber.contact, subscriberAudienceFilter)) {
+        return false;
+      }
+      if (!normalizedSubscriberSearch) return true;
+      return buildSubscriberSearchText(subscriber).includes(normalizedSubscriberSearch);
+    })
+  ), [normalizedSubscriberSearch, subscriberAudienceFilter, subscribers]);
   const latestSubscribers = useMemo(() => (
-    [...subscribers].sort((a, b) => (
+    [...filteredSubscribers].sort((a, b) => (
       (Date.parse(b.contact.createdAt) || 0) - (Date.parse(a.contact.createdAt) || 0)
     ))
-  ), [subscribers]);
+  ), [filteredSubscribers]);
   const contactSegmentsUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/contact-segments`;
   const newsletterSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers`;
   const sendableSubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=sendable`;
@@ -235,7 +256,9 @@ function NewsletterRoute() {
     : `Newsletter management available for ${activeSiteId}.`;
   const exportActionStatus = exportDisabledReason
     ? `Newsletter export unavailable: ${exportDisabledReason}`
-    : `Newsletter export available for ${subscribers.length} subscriber${subscribers.length === 1 ? '' : 's'}.`;
+    : subscriberAudienceFilter === 'all' && !normalizedSubscriberSearch
+      ? `Newsletter export available for ${subscribers.length} subscriber${subscribers.length === 1 ? '' : 's'}.`
+      : `Newsletter export available for ${latestSubscribers.length} visible subscriber${latestSubscribers.length === 1 ? '' : 's'} out of ${subscribers.length}.`;
   const issueDraftDisabledReason = recentPosts.length === 0
     ? 'Publish a report before building a newsletter issue draft.'
     : exportDisabledReason || '';
@@ -446,7 +469,7 @@ function NewsletterRoute() {
   };
 
   const exportNewsletterCsv = () => {
-    if (!canExportNewsletter || subscribers.length === 0) return;
+    if (!canExportNewsletter || latestSubscribers.length === 0) return;
 
     const rows = [
       ['email', 'name', 'status', 'topics', 'signup_source', 'form_id', 'form_title', 'created_at', 'updated_at'],
@@ -470,7 +493,7 @@ function NewsletterRoute() {
     anchor.download = `${activeSiteId}-newsletter-subscribers.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice(`Exported ${subscribers.length} newsletter subscriber${subscribers.length === 1 ? '' : 's'}.`);
+    setNotice(`Exported ${latestSubscribers.length} visible newsletter subscriber${latestSubscribers.length === 1 ? '' : 's'}.`);
   };
 
   const openNewsletterPageCreate = () => {
@@ -723,7 +746,13 @@ function NewsletterRoute() {
       </section>
 
       <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
-        <section className="rounded-lg border border-border bg-card p-4" data-testid="newsletter-subscriber-list">
+        <section
+          className="rounded-lg border border-border bg-card p-4"
+          data-testid="newsletter-subscriber-list"
+          data-audience-filter={subscriberAudienceFilter}
+          data-subscriber-count={subscribers.length}
+          data-visible-subscriber-count={latestSubscribers.length}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-foreground">Subscribers</h2>
@@ -735,13 +764,14 @@ function NewsletterRoute() {
               <Button
                 variant="outline"
                 onClick={exportNewsletterCsv}
-                disabled={actionBusy || subscribers.length === 0 || !canExportNewsletter}
-                title={subscribers.length === 0 ? 'No newsletter subscribers to export.' : exportDisabledReason || undefined}
+                disabled={actionBusy || latestSubscribers.length === 0 || !canExportNewsletter}
+                title={latestSubscribers.length === 0 ? (subscribers.length === 0 ? 'No newsletter subscribers to export.' : 'No subscribers match the current audience view.') : exportDisabledReason || undefined}
                 aria-describedby={exportActionStatusId}
                 iconStart={<Download className="size-4" />}
                 data-testid="newsletter-export-csv"
-                data-action-state={subscribers.length === 0 || exportDisabledReason ? 'blocked' : 'ready'}
+                data-action-state={latestSubscribers.length === 0 || exportDisabledReason ? 'blocked' : 'ready'}
                 data-action-status={exportActionStatus}
+                data-visible-subscriber-count={latestSubscribers.length}
               >
                 Export CSV
               </Button>
@@ -758,14 +788,75 @@ function NewsletterRoute() {
             </div>
           </div>
 
+          <div
+            className="mt-4 rounded-lg border border-border bg-background p-3"
+            data-testid="newsletter-subscriber-controls"
+            data-audience-filter={subscriberAudienceFilter}
+            data-visible-subscriber-count={latestSubscribers.length}
+            data-total-subscriber-count={subscribers.length}
+          >
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Newsletter audience view">
+                {NEWSLETTER_AUDIENCE_FILTERS.map((filter) => {
+                  const count = audienceFilterCounts[filter.id];
+                  const active = subscriberAudienceFilter === filter.id;
+                  return (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      onClick={() => setSubscriberAudienceFilter(filter.id)}
+                      aria-pressed={active}
+                      data-testid={`newsletter-audience-filter-${filter.id}`}
+                      data-filter-count={count}
+                      className={cn(
+                        'inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                        active
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                    >
+                      <span>{filter.label}</span>
+                      <span className={cn(
+                        'rounded-full px-1.5 py-0.5 font-mono text-[10px]',
+                        active ? 'bg-white/20 text-primary-foreground' : 'bg-muted text-muted-foreground',
+                      )}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <label className="relative block min-w-0 lg:w-72">
+                <span className="sr-only">Search subscribers</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={subscriberSearch}
+                  onChange={(event) => setSubscriberSearch(event.target.value)}
+                  placeholder="Search email, topic, source..."
+                  className="min-h-10 w-full rounded-lg border bg-card py-2 pl-9 pr-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-ring"
+                  data-testid="newsletter-subscriber-search"
+                />
+              </label>
+            </div>
+            <div
+              className="mt-3 text-xs leading-5 text-muted-foreground"
+              data-testid="newsletter-subscriber-visible-count"
+            >
+              Showing {latestSubscribers.length} of {subscribers.length} subscribers for this site. Export uses the visible audience view.
+            </div>
+          </div>
+
           {latestSubscribers.length === 0 ? (
             <div className="mt-4">
               <EmptyState
                 icon={Mail}
-                title={newsletterForms.length === 0 ? 'No newsletter signup form yet' : 'No subscribers yet'}
+                title={newsletterForms.length === 0 ? 'No newsletter signup form yet' : subscribers.length > 0 ? 'No subscribers match this view' : 'No subscribers yet'}
                 description={newsletterForms.length === 0
                   ? 'Create a newsletter signup form, then place it on a Backy canvas page or any custom frontend.'
-                  : 'Subscribers captured through newsletter forms will appear here with consent and source metadata.'}
+                  : subscribers.length > 0
+                    ? 'Adjust the audience filter or search term to review another subscriber group.'
+                    : 'Subscribers captured through newsletter forms will appear here with consent and source metadata.'}
               />
             </div>
           ) : (
@@ -1180,6 +1271,44 @@ function buildNewsletterMetrics(subscribers: NewsletterSubscriber[]) {
     if (contact.status === 'qualified' && isSendReady) metrics.ready += 1;
     return metrics;
   }, { total: 0, active: 0, archived: 0, ready: 0, sendReady: 0, held: 0 });
+}
+
+function buildAudienceFilterCounts(subscribers: NewsletterSubscriber[]): Record<NewsletterAudienceFilter, number> {
+  return subscribers.reduce<Record<NewsletterAudienceFilter, number>>((counts, { contact }) => {
+    counts.all += 1;
+    if (subscriberMatchesAudienceFilter(contact, 'send-ready')) counts['send-ready'] += 1;
+    if (subscriberMatchesAudienceFilter(contact, 'held')) counts.held += 1;
+    if (subscriberMatchesAudienceFilter(contact, 'unsubscribed')) counts.unsubscribed += 1;
+    return counts;
+  }, {
+    all: 0,
+    'send-ready': 0,
+    held: 0,
+    unsubscribed: 0,
+  });
+}
+
+function subscriberMatchesAudienceFilter(contact: AdminContact, filter: NewsletterAudienceFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'send-ready') return isSubscriberSendReady(contact);
+  if (filter === 'unsubscribed') return !isSubscriberSubscribed(contact);
+  return isSubscriberSubscribed(contact) && !isSubscriberSendReady(contact);
+}
+
+function buildSubscriberSearchText({ contact, form }: NewsletterSubscriber): string {
+  return [
+    contact.email,
+    contact.name,
+    contact.status,
+    contact.newsletterSubscriptionStatus,
+    contact.newsletterSource,
+    readSourceValue(contact, 'topics'),
+    readSourceValue(contact, 'signup_source'),
+    readSourceValue(contact, 'source'),
+    form.id,
+    form.name,
+    form.title,
+  ].filter(Boolean).join(' ').toLowerCase();
 }
 
 function buildTopicRows(subscribers: NewsletterSubscriber[]) {

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 17:03 IST
+- **Last updated:** 2026-06-01 17:24 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 17:24 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Newsletter subscriber status:** Newsletter workspace now has operator-grade audience views
+
+**What changed:**
+- `apps/admin/src/routes/newsletter.tsx`: added subscriber audience filters for All, Send-ready, Held, and Unsubscribed, with counts derived from the canonical send-ready/subscribed logic.
+- Added subscriber search across email, name, lifecycle status, newsletter status, topic, source, form id/name/title, and visible-count metadata on the subscriber list.
+- CSV export now follows the visible audience view and tells operators when a filtered view has no exportable subscribers.
+- `apps/admin/scripts/newsletter-smoke.mjs`: source coverage now guards the audience filters, search affordance, visible-count metadata, accessible pressed state, and filtered export semantics.
+
+**Commands run:**
+- `npm run test:newsletter --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit, push, and verify production deployment readiness.
 
 ## 2026-06-01 17:03 IST
 

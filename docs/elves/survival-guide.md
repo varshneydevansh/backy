@@ -141,6 +141,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `2b8486c0` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
+**Newest newsletter subscriber polish:** Newsletter now exposes All, Send-ready, Held, and Unsubscribed audience views with canonical readiness counts, search over subscriber/topic/source/form metadata, visible-count machine metadata, and CSV export scoped to the current visible audience.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
