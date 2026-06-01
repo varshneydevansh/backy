@@ -127,6 +127,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest domain/subdomain polish:** Same-site verified hosts are now modeled as `site.settings.domainAliases`, exposed through admin Site settings, public host matching, manifest/OpenAPI/SDK/agent-handoff delivery metadata, and Site Detail handoff copy. Use aliases for multiple verified hosts on the same site; create separate Backy sites when subdomains need independent content, navigation, SEO, or design tokens.
 
+**Newest deploy verification:** `20ba4a8b` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
