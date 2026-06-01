@@ -35,6 +35,7 @@ export type BackyElement = {
   id: string;
   type: string;
   name?: string;
+  parentId?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -46,6 +47,15 @@ export type BackyElement = {
   props?: Record<string, unknown>;
   style?: Record<string, unknown>;
   styles?: Record<string, unknown>;
+  responsive?: Record<string, unknown>;
+  tokenRefs?: Record<string, string>;
+  animation?: Record<string, unknown>;
+  actions?: unknown[];
+  dataBindings?: unknown[];
+  bindingSlots?: unknown[];
+  accessibility?: Record<string, unknown>;
+  assetIds?: string[];
+  metadata?: Record<string, unknown>;
   children?: BackyElement[];
   [key: string]: unknown;
 };
@@ -84,7 +94,7 @@ export type BackyRenderPayload = {
   };
   seo: Record<string, unknown>;
   dataBindings?: Record<string, unknown>;
-  editableMap?: Record<string, unknown>;
+  editableMap?: unknown;
 };
 
 export type BackyManifest = {

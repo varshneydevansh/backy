@@ -187,6 +187,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** SDK npm lookup confirms the package is unpublished, local SDK dry-run pack is green, self-contained starter source/type smoke is green, SDK typecheck is green, and repo-public hygiene is green.
 
+**Newest custom frontend DOM contract polish:** The self-contained Next.js starter now preserves richer per-element APIability metadata in rendered DOM: component-contract pointers, prop/style key lists, responsive breakpoint names, token ref keys, asset ids, action/binding counts, animation type, accessibility label, editable-map count, and the canonical editable-map pointer. Frontend agents can replace the starter renderer with a custom design system while preserving Backy control over each element.
+
+**Newest verification:** Starter source/type smoke, admin typecheck, diff check, and repo-public hygiene are green for the richer custom frontend DOM contract slice.
+
 **Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## Active Compute

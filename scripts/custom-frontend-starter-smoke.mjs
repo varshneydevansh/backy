@@ -87,6 +87,17 @@ assertIncludes(files.page, 'backy.render<BackyRenderPayload>', 'Catch-all route 
 assertIncludes(files.page, 'sitePublicHost', 'Catch-all route passes custom host context');
 assertIncludes(files.render, 'data-backy-element-id', 'Renderer preserves element API id attributes');
 assertIncludes(files.render, 'data-backy-element-type', 'Renderer preserves element API type attributes');
+assertIncludes(files.render, 'data-backy-component-contract-pointer', 'Renderer exposes component contract pointers');
+assertIncludes(files.render, 'data-backy-property-map-pointer', 'Renderer exposes the global property-map pointer');
+assertIncludes(files.render, 'data-backy-prop-keys', 'Renderer exposes element prop key metadata');
+assertIncludes(files.render, 'data-backy-style-keys', 'Renderer exposes element style key metadata');
+assertIncludes(files.render, 'data-backy-responsive-breakpoints', 'Renderer exposes responsive breakpoint metadata');
+assertIncludes(files.render, 'data-backy-token-ref-keys', 'Renderer exposes token reference metadata');
+assertIncludes(files.render, 'data-backy-asset-ids', 'Renderer exposes media asset id metadata');
+assertIncludes(files.render, 'data-backy-action-count', 'Renderer exposes action count metadata');
+assertIncludes(files.render, 'data-backy-binding-count', 'Renderer exposes data binding count metadata');
+assertIncludes(files.render, 'data-backy-animation-type', 'Renderer exposes animation metadata');
+assertIncludes(files.render, 'data-backy-editable-map-pointer', 'Renderer exposes editable-map pointer metadata');
 assertIncludes(files.render, 'payload.navigation.primary', 'Renderer consumes Backy navigation payload');
 assertIncludes(files.render, 'extractBackyElements', 'Renderer has a reusable element extraction boundary');
 assertIncludes(files.newsletter, 'subscribeNewsletter', 'Starter exposes public newsletter signup bridge');

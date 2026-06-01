@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 02:14 IST
+- **Last updated:** 2026-06-02 02:25 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 02:25 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Starter now preserves richer per-element APIability metadata for generated frontends
+
+**What changed:**
+- Extended the self-contained Next.js starter's local Backy element type to include parent ids, responsive overrides, token refs, animation metadata, actions, data bindings, binding slots, accessibility, asset ids, and metadata.
+- Updated `examples/custom-frontend-next/src/lib/render.tsx` so every rendered Backy element keeps DOM-readable component contract pointers, prop/style key lists, responsive breakpoint names, token ref keys, asset ids, action/binding counts, animation type, accessibility label, editable-map count, and the canonical editable-map pointer.
+- Updated the starter README and smoke guard so future frontend/design-system rewrites keep Backy ids, element types, API contract pointers, responsive/style metadata, token refs, binding/motion/asset metadata, editable-map pointers, and form/newsletter boundaries intact.
+
+**Commands run:**
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit/push this richer custom frontend DOM contract slice after final hygiene.
+2. Continue only with launch-critical custom frontend/site-control/backend gaps before broader UI polish.
 
 ## 2026-06-02 02:14 IST
 

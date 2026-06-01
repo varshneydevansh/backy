@@ -23,6 +23,42 @@ const asNumber = (value: unknown): number | undefined => {
 const elementChildren = (element: BackyElement): BackyElement[] =>
   Array.isArray(element.children) ? (element.children as BackyElement[]) : [];
 
+const attrList = (values: unknown): string | undefined => {
+  const list = Array.isArray(values)
+    ? values.filter((value): value is string => typeof value === "string" && Boolean(value.trim()))
+    : [];
+  return list.length > 0 ? list.join(",") : undefined;
+};
+
+const keyList = (value: unknown): string | undefined => {
+  const keys = Object.keys(asRecord(value)).sort();
+  return keys.length > 0 ? keys.join(",") : undefined;
+};
+
+const countAttr = (values: unknown): number | undefined =>
+  Array.isArray(values) && values.length > 0 ? values.length : undefined;
+
+const typeAttr = (value: unknown): string | undefined =>
+  typeof value === "string" && value.trim() ? value : undefined;
+
+function editableEntryCount(payload: BackyRenderPayload, elementId: string): number | undefined {
+  const editableMap = payload.editableMap;
+  if (Array.isArray(editableMap)) {
+    const count = editableMap.filter((entry) => asText(asRecord(entry).elementId) === elementId).length;
+    return count > 0 ? count : undefined;
+  }
+  const editableRecord = asRecord(editableMap);
+  const direct = editableRecord[elementId];
+  if (Array.isArray(direct)) return direct.length > 0 ? direct.length : undefined;
+  if (direct && typeof direct === "object") return 1;
+  const entries = editableRecord.entries;
+  if (Array.isArray(entries)) {
+    const count = entries.filter((entry) => asText(asRecord(entry).elementId) === elementId).length;
+    return count > 0 ? count : undefined;
+  }
+  return undefined;
+}
+
 export function extractBackyElements(payload: BackyRenderPayload): BackyElement[] {
   const content = asRecord(payload.content);
   const nestedDocument = asRecord(content.contentDocument);
@@ -63,17 +99,35 @@ function elementStyle(element: BackyElement): CSSProperties {
 
 function BackyElementFrame({
   element,
+  payload,
   children,
 }: {
   element: BackyElement;
+  payload: BackyRenderPayload;
   children: ReactNode;
 }) {
   if (element.visible === false || element.hidden === true) return null;
+  const animation = asRecord(element.animation);
+  const accessibility = asRecord(element.accessibility);
   return (
     <div
       data-backy-element-id={element.id}
       data-backy-element-type={element.type}
+      data-backy-parent-id={element.parentId}
       data-backy-component-key={typeof element.componentKey === "string" ? element.componentKey : undefined}
+      data-backy-component-contract-pointer={`agent-handoff.componentApiContract.componentTypeContracts.${element.type}`}
+      data-backy-prop-keys={keyList(element.props)}
+      data-backy-style-keys={keyList(element.styles || element.style)}
+      data-backy-responsive-breakpoints={keyList(element.responsive)}
+      data-backy-token-ref-keys={keyList(element.tokenRefs)}
+      data-backy-asset-ids={attrList(element.assetIds)}
+      data-backy-action-count={countAttr(element.actions)}
+      data-backy-binding-count={countAttr(element.dataBindings)}
+      data-backy-binding-slot-count={countAttr(element.bindingSlots)}
+      data-backy-animation-type={typeAttr(animation.type)}
+      data-backy-accessibility-label={typeAttr(accessibility.label)}
+      data-backy-editable-entry-count={editableEntryCount(payload, element.id)}
+      data-backy-editable-map-pointer="render.data.editableMap"
       style={elementStyle(element)}
     >
       {children}
@@ -95,7 +149,7 @@ export function BackyElementView({
   if (element.type === "image") {
     const src = mediaUrl(element, payload.assets.media);
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         {src ? <img src={src} alt={asText(props.alt, props.title)} /> : null}
       </BackyElementFrame>
     );
@@ -104,7 +158,7 @@ export function BackyElementView({
   if (element.type === "button" || element.type === "link") {
     const href = asText(props.href, props.url) || "#";
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         <a href={href}>{text || "Read more"}</a>
       </BackyElementFrame>
     );
@@ -112,7 +166,7 @@ export function BackyElementView({
 
   if (element.type === "navigation" || element.type === "nav") {
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         <nav aria-label={asText(props.ariaLabel) || "Primary navigation"}>
           {(payload.navigation.primary || []).map((item) => (
             <a key={item.id || item.href || item.label} href={item.href || "#"}>
@@ -127,7 +181,7 @@ export function BackyElementView({
   if (element.type === "form") {
     const formId = asText(props.formId, props.id);
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         <form method="post" action="/api/backy-form" data-backy-form-id={formId}>
           <input type="hidden" name="formId" value={formId} />
           <input name="email" type="email" placeholder="Email" />
@@ -140,7 +194,7 @@ export function BackyElementView({
 
   if (children.length > 0) {
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         {children.map((child) => (
           <BackyElementView key={child.id} element={child} payload={payload} />
         ))}
@@ -150,14 +204,14 @@ export function BackyElementView({
 
   if (element.type === "heading") {
     return (
-      <BackyElementFrame element={element}>
+      <BackyElementFrame element={element} payload={payload}>
         <h1>{text || "Untitled"}</h1>
       </BackyElementFrame>
     );
   }
 
   return (
-    <BackyElementFrame element={element}>
+    <BackyElementFrame element={element} payload={payload}>
       <p>{text}</p>
     </BackyElementFrame>
   );
@@ -177,6 +231,9 @@ export function BackyPage({
     <main
       data-backy-site-id={payload.site.id}
       data-backy-route={payload.route.path}
+      data-backy-component-contract-pointer="agent-handoff.componentApiContract.componentTypeContracts"
+      data-backy-property-map-pointer="agent-handoff.componentApiContract.propertyMap"
+      data-backy-editable-map-pointer="render.data.editableMap"
       style={{ position: "relative", minHeight: height, width: "100%", maxWidth: width, margin: "0 auto" }}
     >
       {elements.map((element) => (

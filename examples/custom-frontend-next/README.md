@@ -43,11 +43,11 @@ The starter vendors a tiny public Backy client in `src/lib/backy-client.ts` so i
 
 - `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, and form APIs.
 - `src/lib/backy.ts`: Backy client bootstrap from safe env.
-- `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id` and `data-backy-element-type` on every element.
+- `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id`, `data-backy-element-type`, component-contract pointers, prop/style keys, responsive breakpoints, token refs, asset ids, action/binding counts, animation metadata, and editable-map pointers on every element.
 - `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`.
 - `src/app/api/newsletter/route.ts`: public newsletter signup bridge.
 - `src/app/api/backy-form/route.ts`: public form-submission bridge.
 
-Replace the visual renderer with your own design system as needed, but keep the Backy element ids, element types, responsive/style metadata, and form/newsletter submit boundaries intact.
+Replace the visual renderer with your own design system as needed, but keep the Backy element ids, element types, component-contract pointers, responsive/style metadata, token refs, binding/motion/asset metadata, editable-map pointers, and form/newsletter submit boundaries intact. Those attributes let Backy, analytics, and frontend agents map every visible component back to the stored API contract.
 
 When `@backy/sdk-js` is published to your package registry, you can replace the local client with the full SDK helper. Until then, this starter remains self-contained for production frontend deployment.
