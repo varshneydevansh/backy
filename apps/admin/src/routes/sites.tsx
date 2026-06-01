@@ -595,9 +595,15 @@ const buildSiteFrontendContract = (site: Site, publicApiBase: string, adminApiBa
     },
     endpoints,
     environment: {
+      NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase,
+      NEXT_PUBLIC_BACKY_SITE_ID: getSiteApiId(site),
+      NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: publicHost,
       BACKY_PUBLIC_API_BASE_URL: publicApiBase,
       BACKY_SITE_ID: getSiteApiId(site),
       BACKY_SITE_PUBLIC_HOST: publicHost,
+      browserSafeEnv: ['NEXT_PUBLIC_BACKY_API_BASE_URL', 'NEXT_PUBLIC_BACKY_SITE_ID', 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'],
+      serverSideEnv: ['BACKY_PUBLIC_API_BASE_URL', 'BACKY_SITE_ID', 'BACKY_SITE_PUBLIC_HOST'],
+      domainOwner: 'custom-frontend-vercel-project',
     },
     routing: {
       schemaVersion: 'backy.site-frontend-routing.v1',
@@ -865,6 +871,8 @@ function SitesListView() {
   const publicRenderUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/`;
   const publicRenderWithHostUrl = `${publicApiBase}/sites/${encodeURIComponent(selectedApiSiteId)}/render?path=/...&domain={host}`;
   const selectedPublicHost = selectedApiSite ? (getDomainVerification(selectedApiSite).domain || getDisplayDomain(selectedApiSite)) : '{host}';
+  const selectedBrowserSafeFrontendEnv = `NEXT_PUBLIC_BACKY_API_BASE_URL=${publicApiBase}\nNEXT_PUBLIC_BACKY_SITE_ID=${selectedApiSiteId}\nNEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`;
+  const selectedServerSideFrontendEnv = `BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\nBACKY_SITE_ID=${selectedApiSiteId}\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`;
   const selectedFrontendContract = useMemo(() => (
     selectedApiSite ? buildSiteFrontendContract(selectedApiSite, publicApiBase, adminApiBase) : null
   ), [adminApiBase, publicApiBase, selectedApiSite]);
@@ -2374,7 +2382,8 @@ function SitesListView() {
             <SiteApiSnippet label="Render by path" value={publicRenderUrl} />
             <SiteApiSnippet label="Resolve with host" value={publicResolveWithHostUrl} />
             <SiteApiSnippet label="Render with host" value={publicRenderWithHostUrl} />
-            <SiteApiSnippet label="Frontend env" value={`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\nBACKY_SITE_ID=${selectedApiSiteId}\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`} />
+            <SiteApiSnippet label="Browser-safe frontend env" value={selectedBrowserSafeFrontendEnv} />
+            <SiteApiSnippet label="Server-side loader env" value={selectedServerSideFrontendEnv} />
             <SiteApiSnippet label="Admin sites" value={adminSitesUrl} />
             <SiteApiSnippet label="Admin site detail" value={adminSiteDetailUrl} />
           </div>

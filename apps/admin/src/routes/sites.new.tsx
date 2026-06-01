@@ -662,9 +662,15 @@ function NewSitePage() {
       publicOpenApi: `${publicApiBase}/sites/{siteId}/openapi`,
     },
     frontendEnvironmentAfterCreate: {
+      NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase,
+      NEXT_PUBLIC_BACKY_SITE_ID: '{siteId}',
+      NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`,
       BACKY_PUBLIC_API_BASE_URL: publicApiBase,
       BACKY_SITE_ID: '{siteId}',
       BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`,
+      browserSafeEnv: ['NEXT_PUBLIC_BACKY_API_BASE_URL', 'NEXT_PUBLIC_BACKY_SITE_ID', 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'],
+      serverSideEnv: ['BACKY_PUBLIC_API_BASE_URL', 'BACKY_SITE_ID', 'BACKY_SITE_PUBLIC_HOST'],
+      domainOwner: 'custom-frontend-vercel-project',
     },
     routingAfterCreate: {
       schemaVersion: 'backy.site-create-routing-handoff.v1',
@@ -1759,8 +1765,20 @@ function NewSitePage() {
                 </code>
               </div>
               <div className="md:col-span-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Frontend env after create</div>
-                <pre className="mt-2 overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs leading-5 text-teal-950">
+                <div className="text-xs font-semibold uppercase tracking-wide text-teal-800">Browser-safe frontend env after create</div>
+                <pre
+                  className="mt-2 overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs leading-5 text-teal-950"
+                  data-testid="site-create-browser-safe-env"
+                >
+{`NEXT_PUBLIC_BACKY_API_BASE_URL=${publicApiBase}
+NEXT_PUBLIC_BACKY_SITE_ID={siteId}
+NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=${normalizedDomain || `${displaySlug || 'new-site'}.backy.app`}`}
+                </pre>
+                <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-teal-800">Server-side loader env</div>
+                <pre
+                  className="mt-2 overflow-x-auto rounded border border-teal-200 bg-background px-2.5 py-2 font-mono text-xs leading-5 text-teal-950"
+                  data-testid="site-create-server-side-env"
+                >
 {`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}
 BACKY_SITE_ID={siteId}
 BACKY_SITE_PUBLIC_HOST=${normalizedDomain || `${displaySlug || 'new-site'}.backy.app`}`}

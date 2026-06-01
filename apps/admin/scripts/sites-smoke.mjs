@@ -56,15 +56,22 @@ const assertSitesRouteSourceContract = () => {
     source.includes('agentHandoff: `${publicApiBase}/sites/${siteApiId}/agent-handoff`') &&
       source.includes('resolveWithHost: `${publicApiBase}/sites/${siteApiId}/resolve?path=/&domain={host}`') &&
       source.includes('renderWithHost: `${publicApiBase}/sites/${siteApiId}/render?path={path}&domain={host}`') &&
+      source.includes('NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase') &&
+      source.includes('NEXT_PUBLIC_BACKY_SITE_ID: getSiteApiId(site)') &&
+      source.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: publicHost') &&
       source.includes('BACKY_PUBLIC_API_BASE_URL: publicApiBase') &&
       source.includes('BACKY_SITE_ID: getSiteApiId(site)') &&
       source.includes('BACKY_SITE_PUBLIC_HOST: publicHost') &&
+      source.includes("browserSafeEnv: ['NEXT_PUBLIC_BACKY_API_BASE_URL', 'NEXT_PUBLIC_BACKY_SITE_ID', 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST']") &&
+      source.includes("serverSideEnv: ['BACKY_PUBLIC_API_BASE_URL', 'BACKY_SITE_ID', 'BACKY_SITE_PUBLIC_HOST']") &&
+      source.includes("domainOwner: 'custom-frontend-vercel-project'") &&
       source.includes("schemaVersion: 'backy.site-frontend-routing.v1'") &&
       source.includes("examples: ['blog.example.com', 'docs.example.com', 'studio.example.com']") &&
       source.includes('<SiteApiSnippet label="Agent handoff" value={publicAgentHandoffUrl} />') &&
       source.includes('<SiteApiSnippet label="Resolve with host" value={publicResolveWithHostUrl} />') &&
       source.includes('<SiteApiSnippet label="Render with host" value={publicRenderWithHostUrl} />') &&
-      source.includes('<SiteApiSnippet label="Frontend env" value={`BACKY_PUBLIC_API_BASE_URL=${publicApiBase}\\nBACKY_SITE_ID=${selectedApiSiteId}\\nBACKY_SITE_PUBLIC_HOST=${selectedPublicHost}`} />'),
+      source.includes('<SiteApiSnippet label="Browser-safe frontend env" value={selectedBrowserSafeFrontendEnv} />') &&
+      source.includes('<SiteApiSnippet label="Server-side loader env" value={selectedServerSideFrontendEnv} />'),
     'Sites frontend API panel must expose agent-handoff, host-aware render/resolve, public host env, and routing contract metadata.',
   );
   assert(source.includes('title="No deployment workspace selected"'), 'Sites deployment workspace must keep the no-site selected empty title visible');
@@ -193,9 +200,17 @@ const assertSitesRouteSourceContract = () => {
       createSource.includes('publicManifest: `${publicApiBase}/sites/{siteId}/manifest`') &&
       createSource.includes('publicResolveWithHost: `${publicApiBase}/sites/{siteId}/resolve?path=/&domain={host}`') &&
       createSource.includes('publicRenderWithHost: `${publicApiBase}/sites/{siteId}/render?path=/...&domain={host}`') &&
+      createSource.includes('NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase') &&
+      createSource.includes("NEXT_PUBLIC_BACKY_SITE_ID: '{siteId}'") &&
+      createSource.includes("NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`") &&
       createSource.includes('BACKY_PUBLIC_API_BASE_URL: publicApiBase') &&
       createSource.includes("BACKY_SITE_ID: '{siteId}'") &&
       createSource.includes("BACKY_SITE_PUBLIC_HOST: normalizedDomain || `${displaySlug || 'new-site'}.backy.app`") &&
+      createSource.includes("browserSafeEnv: ['NEXT_PUBLIC_BACKY_API_BASE_URL', 'NEXT_PUBLIC_BACKY_SITE_ID', 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST']") &&
+      createSource.includes("serverSideEnv: ['BACKY_PUBLIC_API_BASE_URL', 'BACKY_SITE_ID', 'BACKY_SITE_PUBLIC_HOST']") &&
+      createSource.includes("domainOwner: 'custom-frontend-vercel-project'") &&
+      createSource.includes('data-testid="site-create-browser-safe-env"') &&
+      createSource.includes('data-testid="site-create-server-side-env"') &&
       createSource.includes("schemaVersion: 'backy.site-create-routing-handoff.v1'") &&
       createSource.includes('Frontend agents should read /agent-handoff first'),
     'Site create handoff must expose subdomain examples, agent-handoff read start, host-aware render/resolve, and frontend env variables.',
@@ -1604,7 +1619,8 @@ const assertLayout = async (client, siteName) => {
     hasAgentHandoffContract: (document.body?.innerText || '').includes('/agent-handoff') &&
       (document.body?.innerText || '').includes('Resolve with host') &&
       (document.body?.innerText || '').includes('Render with host') &&
-      (document.body?.innerText || '').includes('BACKY_SITE_PUBLIC_HOST'),
+      (document.body?.innerText || '').includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
+      (document.body?.innerText || '').includes('Server-side loader env'),
     hasRequiredControls: document.body?.innerText?.includes('What Backy still needs here') || false,
     hasAuditDetails: Boolean(document.querySelector('[data-testid="sites-audit-details"]')),
     auditDefaultCollapsed: document.querySelector('[data-testid="sites-audit-details"]')?.getAttribute('data-default-collapsed') === 'true',

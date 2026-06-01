@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 22:35 IST
+- **Last updated:** 2026-06-01 23:04 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 23:04 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Sites and New Site now show the same browser-safe env split as Site Detail and public handoff
+
+**What changed:**
+- `apps/admin/src/routes/sites.tsx` now adds `NEXT_PUBLIC_BACKY_*`, `browserSafeEnv`, `serverSideEnv`, and `domainOwner` metadata to the selected-site frontend contract.
+- The Sites API panel now separates browser-safe website frontend env from server-side loader env so frontend agents do not copy `BACKY_*` names into client bundles by mistake.
+- `apps/admin/src/routes/sites.new.tsx` now previews the same browser-safe/server-side env split before a site is created.
+- `apps/admin/scripts/sites-smoke.mjs` guards the source and rendered UI labels so Site List and New Site stay aligned with `/agent-handoff`, Help, and Site Detail.
+
+**Commands run:**
+- `BACKY_SITES_SOURCE_ONLY=1 npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+
+**Notes:**
+- This is the UI side of the custom frontend deployment flow for domains such as `devanshvarshney.com`: Backy remains the backend/API source of truth, `backy-public` is the public API/render origin, and the separate custom website Vercel project owns the public domain.
+- The handoff deliberately exposes only endpoint/env names and browser-safe values. Supabase, database, provider, admin, bootstrap, and session secrets remain forbidden from the custom frontend project.
+
+**Next:**
+1. Run final hygiene, commit and push this Sites/New Site handoff alignment slice, then verify production deployments.
 
 ## 2026-06-01 22:35 IST
 
