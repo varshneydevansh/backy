@@ -131,7 +131,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor/APIability polish:** The selected-layer Inspector now exposes a copyable `backy.editor-selected-component-api-contract.v1` Element API payload with selected element id/type, props, styles, responsive overrides, tokens, media asset ids, motion, bindings, child summaries, and the canonical `agent-handoff.componentApiContract.componentTypeContracts` plus `render.data.content.elements[]` pointers. Source and rendered Inspector smokes are green.
 
-**Single next action:** Commit and push the selected-component API Inspector handoff slice, verify Vercel deployments, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest deploy verification:** `732a7ed1` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
+**Single next action:** Commit and push the deploy-verification record, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute
 
