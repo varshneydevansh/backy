@@ -6288,7 +6288,7 @@ export async function createPage(siteId: string, input: PageCreateInput): Promis
   const payload = await readJson<ApiPageResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to create page');
+    throw adminContentApiError(payload, 'Unable to create page');
   }
 
   return toStorePage(payload.data.page);

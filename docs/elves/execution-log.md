@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 06:41 IST
+- **Last updated:** 2026-06-01 07:39 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 07:39 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Page create failures now preserve backend quota codes and the create smoke is quota-deterministic
+
+**What changed:**
+- `apps/admin/src/lib/adminContentApi.ts`: page creation now throws the structured Backy admin API error so backend codes such as `BILLING_PAGE_LIMIT` are not flattened into plain `Error` messages.
+- `apps/admin/src/routes/pages.new.tsx`: `/pages/new` now shows quota blockers as an alert with a direct recovery path to Sites billing/quota controls instead of making a working button look broken.
+- `apps/admin/scripts/page-create-smoke.mjs`: the full page-create smoke now temporarily raises the local demo site's page quota with a cushion and restores the original settings during cleanup, so seeded fixture growth does not turn create-button validation into a false failure.
+
+**Why:**
+- The reported "New page" failure was not a click-handler regression. The create POST reached the backend and was rejected with `402 BILLING_PAGE_LIMIT` because local demo data had reached the free-site page limit.
+- The product fix is to make that blocker explicit in the authoring UI, and the test fix is to keep smoke fixtures independent from accumulated local demo page count.
+
+**Commands run:**
+- `npm run test:page-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:blog-list --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS.
+
+**Next:**
+1. Commit and push this page-create quota/readiness slice.
+2. Continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 06:41 IST
 

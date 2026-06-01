@@ -1293,6 +1293,7 @@ const assert = (condition, message) => {
 const assertPageCreateSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/pages.new.tsx', import.meta.url), 'utf8');
   const pageEditorSource = fs.readFileSync(new URL('../src/routes/pages.$pageId.edit.tsx', import.meta.url), 'utf8');
+  const adminContentApiSource = fs.readFileSync(new URL('../src/lib/adminContentApi.ts', import.meta.url), 'utf8');
   const mediaApiSource = fs.readFileSync(new URL('../src/lib/mediaApi.ts', import.meta.url), 'utf8');
   const chromeSource = fs.readFileSync(new URL('../src/lib/editorTemplateChrome.ts', import.meta.url), 'utf8');
   const templateLibrarySource = fs.readFileSync(new URL('../src/lib/pageCreateTemplateLibrary.ts', import.meta.url), 'utf8');
@@ -1307,6 +1308,15 @@ const assertPageCreateSourceContracts = () => {
   );
   assert(
       source.includes('data-testid="page-create-submit-button"') &&
+      adminContentApiSource.includes("throw adminContentApiError(payload, 'Unable to create page');") &&
+      source.includes('AdminContentApiError') &&
+      source.includes("error.code === 'BILLING_PAGE_LIMIT'") &&
+      source.includes('data-testid="page-create-error"') &&
+      source.includes('role="alert"') &&
+      source.includes("data-error-code={error.includes('page limit') ? 'BILLING_PAGE_LIMIT' : undefined}") &&
+      smokeSource.includes('temporarilyAllowPageCreateSmokeQuota') &&
+      smokeSource.includes('restorePageCreateSmokeQuota') &&
+      smokeSource.includes('Unable to restore page-create smoke fixture quota') &&
       source.includes('const isPageCreateMutating = isLoading || isPreviewAfterCreateBusy;') &&
       !source.includes('|| isPermissionMatrixPending') &&
       source.includes('const isPageCreateBusy = isPageCreateMutating;') &&
@@ -2261,6 +2271,81 @@ const requestApi = async (endpoint, options = {}) => {
   }
 
   return payload;
+};
+
+const getSmokeSite = async () => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`);
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Unable to load page-create smoke site ${SITE_ID}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const updateSmokeSite = async (input) => {
+  const payload = await requestApi(`/api/admin/sites/${SITE_ID}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  const site = payload.data?.site || payload.site;
+  assert(site?.id, `Unable to update page-create smoke site ${SITE_ID}: ${JSON.stringify(payload).slice(0, 500)}`);
+  return site;
+};
+
+const listSmokeSitePages = async () => {
+  const pages = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages?limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.pages || payload.pages || [];
+    pages.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return pages;
+};
+
+const temporarilyAllowPageCreateSmokeQuota = async (extraPages = 80) => {
+  const site = await getSmokeSite();
+  const originalSettings = site.settings || {};
+  const originalBillingQuota = originalSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const existingPages = await listSmokeSitePages();
+  const currentPageLimit = Number(originalLimits.pages || 0);
+  const nextPageLimit = Math.max(
+    Number.isFinite(currentPageLimit) ? currentPageLimit : 0,
+    existingPages.length + extraPages,
+  );
+
+  if (nextPageLimit === currentPageLimit) {
+    return null;
+  }
+
+  await updateSmokeSite({
+    settings: {
+      ...originalSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          pages: nextPageLimit,
+        },
+      },
+    },
+  });
+
+  return originalSettings;
+};
+
+const restorePageCreateSmokeQuota = async (settings) => {
+  if (!settings) return;
+  await updateSmokeSite({ settings });
 };
 
 const loginDemoApi = async ({ email, password, mfaCode, label }) => {
@@ -5181,9 +5266,11 @@ const main = async () => {
   let parentPage = null;
   let datasetCollection = null;
   let originalFrontendDesign = null;
+  let originalPageCreateQuotaSettings = null;
 
   try {
     if (!editorNavigationFallbackOnly) {
+      originalPageCreateQuotaSettings = await temporarilyAllowPageCreateSmokeQuota();
       originalFrontendDesign = await getFrontendDesign();
       await patchFrontendDesign(smokeFrontendDesignContract());
       parentPage = await createParentPage();
@@ -5305,15 +5392,25 @@ const main = async () => {
         console.warn('Unable to restore original frontend design contract:', error instanceof Error ? error.message : error);
       }
     }
-    await cleanup({
-      client,
-      childProcess,
-      userDataDir,
-      pageIds: createdPageIds,
-      pageId,
-      parentPageId: parentPage?.id || null,
-      collectionIds: createdCollectionIds,
-    });
+    try {
+      await cleanup({
+        client,
+        childProcess,
+        userDataDir,
+        pageIds: createdPageIds,
+        pageId,
+        parentPageId: parentPage?.id || null,
+        collectionIds: createdCollectionIds,
+      });
+    } finally {
+      if (originalPageCreateQuotaSettings) {
+        try {
+          await restorePageCreateSmokeQuota(originalPageCreateQuotaSettings);
+        } catch (error) {
+          console.warn('Unable to restore page-create smoke fixture quota:', error instanceof Error ? error.message : error);
+        }
+      }
+    }
   }
   });
 };

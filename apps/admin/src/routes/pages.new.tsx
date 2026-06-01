@@ -8,6 +8,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, Eye, Fil
 import {
     createPage,
     createPagePreview,
+    AdminContentApiError,
     getAdminApiBase,
     getPage,
     getSiteFrontendDesign,
@@ -80,6 +81,14 @@ type PageTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
 type PageCreatePermissionKey = 'pages.view' | 'pages.edit' | 'pages.publish' | 'collections.view' | 'sites.view' | 'sites.configure' | 'sites.create';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
+
+const pageCreateErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof AdminContentApiError && error.code === 'BILLING_PAGE_LIMIT') {
+        return `${error.message} Open Sites -> Billing and quotas to raise the page limit or change overage handling.`;
+    }
+
+    return error instanceof Error ? error.message : fallback;
+};
 
 interface TemplatePreviewBlock {
     label?: string;
@@ -3223,24 +3232,23 @@ function NewPageRoute() {
             });
         } catch (createError) {
             if (created) {
-                const previewWarning = createError instanceof Error
-                    ? `Page was created, but preview failed: ${createError.message}`
-                    : 'Page was created, but preview failed. Open preview from the page editor after saving.';
+                const previewWarning = pageCreateErrorMessage(
+                    createError,
+                    'Open preview from the page editor after saving.',
+                );
                 navigate({
                     to: '/pages/$pageId/edit',
                     params: { pageId: created.id },
                     search: {
                         siteId: formData.siteId,
                         focus: 'canvas',
-                        navWarning: [navigationWarning, previewWarning].filter(Boolean).join(' '),
+                        navWarning: [navigationWarning, `Page was created, but preview failed: ${previewWarning}`].filter(Boolean).join(' '),
                     },
                 });
                 return;
             }
 
-            setError(createError instanceof Error
-                ? `${createError.message}. The preview draft was not created.`
-                : 'Unable to create preview draft. The page was not persisted.');
+            setError(`${pageCreateErrorMessage(createError, 'Unable to create preview draft.')} The preview draft was not created.`);
         } finally {
             setIsPreviewAfterCreateBusy(false);
         }
@@ -3297,9 +3305,7 @@ function NewPageRoute() {
                 },
             });
         } catch (createError) {
-            setError(createError instanceof Error
-                ? `${createError.message}. The page was not created because the backend did not persist it.`
-                : 'Unable to create page. The page was not persisted.');
+            setError(`${pageCreateErrorMessage(createError, 'Unable to create page.')} The page was not created because the backend did not persist it.`);
         } finally {
             setIsLoading(false);
         }
@@ -3621,7 +3627,12 @@ function NewPageRoute() {
 
             <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
                 {error && (
-                    <div className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <div
+                        role="alert"
+                        data-testid="page-create-error"
+                        data-error-code={error.includes('page limit') ? 'BILLING_PAGE_LIMIT' : undefined}
+                        className="xl:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                    >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <span>{error}</span>
                             {routeCheckError && (
