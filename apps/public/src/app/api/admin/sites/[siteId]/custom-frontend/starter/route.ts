@@ -1,0 +1,319 @@
+/**
+ * Protected site-specific custom frontend starter export.
+ *
+ * GET /api/admin/sites/[siteId]/custom-frontend/starter
+ *
+ * Returns a non-secret manifest that lets a separate website frontend project
+ * start from the checked Next.js starter while preserving Backy API control.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminAccess } from "@/lib/adminAccess";
+import { getSiteByIdOrSlug } from "@/lib/backyStore";
+import {
+  getRequiredDatabaseRepositories,
+  shouldUseDemoStoreFallback,
+} from "@/lib/repositoryRuntime";
+
+export const runtime = "nodejs";
+
+interface RouteParams {
+  params: Promise<{
+    siteId: string;
+  }>;
+}
+
+type StarterSite = {
+  id: string;
+  slug: string;
+  name: string;
+  customDomain?: string | null;
+  settings?: {
+    domainVerification?: {
+      domain?: string | null;
+      status?: string | null;
+    } | null;
+    domainAliases?: Array<{
+      host?: string | null;
+      status?: string | null;
+    }> | null;
+  } | null;
+};
+
+const SCHEMA_VERSION = "backy.custom-frontend-starter-export.v1";
+
+const FORBIDDEN_PRIVATE_ENV = [
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "POSTGRES_URL_NON_POOLING",
+  "BACKY_DATABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_SECRET_KEY",
+  "BACKY_ADMIN_API_KEY",
+  "BACKY_ADMIN_SECRET_KEY",
+  "BACKY_BOOTSTRAP_TOKEN",
+  "CRON_SECRET",
+  "SMTP_PASSWORD",
+  "STRIPE_SECRET_KEY",
+] as const;
+
+const STARTER_FILES_TO_PRESERVE = [
+  "src/lib/backy-client.ts",
+  "src/lib/backy.ts",
+  "src/lib/render.tsx",
+  "src/app/[[...path]]/page.tsx",
+  "src/app/api/backy-connection/route.ts",
+  "src/app/api/newsletter/route.ts",
+  "src/app/api/backy-form/route.ts",
+] as const;
+
+const REQUIRED_DOM_ATTRIBUTES = [
+  "data-backy-site-id",
+  "data-backy-route",
+  "data-backy-element-id",
+  "data-backy-element-type",
+  "data-backy-component-contract-pointer",
+  "data-backy-editable-map-pointer",
+] as const;
+
+const makeRequestId = () =>
+  `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+const errorResponse = (
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+) =>
+  NextResponse.json(
+    {
+      success: false,
+      requestId,
+      error: { code, message },
+    },
+    { status },
+  );
+
+const text = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeHost = (value: unknown): string =>
+  text(value)
+    .toLowerCase()
+    .replace(/^https?:\/\//u, "")
+    .replace(/\/.*$/u, "")
+    .replace(/\.$/u, "");
+
+const normalizeApiBaseUrl = (origin: string): string => {
+  const url = new URL(origin);
+  url.pathname = "/api";
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/u, "");
+};
+
+const unique = (values: string[]): string[] =>
+  Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+
+const safeProjectName = (site: StarterSite): string =>
+  `${site.slug || site.id}-website`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .replace(/-{2,}/gu, "-") || "backy-website";
+
+const publicHostsForSite = (site: StarterSite): string[] => {
+  const aliases = Array.isArray(site.settings?.domainAliases)
+    ? site.settings.domainAliases.map((alias) => normalizeHost(alias.host))
+    : [];
+  return unique([
+    normalizeHost(site.customDomain),
+    normalizeHost(site.settings?.domainVerification?.domain),
+    ...aliases,
+    normalizeHost(`${site.slug}.backy.app`),
+  ]);
+};
+
+const getSite = async (siteId: string): Promise<StarterSite | null> => {
+  if (!shouldUseDemoStoreFallback()) {
+    const repositories = await getRequiredDatabaseRepositories();
+    return (
+      (await repositories.sites.getById(siteId)) ||
+      (await repositories.sites.getBySlug(siteId))
+    );
+  }
+
+  return getSiteByIdOrSlug(siteId) as StarterSite | null;
+};
+
+const envExample = ({
+  apiBaseUrl,
+  siteId,
+  publicHost,
+}: {
+  apiBaseUrl: string;
+  siteId: string;
+  publicHost: string;
+}) =>
+  [
+    "# Browser-safe values for the separate public website frontend.",
+    `NEXT_PUBLIC_BACKY_API_BASE_URL=${apiBaseUrl}`,
+    `NEXT_PUBLIC_BACKY_SITE_ID=${siteId}`,
+    `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=${publicHost}`,
+    "",
+    "# Optional server-loader aliases. Keep these out of client-only config files.",
+    `BACKY_PUBLIC_API_BASE_URL=${apiBaseUrl}`,
+    `BACKY_SITE_ID=${siteId}`,
+    `BACKY_SITE_PUBLIC_HOST=${publicHost}`,
+    "",
+    "# Never add database, Supabase service role, admin, cron, SMTP, or provider secrets to this project.",
+  ].join("\n");
+
+const starterReadme = ({
+  apiBaseUrl,
+  siteId,
+  publicHost,
+  adminVerifierEndpoint,
+}: {
+  apiBaseUrl: string;
+  siteId: string;
+  publicHost: string;
+  adminVerifierEndpoint: string;
+}) =>
+  [
+    "# Backy Custom Frontend Starter Manifest",
+    "",
+    "This file was generated by Backy for a separate public website frontend.",
+    "",
+    "## Start",
+    "",
+    "1. Copy `examples/custom-frontend-next` into a new website frontend repository.",
+    "2. Add the `.env.example` values from this manifest to the frontend project.",
+    "3. Attach the website domain to the custom frontend project, not to `backy-admin` or `backy-public`.",
+    "4. Deploy the frontend on Vercel.",
+    "5. Verify it from Backy Site Detail before moving production DNS.",
+    "",
+    "## Site Values",
+    "",
+    `- Backy API base: ${apiBaseUrl}`,
+    `- Backy site id: ${siteId}`,
+    `- Public host: ${publicHost}`,
+    `- Admin verifier: ${adminVerifierEndpoint}`,
+    "",
+    "## Required Runtime Contract",
+    "",
+    "The deployed frontend must expose `GET /api/backy-connection` and rendered pages must keep:",
+    "",
+    ...REQUIRED_DOM_ATTRIBUTES.map((attribute) => `- \`${attribute}\``),
+    "",
+    "Keep Backy as the source of truth for content, design metadata, media, forms, newsletter subscribers, and commerce records.",
+  ].join("\n");
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  const requestId = request.headers.get("x-request-id") || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, {
+    permission: "sites.view",
+  });
+  if (access instanceof NextResponse) {
+    return access;
+  }
+
+  try {
+    const { siteId } = await params;
+    const site = await getSite(siteId);
+    if (!site) {
+      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
+    }
+
+    const apiBaseUrl = normalizeApiBaseUrl(new URL(request.url).origin);
+    const publicHosts = publicHostsForSite(site);
+    const publicHost = publicHosts[0] || `${site.slug}.backy.app`;
+    const adminVerifierEndpoint = `/api/admin/sites/${encodeURIComponent(site.id)}/custom-frontend/connection`;
+    const cliCommand = [
+      `BACKY_CUSTOM_FRONTEND_API_BASE_URL=${apiBaseUrl}`,
+      `BACKY_CUSTOM_FRONTEND_SITE_ID=${site.id}`,
+      "BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>",
+      "BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1",
+      "BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1",
+      "npm run test:custom-frontend-connection",
+    ].join(" ");
+
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        schemaVersion: SCHEMA_VERSION,
+        generatedAt: new Date().toISOString(),
+        site: {
+          id: site.id,
+          slug: site.slug,
+          name: site.name,
+          primaryPublicHost: publicHost,
+          publicHosts,
+        },
+        project: {
+          recommendedName: safeProjectName(site),
+          sourceStarterPath: "examples/custom-frontend-next",
+          sourceStarterDescription:
+            "Checked Next.js starter that keeps Backy render payloads, DOM control attributes, form submissions, newsletter signup, and /api/backy-connection intact.",
+          targetRuntime: "Next.js App Router on a separate Vercel project",
+          domainOwner: "custom-frontend-vercel-project",
+        },
+        environment: {
+          browserSafe: {
+            NEXT_PUBLIC_BACKY_API_BASE_URL: apiBaseUrl,
+            NEXT_PUBLIC_BACKY_SITE_ID: site.id,
+            NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: publicHost,
+          },
+          serverSide: {
+            BACKY_PUBLIC_API_BASE_URL: apiBaseUrl,
+            BACKY_SITE_ID: site.id,
+            BACKY_SITE_PUBLIC_HOST: publicHost,
+          },
+          forbiddenPrivateEnv: [...FORBIDDEN_PRIVATE_ENV],
+        },
+        files: [
+          {
+            path: ".env.example",
+            role: "site-specific-env",
+            content: envExample({ apiBaseUrl, siteId: site.id, publicHost }),
+          },
+          {
+            path: "BACKY_FRONTEND_STARTER.md",
+            role: "site-specific-runbook",
+            content: starterReadme({
+              apiBaseUrl,
+              siteId: site.id,
+              publicHost,
+              adminVerifierEndpoint,
+            }),
+          },
+        ],
+        preserveFiles: [...STARTER_FILES_TO_PRESERVE],
+        readOrder: [
+          `/api/sites/${site.id}/agent-handoff`,
+          `/api/sites/${site.id}/manifest`,
+          `/api/sites/${site.id}/openapi`,
+          `/api/sites/${site.id}/resolve?path=/&domain=${encodeURIComponent(publicHost)}`,
+          `/api/sites/${site.id}/render?path=/&domain=${encodeURIComponent(publicHost)}`,
+        ],
+        verification: {
+          adminVerifierEndpoint,
+          adminVerifierSchema: "backy.admin-custom-frontend-connection-check.v1",
+          frontendProbePath: "/api/backy-connection",
+          frontendProbeSchema: "backy.custom-frontend-connection.v1",
+          requiredDomAttributes: [...REQUIRED_DOM_ATTRIBUTES],
+          cliCommand,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Admin custom frontend starter export error:", error);
+    return errorResponse(
+      500,
+      "CUSTOM_FRONTEND_STARTER_EXPORT_FAILED",
+      "Unable to build custom frontend starter export.",
+      requestId,
+    );
+  }
+}

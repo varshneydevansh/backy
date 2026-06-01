@@ -451,6 +451,20 @@ const CUSTOM_FRONTEND_ENV_CARDS = [
     ].join('\n'),
   },
   {
+    id: 'starter-export',
+    label: 'Starter export',
+    description: 'Download this from Site Detail so the frontend project starts with the checked Next starter, safe env, and verification runbook.',
+    value: (siteId: string) => [
+      'Site Detail -> Separate custom frontend project -> Download starter manifest',
+      `GET /api/admin/sites/${siteId}/custom-frontend/starter`,
+      'schemaVersion=backy.custom-frontend-starter-export.v1',
+      'sourceStarterPath=examples/custom-frontend-next',
+      'files=.env.example + BACKY_FRONTEND_STARTER.md',
+      'preserveFiles=Backy client, renderer, route, /api/backy-connection, newsletter, and form endpoints',
+      'verification.cliCommand=npm run test:custom-frontend-connection',
+    ].join('\n'),
+  },
+  {
     id: 'sdk-bootstrap',
     label: 'SDK bootstrap',
     description: 'Use this in a separate Next/Vercel website project instead of hand-rolling API URL and host glue.',

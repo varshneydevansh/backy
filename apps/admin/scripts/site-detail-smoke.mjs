@@ -47,7 +47,12 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-custom-frontend-project-launch"') &&
       source.includes('data-testid="site-copy-custom-frontend-project-env"') &&
       source.includes('data-testid="site-copy-custom-frontend-project-launch"') &&
+      source.includes('data-testid="site-custom-frontend-download-starter"') &&
+      source.includes('data-testid="site-custom-frontend-starter-error"') &&
       source.includes('backy.custom-frontend-project-launch.v1') &&
+      source.includes('backy.custom-frontend-starter-export.v1') &&
+      source.includes('getSiteCustomFrontendStarterExport') &&
+      source.includes('Custom frontend starter manifest downloaded.') &&
       source.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       source.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
       source.includes('Attach the custom domain to the website frontend project') &&
@@ -1451,6 +1456,9 @@ const assertSiteDetailLayout = async (client, siteName) => {
           primaryHost: launchPanel?.getAttribute('data-launch-primary-host') || '',
           copyEnv: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-env"]')),
           copyLaunch: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-launch"]')),
+          starterButton: Boolean(document.querySelector('[data-testid="site-custom-frontend-download-starter"]')),
+          starterSchema: document.querySelector('[data-testid="site-custom-frontend-download-starter"]')?.getAttribute('data-starter-schema') || '',
+          starterEndpoint: document.querySelector('[data-testid="site-custom-frontend-download-starter"]')?.getAttribute('data-starter-endpoint') || '',
           text: launchPanel?.textContent || '',
         },
         text: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.textContent || '',
@@ -1550,9 +1558,13 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.primaryHost.length > 0 &&
       layout.customFrontendAgentHandoff.projectLaunch.copyEnv &&
       layout.customFrontendAgentHandoff.projectLaunch.copyLaunch &&
+      layout.customFrontendAgentHandoff.projectLaunch.starterButton &&
+      layout.customFrontendAgentHandoff.projectLaunch.starterSchema === 'backy.custom-frontend-starter-export.v1' &&
+      layout.customFrontendAgentHandoff.projectLaunch.starterEndpoint.includes('/custom-frontend/starter') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Separate custom frontend project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Attach the custom domain to the website frontend project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Custom frontend Vercel project') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Download starter manifest') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Server-side equivalents') &&

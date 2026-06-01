@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 04:10 IST
+- **Last updated:** 2026-06-02 04:39 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 04:39 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Backy now exports a site-specific starter manifest
+
+**What changed:**
+- Added protected `GET /api/admin/sites/:siteId/custom-frontend/starter` on `backy-public` for signed-in Backy users with `sites.view`.
+- The export returns `backy.custom-frontend-starter-export.v1` with the selected site id/slug/host, `examples/custom-frontend-next` source path, browser-safe `NEXT_PUBLIC_BACKY_*` env, optional server-loader `BACKY_*` env, forbidden private env names, generated `.env.example`, generated `BACKY_FRONTEND_STARTER.md`, preserve-file list, read order, and verifier command.
+- Site Detail now has a “Download starter manifest” action inside the Separate custom frontend project panel, beside Copy frontend env and Copy launch JSON.
+- Help now exposes the same starter export pointer so a frontend agent can start from the checked starter rather than guessing API shape or env boundaries.
+
+**Commands run:**
+- `npm run test:custom-frontend-connection --silent` -> PASS, 15 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> first run hit transient local `ECONNRESET` before assertions, rerun PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+
+**Next:**
+1. Run `git diff --check` and repo-public hygiene.
+2. Commit/push this starter-export slice and verify Vercel production again.
+3. Use Site Detail -> Separate custom frontend project -> Download starter manifest when creating the real `devanshvarshney.com` frontend project.
 
 ## 2026-06-02 04:10 IST
 

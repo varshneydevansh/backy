@@ -68,6 +68,7 @@ import {
   updateContact,
   updateFormSubmission,
   updateSiteFrontendDesign,
+  getSiteCustomFrontendStarterExport,
   verifySiteCustomFrontendConnection,
   updateSite as updateSiteFromApi,
   captureSiteFrontendDesignDefaults,
@@ -2132,6 +2133,10 @@ function EditSitePage() {
   const [customFrontendVerificationLoading, setCustomFrontendVerificationLoading] =
     useState(false);
   const [customFrontendVerificationError, setCustomFrontendVerificationError] =
+    useState<string | null>(null);
+  const [customFrontendStarterLoading, setCustomFrontendStarterLoading] =
+    useState(false);
+  const [customFrontendStarterError, setCustomFrontendStarterError] =
     useState<string | null>(null);
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
   const [readinessHydrated, setReadinessHydrated] = useState(false);
@@ -5843,6 +5848,7 @@ function EditSitePage() {
     setCustomFrontendVerifyUrlTouched(false);
     setCustomFrontendVerification(null);
     setCustomFrontendVerificationError(null);
+    setCustomFrontendStarterError(null);
   }, [siteApiId]);
 
   useEffect(() => {
@@ -6115,6 +6121,49 @@ function EditSitePage() {
     );
     setSiteSettingsError(null);
     setSiteWorkspaceNotice("Site workspace handoff manifest downloaded.");
+  };
+
+  const handleDownloadCustomFrontendStarter = async () => {
+    if (isSiteSettingsBusy) return;
+
+    if (!canViewSite) {
+      setCustomFrontendStarterError(
+        viewSitePermissionTitle ||
+          "Your account needs sites.view to export the custom frontend starter.",
+      );
+      return;
+    }
+
+    setCustomFrontendStarterLoading(true);
+    setCustomFrontendStarterError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const starter = await getSiteCustomFrontendStarterExport(
+        siteApiId || siteId,
+      );
+      const fileBase =
+        `backy-custom-frontend-starter-${formData.slug || site?.slug || siteId}`
+          .toLowerCase()
+          .replace(/[^a-z0-9.-]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "backy-custom-frontend-starter";
+
+      downloadBlob(
+        `${fileBase}.json`,
+        new Blob([JSON.stringify(starter, null, 2)], {
+          type: "application/json;charset=utf-8",
+        }),
+      );
+      setSiteWorkspaceNotice("Custom frontend starter manifest downloaded.");
+    } catch (error) {
+      setCustomFrontendStarterError(
+        error instanceof Error
+          ? error.message
+          : "Unable to download custom frontend starter manifest.",
+      );
+    } finally {
+      setCustomFrontendStarterLoading(false);
+    }
   };
 
   const handleVerifyCustomFrontendConnection = async () => {
@@ -6975,6 +7024,30 @@ function EditSitePage() {
                       <Copy className="h-3.5 w-3.5" />
                       Copy launch JSON
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadCustomFrontendStarter()}
+                      disabled={
+                        isSiteSettingsBusy ||
+                        customFrontendStarterLoading ||
+                        !canViewSite
+                      }
+                      title={canViewSite ? undefined : viewSitePermissionTitle}
+                      data-testid="site-custom-frontend-download-starter"
+                      data-starter-schema="backy.custom-frontend-starter-export.v1"
+                      data-starter-endpoint={`${adminSiteUrl}/custom-frontend/starter`}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Download
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          customFrontendStarterLoading && "animate-pulse",
+                        )}
+                      />
+                      {customFrontendStarterLoading
+                        ? "Preparing starter"
+                        : "Download starter manifest"}
+                    </button>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -6998,6 +7071,14 @@ function EditSitePage() {
                 <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">
                   {customFrontendProjectEnvText}
                 </pre>
+                {customFrontendStarterError ? (
+                  <p
+                    className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
+                    data-testid="site-custom-frontend-starter-error"
+                  >
+                    {customFrontendStarterError}
+                  </p>
+                ) : null}
                 <div
                   className="mt-3 rounded-lg border border-teal-200 bg-background/80 p-3"
                   data-testid="site-custom-frontend-connection-verifier"

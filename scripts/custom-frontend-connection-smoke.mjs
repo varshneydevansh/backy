@@ -27,6 +27,7 @@ const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
 const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
 const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
+const adminStarterExportRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/starter/route.ts');
 const adminSiteDetailRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
 const adminContentApi = read('apps/admin/src/lib/adminContentApi.ts');
 const handoffSource = read('packages/core/src/custom-frontend-agent-handoff.ts');
@@ -122,26 +123,50 @@ includesAll(
   'Admin custom frontend verifier is protected, SSRF-aware, and checks probe plus DOM control attributes',
 );
 includesAll(
+  adminStarterExportRoute,
+  [
+    'backy.custom-frontend-starter-export.v1',
+    'requireAdminAccess',
+    'permission: "sites.view"',
+    'examples/custom-frontend-next',
+    'NEXT_PUBLIC_BACKY_API_BASE_URL',
+    'BACKY_FRONTEND_STARTER.md',
+    'STARTER_FILES_TO_PRESERVE',
+    'src/app/api/backy-connection/route.ts',
+    '/custom-frontend/connection',
+    'forbiddenPrivateEnv',
+    'cliCommand',
+  ],
+  'Admin custom frontend starter export is protected and returns safe env, starter files, preserve list, and verification commands',
+);
+includesAll(
   adminSiteDetailRoute,
   [
     'site-custom-frontend-connection-verifier',
     'site-custom-frontend-connection-url',
     'site-custom-frontend-connection-run',
     'site-custom-frontend-connection-result',
+    'site-custom-frontend-download-starter',
+    'site-custom-frontend-starter-error',
+    'getSiteCustomFrontendStarterExport',
     'verifySiteCustomFrontendConnection',
     'backy.admin-custom-frontend-connection-check.v1',
+    'backy.custom-frontend-starter-export.v1',
     '/api/backy-connection',
   ],
-  'Site detail exposes an in-admin custom frontend connection verifier',
+  'Site detail exposes an in-admin custom frontend starter export and connection verifier',
 );
 includesAll(
   adminContentApi,
   [
     'AdminCustomFrontendConnectionVerification',
+    'AdminCustomFrontendStarterExport',
     'verifySiteCustomFrontendConnection',
     '/custom-frontend/connection',
+    'getSiteCustomFrontendStarterExport',
+    '/custom-frontend/starter',
   ],
-  'Admin content API exposes the custom frontend connection verifier client',
+  'Admin content API exposes the custom frontend starter export and connection verifier clients',
 );
 includesAll(
   readme,
@@ -181,7 +206,12 @@ includesAll(
     'BACKY_CUSTOM_FRONTEND_URL',
     'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
     'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
+    'Site Detail -> Separate custom frontend project -> Download starter manifest',
     '/api/admin/sites/${siteId}/custom-frontend/connection',
+    '/api/admin/sites/${siteId}/custom-frontend/starter',
+    'BACKY_FRONTEND_STARTER.md',
+    'preserveFiles',
+    'verification.cliCommand',
     'data-backy-component-contract-pointer',
     'data-backy-editable-map-pointer',
     'forbidden private env names',

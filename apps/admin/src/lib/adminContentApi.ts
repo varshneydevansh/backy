@@ -304,6 +304,55 @@ interface ApiCustomFrontendConnectionResponse {
   };
 }
 
+export interface AdminCustomFrontendStarterExport {
+  schemaVersion: 'backy.custom-frontend-starter-export.v1';
+  generatedAt: string;
+  site: {
+    id: string;
+    slug: string;
+    name: string;
+    primaryPublicHost: string;
+    publicHosts: string[];
+  };
+  project: {
+    recommendedName: string;
+    sourceStarterPath: string;
+    sourceStarterDescription: string;
+    targetRuntime: string;
+    domainOwner: string;
+  };
+  environment: {
+    browserSafe: Record<string, string>;
+    serverSide: Record<string, string>;
+    forbiddenPrivateEnv: string[];
+  };
+  files: Array<{
+    path: string;
+    role: string;
+    content: string;
+  }>;
+  preserveFiles: string[];
+  readOrder: string[];
+  verification: {
+    adminVerifierEndpoint: string;
+    adminVerifierSchema: string;
+    frontendProbePath: string;
+    frontendProbeSchema: string;
+    requiredDomAttributes: string[];
+    cliCommand: string;
+  };
+}
+
+interface ApiCustomFrontendStarterResponse {
+  success: boolean;
+  data?: AdminCustomFrontendStarterExport;
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
 export interface CollectionBindingPreset {
   id: string;
   name: string;
@@ -5501,6 +5550,19 @@ export async function verifySiteCustomFrontendConnection(
 
   if (!response.ok || !payload.success || !payload.data) {
     throw adminContentApiError(payload, 'Unable to verify custom frontend connection');
+  }
+
+  return payload.data;
+}
+
+export async function getSiteCustomFrontendStarterExport(
+  siteId: string,
+): Promise<AdminCustomFrontendStarterExport> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/custom-frontend/starter`);
+  const payload = await readJson<ApiCustomFrontendStarterResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to load custom frontend starter export');
   }
 
   return payload.data;
