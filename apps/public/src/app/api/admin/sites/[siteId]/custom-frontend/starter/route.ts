@@ -11,6 +11,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { getSiteByIdOrSlug } from "@/lib/backyStore";
 import {
+  CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES,
+  CUSTOM_FRONTEND_STARTER_TEMPLATE_ROOT,
+} from "@/lib/customFrontendStarterProjectTemplate";
+import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
@@ -41,6 +45,7 @@ type StarterSite = {
 };
 
 const SCHEMA_VERSION = "backy.custom-frontend-starter-export.v1";
+const STARTER_PROJECT_SCHEMA_VERSION = "backy.custom-frontend-starter-project.v1";
 
 const FORBIDDEN_PRIVATE_ENV = [
   "POSTGRES_URL",
@@ -75,6 +80,13 @@ const REQUIRED_DOM_ATTRIBUTES = [
   "data-backy-component-contract-pointer",
   "data-backy-editable-map-pointer",
 ] as const;
+
+type StarterExportFile = {
+  path: string;
+  role: string;
+  content: string;
+  source?: string;
+};
 
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -187,11 +199,12 @@ const starterReadme = ({
     "",
     "## Start",
     "",
-    "1. Copy `examples/custom-frontend-next` into a new website frontend repository.",
-    "2. Add the `.env.example` values from this manifest to the frontend project.",
-    "3. Attach the website domain to the custom frontend project, not to `backy-admin` or `backy-public`.",
-    "4. Deploy the frontend on Vercel.",
-    "5. Verify it from Backy Site Detail before moving production DNS.",
+    "1. Create a new website frontend repository.",
+    "2. Write every `files[].path` from this manifest into that repository, keeping paths unchanged.",
+    "3. Add the `.env.example` values from this manifest to the frontend project.",
+    "4. Attach the website domain to the custom frontend project, not to `backy-admin` or `backy-public`.",
+    "5. Deploy the frontend on Vercel.",
+    "6. Verify it from Backy Site Detail before moving production DNS.",
     "",
     "## Site Values",
     "",
@@ -237,6 +250,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       "BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1",
       "npm run test:custom-frontend-connection",
     ].join(" ");
+    const siteSpecificFiles: StarterExportFile[] = [
+      {
+        path: ".env.example",
+        role: "site-specific-env",
+        content: envExample({ apiBaseUrl, siteId: site.id, publicHost }),
+      },
+      {
+        path: "BACKY_FRONTEND_STARTER.md",
+        role: "site-specific-runbook",
+        content: starterReadme({
+          apiBaseUrl,
+          siteId: site.id,
+          publicHost,
+          adminVerifierEndpoint,
+        }),
+      },
+    ];
+    const starterProjectFiles: StarterExportFile[] = [
+      ...siteSpecificFiles,
+      ...CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES,
+    ];
 
     return NextResponse.json({
       success: true,
@@ -253,10 +287,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         project: {
           recommendedName: safeProjectName(site),
-          sourceStarterPath: "examples/custom-frontend-next",
+          sourceStarterPath: CUSTOM_FRONTEND_STARTER_TEMPLATE_ROOT,
           sourceStarterDescription:
             "Checked Next.js starter that keeps Backy render payloads, DOM control attributes, form submissions, newsletter signup, and /api/backy-connection intact.",
           targetRuntime: "Next.js App Router on a separate Vercel project",
+          domainOwner: "custom-frontend-vercel-project",
+          starterExportFormat: "file-list",
+          sourceStarterFileCount: CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES.length,
+          rootDirectory: ".",
+          installCommand: "npm install",
+          buildCommand: "npm run build",
+          devCommand: "npm run dev",
+        },
+        starterProject: {
+          schemaVersion: STARTER_PROJECT_SCHEMA_VERSION,
+          sourceRoot: CUSTOM_FRONTEND_STARTER_TEMPLATE_ROOT,
+          exportFormat: "file-list",
+          rootDirectory: ".",
+          fileCount: starterProjectFiles.length,
+          generatedFiles: siteSpecificFiles.map((file) => file.path),
+          copiedFiles: CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES.map((file) => file.path),
+          installCommand: "npm install",
+          buildCommand: "npm run build",
+          devCommand: "npm run dev",
+          deploymentTarget: "separate Vercel project",
           domainOwner: "custom-frontend-vercel-project",
         },
         environment: {
@@ -272,23 +326,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           forbiddenPrivateEnv: [...FORBIDDEN_PRIVATE_ENV],
         },
-        files: [
-          {
-            path: ".env.example",
-            role: "site-specific-env",
-            content: envExample({ apiBaseUrl, siteId: site.id, publicHost }),
-          },
-          {
-            path: "BACKY_FRONTEND_STARTER.md",
-            role: "site-specific-runbook",
-            content: starterReadme({
-              apiBaseUrl,
-              siteId: site.id,
-              publicHost,
-              adminVerifierEndpoint,
-            }),
-          },
-        ],
+        files: starterProjectFiles,
+        fileCount: starterProjectFiles.length,
         preserveFiles: [...STARTER_FILES_TO_PRESERVE],
         readOrder: [
           `/api/sites/${site.id}/agent-handoff`,

@@ -6154,12 +6154,12 @@ function EditSitePage() {
           type: "application/json;charset=utf-8",
         }),
       );
-      setSiteWorkspaceNotice("Custom frontend starter manifest downloaded.");
+      setSiteWorkspaceNotice("Custom frontend starter project manifest downloaded.");
     } catch (error) {
       setCustomFrontendStarterError(
         error instanceof Error
           ? error.message
-          : "Unable to download custom frontend starter manifest.",
+          : "Unable to download custom frontend starter project manifest.",
       );
     } finally {
       setCustomFrontendStarterLoading(false);
@@ -7035,6 +7035,8 @@ function EditSitePage() {
                       title={canViewSite ? undefined : viewSitePermissionTitle}
                       data-testid="site-custom-frontend-download-starter"
                       data-starter-schema="backy.custom-frontend-starter-export.v1"
+                      data-starter-project-schema="backy.custom-frontend-starter-project.v1"
+                      data-starter-project-format="file-list"
                       data-starter-endpoint={`${adminSiteUrl}/custom-frontend/starter`}
                       className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -7046,7 +7048,7 @@ function EditSitePage() {
                       />
                       {customFrontendStarterLoading
                         ? "Preparing starter"
-                        : "Download starter manifest"}
+                        : "Download starter project"}
                     </button>
                   </div>
                 </div>
@@ -7066,6 +7068,10 @@ function EditSitePage() {
                   <SiteHandoffEndpoint
                     label="Public host context"
                     value={customFrontendPrimaryHost}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Starter bundle"
+                    value="File-list project export"
                   />
                 </div>
                 <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">

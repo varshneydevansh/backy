@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 04:39 IST
+- **Last updated:** 2026-06-02 05:05 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 05:05 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Backy starter export is now a self-contained project bundle
+
+**What changed:**
+- Added `scripts/generate-custom-frontend-starter-template.mjs` and generated `apps/public/src/lib/customFrontendStarterProjectTemplate.ts` from the checked `examples/custom-frontend-next` starter.
+- Protected `GET /api/admin/sites/:siteId/custom-frontend/starter` now returns `starterProject.schemaVersion=backy.custom-frontend-starter-project.v1`, `exportFormat=file-list`, install/build/dev commands, generated site files, copied starter files, and a complete `files[]` list that can reconstruct the separate Next/Vercel website frontend.
+- Site Detail now labels the action as “Download starter project” and exposes `data-starter-project-schema` plus `data-starter-project-format=file-list`.
+- Help now tells frontend agents to write every `files[].path` into the separate frontend repo before deploying, instead of assuming local access to the Backy monorepo example.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS, 53 checks.
+- `npm run test:custom-frontend-connection --silent` -> first run caught one stale source assertion, rerun PASS, 17 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 54 checks.
+
+**Next:**
+1. Run `git diff --check` and repo-public hygiene.
+2. Commit/push this self-contained starter project bundle.
+3. After deploy, use Site Detail -> Separate custom frontend project -> Download starter project to create the real `devanshvarshney.com` frontend repo, attach the domain to that separate Vercel project, then verify from Backy.
 
 ## 2026-06-02 04:39 IST
 

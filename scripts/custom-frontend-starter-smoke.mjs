@@ -21,6 +21,15 @@ const read = (relativePath) => {
   return fs.readFileSync(absolutePath, 'utf8');
 };
 
+const readRepo = (relativePath) => {
+  const absolutePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    fail(`${relativePath} is missing`);
+    return '';
+  }
+  return fs.readFileSync(absolutePath, 'utf8');
+};
+
 const assertIncludes = (text, needle, message) => {
   if (text.includes(needle)) pass(message);
   else fail(message);
@@ -37,6 +46,8 @@ const files = {
   form: read('src/app/api/backy-form/route.ts'),
   connection: read('src/app/api/backy-connection/route.ts'),
   client: read('src/lib/backy-client.ts'),
+  generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
+  generatedTemplate: readRepo('apps/public/src/lib/customFrontendStarterProjectTemplate.ts'),
 };
 
 const packageJson = JSON.parse(files.packageJson || '{}');
@@ -114,6 +125,20 @@ assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form subm
 assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter README begins with agent handoff read path');
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
+assertIncludes(files.generator, 'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES', 'Starter bundle generator writes the public template file list');
+assertIncludes(files.generator, 'examples/custom-frontend-next', 'Starter bundle generator reads the checked starter project');
+assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
+assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
+assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
+assertIncludes(files.generatedTemplate, 'data-backy-element-id', 'Generated starter bundle preserves element API id attributes');
+assertIncludes(files.generatedTemplate, 'data-backy-component-contract-pointer', 'Generated starter bundle preserves component contract pointers');
+assertIncludes(files.generatedTemplate, 'subscribeNewsletter', 'Generated starter bundle includes newsletter signup support');
+assertIncludes(files.generatedTemplate, 'submitForm', 'Generated starter bundle includes public form submission support');
+if (!files.generatedTemplate.includes('"path": ".next')) {
+  pass('Generated starter bundle excludes local Next build artifacts');
+} else {
+  fail('Generated starter bundle must not include local Next build artifacts');
+}
 
 const allStarterText = Object.entries(files)
   .filter(([name]) => name !== 'readme')

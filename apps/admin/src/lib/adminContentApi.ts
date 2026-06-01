@@ -320,6 +320,26 @@ export interface AdminCustomFrontendStarterExport {
     sourceStarterDescription: string;
     targetRuntime: string;
     domainOwner: string;
+    starterExportFormat?: string;
+    sourceStarterFileCount?: number;
+    rootDirectory?: string;
+    installCommand?: string;
+    buildCommand?: string;
+    devCommand?: string;
+  };
+  starterProject?: {
+    schemaVersion: 'backy.custom-frontend-starter-project.v1';
+    sourceRoot: string;
+    exportFormat: string;
+    rootDirectory: string;
+    fileCount: number;
+    generatedFiles: string[];
+    copiedFiles: string[];
+    installCommand: string;
+    buildCommand: string;
+    devCommand: string;
+    deploymentTarget: string;
+    domainOwner: string;
   };
   environment: {
     browserSafe: Record<string, string>;
@@ -330,7 +350,9 @@ export interface AdminCustomFrontendStarterExport {
     path: string;
     role: string;
     content: string;
+    source?: string;
   }>;
+  fileCount?: number;
   preserveFiles: string[];
   readOrder: string[];
   verification: {

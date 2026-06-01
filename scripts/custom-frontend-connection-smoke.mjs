@@ -26,6 +26,7 @@ const helpRoute = read('apps/admin/src/routes/help.tsx');
 const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
 const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
+const starterTemplateModule = read('apps/public/src/lib/customFrontendStarterProjectTemplate.ts');
 const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
 const adminStarterExportRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/starter/route.ts');
 const adminSiteDetailRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
@@ -126,18 +127,48 @@ includesAll(
   adminStarterExportRoute,
   [
     'backy.custom-frontend-starter-export.v1',
+    'backy.custom-frontend-starter-project.v1',
     'requireAdminAccess',
     'permission: "sites.view"',
-    'examples/custom-frontend-next',
+    'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES',
+    'CUSTOM_FRONTEND_STARTER_TEMPLATE_ROOT',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'BACKY_FRONTEND_STARTER.md',
     'STARTER_FILES_TO_PRESERVE',
     'src/app/api/backy-connection/route.ts',
     '/custom-frontend/connection',
+    'starterProject',
+    'starterProjectFiles',
+    'fileCount',
+    'copiedFiles',
+    'installCommand',
+    'buildCommand',
     'forbiddenPrivateEnv',
     'cliCommand',
   ],
-  'Admin custom frontend starter export is protected and returns safe env, starter files, preserve list, and verification commands',
+  'Admin custom frontend starter export is protected and returns safe env, bundled starter files, preserve list, and verification commands',
+);
+includesAll(
+  starterTemplateModule,
+  [
+    'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES',
+    'CUSTOM_FRONTEND_STARTER_TEMPLATE_ROOT',
+    'examples/custom-frontend-next',
+    'src/lib/backy-client.ts',
+    'src/app/[[...path]]/page.tsx',
+    'src/app/api/backy-connection/route.ts',
+    'src/app/api/newsletter/route.ts',
+    'src/app/api/backy-form/route.ts',
+    'data-backy-component-contract-pointer',
+    'data-backy-editable-map-pointer',
+    'subscribeNewsletter',
+    'submitForm',
+  ],
+  'Generated starter project template carries the self-contained custom frontend file list',
+);
+assert(
+  !starterTemplateModule.includes('"path": ".next'),
+  'Generated starter project template excludes local Next build artifacts',
 );
 includesAll(
   adminSiteDetailRoute,
@@ -152,9 +183,12 @@ includesAll(
     'verifySiteCustomFrontendConnection',
     'backy.admin-custom-frontend-connection-check.v1',
     'backy.custom-frontend-starter-export.v1',
+    'backy.custom-frontend-starter-project.v1',
+    'data-starter-project-format="file-list"',
+    'Download starter project',
     '/api/backy-connection',
   ],
-  'Site detail exposes an in-admin custom frontend starter export and connection verifier',
+  'Site detail exposes an in-admin custom frontend starter project export and connection verifier',
 );
 includesAll(
   adminContentApi,
@@ -165,6 +199,8 @@ includesAll(
     '/custom-frontend/connection',
     'getSiteCustomFrontendStarterExport',
     '/custom-frontend/starter',
+    "schemaVersion: 'backy.custom-frontend-starter-project.v1'",
+    'fileCount?: number',
   ],
   'Admin content API exposes the custom frontend starter export and connection verifier clients',
 );
@@ -206,9 +242,12 @@ includesAll(
     'BACKY_CUSTOM_FRONTEND_URL',
     'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
     'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
-    'Site Detail -> Separate custom frontend project -> Download starter manifest',
+    'Site Detail -> Separate custom frontend project -> Download starter project',
     '/api/admin/sites/${siteId}/custom-frontend/connection',
     '/api/admin/sites/${siteId}/custom-frontend/starter',
+    'backy.custom-frontend-starter-project.v1',
+    'files[]=complete project file list',
+    'Write every files[].path',
     'BACKY_FRONTEND_STARTER.md',
     'preserveFiles',
     'verification.cliCommand',

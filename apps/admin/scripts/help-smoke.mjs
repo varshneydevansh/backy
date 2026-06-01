@@ -401,11 +401,14 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('customDomain or domainAliases host') &&
       helpSource.includes('Create a separate Backy site when a subdomain needs independent content, navigation, SEO, design tokens, or launch state.') &&
       helpSource.includes('Site Detail -> Separate custom frontend project -> Verify deployed frontend') &&
-      helpSource.includes('Site Detail -> Separate custom frontend project -> Download starter manifest') &&
+      helpSource.includes('Site Detail -> Separate custom frontend project -> Download starter project') &&
       helpSource.includes('/api/admin/sites/${siteId}/custom-frontend/connection') &&
       helpSource.includes('/api/admin/sites/${siteId}/custom-frontend/starter') &&
       helpSource.includes("id: 'starter-export'") &&
       helpSource.includes('backy.custom-frontend-starter-export.v1') &&
+      helpSource.includes('backy.custom-frontend-starter-project.v1') &&
+      helpSource.includes('files[]=complete project file list') &&
+      helpSource.includes('Write every files[].path') &&
       helpSource.includes('examples/custom-frontend-next') &&
       helpSource.includes('BACKY_FRONTEND_STARTER.md') &&
       helpSource.includes('preserveFiles') &&
@@ -663,7 +666,7 @@ const runRenderedHelpSmoke = async () => {
       'customDomain or domainAliases',
       'Verify connection',
       'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
-      'Site Detail -> Separate custom frontend project -> Download starter manifest',
+      'Site Detail -> Separate custom frontend project -> Download starter project',
       'NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api',
       `NEXT_PUBLIC_BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
       'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
@@ -674,6 +677,9 @@ const runRenderedHelpSmoke = async () => {
       `/api/admin/sites/${HELP_SMOKE_SITE_ID}/custom-frontend/connection`,
       `/api/admin/sites/${HELP_SMOKE_SITE_ID}/custom-frontend/starter`,
       'backy.custom-frontend-starter-export.v1',
+      'backy.custom-frontend-starter-project.v1',
+      'files[]=complete project file list',
+      'Write every files[].path',
       'examples/custom-frontend-next',
       'BACKY_FRONTEND_STARTER.md',
       'preserveFiles',
