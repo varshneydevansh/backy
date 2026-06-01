@@ -38,6 +38,11 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
    - Shows safe env bootstrap, host-aware public route rendering, `data-backy-element-id` / `data-backy-element-type` preservation, newsletter signup, and public form submission without admin/database/provider env.
    - Vendors a tiny public client with the same `createBackyCustomFrontendClient({ env: process.env })` shape so a separate Vercel project can install immediately even before `@backy/sdk-js` is published to a package registry.
 
+8. `npm run test:custom-frontend-connection`
+   - Connection proof for separate custom frontend projects.
+   - Set `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api` and `BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug>` to prove public site discovery, agent-handoff, manifest, OpenAPI, resolve, and render contracts.
+   - After deploying the public website, set `BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>` and `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` to prove the DOM still exposes Backy site, route, element, component-contract, and editable-map attributes.
+
 Long-form details live in `specs/backy-api-contracts.md` and `specs/editor_complete_spec.md`.
 
 ## Admin handoff surface
@@ -70,6 +75,28 @@ The brief includes:
 - `deploymentTopology`: the protected `backy-admin`, public `backy-public`, and separate custom-frontend project model, including required/forbidden environment variable names and release verification commands.
 
 Use `data.agentBrief` from the direct `/agent-handoff` response when you want the smallest copy/paste surface. Use `data.handoff` when the agent needs the full endpoint map and component contracts.
+
+## Connection verification
+
+Before a separate website frontend is considered connected, run:
+
+```bash
+BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api \
+BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> \
+npm run test:custom-frontend-connection
+```
+
+After the frontend is deployed, prove the public page still carries Backy's DOM control attributes:
+
+```bash
+BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api \
+BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> \
+BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> \
+BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 \
+npm run test:custom-frontend-connection
+```
+
+This gate validates the public Backy contracts first, then verifies the custom frontend page keeps `data-backy-site-id`, `data-backy-route`, `data-backy-element-id`, `data-backy-element-type`, `data-backy-component-contract-pointer`, and `data-backy-editable-map-pointer`. A frontend that renders visually but drops those attributes is not fully connected to Backy control.
 
 ## Component API contract
 

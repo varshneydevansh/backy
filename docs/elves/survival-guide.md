@@ -191,7 +191,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter source/type smoke, admin typecheck, diff check, and repo-public hygiene are green for the richer custom frontend DOM contract slice.
 
-**Single next action:** Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
+**Newest custom frontend connection gate:** `npm run test:custom-frontend-connection` now proves the separate website connection path. Source mode checks contracts/docs/schemas; live API mode validates site discovery, agent handoff, manifest, OpenAPI, resolve, render, deployment topology, and component APIability; deployed frontend mode can require `data-backy-site-id`, `data-backy-route`, `data-backy-element-id`, `data-backy-element-type`, `data-backy-component-contract-pointer`, and `data-backy-editable-map-pointer` on the custom frontend DOM.
+
+**Newest verification:** Source connection smoke, local live public API connection smoke against `http://127.0.0.1:3001/api`, Help source/rendered smokes, admin typecheck, SDK typecheck, frontend contract type generation, custom frontend starter smoke, and diff check are green for the connection gate slice. Production live proof must wait until this slice is pushed and Vercel redeploys.
+
+**Single next action:** Commit/push the custom frontend connection gate, then resume only with production custom frontend/domain connection proof and owner-controlled site setup before broad UI polish.
 
 ## Active Compute
 

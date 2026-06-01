@@ -54,6 +54,8 @@ Long-form contract: [specs/custom-frontend-agent-handoff.md](specs/custom-fronte
 
 Minimal launch starter: [examples/custom-frontend-next](examples/custom-frontend-next). It is the smallest checked Next.js shape for a separate website project: safe env bootstrap, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submission. It is self-contained until `@backy/sdk-js` is published to a package registry.
 
+Connection gate: run `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> npm run test:custom-frontend-connection` before treating a separate website project as connected. After deploying that website, add `BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>` and `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` so the gate also verifies the public DOM keeps Backy site, route, element, component-contract, and editable-map attributes.
+
 Use `apiAlignment` before generating frontend code. It names the direct read start, manifest/OpenAPI mirrors, SDK/generated-type source, public discovery endpoints, authenticated write boundary, canvas-first creation routes, preserve-field list, and render/resolve verification endpoints.
 
 For separate website projects, prefer `@backy/sdk-js` helpers instead of hand-rolling the API glue:
@@ -124,6 +126,7 @@ npm run test:editor-smoke-coverage --workspace @backy-cms/admin
 BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-zoom --workspace @backy-cms/admin
 npm run doctor:release-certification
 npm run test:custom-frontend-starter
+BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> npm run test:custom-frontend-connection
 ```
 
 Before claiming a custom frontend or editor path is complete, verify both the API contract and the rendered/admin UI path that exposes it.

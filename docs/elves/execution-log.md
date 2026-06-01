@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 02:25 IST
+- **Last updated:** 2026-06-02 02:53 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 02:53 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate website connection is now a checked launch gate
+
+**What changed:**
+- Added `npm run test:custom-frontend-connection`, a non-secret smoke that proves Backy custom frontend readiness from source, optional live public API, and optional deployed frontend DOM checks.
+- The gate validates public site discovery, agent handoff, manifest, OpenAPI, resolve, render, component APIability, deployment topology, and the required `data-backy-*` DOM control attributes for separate custom frontends.
+- Help, README, AGENTS, the custom frontend handoff spec, OpenAPI, manifest schema, core handoff metadata, and generated SDK contract types now point frontend agents at this connection proof before a separate Vercel frontend is handed to users.
+
+**Commands run:**
+- `npm run test:custom-frontend-connection --silent` -> PASS, 10 source checks; live API/frontend URL skipped by unset env.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=http://127.0.0.1:3001/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 38 live local public API checks; deployed frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run test:frontend-contract-types --silent` -> PASS.
+- `npm run test:custom-frontend-starter --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Run final repo-public hygiene, commit/push this connection gate slice, then re-read the survival guide.
+2. After deploy, run the same gate against `https://backy-public.vercel.app/api`; require `BACKY_CUSTOM_FRONTEND_URL` only after the separate custom website project is deployed.
+3. If limits force a pause, resume only with production custom frontend/domain connection proof and owner-controlled site setup before broad UI polish.
 
 ## 2026-06-02 02:25 IST
 

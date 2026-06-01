@@ -905,13 +905,14 @@
                 "previewReadinessSmoke": { "const": "npm run test:vercel-preview-readiness" },
                 "productionReadinessSmoke": { "const": "npm run test:vercel-production-readiness" },
                 "frontendContractSmoke": { "const": "npm run test:frontend-contract-types" },
+                "customFrontendConnectionSmoke": { "const": "npm run test:custom-frontend-connection" },
                 "releaseDoctor": { "const": "npm run doctor:release-certification" },
                 "providerArtifactAdmission": { "const": "npm run ci:provider-artifact-admission" },
                 "promotionRule": { "const": "Never promote demo-mode previews or production aliases." },
                 "liveProof": { "type": "string", "minLength": 1 },
                 "adminAuthProof": { "type": "string", "minLength": 1 }
               },
-              "required": ["releaseConfigSmoke", "previewReadinessSmoke", "productionReadinessSmoke", "frontendContractSmoke", "releaseDoctor", "providerArtifactAdmission", "promotionRule", "liveProof", "adminAuthProof"]
+              "required": ["releaseConfigSmoke", "previewReadinessSmoke", "productionReadinessSmoke", "frontendContractSmoke", "customFrontendConnectionSmoke", "releaseDoctor", "providerArtifactAdmission", "promotionRule", "liveProof", "adminAuthProof"]
             },
             "secretHandling": { "type": "string", "minLength": 1 }
           },

@@ -8304,6 +8304,7 @@ const customFrontendAgentHandoff = {
       previewReadinessSmoke: "npm run test:vercel-preview-readiness",
       productionReadinessSmoke: "npm run test:vercel-production-readiness",
       frontendContractSmoke: "npm run test:frontend-contract-types",
+      customFrontendConnectionSmoke: "npm run test:custom-frontend-connection",
       releaseDoctor: "npm run doctor:release-certification",
       providerArtifactAdmission: "npm run ci:provider-artifact-admission",
       promotionRule: "Never promote demo-mode previews or production aliases.",

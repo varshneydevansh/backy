@@ -6515,6 +6515,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     frontendContractSmoke: {
                       const: "npm run test:frontend-contract-types",
                     },
+                    customFrontendConnectionSmoke: {
+                      const: "npm run test:custom-frontend-connection",
+                    },
                     releaseDoctor: {
                       const: "npm run doctor:release-certification",
                     },
