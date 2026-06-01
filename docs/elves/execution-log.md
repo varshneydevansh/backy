@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 00:59 IST
+- **Last updated:** 2026-06-02 01:09 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,23 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 01:09 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Deploy status:** Custom frontend Help checklist slice is production-verified
+
+**Verification:**
+- `a9778ab7 feat(admin): document custom frontend connection checklist` is pushed to `main`.
+- Latest `backy-admin` production deployment is Ready, created 2026-06-02 01:01 IST.
+- Latest `backy-public` production deployment is Ready, created 2026-06-02 01:01 IST.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; live admin auth proof skipped because credential env is intentionally unset.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9548 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS; hosted login shell still has no demo credentials or dev MFA phrase.
+- `npx vercel@latest logs backy-admin.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs found.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs found.
+
+**Next:**
+1. Continue Batch 5 only with release-critical custom frontend/backend gaps first; defer broad design polish unless it blocks launch use.
 
 ## 2026-06-02 00:59 IST
 
