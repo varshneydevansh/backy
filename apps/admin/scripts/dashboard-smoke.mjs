@@ -96,6 +96,17 @@ const assertDashboardSourceContracts = () => {
     'Active owners',
     'Review users',
     'data-testid="dashboard-module-map-details"',
+    "schemaVersion: 'backy.dashboard-custom-frontend-launch.v1'",
+    "domainOwner: 'custom-frontend-vercel-project'",
+    'customFrontendLaunch',
+    'NEXT_PUBLIC_BACKY_API_BASE_URL',
+    'NEXT_PUBLIC_BACKY_SITE_ID',
+    'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
+    'BACKY_PUBLIC_API_BASE_URL',
+    'data-testid="dashboard-custom-frontend-launch"',
+    'data-testid="dashboard-custom-frontend-browser-env"',
+    'data-testid="dashboard-custom-frontend-server-env"',
+    'Open Sites handoff',
   ]) {
     assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
   }
@@ -650,7 +661,20 @@ const runDashboardDeploymentPreflight = async (client) => {
 };
 
 const assertDashboardLayout = async (client, siteName) => {
-  const layout = await evaluate(client, `(() => ({
+  const layout = await evaluate(client, `(() => {
+    const apiConsumers = document.querySelector('[data-testid="dashboard-api-consumers"]');
+    const customLaunch = document.querySelector('[data-testid="dashboard-custom-frontend-launch"]');
+    const customLaunchText = customLaunch?.textContent || '';
+    const customLaunchState = {
+      exists: Boolean(customLaunch),
+      schema: customLaunch?.getAttribute('data-schema') || '',
+      domainOwner: customLaunch?.getAttribute('data-domain-owner') || '',
+      browserEnvKeys: customLaunch?.getAttribute('data-browser-env-keys') || '',
+      serverEnvKeys: customLaunch?.getAttribute('data-server-env-keys') || '',
+      text: customLaunchText.slice(0, 1000),
+    };
+
+    return ({
     width: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
     hasCommandCenter: Boolean(document.querySelector('[data-testid="dashboard-command-center"]')),
@@ -714,11 +738,19 @@ const assertDashboardLayout = async (client, siteName) => {
       document.body?.innerText?.includes('Publishing mix') &&
       document.body?.innerText?.includes('Activity velocity') &&
       document.body?.innerText?.includes('Engagement and commerce'),
-    hasApiConsumers: Boolean(document.querySelector('[data-testid="dashboard-api-consumers"]')) &&
+    customLaunchState,
+    hasApiConsumers: Boolean(apiConsumers) &&
       document.body?.innerText?.includes('API consumer readiness') &&
       document.body?.innerText?.includes('Contract coverage') &&
       document.body?.innerText?.includes('Credentials') &&
-      document.body?.innerText?.includes('Access changes'),
+      document.body?.innerText?.includes('Access changes') &&
+      customLaunchText.includes('Custom frontend launch') &&
+      customLaunchText.includes('Browser-safe env') &&
+      customLaunchText.includes('Server loader env') &&
+      customLaunchText.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
+      customLaunchState.schema === 'backy.dashboard-custom-frontend-launch.v1' &&
+      customLaunchState.domainOwner === 'custom-frontend-vercel-project' &&
+      customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
       document.body?.innerText?.includes('Persistence and Supabase readiness') &&
       document.body?.innerText?.includes('Database runtime') &&
@@ -734,7 +766,8 @@ const assertDashboardLayout = async (client, siteName) => {
     hasLaunchWorkflows: document.body?.innerText?.includes('Registration page') &&
       document.body?.innerText?.includes('Product catalog') &&
       document.body?.innerText?.includes('Member access'),
-  }))()`);
+  });
+})()`);
   assert(layout.scrollWidth <= layout.width + 8, `Dashboard has horizontal overflow: ${JSON.stringify(layout)}`);
   assert(
     layout.hasCommandCenter &&
@@ -985,7 +1018,9 @@ const assertDashboardVisualState = async (client, label, screenshotPath, siteNam
         bodyText.includes('Registration page') &&
         bodyText.includes('Product catalog'),
       hasApiHandoff: bodyText.includes('API control plane') &&
-        bodyText.includes('/api/sites/'),
+        bodyText.includes('/api/sites/') &&
+        bodyText.includes('Custom frontend launch') &&
+        bodyText.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
       hasFrameworkOverlay: /Failed to compile|Unhandled Runtime Error|Vite Error|Internal Server Error/i.test(bodyText),
       regions,
       missingRegions,

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 23:04 IST
+- **Last updated:** 2026-06-01 23:36 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 23:36 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Dashboard status:** Custom frontend launch is now visible from the main cockpit
+
+**What changed:**
+- `apps/admin/src/routes/index.tsx` now adds `backy.dashboard-custom-frontend-launch.v1` to the dashboard handoff payload.
+- Dashboard API consumer readiness now includes a visible Custom frontend launch panel with browser-safe `NEXT_PUBLIC_BACKY_*` env, server-loader `BACKY_*` env, public host, agent-handoff read start, and a Sites handoff shortcut.
+- `apps/admin/scripts/dashboard-smoke.mjs` now source- and render-checks the launch card schema, domain owner, browser-safe env keys, and visible custom frontend handoff copy.
+
+**Commands run:**
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Notes:**
+- This reduces the gap between "Backy has the custom frontend contract" and "an owner can find the exact launch env from the first dashboard screen."
+- The panel still respects the security boundary: custom website projects receive public/read env only, while Supabase, database, provider, cron, admin, bootstrap, and session secrets remain forbidden.
+
+**Next:**
+1. Run repo-public hygiene, commit and push this Dashboard launch-handoff slice, then verify production deployments.
 
 ## 2026-06-01 23:04 IST
 

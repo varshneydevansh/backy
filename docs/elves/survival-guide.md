@@ -161,6 +161,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Sites handoff polish:** Sites and New Site now mirror the same env boundary in their visible handoff panels: browser-safe `NEXT_PUBLIC_BACKY_*` for custom website client bundles, server-side `BACKY_*` for loaders only, and `custom-frontend-vercel-project` as the public-domain owner.
 
+**Newest Dashboard launch polish:** Dashboard API consumer readiness now includes a first-class `backy.dashboard-custom-frontend-launch.v1` panel with browser-safe env, server-loader env, public host, agent-handoff read start, and a Sites handoff shortcut so owners can start a separate Vercel website project from the cockpit.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

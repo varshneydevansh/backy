@@ -1557,6 +1557,63 @@ function Index() {
     deploymentRuns,
     vercel,
   ]);
+  const customFrontendPublicHost = activeSite?.customDomain || deploymentHealth.targetDomain || (activeSite?.slug ? `${activeSite.slug}.backy.app` : 'new-site.backy.app');
+  const customFrontendLaunch = useMemo(() => {
+    const publicApiBase = `${publicBaseUrl}/api`;
+    const encodedSiteId = encodeURIComponent(activeSiteId);
+
+    return {
+      schemaVersion: 'backy.dashboard-custom-frontend-launch.v1',
+      domainOwner: 'custom-frontend-vercel-project',
+      projectBoundaries: {
+        admin: 'backy-admin stays protected and never owns the public website domain.',
+        publicApi: 'backy-public serves public read/render APIs and protected admin API routes.',
+        website: 'The separate custom website frontend project owns the production domain.',
+      },
+      site: {
+        id: activeSiteId,
+        name: activeSite?.name || activeSiteId,
+        publicHost: customFrontendPublicHost,
+      },
+      publicApiBase,
+      endpoints: {
+        agentHandoff: `${publicApiBase}/sites/${encodedSiteId}/agent-handoff`,
+        manifest: `${publicApiBase}/sites/${encodedSiteId}/manifest`,
+        openApi: `${publicApiBase}/sites/${encodedSiteId}/openapi`,
+        renderWithHost: `${publicApiBase}/sites/${encodedSiteId}/render?path=/&domain=${encodeURIComponent(customFrontendPublicHost)}`,
+      },
+      browserSafeEnv: {
+        NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase,
+        NEXT_PUBLIC_BACKY_SITE_ID: activeSiteId,
+        NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: customFrontendPublicHost,
+      },
+      serverSideEnv: {
+        BACKY_PUBLIC_API_BASE_URL: publicApiBase,
+        BACKY_SITE_ID: activeSiteId,
+        BACKY_SITE_PUBLIC_HOST: customFrontendPublicHost,
+      },
+      forbiddenEnv: [
+        'DATABASE_URL',
+        'POSTGRES_URL',
+        'SUPABASE_SERVICE_ROLE_KEY',
+        'BACKY_ADMIN_BOOTSTRAP_TOKEN',
+        'BACKY_CRON_SECRET',
+        'provider API keys',
+        'admin session cookies',
+      ],
+    };
+  }, [
+    activeSite?.name,
+    activeSiteId,
+    customFrontendPublicHost,
+    publicBaseUrl,
+  ]);
+  const customFrontendBrowserEnvText = useMemo(() => Object.entries(customFrontendLaunch.browserSafeEnv)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n'), [customFrontendLaunch.browserSafeEnv]);
+  const customFrontendServerEnvText = useMemo(() => Object.entries(customFrontendLaunch.serverSideEnv)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n'), [customFrontendLaunch.serverSideEnv]);
   const frontendHandoff = useMemo(() => ({
     schemaVersion: 'backy.dashboard-handoff.v1',
     generatedAt: new Date().toISOString(),
@@ -1589,6 +1646,7 @@ function Index() {
     },
     publicEndpoints: frontendContractUrls,
     adminEndpoints: Object.fromEntries(adminContractUrlEntries),
+    customFrontendLaunch,
     apiConsumers: {
       publicEndpointCount: apiConsumerReadiness.publicEndpoints,
       adminEndpointCount: apiConsumerReadiness.adminEndpoints,
@@ -1715,6 +1773,7 @@ function Index() {
     apiConsumerReadiness,
     backendHealthy,
     buildDashboardPageCreateRoute,
+    customFrontendLaunch,
     dashboard.collections.length,
     dashboard.comments,
     dashboard.contacts,
@@ -3589,6 +3648,91 @@ function Index() {
               <p className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 Recent API access changes remain visible in Settings audit history and the handoff JSON includes non-secret consumer counts.
               </p>
+            </div>
+          </div>
+
+          <div
+            className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4"
+            data-testid="dashboard-custom-frontend-launch"
+            data-schema={customFrontendLaunch.schemaVersion}
+            data-domain-owner={customFrontendLaunch.domainOwner}
+            data-browser-env-keys={Object.keys(customFrontendLaunch.browserSafeEnv).join(',')}
+            data-server-env-keys={Object.keys(customFrontendLaunch.serverSideEnv).join(',')}
+          >
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Globe className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Custom frontend launch</h3>
+                </div>
+                <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                  Attach the public domain to the separate custom website Vercel project. Keep Backy as the CMS/API source and copy only browser-safe env into client bundles.
+                </p>
+              </div>
+              <span className="w-fit rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-primary">
+                Custom website Vercel project
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">
+              <div className="rounded-lg border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Browser-safe env</div>
+                  <button
+                    type="button"
+                    onClick={() => void copyDashboardText(customFrontendBrowserEnvText, 'Custom frontend browser env')}
+                    disabled={isDashboardBusy}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy
+                  </button>
+                </div>
+                <pre
+                  className="mt-2 overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[0.7rem] leading-5 text-foreground"
+                  data-testid="dashboard-custom-frontend-browser-env"
+                >{customFrontendBrowserEnvText}</pre>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Server loader env</div>
+                  <button
+                    type="button"
+                    onClick={() => void copyDashboardText(customFrontendServerEnvText, 'Custom frontend server env')}
+                    disabled={isDashboardBusy}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy
+                  </button>
+                </div>
+                <pre
+                  className="mt-2 overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-[0.7rem] leading-5 text-foreground"
+                  data-testid="dashboard-custom-frontend-server-env"
+                >{customFrontendServerEnvText}</pre>
+              </div>
+
+              <div className="rounded-lg border border-border bg-background p-3 text-xs">
+                <dl className="grid gap-2">
+                  <div>
+                    <dt className="font-semibold text-muted-foreground">Public host</dt>
+                    <dd className="mt-0.5 break-all font-mono text-foreground" data-testid="dashboard-custom-frontend-public-host">{customFrontendLaunch.site.publicHost}</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-muted-foreground">Read first</dt>
+                    <dd className="mt-0.5 break-all font-mono text-primary">{customFrontendLaunch.endpoints.agentHandoff}</dd>
+                  </div>
+                </dl>
+                <Link
+                  to="/sites"
+                  search={{ siteId: activeSiteId }}
+                  className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                >
+                  Open Sites handoff
+                  <ArrowRight className="size-3.5" />
+                </Link>
+              </div>
             </div>
           </div>
         </section>
