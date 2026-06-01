@@ -155,6 +155,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest compact editor shell polish:** The editor shell now detects compact widths and auto-collapses Components/Inspector/Layers into overlay panels instead of docking fixed side rails beside the canvas. Responsive smoke proves compact auto-collapse, overlay Components/Layers open/close, canvas width preservation while overlays are open, and docked panel restoration on desktop; preview-scroll remains green.
 
+**Newest custom frontend launch polish:** Site Detail now exposes a copyable `backy.custom-frontend-project-launch.v1` block that tells owners and frontend agents to attach the public website domain to the separate custom frontend Vercel project, use `backy-public` as the API/render origin, keep `backy-admin` protected, copy only public/read env values, and keep Supabase/database/provider/admin secrets out of the frontend. Site Detail smoke, typecheck, diff check, and repo-public hygiene are green.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

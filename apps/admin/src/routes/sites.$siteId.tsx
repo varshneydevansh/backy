@@ -5726,6 +5726,106 @@ function EditSitePage() {
       siteHandoffIdParam,
     ],
   );
+  const customFrontendPrimaryHost =
+    normalizeSiteSettingsDomain(formData.customDomain || site?.customDomain || "") ||
+    domainAliasDraftHosts[0] ||
+    savedDomainAliases[0]?.host ||
+    `${formData.slug || site?.slug || siteHandoffId}.backy.app`;
+  const customFrontendSameSiteHosts = useMemo(
+    () =>
+      (
+        domainAliasDraftHosts.length > 0
+          ? domainAliasDraftHosts
+          : savedDomainAliases.map((alias) => alias.host)
+      ).filter((host) => host !== customFrontendPrimaryHost),
+    [customFrontendPrimaryHost, domainAliasDraftHosts, savedDomainAliases],
+  );
+  const customFrontendProjectEnvText = useMemo(
+    () =>
+      [
+        `NEXT_PUBLIC_BACKY_API_BASE_URL=${publicApiBase}`,
+        `NEXT_PUBLIC_BACKY_SITE_ID=${siteHandoffId}`,
+        `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=${customFrontendPrimaryHost}`,
+        "",
+        "# Server-side equivalents for Next.js server components/actions",
+        `BACKY_PUBLIC_API_BASE_URL=${publicApiBase}`,
+        `BACKY_SITE_ID=${siteHandoffId}`,
+        `BACKY_SITE_PUBLIC_HOST=${customFrontendPrimaryHost}`,
+      ].join("\n"),
+    [customFrontendPrimaryHost, publicApiBase, siteHandoffId],
+  );
+  const customFrontendProjectLaunchPlan = useMemo(
+    () => ({
+      schemaVersion: "backy.custom-frontend-project-launch.v1",
+      model: "separate-public-website-frontend-consuming-backy-public-api",
+      siteId: siteHandoffId,
+      projectBoundary: {
+        backyAdmin: "Protected admin/editor project. Do not attach the public website domain here.",
+        backyPublic: "Public Backy API/render runtime. Keep this as the API origin unless you add a dedicated API domain.",
+        customFrontend: "Separate public Vercel project that owns the website domain and renders from Backy APIs.",
+      },
+      domain: {
+        attachPrimaryHostTo: "custom-frontend-vercel-project",
+        primaryHost: customFrontendPrimaryHost,
+        sameSiteHosts: customFrontendSameSiteHosts,
+        dnsRule:
+          "Point the website host to the custom frontend Vercel project; keep Backy domain verification as readiness metadata and host-aware API routing context.",
+      },
+      environment: {
+        browserSafe: {
+          NEXT_PUBLIC_BACKY_API_BASE_URL: publicApiBase,
+          NEXT_PUBLIC_BACKY_SITE_ID: siteHandoffId,
+          NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST: customFrontendPrimaryHost,
+        },
+        serverSide: {
+          BACKY_PUBLIC_API_BASE_URL: publicApiBase,
+          BACKY_SITE_ID: siteHandoffId,
+          BACKY_SITE_PUBLIC_HOST: customFrontendPrimaryHost,
+        },
+        forbiddenInCustomFrontend: [
+          "Supabase service role keys",
+          "database URLs",
+          "Backy admin/session secrets",
+          "bootstrap tokens",
+          "provider API keys",
+          "mail/commerce/webhook secrets",
+          "copied Backy content JSON as a second source of truth",
+        ],
+      },
+      readStart: {
+        agentHandoff: siteCustomFrontendAgentHandoff.endpoints.agentHandoff,
+        manifest: siteCustomFrontendAgentHandoff.endpoints.manifest,
+        openapi: siteCustomFrontendAgentHandoff.endpoints.openapi,
+        resolveWithHost:
+          siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost,
+        renderWithHost:
+          siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost,
+      },
+      workflow: [
+        "Create the Backy site and save the custom domain/aliases.",
+        "Build the website in a separate frontend repo or Vercel project.",
+        "Give the frontend agent this launch plan plus the agent handoff before it writes routes or components.",
+        "Attach the production domain to the website frontend project, not to backy-admin or backy-public.",
+        "Fetch Backy manifest/OpenAPI/render payloads at runtime or through ISR/revalidation.",
+        "Use Backy admin APIs only from authenticated server-side tools when writing content back.",
+      ],
+    }),
+    [
+      customFrontendPrimaryHost,
+      customFrontendSameSiteHosts,
+      publicApiBase,
+      siteCustomFrontendAgentHandoff.endpoints.agentHandoff,
+      siteCustomFrontendAgentHandoff.endpoints.manifest,
+      siteCustomFrontendAgentHandoff.endpoints.openapi,
+      siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost,
+      siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost,
+      siteHandoffId,
+    ],
+  );
+  const customFrontendProjectLaunchPlanText = useMemo(
+    () => JSON.stringify(customFrontendProjectLaunchPlan, null, 2),
+    [customFrontendProjectLaunchPlan],
+  );
   const siteWorkspaceHandoff = useMemo(
     () => ({
       generatedAt: new Date().toISOString(),
@@ -5804,6 +5904,7 @@ function EditSitePage() {
         notes: frontendDesignState.frontendDesign.notes || "",
       },
       customFrontendAgentHandoff: siteCustomFrontendAgentHandoff,
+      customFrontendProjectLaunch: customFrontendProjectLaunchPlan,
       theme: siteThemeDraftToTheme(themeDraft),
       navigation: {
         primaryItems: navigationState.navigation.primary.length,
@@ -5928,6 +6029,7 @@ function EditSitePage() {
       seoState.seo.titleTemplate,
       savedDomainAliases,
       siteCustomFrontendAgentHandoff,
+      customFrontendProjectLaunchPlan,
       site?.customDomain,
       site?.id,
       site?.name,
@@ -6745,6 +6847,89 @@ function EditSitePage() {
                   or the browser Host header for subdomains, and create a separate
                   Backy site when a subdomain needs independent content, navigation,
                   SEO, or design tokens.
+                </p>
+              </div>
+              <div
+                className="mt-3 rounded-lg border border-teal-200 bg-background/80 p-3"
+                data-testid="site-custom-frontend-project-launch"
+                data-launch-schema={customFrontendProjectLaunchPlan.schemaVersion}
+                data-launch-model={customFrontendProjectLaunchPlan.model}
+                data-launch-api-base={publicApiBase}
+                data-launch-site-id={siteHandoffId}
+                data-launch-primary-host={customFrontendPrimaryHost}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                      Separate custom frontend project
+                    </div>
+                    <p className="mt-1 max-w-3xl text-xs leading-5 text-teal-950">
+                      Attach the custom domain to the website frontend project.
+                      Backy stays the protected admin plus public API/render
+                      source, while the frontend project owns the public website
+                      UI and fetches this site’s manifest, OpenAPI, resolve, and
+                      render payloads.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copySiteHandoffText(
+                          customFrontendProjectEnvText,
+                          "Custom frontend env",
+                        )
+                      }
+                      disabled={isSiteSettingsBusy}
+                      data-testid="site-copy-custom-frontend-project-env"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy frontend env
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copySiteHandoffText(
+                          customFrontendProjectLaunchPlanText,
+                          "Custom frontend launch plan",
+                        )
+                      }
+                      disabled={isSiteSettingsBusy}
+                      data-testid="site-copy-custom-frontend-project-launch"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy launch JSON
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <SiteHandoffEndpoint
+                    label="Website domain owner"
+                    value="Custom frontend Vercel project"
+                  />
+                  <SiteHandoffEndpoint
+                    label="Backy API origin"
+                    value={publicApiBase}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Site identifier"
+                    value={siteHandoffId}
+                  />
+                  <SiteHandoffEndpoint
+                    label="Public host context"
+                    value={customFrontendPrimaryHost}
+                  />
+                </div>
+                <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">
+                  {customFrontendProjectEnvText}
+                </pre>
+                <p className="mt-3 text-xs leading-5 text-teal-900/80">
+                  Do not place Supabase service role keys, database URLs, Backy
+                  admin/session secrets, bootstrap tokens, provider keys,
+                  private order/submission payloads, or copied Backy content JSON
+                  in the custom frontend project.
                 </p>
               </div>
               <div

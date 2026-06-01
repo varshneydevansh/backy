@@ -44,6 +44,16 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-agent-content-entry-points"') &&
       source.includes('data-testid="site-agent-canvas-first-rule"') &&
       source.includes('data-testid="site-agent-routing-handoff"') &&
+      source.includes('data-testid="site-custom-frontend-project-launch"') &&
+      source.includes('data-testid="site-copy-custom-frontend-project-env"') &&
+      source.includes('data-testid="site-copy-custom-frontend-project-launch"') &&
+      source.includes('backy.custom-frontend-project-launch.v1') &&
+      source.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
+      source.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
+      source.includes('Attach the custom domain to the website frontend project') &&
+      source.includes('Custom frontend Vercel project') &&
+      source.includes('customFrontendProjectLaunch: customFrontendProjectLaunchPlan') &&
+      source.includes('forbiddenInCustomFrontend') &&
       source.includes('data-routing-schema={siteCustomFrontendAgentHandoff.routing.schemaVersion}') &&
       source.includes('siteCustomFrontendAgentHandoff.routing.subdomainRouting.model') &&
       source.includes('siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost') &&
@@ -1337,6 +1347,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       : [];
     const disabledFrontendDraftControls = frontendDraftControls.filter((control) => control.disabled);
     const routingPanel = document.querySelector('[data-testid="site-agent-routing-handoff"]');
+    const launchPanel = document.querySelector('[data-testid="site-custom-frontend-project-launch"]');
     const frontendDesign = {
       hasPanel: Boolean(frontendPanel),
       hydrated: frontendPanel?.getAttribute('data-hydrated') === 'true',
@@ -1431,6 +1442,17 @@ const assertSiteDetailLayout = async (client, siteName) => {
           renderHost: routingPanel?.getAttribute('data-routing-render-host') || '',
           text: routingPanel?.textContent || '',
         },
+        projectLaunch: {
+          visible: Boolean(launchPanel),
+          schema: launchPanel?.getAttribute('data-launch-schema') || '',
+          model: launchPanel?.getAttribute('data-launch-model') || '',
+          apiBase: launchPanel?.getAttribute('data-launch-api-base') || '',
+          siteId: launchPanel?.getAttribute('data-launch-site-id') || '',
+          primaryHost: launchPanel?.getAttribute('data-launch-primary-host') || '',
+          copyEnv: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-env"]')),
+          copyLaunch: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-launch"]')),
+          text: launchPanel?.textContent || '',
+        },
         text: document.querySelector('[data-testid="site-custom-frontend-agent-handoff"]')?.textContent || '',
       },
     };
@@ -1520,6 +1542,21 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.routing.text.includes('Resolve with host') &&
       layout.customFrontendAgentHandoff.routing.text.includes('Same-site aliases') &&
       layout.customFrontendAgentHandoff.routing.text.includes('Subdomain rule') &&
+      layout.customFrontendAgentHandoff.projectLaunch.visible &&
+      layout.customFrontendAgentHandoff.projectLaunch.schema === 'backy.custom-frontend-project-launch.v1' &&
+      layout.customFrontendAgentHandoff.projectLaunch.model === 'separate-public-website-frontend-consuming-backy-public-api' &&
+      layout.customFrontendAgentHandoff.projectLaunch.apiBase.includes('/api') &&
+      layout.customFrontendAgentHandoff.projectLaunch.siteId.length > 0 &&
+      layout.customFrontendAgentHandoff.projectLaunch.primaryHost.length > 0 &&
+      layout.customFrontendAgentHandoff.projectLaunch.copyEnv &&
+      layout.customFrontendAgentHandoff.projectLaunch.copyLaunch &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Separate custom frontend project') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Attach the custom domain to the website frontend project') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Custom frontend Vercel project') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Server-side equivalents') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Do not place Supabase service role keys') &&
       layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
       layout.customFrontendAgentHandoff.text.includes('/agent-handoff') &&
       layout.customFrontendAgentHandoff.text.includes('backy.custom-frontend-routing-handoff.v1') &&

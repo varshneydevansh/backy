@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 21:33 IST
+- **Last updated:** 2026-06-01 22:01 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 22:01 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Site Detail now gives owners a copyable separate-frontend launch plan
+
+**What changed:**
+- `apps/admin/src/routes/sites.$siteId.tsx` now adds `backy.custom-frontend-project-launch.v1` to the site workspace handoff so a site owner or frontend agent can distinguish protected `backy-admin`, public `backy-public`, and the separate public website frontend project.
+- Site Detail's Frontend handoff now includes a visible "Separate custom frontend project" block with browser-safe `NEXT_PUBLIC_BACKY_*` env, server-side equivalents, the primary host context, the Backy public API origin, and explicit forbidden-secret boundaries.
+- `apps/admin/scripts/site-detail-smoke.mjs` now source- and render-checks the launch block, copy buttons, schema/model metadata, env values, and no-secret warning.
+
+**Commands run:**
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This turns the `devanshvarshney.com` custom-frontend answer into an in-product workflow: attach the domain to the custom website frontend Vercel project, keep Backy as CMS/API/runtime, and copy only public/read env to the frontend.
+- The launch plan intentionally contains env names and endpoint templates only; it does not expose Supabase, database, provider, admin-session, mail, commerce, or bootstrap secrets.
+
+**Next:**
+1. Commit and push this Site Detail launch-handoff slice, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 21:33 IST
 
