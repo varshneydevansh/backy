@@ -242,6 +242,68 @@ interface ApiSiteFrontendDesignResponse {
   };
 }
 
+export interface AdminCustomFrontendConnectionCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'warning' | 'fail';
+  detail: string;
+}
+
+export interface AdminCustomFrontendConnectionVerification {
+  schemaVersion: 'backy.admin-custom-frontend-connection-check.v1';
+  checkedAt: string;
+  frontendUrl: string;
+  probeUrl: string;
+  status: 'ready' | 'warning' | 'failed';
+  summary: {
+    passed: number;
+    warnings: number;
+    failed: number;
+    total: number;
+  };
+  expected: {
+    apiBaseUrl: string;
+    siteIdentifiers: string[];
+    publicHosts: string[];
+    requiredDomAttributes: string[];
+    forbiddenPrivateEnv: string[];
+  };
+  checks: AdminCustomFrontendConnectionCheck[];
+  probe: {
+    schemaVersion: string | null;
+    runtime: string | null;
+    configured: {
+      apiBaseUrl: string | null;
+      siteId: string | null;
+      sitePublicHost: string | null;
+    };
+    backy: {
+      manifestReachable: boolean;
+      manifestSchema: string | null;
+      hasCustomFrontendHandoff: boolean;
+      hasComponentApiContract: boolean;
+    };
+    boundaries: {
+      includesSecretValues: false | null;
+      forbiddenEnvPresent: string[];
+    };
+    domContract: {
+      requiredAttributes: string[];
+    };
+  } | null;
+  smokeCommand: string;
+}
+
+interface ApiCustomFrontendConnectionResponse {
+  success: boolean;
+  data?: AdminCustomFrontendConnectionVerification;
+  error?: {
+    message?: string;
+    details?: unknown;
+    code?: string;
+  };
+}
+
 export interface CollectionBindingPreset {
   id: string;
   name: string;
@@ -5415,6 +5477,30 @@ export async function captureSiteFrontendDesignDefaults(siteId: string): Promise
 
   if (!response.ok || !payload.success || !payload.data) {
     throw new Error(payload.error?.message || 'Unable to capture frontend design defaults');
+  }
+
+  return payload.data;
+}
+
+export async function verifySiteCustomFrontendConnection(
+  siteId: string,
+  input: {
+    frontendUrl: string;
+    expectedApiBaseUrl?: string;
+    expectedSitePublicHost?: string;
+  },
+): Promise<AdminCustomFrontendConnectionVerification> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/custom-frontend/connection`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = await readJson<ApiCustomFrontendConnectionResponse>(response);
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to verify custom frontend connection');
   }
 
   return payload.data;

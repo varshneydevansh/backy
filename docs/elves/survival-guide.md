@@ -199,11 +199,15 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest custom frontend self-probe polish:** `examples/custom-frontend-next` now exposes `GET /api/backy-connection` with schema `backy.custom-frontend-connection.v1`. The endpoint returns only public configuration and booleans: Backy API base, site id, public host, manifest reachability, required DOM control attributes, and forbidden private env names present by name only, with `includesSecretValues: false`.
 
+**Newest custom frontend admin verifier polish:** Site Detail now exposes a protected `backy.admin-custom-frontend-connection-check.v1` verifier for deployed separate frontends. It posts to `/api/admin/sites/:siteId/custom-frontend/connection`, rejects local/private/reserved frontend hosts, checks `/api/backy-connection`, required `data-backy-*` DOM control attributes, expected Backy API/site/host values, and forbidden private env names without exposing secret values. Help mirrors the verifier workflow for owners and frontend agents.
+
+**Newest verification:** Source connection smoke, Help source/rendered smokes, Site Detail rendered smoke, admin typecheck, public typecheck, production API connection smoke against `https://backy-public.vercel.app/api`, and diff check are green for the in-admin custom frontend verifier slice.
+
 **Newest verification:** Starter source smoke, starter typecheck, production API connection smoke, Help source/rendered smokes, admin typecheck, SDK typecheck, diff check, env-backed starter production build, and a full 49-check local starter connection proof against production Backy are green. The full proof uses `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
 
 **Newest deploy verification:** `291c8b84` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live custom frontend connection gate passes 39 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes, and recent Vercel error logs are empty.
 
-**Single next action:** Create/connect the real separate custom website frontend project for `devanshvarshney.com`, point it at `https://backy-public.vercel.app/api` using only safe browser/server-loader env, attach the public website domain to that frontend project, and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
+**Single next action:** Create/connect the real separate custom website frontend project for `devanshvarshney.com`, point it at `https://backy-public.vercel.app/api` using only safe browser/server-loader env, attach the public website domain to that frontend project, then use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
 
 ## Active Compute
 

@@ -400,6 +400,11 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('Backy-public remains the public API/render origin.') &&
       helpSource.includes('customDomain or domainAliases host') &&
       helpSource.includes('Create a separate Backy site when a subdomain needs independent content, navigation, SEO, design tokens, or launch state.') &&
+      helpSource.includes('Site Detail -> Separate custom frontend project -> Verify deployed frontend') &&
+      helpSource.includes('/api/admin/sites/${siteId}/custom-frontend/connection') &&
+      helpSource.includes('/api/backy-connection') &&
+      helpSource.includes('required data-backy-* DOM attributes') &&
+      helpSource.includes('forbidden private env names') &&
       helpSource.includes('data-testid="help-custom-frontend-checklist"') &&
       helpSource.includes('data-testid="help-custom-frontend-steps"') &&
       helpSource.includes('data-testid="help-custom-frontend-env-grid"') &&
@@ -408,6 +413,7 @@ const assertHelpSourceContracts = () => {
       helpSource.includes('BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api') &&
       helpSource.includes('BACKY_SITE_PUBLIC_HOST=<your-domain.com>') &&
       helpSource.includes("id: 'sdk-bootstrap'") &&
+      helpSource.includes("id: 'admin-verifier'") &&
       helpSource.includes('createBackyCustomFrontendClient') &&
       helpSource.includes('GET /api/sites/${siteId}/resolve?path=/&domain=<your-domain.com>') &&
       helpSource.includes('GET /api/sites/${siteId}/render?path=/&domain=<your-domain.com>') &&
@@ -642,11 +648,13 @@ const runRenderedHelpSmoke = async () => {
       };
     })()`);
     assert(customFrontendState.targetSiteId === HELP_SMOKE_SITE_ID, `Custom frontend checklist used wrong site id: ${JSON.stringify(customFrontendState)}`);
-    assert(customFrontendState.stepCount === 5, `Custom frontend checklist should expose five steps: ${JSON.stringify(customFrontendState)}`);
+    assert(customFrontendState.stepCount === 6, `Custom frontend checklist should expose six steps: ${JSON.stringify(customFrontendState)}`);
     for (const expected of [
       'Connect a separate custom frontend',
       'custom frontend Vercel project',
       'customDomain or domainAliases',
+      'Verify connection',
+      'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
       'NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api',
       `NEXT_PUBLIC_BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
       'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
@@ -654,6 +662,11 @@ const runRenderedHelpSmoke = async () => {
       `BACKY_SITE_ID=${HELP_SMOKE_SITE_ID}`,
       'BACKY_SITE_PUBLIC_HOST=<your-domain.com>',
       'createBackyCustomFrontendClient',
+      `/api/admin/sites/${HELP_SMOKE_SITE_ID}/custom-frontend/connection`,
+      '/api/backy-connection',
+      'data-backy-component-contract-pointer',
+      'data-backy-editable-map-pointer',
+      'forbidden private env names',
       `/api/sites/${HELP_SMOKE_SITE_ID}/resolve?path=/&domain=<your-domain.com>`,
       `/api/sites/${HELP_SMOKE_SITE_ID}/render?path=/&domain=<your-domain.com>`,
       'SUPABASE_SERVICE_ROLE_KEY',

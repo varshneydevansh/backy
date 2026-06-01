@@ -26,6 +26,9 @@ const helpRoute = read('apps/admin/src/routes/help.tsx');
 const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
 const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
+const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
+const adminSiteDetailRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
+const adminContentApi = read('apps/admin/src/lib/adminContentApi.ts');
 const handoffSource = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
@@ -100,6 +103,47 @@ includesAll(
   'Starter exposes a public custom frontend connection probe without secret values',
 );
 includesAll(
+  adminConnectionVerifierRoute,
+  [
+    'backy.admin-custom-frontend-connection-check.v1',
+    'requireAdminAccess',
+    'assertPublicFrontendUrl',
+    'isPrivateAddress',
+    'lookup(host',
+    'a === 100 && b >= 64 && b <= 127',
+    'a === 198 && (b === 18 || b === 19)',
+    'a === 203 && b === 0 && c === 113',
+    '/api/backy-connection',
+    'data-backy-component-contract-pointer',
+    'data-backy-editable-map-pointer',
+    'forbiddenEnvPresent',
+    'includesSecretValues',
+  ],
+  'Admin custom frontend verifier is protected, SSRF-aware, and checks probe plus DOM control attributes',
+);
+includesAll(
+  adminSiteDetailRoute,
+  [
+    'site-custom-frontend-connection-verifier',
+    'site-custom-frontend-connection-url',
+    'site-custom-frontend-connection-run',
+    'site-custom-frontend-connection-result',
+    'verifySiteCustomFrontendConnection',
+    'backy.admin-custom-frontend-connection-check.v1',
+    '/api/backy-connection',
+  ],
+  'Site detail exposes an in-admin custom frontend connection verifier',
+);
+includesAll(
+  adminContentApi,
+  [
+    'AdminCustomFrontendConnectionVerification',
+    'verifySiteCustomFrontendConnection',
+    '/custom-frontend/connection',
+  ],
+  'Admin content API exposes the custom frontend connection verifier client',
+);
+includesAll(
   readme,
   [
     'npm run test:custom-frontend-connection',
@@ -136,6 +180,11 @@ includesAll(
     'BACKY_CUSTOM_FRONTEND_API_BASE_URL',
     'BACKY_CUSTOM_FRONTEND_URL',
     'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE',
+    'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
+    '/api/admin/sites/${siteId}/custom-frontend/connection',
+    'data-backy-component-contract-pointer',
+    'data-backy-editable-map-pointer',
+    'forbidden private env names',
   ],
   'Help route exposes the custom frontend connection gate',
 );

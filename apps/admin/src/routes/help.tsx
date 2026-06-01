@@ -230,6 +230,7 @@ const HELP_TOPICS: HelpTopic[] = [
       'In Backy, create or select the site, save the exact customDomain or domainAliases host, and verify DNS before relying on public host discovery.',
       'Use aliases for multiple hosts that should show the same site. Create a separate Backy site when a subdomain needs independent content, navigation, SEO, design tokens, or launch state.',
       'Frontend agents should read agent-handoff, manifest, OpenAPI, resolve, and render before writing routes or components; the render payload keeps content, fonts, colors, assets, responsive overrides, motion, and component metadata structured.',
+      'After the frontend deploys, open Site Detail -> Separate custom frontend project -> Verify deployed frontend. Backy checks /api/backy-connection, required data-backy-* DOM attributes, expected API/site/host values, and forbidden private env names.',
       'Only browser-safe public env belongs in the custom frontend bundle. Supabase, database, provider, admin session, bootstrap, cron, and transactional mail secrets stay on backy-public/admin or private delivery workers.',
     ],
     route: '/sites',
@@ -412,7 +413,7 @@ const FRONTEND_AGENT_STARTERS = [
     id: 'connection-smoke',
     label: 'Connection smoke',
     value: 'BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=:siteId npm run test:custom-frontend-connection  |  BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection',
-    detail: 'Run this in the Backy repo to prove the public API contract is reachable, then add the frontend URL to prove the deployed custom website keeps Backy DOM control attributes and exposes a secret-free /api/backy-connection probe.',
+    detail: 'Run this in the Backy repo or use Site Detail -> Separate custom frontend project -> Verify deployed frontend to prove the deployed custom website keeps Backy DOM control attributes and exposes a secret-free /api/backy-connection probe.',
   },
 ];
 
@@ -462,6 +463,19 @@ const CUSTOM_FRONTEND_ENV_CARDS = [
       '  backy.manifest(),',
       "  backy.render('/'),",
       ']);',
+    ].join('\n'),
+  },
+  {
+    id: 'admin-verifier',
+    label: 'Admin connection verifier',
+    description: 'Use this from Backy after the separate frontend is deployed, before moving production DNS.',
+    value: (siteId: string) => [
+      'Site Detail -> Separate custom frontend project -> Verify deployed frontend',
+      `POST /api/admin/sites/${siteId}/custom-frontend/connection`,
+      'Checks /api/backy-connection',
+      'Checks data-backy-site-id, data-backy-route, data-backy-element-id, data-backy-element-type',
+      'Checks data-backy-component-contract-pointer and data-backy-editable-map-pointer',
+      'Checks expected Backy API base, site id, public host, and forbidden private env names',
     ].join('\n'),
   },
   {
@@ -521,6 +535,7 @@ const buildAgentCopyBrief = (siteId: string) => [
   '10. For Vercel release topology, deploy protected backy-admin, public backy-public, and separate custom frontend projects. Custom frontend browser bundles use NEXT_PUBLIC_BACKY_API_BASE_URL, NEXT_PUBLIC_BACKY_SITE_ID, and NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST only. Server-side loaders may use BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and BACKY_SITE_PUBLIC_HOST.',
   "11. In custom frontend code, prefer @backy/sdk-js createBackyCustomFrontendClient({ env: process.env }); it accepts the /api env base URL and passes the public host as domain for resolve/render calls.",
   '12. Before preview deploy, run npm run test:vercel-release-config and npm run test:vercel-preview-readiness; after linking projects, strict mode can require apps/public/.vercel/project.json, apps/admin/.vercel/project.json, and remote backy-public/backy-admin projects.',
+  '13. After the separate frontend deploys, paste its public URL into Site Detail -> Separate custom frontend project -> Verify deployed frontend. The protected Backy verifier checks /api/backy-connection, required data-backy-* DOM attributes, expected API/site/host values, and forbidden private env names.',
 ].join('\n');
 
 function HelpPage() {
@@ -783,13 +798,14 @@ function HelpPage() {
           icon={<Globe2 className="h-4 w-4" />}
         />
         <PanelContent>
-          <div className="grid gap-3 lg:grid-cols-5" data-testid="help-custom-frontend-steps">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" data-testid="help-custom-frontend-steps">
             {[
               ['1', 'Create/select site', 'Create the Backy site, pick the starter or imported design source, then keep authoring content in Backy.'],
               ['2', 'Attach domain to frontend', 'Put the root domain or subdomain on the custom frontend Vercel project. Keep backy-admin protected.'],
               ['3', 'Verify host in Backy', 'Save the exact host as customDomain or domainAliases, then verify DNS before public host discovery.'],
               ['4', 'Configure safe env', 'Use only public API/site/host env in browser bundles; optional server loaders can use non-NEXT_PUBLIC mirrors.'],
               ['5', 'Render from APIs', 'Read agent-handoff, manifest, OpenAPI, resolve, and render so content/design stays controlled by Backy.'],
+              ['6', 'Verify connection', 'Paste the deployed frontend URL into the Site Detail verifier before moving production DNS.'],
             ].map(([step, title, description]) => (
               <div key={step} className="rounded-lg border border-border bg-muted/20 p-3" data-testid={`help-custom-frontend-step-${step}`}>
                 <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{step}</span>

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 03:39 IST
+- **Last updated:** 2026-06-02 04:10 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 04:10 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Backy admin can now verify a deployed separate frontend
+
+**What changed:**
+- Added protected `POST /api/admin/sites/:siteId/custom-frontend/connection` on `backy-public` for owner/admin use from Site Detail.
+- The verifier validates a deployed frontend URL with public-host checks, DNS/private/reserved-address rejection, `/api/backy-connection` JSON proof, required `data-backy-*` DOM control attributes, expected Backy API/site/host values, and forbidden private env names without returning secret values.
+- Site Detail now has a “Verify deployed frontend” panel inside the Separate custom frontend project handoff, with per-check pass/warning/fail output.
+- Help now includes the same verifier in the separate-custom-frontend checklist and copyable agent handoff guidance, so owners and frontend agents do not rely only on shell commands.
+
+**Commands run:**
+- `npm run test:custom-frontend-connection --silent` -> PASS, 14 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 42 checks; deployed frontend DOM/probe proof skipped because the separate website frontend URL does not exist yet.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Run final repo-public hygiene, commit/push this verifier slice, then re-read the survival guide.
+2. Create/connect the real separate custom website frontend project for `devanshvarshney.com`.
+3. Paste the deployed frontend URL into Site Detail -> Separate custom frontend project -> Verify deployed frontend, and also run `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
 
 ## 2026-06-02 03:39 IST
 

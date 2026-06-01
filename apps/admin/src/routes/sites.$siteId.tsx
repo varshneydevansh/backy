@@ -68,10 +68,12 @@ import {
   updateContact,
   updateFormSubmission,
   updateSiteFrontendDesign,
+  verifySiteCustomFrontendConnection,
   updateSite as updateSiteFromApi,
   captureSiteFrontendDesignDefaults,
   adminFetch,
   type AdminAuditLog,
+  type AdminCustomFrontendConnectionVerification,
   type AdminUserPermissionMatrix,
   type ApiSite,
 } from "@/lib/adminContentApi";
@@ -2122,6 +2124,15 @@ function EditSitePage() {
   const [siteWorkspaceNotice, setSiteWorkspaceNotice] = useState<string | null>(
     null,
   );
+  const [customFrontendVerifyUrl, setCustomFrontendVerifyUrl] = useState("");
+  const [customFrontendVerifyUrlTouched, setCustomFrontendVerifyUrlTouched] =
+    useState(false);
+  const [customFrontendVerification, setCustomFrontendVerification] =
+    useState<AdminCustomFrontendConnectionVerification | null>(null);
+  const [customFrontendVerificationLoading, setCustomFrontendVerificationLoading] =
+    useState(false);
+  const [customFrontendVerificationError, setCustomFrontendVerificationError] =
+    useState<string | null>(null);
   const [readiness, setReadiness] = useState<SiteReadiness | null>(null);
   const [readinessHydrated, setReadinessHydrated] = useState(false);
   const [readinessLoading, setReadinessLoading] = useState(false);
@@ -5826,6 +5837,20 @@ function EditSitePage() {
     () => JSON.stringify(customFrontendProjectLaunchPlan, null, 2),
     [customFrontendProjectLaunchPlan],
   );
+  const customFrontendDefaultVerifyUrl = `https://${customFrontendPrimaryHost}`;
+
+  useEffect(() => {
+    setCustomFrontendVerifyUrlTouched(false);
+    setCustomFrontendVerification(null);
+    setCustomFrontendVerificationError(null);
+  }, [siteApiId]);
+
+  useEffect(() => {
+    if (!customFrontendVerifyUrlTouched) {
+      setCustomFrontendVerifyUrl(customFrontendDefaultVerifyUrl);
+    }
+  }, [customFrontendDefaultVerifyUrl, customFrontendVerifyUrlTouched]);
+
   const siteWorkspaceHandoff = useMemo(
     () => ({
       generatedAt: new Date().toISOString(),
@@ -6090,6 +6115,54 @@ function EditSitePage() {
     );
     setSiteSettingsError(null);
     setSiteWorkspaceNotice("Site workspace handoff manifest downloaded.");
+  };
+
+  const handleVerifyCustomFrontendConnection = async () => {
+    if (!canViewSite) {
+      setCustomFrontendVerificationError(
+        viewSitePermissionTitle ||
+          "Your account needs sites.view to verify custom frontend connections.",
+      );
+      return;
+    }
+
+    const frontendUrl = customFrontendVerifyUrl.trim();
+    if (!frontendUrl) {
+      setCustomFrontendVerificationError("Enter the deployed custom frontend URL.");
+      return;
+    }
+
+    setCustomFrontendVerificationLoading(true);
+    setCustomFrontendVerificationError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const verification = await verifySiteCustomFrontendConnection(
+        siteApiId || siteId,
+        {
+          frontendUrl,
+          expectedApiBaseUrl: publicApiBase,
+          expectedSitePublicHost: customFrontendPrimaryHost,
+        },
+      );
+      setCustomFrontendVerification(verification);
+      setSiteWorkspaceNotice(
+        verification.status === "ready"
+          ? "Custom frontend connection verified."
+          : verification.status === "warning"
+            ? "Custom frontend connection verified with warnings."
+            : "Custom frontend connection check found blockers.",
+      );
+    } catch (error) {
+      setCustomFrontendVerification(null);
+      setCustomFrontendVerificationError(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify custom frontend connection.",
+      );
+    } finally {
+      setCustomFrontendVerificationLoading(false);
+    }
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -6925,6 +6998,134 @@ function EditSitePage() {
                 <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">
                   {customFrontendProjectEnvText}
                 </pre>
+                <div
+                  className="mt-3 rounded-lg border border-teal-200 bg-background/80 p-3"
+                  data-testid="site-custom-frontend-connection-verifier"
+                  data-verifier-schema="backy.admin-custom-frontend-connection-check.v1"
+                  data-verifier-endpoint={`${adminSiteUrl}/custom-frontend/connection`}
+                  data-verifier-api-base={publicApiBase}
+                  data-verifier-site-id={siteHandoffId}
+                  data-verifier-public-host={customFrontendPrimaryHost}
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                        Verify deployed frontend
+                      </div>
+                      <p className="mt-1 max-w-3xl text-xs leading-5 text-teal-950">
+                        Checks the public page DOM and its secret-free
+                        <code className="mx-1 rounded bg-teal-100 px-1 py-0.5 font-mono text-teal-950">
+                          /api/backy-connection
+                        </code>
+                        probe against this Backy site before the frontend is handed to users.
+                      </p>
+                      <input
+                        value={customFrontendVerifyUrl}
+                        onChange={(event) => {
+                          setCustomFrontendVerifyUrlTouched(true);
+                          setCustomFrontendVerifyUrl(event.target.value);
+                        }}
+                        placeholder="https://www.example.com"
+                        data-testid="site-custom-frontend-connection-url"
+                        className="mt-3 w-full rounded-lg border border-teal-200 bg-background px-3 py-2 text-xs text-foreground outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleVerifyCustomFrontendConnection()}
+                      disabled={customFrontendVerificationLoading || !canViewSite}
+                      title={canViewSite ? undefined : viewSitePermissionTitle}
+                      data-testid="site-custom-frontend-connection-run"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          customFrontendVerificationLoading && "animate-spin",
+                        )}
+                      />
+                      {customFrontendVerificationLoading ? "Checking" : "Verify connection"}
+                    </button>
+                  </div>
+                  {customFrontendVerificationError ? (
+                    <div
+                      className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700"
+                      data-testid="site-custom-frontend-connection-error"
+                    >
+                      {customFrontendVerificationError}
+                    </div>
+                  ) : null}
+                  {customFrontendVerification ? (
+                    <div
+                      className="mt-3"
+                      data-testid="site-custom-frontend-connection-result"
+                      data-connection-status={customFrontendVerification.status}
+                      data-connection-passed={customFrontendVerification.summary.passed}
+                      data-connection-warnings={customFrontendVerification.summary.warnings}
+                      data-connection-failed={customFrontendVerification.summary.failed}
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 font-semibold",
+                            customFrontendVerification.status === "ready"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : customFrontendVerification.status === "warning"
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : "border-red-200 bg-red-50 text-red-700",
+                          )}
+                        >
+                          {customFrontendVerification.status === "ready" ? (
+                            <CheckCircle className="h-3.5 w-3.5" />
+                          ) : (
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                          )}
+                          {customFrontendVerification.status === "ready"
+                            ? "Ready"
+                            : customFrontendVerification.status === "warning"
+                              ? "Warnings"
+                              : "Blocked"}
+                        </span>
+                        <span className="text-teal-900/80">
+                          {customFrontendVerification.summary.passed} passed ·{" "}
+                          {customFrontendVerification.summary.warnings} warnings ·{" "}
+                          {customFrontendVerification.summary.failed} failed
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {customFrontendVerification.checks.map((check) => (
+                          <div
+                            key={check.id}
+                            className="rounded-md border border-teal-100 bg-teal-50/40 px-3 py-2 text-xs"
+                            data-testid={`site-custom-frontend-connection-check-${check.id}`}
+                            data-check-status={check.status}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-teal-950">
+                                {check.label}
+                              </span>
+                              <span
+                                className={cn(
+                                  "rounded-full px-2 py-0.5 font-semibold",
+                                  check.status === "pass"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : check.status === "warning"
+                                      ? "bg-amber-50 text-amber-700"
+                                      : "bg-red-50 text-red-700",
+                                )}
+                              >
+                                {check.status}
+                              </span>
+                            </div>
+                            <p className="mt-1 leading-5 text-teal-900/80">
+                              {check.detail}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <p className="mt-3 text-xs leading-5 text-teal-900/80">
                   Do not place Supabase service role keys, database URLs, Backy
                   admin/session secrets, bootstrap tokens, provider keys,
