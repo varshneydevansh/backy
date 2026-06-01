@@ -89,6 +89,36 @@ assert.equal(publicRouteHostMatchesSite({
   customDomain: 'example.com',
   settings: {
     ...domainSettings,
+    domainAliases: [
+      {
+        id: 'alias-docs',
+        host: 'docs.example.com',
+        kind: 'subdomain',
+        status: 'verified',
+        requestedAt: '2026-05-30T00:00:00.000Z',
+        verifiedAt: '2026-05-30T00:00:00.000Z',
+      },
+    ],
+  },
+}, 'https://www.docs.example.com/path'), true);
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: {
+    ...domainSettings,
+    domainAliases: [
+      {
+        id: 'alias-pending',
+        host: 'preview.example.com',
+        kind: 'subdomain',
+        status: 'pending',
+      },
+    ],
+  },
+}, 'preview.example.com'), false);
+assert.equal(publicRouteHostMatchesSite({
+  customDomain: 'example.com',
+  settings: {
+    ...domainSettings,
     domainVerification: {
       ...verifiedDomainSettings.domainVerification!,
       domain: 'other.example.com',

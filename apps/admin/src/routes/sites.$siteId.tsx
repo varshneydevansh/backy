@@ -1914,20 +1914,77 @@ const isValidSiteSettingsSlug = (value: string): boolean =>
 const isValidSiteSettingsDomain = (value: string): boolean =>
   !value || /^[a-z0-9.-]+\.[a-z]{2,}$/.test(value);
 
+const normalizeSiteSettingsDomainAliases = (value: string): string[] => {
+  const seen = new Set<string>();
+  return value
+    .split(/[\n,]/)
+    .map(normalizeSiteSettingsDomain)
+    .filter((host) => {
+      if (!host || seen.has(host)) return false;
+      seen.add(host);
+      return true;
+    });
+};
+
+const siteDomainAliasKind = (
+  host: string,
+): NonNullable<SiteSettings["domainAliases"]>[number]["kind"] =>
+  host.split(".").length > 2 ? "subdomain" : "alias";
+
+const buildSiteDomainAliasSettings = (
+  hosts: string[],
+  current: SiteSettings["domainAliases"] | undefined,
+  timestamp: string,
+): NonNullable<SiteSettings["domainAliases"]> => {
+  const currentByHost = new Map(
+    (current || []).map((alias) => [
+      normalizeSiteSettingsDomain(alias.host),
+      alias,
+    ]),
+  );
+
+  return hosts.map((host) => {
+    const existing = currentByHost.get(host);
+
+    return {
+      id:
+        existing?.id ||
+        `domain-alias-${host.replace(/[^a-z0-9]+/g, "-")}`,
+      host,
+      kind: existing?.kind || siteDomainAliasKind(host),
+      status: existing?.status || "pending",
+      requestedAt: existing?.requestedAt || timestamp,
+      verifiedAt: existing?.status === "verified" ? existing.verifiedAt || timestamp : null,
+      lastError: existing?.lastError || null,
+    };
+  });
+};
+
 interface SiteSettingsInlineErrors {
   name?: string;
   slug?: string;
   customDomain?: string;
+  domainAliases?: string;
 }
 
 const buildSiteSettingsInlineErrors = (input: {
   name: string;
   slug: string;
   customDomain: string;
+  domainAliases: string;
 }): SiteSettingsInlineErrors => {
   const name = input.name.trim();
   const slug = input.slug.trim();
   const customDomain = normalizeSiteSettingsDomain(input.customDomain);
+  const rawAliases = input.domainAliases
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const domainAliases = normalizeSiteSettingsDomainAliases(input.domainAliases);
+  const invalidAlias = rawAliases.find(
+    (entry) => !isValidSiteSettingsDomain(normalizeSiteSettingsDomain(entry)),
+  );
+  const duplicateAlias = rawAliases.length !== domainAliases.length;
 
   return {
     name: !name
@@ -1948,6 +2005,13 @@ const buildSiteSettingsInlineErrors = (input: {
       customDomain && !isValidSiteSettingsDomain(customDomain)
         ? "Use a domain like example.com."
         : undefined,
+    domainAliases: invalidAlias
+      ? `Invalid alias: ${invalidAlias}. Use one domain or subdomain per line.`
+      : duplicateAlias
+        ? "Remove duplicate domain aliases."
+        : customDomain && domainAliases.includes(customDomain)
+          ? "The primary custom domain should not also be listed as an alias."
+          : undefined,
   };
 };
 
@@ -2011,12 +2075,14 @@ function EditSitePage() {
     name: string;
     slug: string;
     customDomain: string;
+    domainAliases: string;
     description: string;
     status: SiteStatusFilter;
   }>({
     name: "",
     slug: "",
     customDomain: "",
+    domainAliases: "",
     description: "",
     status: "draft",
   });
@@ -2419,6 +2485,9 @@ function EditSitePage() {
         name: site.name,
         slug: site.slug,
         customDomain: site.customDomain || "",
+        domainAliases: (site.settings?.domainAliases || [])
+          .map((alias) => alias.host)
+          .join("\n"),
         description: site.description,
         status: site.status as SiteStatusFilter,
       });
@@ -3676,6 +3745,63 @@ function EditSitePage() {
         error instanceof Error
           ? error.message
           : "Unable to update domain verification.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDomainAliasesVerificationChange = async (
+    status: NonNullable<SiteSettings["domainAliases"]>[number]["status"],
+  ) => {
+    if (!siteApiId || !site) return;
+    if (!canConfigureSite) {
+      setSiteSettingsError(siteConfigureDeniedMessage);
+      return;
+    }
+    if (savedDomainAliases.length === 0) {
+      setSiteSettingsError(
+        "Save domain aliases or subdomains before marking alias DNS verified.",
+      );
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextAliases = savedDomainAliases.map((alias) => ({
+      ...alias,
+      status,
+      requestedAt: alias.requestedAt || now,
+      verifiedAt: status === "verified" ? now : null,
+      lastError:
+        status === "failed"
+          ? "Manual alias DNS confirmation failed in the local workspace."
+          : null,
+    }));
+
+    setIsLoading(true);
+    setSiteSettingsError(null);
+    setSiteWorkspaceNotice(null);
+
+    try {
+      const savedSite = await updateSiteFromApi(siteApiId, {
+        settings: {
+          domainAliases: nextAliases,
+        },
+      });
+      updateSite(storeSiteId, savedSite);
+      setFetchedSite(savedSite);
+      setSiteWorkspaceNotice(
+        status === "verified"
+          ? `${savedSite.name} domain aliases marked verified.`
+          : `${savedSite.name} domain alias DNS records are ready.`,
+      );
+      void loadReadiness();
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setSiteSettingsError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update domain aliases.",
       );
     } finally {
       setIsLoading(false);
@@ -5297,6 +5423,14 @@ function EditSitePage() {
         formData.slug || site.slug,
       )
     : null;
+  const savedDomainAliases = useMemo(
+    () => site?.settings?.domainAliases || [],
+    [site?.settings?.domainAliases],
+  );
+  const domainAliasDraftHosts = useMemo(
+    () => normalizeSiteSettingsDomainAliases(formData.domainAliases),
+    [formData.domainAliases],
+  );
   const hasCustomDomain = Boolean(savedCustomDomain);
   const templateVersionReadiness = useMemo(
     () =>
@@ -5553,6 +5687,14 @@ function EditSitePage() {
     : canConfigureSite
       ? undefined
       : configureSitePermissionTitle;
+  const domainAliasActionDisabled =
+    isSiteSettingsBusy || !canConfigureSite || savedDomainAliases.length === 0;
+  const domainAliasActionTitle =
+    savedDomainAliases.length === 0
+      ? "Save domain aliases or subdomains before preparing alias DNS."
+      : canConfigureSite
+        ? undefined
+        : configureSitePermissionTitle;
   const siteCustomFrontendAgentHandoff = useMemo(
     () =>
       buildAdminSiteCustomFrontendAgentHandoff({
@@ -5564,14 +5706,20 @@ function EditSitePage() {
           slug: formData.slug || site?.slug || siteHandoffId,
           customDomain: formData.customDomain || site?.customDomain || null,
           domainVerificationDomain: domainVerification?.domain || null,
+          domainAliases:
+            domainAliasDraftHosts.length > 0
+              ? domainAliasDraftHosts
+              : savedDomainAliases,
         },
       }),
     [
       adminSiteUrl,
+      domainAliasDraftHosts,
       domainVerification?.domain,
       formData.customDomain,
       formData.slug,
       publicSiteApiUrl,
+      savedDomainAliases,
       site?.customDomain,
       site?.slug,
       siteHandoffId,
@@ -5587,6 +5735,10 @@ function EditSitePage() {
         name: formData.name || site?.name || "Untitled site",
         slug: formData.slug || site?.slug || siteId,
         customDomain: formData.customDomain || site?.customDomain || null,
+        domainAliases:
+          domainAliasDraftHosts.length > 0
+            ? domainAliasDraftHosts
+            : savedDomainAliases.map((alias) => alias.host),
         status: formData.status,
         publicUrl: publicSiteUrl,
       },
@@ -5750,6 +5902,7 @@ function EditSitePage() {
       commentTargetId,
       commentTargetType,
       contactStatus,
+      domainAliasDraftHosts,
       formData.customDomain,
       formData.name,
       formData.slug,
@@ -5773,6 +5926,7 @@ function EditSitePage() {
       seoState.seo.routeOverrides,
       seoState.seo.sitemap,
       seoState.seo.titleTemplate,
+      savedDomainAliases,
       siteCustomFrontendAgentHandoff,
       site?.customDomain,
       site?.id,
@@ -5856,6 +6010,12 @@ function EditSitePage() {
     setSiteSettingsSubmitted(false);
     setSiteSettingsError(null);
     setSiteSettingsNotice(null);
+    const savedAt = new Date().toISOString();
+    const domainAliases = buildSiteDomainAliasSettings(
+      normalizeSiteSettingsDomainAliases(formData.domainAliases),
+      site?.settings?.domainAliases,
+      savedAt,
+    );
 
     const nextSite = {
       name: formData.name.trim(),
@@ -5863,6 +6023,9 @@ function EditSitePage() {
       customDomain: normalizeSiteSettingsDomain(formData.customDomain) || null,
       description: formData.description.trim(),
       status: formData.status,
+      settings: {
+        domainAliases,
+      },
     };
 
     try {
@@ -6548,6 +6711,16 @@ function EditSitePage() {
                     value={siteCustomFrontendAgentHandoff.routing.subdomainRouting.examples.join(", ")}
                   />
                   <SiteHandoffEndpoint
+                    label="Same-site aliases"
+                    value={
+                      siteCustomFrontendAgentHandoff.routing.subdomainRouting.sameSiteAliases.length
+                        ? siteCustomFrontendAgentHandoff.routing.subdomainRouting.sameSiteAliases
+                            .map((alias) => `${alias.host} (${alias.status})`)
+                            .join(", ")
+                        : "No saved aliases"
+                    }
+                  />
+                  <SiteHandoffEndpoint
                     label="Resolve with host"
                     value={siteCustomFrontendAgentHandoff.routing.publicResolution.resolveWithHost}
                   />
@@ -6734,6 +6907,110 @@ function EditSitePage() {
                 {domainVerification.lastError}
               </div>
             ) : null}
+
+            <div
+              className="mt-5 rounded-lg border border-border bg-background/70 p-4"
+              data-testid="site-domain-aliases-panel"
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Domain aliases and subdomains
+                  </h3>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                    These verified hosts resolve to this same site through
+                    <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono">
+                      settings.domainAliases
+                    </code>
+                    . Use separate Backy sites for subdomains with independent
+                    content or design state.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copySiteHandoffText(
+                        savedDomainAliases.map((alias) => alias.host).join("\n"),
+                        "Domain aliases",
+                      )
+                    }
+                    disabled={isSiteSettingsBusy || savedDomainAliases.length === 0}
+                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy aliases
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleDomainAliasesVerificationChange("pending")
+                    }
+                    disabled={domainAliasActionDisabled}
+                    title={domainAliasActionTitle}
+                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw
+                      className={cn("h-4 w-4", isLoading && "animate-spin")}
+                    />
+                    Prepare alias DNS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleDomainAliasesVerificationChange("verified")
+                    }
+                    disabled={domainAliasActionDisabled}
+                    title={domainAliasActionTitle}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Mark aliases verified
+                  </button>
+                </div>
+              </div>
+
+              {savedDomainAliases.length === 0 ? (
+                <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                  No aliases saved yet. Add hosts in Site settings, save, then
+                  verify DNS before using them for public routing.
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {savedDomainAliases.map((alias) => (
+                    <div
+                      key={alias.id || alias.host}
+                      className="rounded-lg border border-border bg-card px-3 py-2"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="break-all font-mono text-xs text-foreground">
+                            {alias.host}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {alias.kind || siteDomainAliasKind(alias.host)}
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            domainVerificationStatusClass[
+                              alias.status || "pending"
+                            ],
+                          )}
+                        >
+                          {
+                            domainVerificationStatusLabel[
+                              alias.status || "pending"
+                            ]
+                          }
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
         )}
 
@@ -9468,6 +9745,75 @@ function EditSitePage() {
                   </p>
                 ) : null}
               </div>
+            </div>
+            <div>
+              <label
+                htmlFor="site-settings-domain-aliases-input"
+                className="block text-sm font-medium mb-2"
+              >
+                Domain aliases and subdomains
+              </label>
+              <textarea
+                id="site-settings-domain-aliases-input"
+                data-testid="site-settings-domain-aliases-input"
+                rows={3}
+                value={formData.domainAliases}
+                disabled={isSiteConfigurationDisabled}
+                title={
+                  canConfigureSite ? undefined : configureSitePermissionTitle
+                }
+                onChange={(e) => {
+                  if (isSiteConfigurationDisabled) return;
+
+                  setFormData({ ...formData, domainAliases: e.target.value });
+                }}
+                onBlur={(e) => {
+                  if (isSiteConfigurationDisabled) return;
+
+                  setFormData({
+                    ...formData,
+                    domainAliases: normalizeSiteSettingsDomainAliases(
+                      e.target.value,
+                    ).join("\n"),
+                  });
+                }}
+                placeholder={"blog.example.com\ndocs.example.com"}
+                className={cn(
+                  "w-full px-4 py-2.5 rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                  showSiteSettingsInlineErrors &&
+                    siteSettingsInlineErrors.domainAliases
+                    ? "border-red-300"
+                    : "border-border",
+                )}
+                aria-invalid={Boolean(
+                  showSiteSettingsInlineErrors &&
+                    siteSettingsInlineErrors.domainAliases,
+                )}
+                aria-describedby={
+                  showSiteSettingsInlineErrors &&
+                  siteSettingsInlineErrors.domainAliases
+                    ? "site-settings-domain-aliases-error"
+                    : "site-settings-domain-aliases-help"
+                }
+              />
+              <p
+                id="site-settings-domain-aliases-help"
+                className="mt-2 text-xs leading-5 text-muted-foreground"
+              >
+                Add one verified host per line when the same site should render
+                from several domains or subdomains. Create a separate Backy site
+                when content, navigation, SEO, or design tokens differ.
+              </p>
+              {showSiteSettingsInlineErrors &&
+              siteSettingsInlineErrors.domainAliases ? (
+                <p
+                  id="site-settings-domain-aliases-error"
+                  data-testid="site-settings-domain-aliases-error"
+                  className="mt-2 text-xs text-red-600"
+                >
+                  {siteSettingsInlineErrors.domainAliases}
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">

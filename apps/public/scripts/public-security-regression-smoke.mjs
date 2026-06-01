@@ -1761,6 +1761,16 @@ assertIncludes(
 );
 assertIncludes(
   publicRouteHostSource,
+  "publicRouteHostAliasesForSite(site.settings).some",
+  "public custom-domain host matching must include verified same-site domain aliases",
+);
+assertIncludes(
+  publicRouteHostSource,
+  "domainAlias.status === 'verified'",
+  "public custom-domain aliases must not bypass domain verification",
+);
+assertIncludes(
+  publicRouteHostSource,
   "allowUnverifiedCustomHosts",
   "public custom-domain host matching must keep an explicit source-guarded test/demo escape hatch",
 );

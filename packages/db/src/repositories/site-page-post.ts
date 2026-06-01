@@ -218,6 +218,46 @@ const normalizeSocialSettings = (value: unknown): SiteSettings['social'] => {
     return social;
 };
 
+const normalizeDomainHost = (value: unknown): string => (
+    typeof value === 'string'
+        ? value.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0]?.replace(/\/+$/, '') || ''
+        : ''
+);
+
+const normalizeDomainAliases = (value: unknown): NonNullable<SiteSettings['domainAliases']> => {
+    if (!Array.isArray(value)) return [];
+    type DomainAliasSettings = NonNullable<SiteSettings['domainAliases']>[number];
+    const seen = new Set<string>();
+
+    return value.filter(isRecord).flatMap((alias): DomainAliasSettings[] => {
+        const host = normalizeDomainHost(alias.host);
+        if (!host || seen.has(host)) return [];
+        seen.add(host);
+        const status = alias.status === 'not_started'
+            || alias.status === 'pending'
+            || alias.status === 'verified'
+            || alias.status === 'failed'
+            ? alias.status
+            : 'pending';
+        return [{
+            id: typeof alias.id === 'string' && alias.id.length > 0
+                ? alias.id
+                : `domain-alias-${host.replace(/[^a-z0-9]+/g, '-')}`,
+            host,
+            kind: alias.kind === 'subdomain'
+                || alias.kind === 'root'
+                || alias.kind === 'locale'
+                || alias.kind === 'redirect'
+                ? alias.kind
+                : 'alias',
+            status,
+            requestedAt: typeof alias.requestedAt === 'string' ? alias.requestedAt : null,
+            verifiedAt: status === 'verified' && typeof alias.verifiedAt === 'string' ? alias.verifiedAt : null,
+            lastError: typeof alias.lastError === 'string' ? alias.lastError : null,
+        }];
+    });
+};
+
 const normalizeSettings = (value: unknown): SiteSettings => {
     const defaultSettings = DEFAULT_SITE_SETTINGS as unknown as SiteSettings;
 
@@ -238,6 +278,7 @@ const normalizeSettings = (value: unknown): SiteSettings => {
         },
         redirectRules: normalizeSiteRedirectRules(isRecord(value) ? value.redirectRules : undefined),
         navigation: normalizeNavigation(isRecord(value) ? value.navigation : undefined),
+        domainAliases: normalizeDomainAliases(isRecord(value) ? value.domainAliases : undefined),
         frontendDesign: normalizeFrontendDesign(isRecord(value) ? value.frontendDesign : undefined),
         contacts: isRecord(value) && isRecord(value.contacts)
             ? {

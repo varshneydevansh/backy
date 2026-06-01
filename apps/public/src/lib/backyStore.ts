@@ -832,6 +832,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     },
   }),
   domainVerification: { ...DEFAULT_SITE_SETTINGS.domainVerification },
+  domainAliases: [],
   webhooks: { ...DEFAULT_SITE_SETTINGS.webhooks, endpoints: [] },
   vercelDeployment: {
     ...DEFAULT_SITE_SETTINGS.vercelDeployment,
@@ -6203,6 +6204,63 @@ const normalizeSiteWebhooksInput = (
   };
 };
 
+const normalizeSiteDomainAliasesInput = (
+  input: unknown,
+  current?: SiteSettings["domainAliases"],
+): NonNullable<SiteSettings["domainAliases"]> => {
+  type DomainAliasSettings = NonNullable<SiteSettings["domainAliases"]>[number];
+  const currentByHost = new Map(
+    (Array.isArray(current) ? current : [])
+      .map((alias) => [sanitizeString(alias.host).toLowerCase(), alias] as const)
+      .filter(([host]) => Boolean(host)),
+  );
+  const seen = new Set<string>();
+
+  return (Array.isArray(input) ? input : [])
+    .flatMap((entry): DomainAliasSettings[] => {
+      const aliasInput = toRecord(entry);
+      const host = sanitizeString(aliasInput.host)
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .split("/")[0]
+        ?.replace(/\/+$/, "");
+      if (!host || seen.has(host)) return [];
+      seen.add(host);
+      const existing = currentByHost.get(host);
+      const status = ["not_started", "pending", "verified", "failed"].includes(
+        String(aliasInput.status),
+      )
+        ? (aliasInput.status as NonNullable<
+            SiteSettings["domainAliases"]
+          >[number]["status"])
+        : existing?.status || "pending";
+
+      return [{
+        id: sanitizeString(aliasInput.id) || existing?.id || createRuntimeId("domain-alias"),
+        host,
+        kind:
+          aliasInput.kind === "subdomain" ||
+          aliasInput.kind === "root" ||
+          aliasInput.kind === "locale" ||
+          aliasInput.kind === "redirect"
+            ? aliasInput.kind
+            : existing?.kind || "alias",
+        status,
+        requestedAt:
+          sanitizeString(aliasInput.requestedAt) || existing?.requestedAt || null,
+        verifiedAt:
+          status === "verified"
+            ? sanitizeString(aliasInput.verifiedAt) || existing?.verifiedAt || null
+            : null,
+        lastError:
+          aliasInput.lastError === null
+            ? null
+            : sanitizeString(aliasInput.lastError) || existing?.lastError || null,
+      }];
+    })
+    .slice(0, 100);
+};
+
 function normalizeSiteSettingsInput(
   input: unknown,
   current?: SiteSettings,
@@ -6405,6 +6463,13 @@ function normalizeSiteSettingsInput(
                 ? null
                 : sanitizeString(domainVerificationInput.lastError) || null,
           },
+    domainAliases:
+      settingsInput.domainAliases === undefined
+        ? normalizeSiteDomainAliasesInput(base.domainAliases, base.domainAliases)
+        : normalizeSiteDomainAliasesInput(
+            settingsInput.domainAliases,
+            base.domainAliases,
+          ),
     webhooks:
       settingsInput.webhooks === undefined
         ? normalizeSiteWebhooksInput(base.webhooks, base.webhooks)

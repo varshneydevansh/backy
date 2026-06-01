@@ -237,6 +237,11 @@ export type GeneratedBackyOpenApiCustomFrontendRoutingHandoff = {
     slug?: string;
     customDomain?: string | null;
     verificationDomain?: string | null;
+    domainAliases?: Array<{
+      host?: string;
+      status?: string;
+      [key: string]: unknown;
+    }>;
     acceptedPublicIdentifiers?: Array<string>;
     [key: string]: unknown;
   };
@@ -744,6 +749,7 @@ export type GeneratedBackyOpenApiAdminSiteSettingsPatchRequest = {
     navigation?: Record<string, unknown>;
     localization?: Record<string, unknown>;
     domainVerification?: Record<string, unknown>;
+    domainAliases?: Array<Record<string, unknown>>;
     vercelDeployment?: Record<string, unknown>;
     billingQuota?: Record<string, unknown>;
     webhooks?: Record<string, unknown>;
@@ -757,6 +763,7 @@ export type GeneratedBackyOpenApiAdminSiteSettingsPatchRequest = {
   navigation?: Record<string, unknown>;
   localization?: Record<string, unknown>;
   domainVerification?: Record<string, unknown>;
+  domainAliases?: Array<Record<string, unknown>>;
   vercelDeployment?: Record<string, unknown>;
   billingQuota?: Record<string, unknown>;
   webhooks?: Record<string, unknown>;

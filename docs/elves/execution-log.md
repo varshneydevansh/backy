@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 11:52 IST
+- **Last updated:** 2026-06-01 14:21 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 14:21 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Domain/subdomain status:** Same-site aliases are now first-class in Backy settings, routing, and handoff payloads
+
+**What changed:**
+- `site.settings.domainAliases` now persists multiple same-site verified hosts/subdomains through admin site update APIs, local/demo store normalization, and Supabase repository normalization.
+- Public host matching now treats verified aliases as routable hosts while leaving unverified aliases blocked unless an explicit development override is used.
+- Manifest, OpenAPI, SDK contract types, and `/agent-handoff` now expose aliases in delivery/routing metadata so custom frontend agents can distinguish same-site aliases from independent subdomain sites.
+- Site Detail now has a domain aliases/subdomains textarea, saved alias status cards, copy action, manual DNS preparation/verification controls, and handoff copy that explains when to use one Backy site versus separate sites.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_SITE_DETAIL_SOURCE_ONLY=1 npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:localized-routes --workspace @backy/public --silent` -> PASS.
+- `npm run test:frontend-contract --workspace @backy/public --silent` -> PASS.
+- `npm run test:public-security --workspace @backy/public --silent` -> PASS.
+- `npm run test:frontend-contract-types --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit and push this domain/subdomain alias slice.
+2. Re-read survival guide and continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 12:38 IST
 

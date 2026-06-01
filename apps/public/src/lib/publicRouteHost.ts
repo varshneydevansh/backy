@@ -3,7 +3,7 @@ import { normalizeSiteLocalization } from './siteLocalization';
 
 type PublicRouteHostSite = {
   customDomain?: string | null;
-  settings?: Pick<SiteSettings, 'domainVerification' | 'localization'> | null;
+  settings?: Pick<SiteSettings, 'domainVerification' | 'domainAliases' | 'localization'> | null;
 };
 
 type PublicRouteHostMatchOptions = {
@@ -31,6 +31,23 @@ const hostsEqual = (left: string | null | undefined, right: string | null | unde
   return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
 };
 
+export const publicRouteHostAliasesForSite = (
+  settings: Pick<SiteSettings, 'domainAliases'> | null | undefined,
+) => (
+  (Array.isArray(settings?.domainAliases) ? settings.domainAliases : [])
+    .map((alias) => {
+      const host = normalizePublicRouteHost(alias?.host);
+      if (!host) return null;
+
+      return {
+        ...alias,
+        host,
+        status: alias?.status || 'pending',
+      };
+    })
+    .filter((alias): alias is NonNullable<typeof alias> => Boolean(alias))
+);
+
 export const publicRouteHostIsVerifiedForSite = (
   site: PublicRouteHostSite,
   host: string | null | undefined,
@@ -40,8 +57,13 @@ export const publicRouteHostIsVerifiedForSite = (
 
   const verification = site.settings?.domainVerification;
   return Boolean(
-    verification?.status === 'verified'
-    && hostsEqual(verification.domain, normalizedHost),
+    (
+      verification?.status === 'verified'
+      && hostsEqual(verification.domain, normalizedHost)
+    )
+    || publicRouteHostAliasesForSite(site.settings).some((alias) => (
+      alias.status === 'verified' && hostsEqual(alias.host, normalizedHost)
+    )),
   );
 };
 
@@ -54,6 +76,13 @@ export const publicRouteHostMatchesSite = (
   if (!normalizedHost) return false;
   const allowsUnverified = options.allowUnverifiedCustomHosts === true;
   const verified = allowsUnverified || publicRouteHostIsVerifiedForSite(site, normalizedHost);
+  const domainAlias = publicRouteHostAliasesForSite(site.settings).find((alias) =>
+    hostsEqual(alias.host, normalizedHost),
+  );
+
+  if (domainAlias) {
+    return allowsUnverified || domainAlias.status === 'verified';
+  }
 
   if (
     hostsEqual(site.customDomain, normalizedHost)

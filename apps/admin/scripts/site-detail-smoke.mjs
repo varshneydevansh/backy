@@ -40,6 +40,7 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-agent-handoff-direct={siteCustomFrontendAgentHandoff.endpoints.agentHandoff}') &&
       source.includes('siteContext: {') &&
       source.includes('domainVerificationDomain: domainVerification?.domain || null') &&
+      source.includes('domainAliases:') &&
       source.includes('data-testid="site-agent-content-entry-points"') &&
       source.includes('data-testid="site-agent-canvas-first-rule"') &&
       source.includes('data-testid="site-agent-routing-handoff"') &&
@@ -305,11 +306,23 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-settings-name-error"') &&
       source.includes('data-testid="site-settings-slug-error"') &&
       source.includes('data-testid="site-settings-custom-domain-error"') &&
+      source.includes('data-testid="site-settings-domain-aliases-input"') &&
+      source.includes('data-testid="site-settings-domain-aliases-error"') &&
       source.includes('aria-invalid={Boolean(') &&
       source.includes('aria-describedby=') &&
       source.includes('Fix site settings fields before saving.') &&
-      source.includes('normalizeSiteSettingsDomain(formData.customDomain) || null'),
+      source.includes('normalizeSiteSettingsDomain(formData.customDomain) || null') &&
+      source.includes('settings: {') &&
+      source.includes('domainAliases,'),
     'Site detail settings form must use source-guarded inline validation for saved site identity and custom domain updates',
+  );
+  assert(
+    source.includes('data-testid="site-domain-aliases-panel"') &&
+      source.includes('handleDomainAliasesVerificationChange') &&
+      source.includes('settings.domainAliases') &&
+      source.includes('Mark aliases verified') &&
+      source.includes('Same-site aliases'),
+    'Site detail domain workspace must expose same-site domain aliases and subdomain verification controls',
   );
   assert(
     source.includes('const commentPolicyLoadRequestRef = useRef(0);') &&
@@ -1505,6 +1518,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.routing.text.includes('Routing and subdomains') &&
       layout.customFrontendAgentHandoff.routing.text.includes('blog.example.com') &&
       layout.customFrontendAgentHandoff.routing.text.includes('Resolve with host') &&
+      layout.customFrontendAgentHandoff.routing.text.includes('Same-site aliases') &&
       layout.customFrontendAgentHandoff.routing.text.includes('Subdomain rule') &&
       layout.customFrontendAgentHandoff.text.includes('Agent handoff') &&
       layout.customFrontendAgentHandoff.text.includes('/agent-handoff') &&

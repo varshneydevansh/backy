@@ -372,6 +372,7 @@ export interface CustomFrontendAgentSiteContext {
   slug?: string | null;
   customDomain?: string | null;
   domainVerificationDomain?: string | null;
+  domainAliases?: Array<string | { host?: string | null; status?: string | null }>;
 }
 
 const normalizeHandoffDomain = (value: string | null | undefined): string | null => {
@@ -389,6 +390,26 @@ const normalizeHandoffSlug = (value: string | null | undefined, fallback: string
   if (typeof value !== 'string') return fallback;
   const slug = value.trim().replace(/^\/+|\/+$/g, '');
   return slug || fallback;
+};
+
+const normalizeHandoffDomainAliases = (
+  aliases: CustomFrontendAgentSiteContext['domainAliases'],
+) => {
+  if (!Array.isArray(aliases)) return [];
+  const seen = new Set<string>();
+
+  return aliases
+    .map((alias) => {
+      const host = normalizeHandoffDomain(typeof alias === 'string' ? alias : alias?.host);
+      if (!host || seen.has(host)) return null;
+      seen.add(host);
+
+      return {
+        host,
+        status: typeof alias === 'object' && alias?.status ? alias.status : 'pending',
+      };
+    })
+    .filter((alias): alias is { host: string; status: string } => Boolean(alias));
 };
 
 export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
@@ -416,6 +437,8 @@ export const buildCustomFrontendRoutingHandoff = (
   const slug = normalizeHandoffSlug(site.slug, siteId);
   const customDomain = normalizeHandoffDomain(site.customDomain);
   const verificationDomain = normalizeHandoffDomain(site.domainVerificationDomain);
+  const domainAliases = normalizeHandoffDomainAliases(site.domainAliases);
+  const firstDomainAlias = domainAliases[0]?.host || null;
 
   return {
     schemaVersion: CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA,
@@ -425,10 +448,11 @@ export const buildCustomFrontendRoutingHandoff = (
       slug,
       customDomain,
       verificationDomain,
-      acceptedPublicIdentifiers: ['siteId', 'slug', 'customDomain', 'domain query parameter', 'Host header'],
+      domainAliases,
+      acceptedPublicIdentifiers: ['siteId', 'slug', 'customDomain', 'domainAliases', 'domain query parameter', 'Host header'],
     },
     publicResolution: {
-      siteDiscovery: `/api/sites?identifier=${customDomain || slug}`,
+      siteDiscovery: `/api/sites?identifier=${customDomain || firstDomainAlias || slug}`,
       managedPath: `/sites/${slug}`,
       resolveBySiteId: `/api/sites/${siteId}/resolve?path=/`,
       renderBySiteId: `/api/sites/${siteId}/render?path=/...`,
@@ -442,15 +466,17 @@ export const buildCustomFrontendRoutingHandoff = (
       adminSiteApi: `/api/admin/sites/${siteId}`,
       adminSettingsApi: `/api/admin/sites/${siteId}/settings`,
       customDomainField: 'site.customDomain',
+      aliasField: 'site.settings.domainAliases',
       verificationField: 'site.settings.domainVerification.domain',
       verificationStatusField: 'site.settings.domainVerification.status',
       dnsRecordEvidenceField: 'site.settings.domainVerification.records',
     },
     subdomainRouting: {
       supported: true,
-      model: 'Treat every public host such as blog.example.com, docs.example.com, shop.example.com, or a root apex as a site custom domain/verification host, then resolve Backy content by site id plus Host/domain context.',
+      model: 'Treat every public host such as blog.example.com, docs.example.com, shop.example.com, or a root apex as either the site custom domain or a verified domainAliases host, then resolve Backy content by site id plus Host/domain context.',
       examples: ['blog.example.com', 'docs.example.com', 'shop.example.com'],
-      recommendation: 'Use one Backy site per independent public subdomain when content, navigation, SEO, or design tokens differ; reuse the same frontend design template when the subdomains should look related.',
+      sameSiteAliases: domainAliases,
+      recommendation: 'Use domainAliases when several verified hosts should render this same site; use one Backy site per independent public subdomain when content, navigation, SEO, or design tokens differ.',
     },
     customFrontendDeployment: {
       publicApiOriginEnv: 'BACKY_PUBLIC_API_BASE_URL',

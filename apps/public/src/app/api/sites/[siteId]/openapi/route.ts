@@ -2287,12 +2287,36 @@ const normalizeOpenApiDomain = (
   return hostname || null;
 };
 
+const openApiDomainAliases = (
+  settings: Pick<SiteSettings, "domainAliases"> | null | undefined,
+) => {
+  const seen = new Set<string>();
+
+  return (Array.isArray(settings?.domainAliases) ? settings.domainAliases : [])
+    .map((alias) => {
+      const host = normalizeOpenApiDomain(alias.host);
+      if (!host || seen.has(host)) return null;
+      seen.add(host);
+
+      return {
+        type: alias.kind || "alias",
+        host,
+        baseUrl: `https://${host}`,
+        primary: false,
+        verified: alias.status === "verified",
+        verificationStatus: alias.status || "pending",
+        source: "settings.domainAliases",
+      };
+    })
+    .filter((alias): alias is NonNullable<typeof alias> => Boolean(alias));
+};
+
 const deliveryDiscovery = (
   origin: string,
   site: {
     slug: string;
     customDomain?: string | null;
-    settings?: Pick<SiteSettings, "domainVerification" | "localization"> | null;
+    settings?: Pick<SiteSettings, "domainVerification" | "domainAliases" | "localization"> | null;
   },
 ) => {
   const localization = normalizeSiteLocalization(site.settings);
@@ -2345,6 +2369,7 @@ const deliveryDiscovery = (
             },
           ]
         : []),
+      ...openApiDomainAliases(site.settings),
     ],
     urls: {
       home: canonicalBaseUrl,
@@ -2375,7 +2400,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           name: repositorySite.name,
           isPublished: repositorySite.isPublished,
           customDomain: repositorySite.customDomain,
-          settings: repositorySite.settings,
+          settings: repositorySite.settings as SiteSettings | undefined,
         }
       : storeSite;
 
@@ -2473,6 +2498,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       slug: site.slug,
       customDomain: site.customDomain,
       domainVerificationDomain: site.settings?.domainVerification?.domain,
+      domainAliases: site.settings?.domainAliases,
     });
     const completionStatusContract = buildBackyCompletionStatus();
     const delivery = deliveryDiscovery(origin, site);
@@ -6323,6 +6349,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     slug: { type: "string" },
                     customDomain: { type: ["string", "null"] },
                     verificationDomain: { type: ["string", "null"] },
+                    domainAliases: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        additionalProperties: true,
+                        properties: {
+                          host: { type: "string" },
+                          status: { type: "string" },
+                        },
+                      },
+                    },
                     acceptedPublicIdentifiers: {
                       type: "array",
                       items: { type: "string" },
@@ -7592,6 +7629,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                       type: "object",
                       additionalProperties: true,
                     },
+                    domainAliases: {
+                      type: "array",
+                      items: { type: "object", additionalProperties: true },
+                    },
                     vercelDeployment: {
                       type: "object",
                       additionalProperties: true,
@@ -7620,6 +7661,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 domainVerification: {
                   type: "object",
                   additionalProperties: true,
+                },
+                domainAliases: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true },
                 },
                 vercelDeployment: {
                   type: "object",

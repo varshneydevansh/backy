@@ -157,7 +157,7 @@ type ManifestDeliveryDiscovery = ReturnType<typeof buildDeliveryDiscovery>;
 type ManifestDeliverySite = {
   slug: string;
   customDomain?: string | null;
-  settings?: Pick<SiteSettings, 'domainVerification' | 'localization'> | null;
+  settings?: Pick<SiteSettings, 'domainVerification' | 'domainAliases' | 'localization'> | null;
 };
 
 const envValue = (keys: string[]): { key: string; value: string } | null => {
@@ -997,6 +997,28 @@ const normalizeManifestDomain = (domain: string | null | undefined): string | nu
   return hostname || null;
 };
 
+const manifestDomainAliases = (settings: Pick<SiteSettings, 'domainAliases'> | null | undefined) => {
+  const seen = new Set<string>();
+
+  return (Array.isArray(settings?.domainAliases) ? settings.domainAliases : [])
+    .map((alias) => {
+      const host = normalizeManifestDomain(alias.host);
+      if (!host || seen.has(host)) return null;
+      seen.add(host);
+
+      return {
+        type: alias.kind || 'alias',
+        host,
+        baseUrl: `https://${host}`,
+        primary: false,
+        verified: alias.status === 'verified',
+        verificationStatus: alias.status || 'pending',
+        source: 'settings.domainAliases',
+      };
+    })
+    .filter((alias): alias is NonNullable<typeof alias> => Boolean(alias));
+};
+
 const buildDeliveryDiscovery = (
   origin: string,
   site: ManifestDeliverySite,
@@ -1037,6 +1059,7 @@ const buildDeliveryDiscovery = (
           }]
         : []
     ),
+    ...manifestDomainAliases(site.settings),
   ];
 
   return {
@@ -3452,6 +3475,7 @@ const buildRepositoryManifest = (
           slug: input.site.slug,
           customDomain: input.site.customDomain,
           domainVerificationDomain: input.site.settings?.domainVerification?.domain,
+          domainAliases: input.site.settings?.domainAliases,
         }),
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
@@ -3825,6 +3849,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             slug: site.slug,
             customDomain: site.customDomain,
             domainVerificationDomain: site.settings?.domainVerification?.domain,
+            domainAliases: site.settings?.domainAliases,
           }),
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',

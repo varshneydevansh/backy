@@ -699,6 +699,7 @@ assert(
     publicAgentHandoffRoute.includes('backy.custom-frontend-agent-handoff-response.v1') &&
     publicAgentHandoffRoute.includes('buildCustomFrontendAgentHandoff(site.id, {') &&
     publicAgentHandoffRoute.includes('domainVerificationDomain: site.settings?.domainVerification?.domain') &&
+    publicAgentHandoffRoute.includes('domainAliases: site.settings?.domainAliases || []') &&
     publicAgentHandoffRoute.includes("manifestPointer: 'data.contract.customFrontendAgentHandoff'") &&
     publicAgentHandoffRoute.includes("openApiPointer: 'x-backy-custom-frontend-agent-handoff'") &&
     publicAgentHandoffRoute.includes("agentBriefPointer: 'data.agentBrief'") &&
@@ -713,6 +714,8 @@ assert(
     manifestRoute.includes('customFrontendAgentHandoff: buildCustomFrontendAgentHandoff') &&
     manifestRoute.includes('domainVerificationDomain: input.site.settings?.domainVerification?.domain') &&
     manifestRoute.includes('domainVerificationDomain: site.settings?.domainVerification?.domain') &&
+    manifestRoute.includes('domainAliases: input.site.settings?.domainAliases') &&
+    manifestRoute.includes('domainAliases: site.settings?.domainAliases') &&
     manifestRoute.includes('agentHandoff: `/api/sites/${input.site.id}/agent-handoff`') &&
     manifestRoute.includes('customFrontendAgentHandoff: `/api/sites/${input.site.id}/manifest#data.contract.customFrontendAgentHandoff`') &&
     openApiRoute.includes('"x-backy-custom-frontend-agent-handoff": customFrontendAgentHandoff') &&

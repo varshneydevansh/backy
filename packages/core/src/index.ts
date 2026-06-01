@@ -159,6 +159,7 @@ export const DEFAULT_SITE_SETTINGS = {
     verifiedAt: null,
     lastError: null,
   },
+  domainAliases: [],
   webhooks: {
     enabled: false,
     endpoints: [],

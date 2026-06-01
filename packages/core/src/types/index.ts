@@ -343,6 +343,9 @@ export interface SiteSettings {
   /** Custom-domain DNS verification state for managed and custom frontend delivery */
   domainVerification?: SiteDomainVerificationSettings;
 
+  /** Additional verified hosts that should resolve to this same site workspace */
+  domainAliases?: SiteDomainAliasSettings[];
+
   /** Site-level webhook endpoints used by custom automations and integration handoff */
   webhooks?: SiteWebhookSettings;
 
@@ -387,6 +390,16 @@ export interface SiteDomainVerificationSettings {
   cnameTarget?: string;
   requestedAt?: string | null;
   checkedAt?: string | null;
+  verifiedAt?: string | null;
+  lastError?: string | null;
+}
+
+export interface SiteDomainAliasSettings {
+  id: string;
+  host: string;
+  kind?: "alias" | "subdomain" | "root" | "locale" | "redirect";
+  status: SiteDomainVerificationSettings["status"];
+  requestedAt?: string | null;
   verifiedAt?: string | null;
   lastError?: string | null;
 }

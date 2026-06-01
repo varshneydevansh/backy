@@ -149,6 +149,59 @@ const normalizeCustomDomain = (value: unknown): string => {
     .replace(/\.$/, "");
 };
 
+const normalizeDomainAliases = (
+  value: unknown,
+  current?: SiteSettings["domainAliases"],
+): NonNullable<SiteSettings["domainAliases"]> => {
+  type DomainAliasSettings = NonNullable<SiteSettings["domainAliases"]>[number];
+  const currentByHost = new Map(
+    (Array.isArray(current) ? current : [])
+      .map((alias) => [normalizeCustomDomain(alias.host), alias] as const)
+      .filter(([host]) => Boolean(host)),
+  );
+  const seen = new Set<string>();
+
+  return (Array.isArray(value) ? value : [])
+    .flatMap((entry): DomainAliasSettings[] => {
+      if (!isRecord(entry)) return [];
+      const host = normalizeCustomDomain(entry.host);
+      if (!host || seen.has(host)) return [];
+      seen.add(host);
+      const existing = currentByHost.get(host);
+      const status = ["not_started", "pending", "verified", "failed"].includes(
+        String(entry.status),
+      )
+        ? (entry.status as NonNullable<SiteSettings["domainAliases"]>[number]["status"])
+        : existing?.status || "pending";
+
+      return [{
+        id:
+          sanitizeString(entry.id) ||
+          existing?.id ||
+          `domain-alias-${host.replace(/[^a-z0-9]+/g, "-")}`,
+        host,
+        kind:
+          entry.kind === "subdomain" ||
+          entry.kind === "root" ||
+          entry.kind === "locale" ||
+          entry.kind === "redirect"
+            ? entry.kind
+            : existing?.kind || "alias",
+        status,
+        requestedAt: sanitizeString(entry.requestedAt) || existing?.requestedAt || null,
+        verifiedAt:
+          status === "verified"
+            ? sanitizeString(entry.verifiedAt) || existing?.verifiedAt || null
+            : null,
+        lastError:
+          entry.lastError === null
+            ? null
+            : sanitizeString(entry.lastError) || existing?.lastError || null,
+      }];
+    })
+    .slice(0, 100);
+};
+
 const numberValue = (value: unknown, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, value)
@@ -559,6 +612,10 @@ const mergeSiteSettings = (
                 ? null
                 : sanitizeString(domainVerificationInput.lastError) || null,
           },
+    domainAliases:
+      input.domainAliases === undefined
+        ? current.domainAliases || []
+        : normalizeDomainAliases(input.domainAliases, current.domainAliases),
     webhooks:
       input.webhooks === undefined
         ? normalizeSiteWebhooksInput(current.webhooks, current.webhooks)

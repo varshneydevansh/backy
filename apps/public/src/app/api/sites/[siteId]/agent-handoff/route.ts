@@ -25,6 +25,7 @@ type HandoffSite = {
     domainVerification?: {
       domain?: string | null;
     } | null;
+    domainAliases?: Array<{ host?: string | null; status?: string | null }> | null;
   } | null;
   status?: string;
   isPublished?: boolean;
@@ -59,6 +60,7 @@ const agentHandoffResponse = (
     slug: site.slug,
     customDomain: site.customDomain,
     domainVerificationDomain: site.settings?.domainVerification?.domain,
+    domainAliases: site.settings?.domainAliases || [],
   });
   const body = {
     success: true,

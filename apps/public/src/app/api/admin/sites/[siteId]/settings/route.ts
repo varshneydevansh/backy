@@ -612,6 +612,7 @@ const siteSettingsPatchKeys = [
   "navigation",
   "localization",
   "domainVerification",
+  "domainAliases",
   "vercelDeployment",
   "billingQuota",
   "webhooks",
@@ -632,6 +633,74 @@ const sanitizeStringRecord = (value: unknown): Record<string, string> => {
     },
     {},
   );
+};
+
+const normalizeDomainAliasHost = (value: unknown): string => (
+  typeof value === "string"
+    ? value
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .split("/")[0]
+        ?.replace(/\/+$/, "") || ""
+    : ""
+);
+
+const normalizeDomainAliasesPatch = (
+  value: unknown,
+  current?: SiteSettings["domainAliases"],
+): NonNullable<SiteSettings["domainAliases"]> => {
+  type DomainAliasSettings = NonNullable<SiteSettings["domainAliases"]>[number];
+  const currentByHost = new Map(
+    (Array.isArray(current) ? current : [])
+      .map((alias) => [normalizeDomainAliasHost(alias.host), alias] as const)
+      .filter(([host]) => Boolean(host)),
+  );
+  const seen = new Set<string>();
+
+  return (Array.isArray(value) ? value : [])
+    .flatMap((entry): DomainAliasSettings[] => {
+      if (!isRecord(entry)) return [];
+      const host = normalizeDomainAliasHost(entry.host);
+      if (!host || seen.has(host)) return [];
+      seen.add(host);
+      const existing = currentByHost.get(host);
+      const status = ["not_started", "pending", "verified", "failed"].includes(String(entry.status))
+        ? (entry.status as NonNullable<SiteSettings["domainAliases"]>[number]["status"])
+        : existing?.status || "pending";
+
+      return [{
+        id: typeof entry.id === "string" && entry.id.trim()
+          ? entry.id.trim()
+          : existing?.id || `domain-alias-${host.replace(/[^a-z0-9]+/g, "-")}`,
+        host,
+        kind:
+          entry.kind === "subdomain" ||
+          entry.kind === "root" ||
+          entry.kind === "locale" ||
+          entry.kind === "redirect"
+            ? entry.kind
+            : existing?.kind || "alias",
+        status,
+        requestedAt:
+          typeof entry.requestedAt === "string"
+            ? entry.requestedAt
+            : existing?.requestedAt || null,
+        verifiedAt:
+          status === "verified"
+            ? typeof entry.verifiedAt === "string"
+              ? entry.verifiedAt
+              : existing?.verifiedAt || null
+            : null,
+        lastError:
+          entry.lastError === null
+            ? null
+            : typeof entry.lastError === "string"
+              ? entry.lastError
+              : existing?.lastError || null,
+      }];
+    })
+    .slice(0, 100);
 };
 
 const filteredSiteSettingsPatch = (value: Record<string, unknown>) =>
@@ -720,6 +789,10 @@ const mergeSiteSettings = (
               ? patch.domainVerification
               : {}),
           } as SiteSettings["domainVerification"]),
+    domainAliases:
+      patch.domainAliases === undefined
+        ? base.domainAliases || []
+        : normalizeDomainAliasesPatch(patch.domainAliases, base.domainAliases),
     vercelDeployment:
       patch.vercelDeployment === undefined
         ? base.vercelDeployment
