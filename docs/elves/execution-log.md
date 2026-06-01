@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 18:39 IST
+- **Last updated:** 2026-06-01 19:56 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,38 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 19:56 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Admin shell status:** Ordinary admin pages now share one route-containment contract
+
+**What changed:**
+- `apps/admin/src/components/layout/MainLayout.tsx` now marks the main pane as the route-scroll owner, adds a stable scrollbar gutter, and wraps non-editor routes in a clipped `admin-content-frame`.
+- `apps/admin/src/components/layout/PageShell.tsx` now exposes a contained page-shell contract and clips route content overflow.
+- `apps/admin/src/components/ui/Panel.tsx` now wraps header/action text inside the available width instead of letting actions force page overflow.
+- `apps/admin/src/components/ui/DataGrid.tsx` now respects the parent shell width with `maxInlineSize: '100%'` instead of using a viewport subtraction guess.
+- `apps/admin/scripts/login-smoke.mjs` now verifies Dashboard, Pages, Users, Settings, and New Site all keep browser scroll pinned, body/root locked, route content inside the shell, and horizontal document overflow at zero.
+- `apps/admin/scripts/pages-list-smoke.mjs` was aligned with the new shared `DataGrid` containment rule.
+
+**Commands run:**
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:pages-list --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:settings --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The user clarified the blank-space/overlap issue was global. This slice fixes it in shared layout primitives rather than chasing individual routes.
+- Users and Sites smokes intentionally mutate `user-admin` role for RBAC checks; they were rerun sequentially and `user-admin` was restored to `owner/active` after the Sites smoke.
+- A stale local Next dev server on `3001` was accepting connections but hanging; it was restarted with `BACKY_ADMIN_MFA_CODE=backy-dev-mfa` before rendered smokes.
+
+**Next:**
+1. Commit and push this global route-containment slice, then verify production deployment.
 
 ## 2026-06-01 18:39 IST
 

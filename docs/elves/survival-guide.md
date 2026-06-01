@@ -147,6 +147,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `d32950b7` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
+**Newest global route containment polish:** Ordinary admin pages now share a `MainLayout`/`PageShell`/`Panel`/`DataGrid` containment contract so Dashboard, Pages, Users, Settings, and New Site keep browser scroll pinned, body/root locked to the viewport, horizontal document overflow at zero, and long content scrolling inside the admin main pane.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

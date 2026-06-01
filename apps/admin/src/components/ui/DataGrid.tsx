@@ -162,7 +162,7 @@ export function DataGrid<T extends { id: string }>({
             className="min-w-0 max-w-full space-y-3 overflow-x-clip"
             style={{
                 contain: 'layout paint inline-size',
-                maxInlineSize: 'min(100%, calc(100vw - 8rem))',
+                maxInlineSize: '100%',
             }}
             aria-describedby={descriptionId}
             data-testid="admin-data-grid"

@@ -301,7 +301,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         {/* Page Content */}
         <main className={cn(
-          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden',
+          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]',
           isFocusedEditorWorkspace
             ? 'bg-muted/40 p-2 lg:p-3'
             : isEditorWorkspace
@@ -311,8 +311,17 @@ export function MainLayout({ children }: MainLayoutProps) {
           id="admin-main-content"
           tabIndex={-1}
           data-testid="admin-main-content"
+          data-layout-contract="admin-main-owns-route-scroll"
         >
-          <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'mx-auto w-full max-w-[1680px]')}>
+          <div
+            className={cn(
+              isEditorWorkspace
+                ? 'w-full min-w-0 max-w-full'
+                : 'mx-auto flex min-h-full w-full min-w-0 max-w-[1680px] flex-col overflow-x-clip',
+            )}
+            data-testid="admin-content-frame"
+            data-layout-contract={isEditorWorkspace ? 'editor-route-unframed' : 'ordinary-route-contained'}
+          >
             {children}
             {!isEditorWorkspace && (
               <AdminShellFooter

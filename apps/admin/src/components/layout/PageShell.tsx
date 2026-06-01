@@ -28,14 +28,18 @@ export function PageShell({
     hideHeader = false,
 }: PageShellProps) {
     return (
-        <div className={cn(hideHeader ? "space-y-0" : "space-y-6", className)}>
+        <div
+            className={cn("min-w-0 max-w-full", hideHeader ? "space-y-0" : "space-y-6", className)}
+            data-testid="admin-page-shell"
+            data-layout-contract="ordinary-admin-page-contained"
+        >
             {/* Page Header */}
             {!hideHeader && (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                    <h1 className="break-words text-2xl font-bold tracking-tight [overflow-wrap:anywhere]">{title}</h1>
                     {description && (
-                        <p className="text-muted-foreground mt-1">
+                        <p className="mt-1 max-w-3xl break-words text-muted-foreground [overflow-wrap:anywhere]">
                             {description}
                         </p>
                     )}
@@ -43,7 +47,7 @@ export function PageShell({
 
                 {/* Primary Action (New Button, etc.) */}
                 {action && (
-                    <div className="flex-shrink-0">
+                    <div className="min-w-0 max-w-full">
                         {action}
                     </div>
                 )}
@@ -51,7 +55,11 @@ export function PageShell({
             )}
 
             {/* Main Content */}
-            <div className={cn("w-full", contentClassName)}>
+            <div
+                className={cn("min-w-0 w-full max-w-full overflow-x-clip", contentClassName)}
+                data-testid="admin-page-shell-content"
+                data-layout-contract="route-content-overflow-contained"
+            >
                 {children}
             </div>
         </div>

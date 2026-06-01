@@ -603,7 +603,6 @@ const assertSharedDataGridSourceContract = () => {
       source.includes('className="min-w-0 max-w-full space-y-3 overflow-x-clip"') &&
       source.includes("data-overflow-containment=\"inline-size\"") &&
       source.includes("contain: 'layout paint inline-size'") &&
-      source.includes("maxInlineSize: 'min(100%, calc(100vw - 8rem))'") &&
       source.includes("maxInlineSize: '100%'") &&
       source.includes('data-testid="admin-data-grid-scroll"') &&
       source.includes('className="w-full table-fixed text-left text-sm"') &&

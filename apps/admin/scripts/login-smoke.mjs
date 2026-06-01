@@ -219,10 +219,13 @@ const assertAuthRecoverySource = () => {
   const authStoreSource = fs.readFileSync(new URL('../src/stores/authStore.ts', import.meta.url), 'utf8');
   const rootRouteSource = fs.readFileSync(new URL('../src/routes/__root.tsx', import.meta.url), 'utf8');
   const mainLayoutSource = fs.readFileSync(new URL('../src/components/layout/MainLayout.tsx', import.meta.url), 'utf8');
+  const pageShellSource = fs.readFileSync(new URL('../src/components/layout/PageShell.tsx', import.meta.url), 'utf8');
   const sidebarSource = fs.readFileSync(new URL('../src/components/layout/Sidebar.tsx', import.meta.url), 'utf8');
   const sidebarModelSource = fs.readFileSync(new URL('../src/components/layout/sidebarModel.ts', import.meta.url), 'utf8');
   const headerSource = fs.readFileSync(new URL('../src/components/layout/Header.tsx', import.meta.url), 'utf8');
   const headerModelSource = fs.readFileSync(new URL('../src/components/layout/headerModel.ts', import.meta.url), 'utf8');
+  const panelSource = fs.readFileSync(new URL('../src/components/ui/Panel.tsx', import.meta.url), 'utf8');
+  const dataGridSource = fs.readFileSync(new URL('../src/components/ui/DataGrid.tsx', import.meta.url), 'utf8');
   const permissionSource = fs.readFileSync(new URL('../src/lib/adminPermissionUi.ts', import.meta.url), 'utf8');
   const navigationAccessSource = fs.readFileSync(new URL('../src/lib/adminNavigationAccess.ts', import.meta.url), 'utf8');
   const viteConfigSource = fs.readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
@@ -459,10 +462,29 @@ const assertAuthRecoverySource = () => {
       mainLayoutSource.includes('className="hidden h-dvh shrink-0 lg:flex"') &&
       mainLayoutSource.includes('data-dense-surface={String(isDenseAdminSurface)}') &&
       mainLayoutSource.includes('data-scroll-contract="sidebar-independent-from-main"') &&
-      mainLayoutSource.includes("'min-h-0 flex-1 overflow-y-auto overflow-x-hidden'") &&
+      mainLayoutSource.includes("'min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]'") &&
+      mainLayoutSource.includes('data-testid="admin-content-frame"') &&
+      mainLayoutSource.includes("data-layout-contract=\"admin-main-owns-route-scroll\"") &&
+      mainLayoutSource.includes("data-layout-contract={isEditorWorkspace ? 'editor-route-unframed' : 'ordinary-route-contained'}") &&
       mainLayoutSource.includes('Skip to content') &&
       mainLayoutSource.includes('data-testid="admin-main-content"'),
     'Admin layout must preserve standard sidebar preference, keep dense work surfaces compact by default, keep editor workspaces user-toggleable, keep sidebar/main scrolling independent, and expose a keyboard skip target.',
+  );
+
+  assert(
+    pageShellSource.includes('data-testid="admin-page-shell"') &&
+      pageShellSource.includes('data-layout-contract="ordinary-admin-page-contained"') &&
+      pageShellSource.includes('data-testid="admin-page-shell-content"') &&
+      pageShellSource.includes('data-layout-contract="route-content-overflow-contained"') &&
+      pageShellSource.includes('"min-w-0 max-w-full"') &&
+      pageShellSource.includes('"min-w-0 w-full max-w-full overflow-x-clip"') &&
+      panelSource.includes("'flex min-w-0 flex-wrap items-start justify-between gap-3 p-5'") &&
+      panelSource.includes('className="flex min-w-0 flex-1 items-start gap-3"') &&
+      panelSource.includes('className="min-w-0 max-w-full"') &&
+      panelSource.includes("'min-w-0 max-w-full p-5 pt-0'") &&
+      dataGridSource.includes("maxInlineSize: '100%'") &&
+      dataGridSource.includes('data-overflow-containment="inline-size"'),
+    'Shared admin route wrappers must contain ordinary pages, panel chrome, and dense tables so no route leaks horizontal/body overflow into the global shell.',
   );
 
   assert(
@@ -820,7 +842,9 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
-    loginSmokeSource.includes('assertSidebarViewportScrollContract') &&
+      loginSmokeSource.includes('assertSidebarViewportScrollContract') &&
+      loginSmokeSource.includes('assertOrdinaryAdminRouteViewportContracts') &&
+      loginSmokeSource.includes('routeViewportContracts') &&
       loginSmokeSource.includes('pointerClickTestId') &&
       loginSmokeSource.includes('document.documentElement.scrollHeight') &&
       loginSmokeSource.includes('htmlShellClass') &&
@@ -4088,6 +4112,162 @@ const assertSidebarPermissionMatrixCache = async (client, label = 'Sidebar permi
   )
 );
 
+const assertOrdinaryAdminRouteViewportContracts = async (client) => {
+  const routeContracts = [
+    { label: 'Dashboard', path: '/', marker: '[data-testid="dashboard-command-center"]' },
+    { label: 'Pages', path: '/pages?siteId=site-demo', marker: '[data-testid="pages-command-center"]' },
+    { label: 'Users', path: '/users', marker: '[data-testid="users-command-center"]' },
+    { label: 'Settings', path: '/settings', marker: '[data-testid="settings-command-center"]' },
+    { label: 'New site', path: '/sites/new', marker: '[data-testid="site-creation-command-center"]' },
+  ];
+  const states = [];
+
+  for (const contract of routeContracts) {
+    await navigate(
+      client,
+      `${ADMIN_BASE_URL}${contract.path}`,
+      `(() => {
+        const body = document.body?.innerText || '';
+        return {
+          ready: Boolean(document.querySelector(${JSON.stringify(contract.marker)})) &&
+            Boolean(document.querySelector('[data-testid="admin-main-content"]')) &&
+            Boolean(document.querySelector('[data-testid="admin-content-frame"]')) &&
+            Boolean(document.querySelector('[data-testid="admin-shell-footer"]')) &&
+            !body.includes('Authenticated admin access'),
+          path: window.location.pathname,
+          search: window.location.search,
+          body: body.slice(0, 900),
+        };
+      })()`,
+      `${contract.label} ordinary route viewport`,
+    );
+
+    const state = await waitForState(
+      client,
+      `(() => {
+        const shell = document.querySelector('[data-testid="admin-shell"]');
+        const main = document.querySelector('[data-testid="admin-main-content"]');
+        const frame = document.querySelector('[data-testid="admin-content-frame"]');
+        const pageShell = document.querySelector('[data-testid="admin-page-shell"]');
+        const pageShellContent = document.querySelector('[data-testid="admin-page-shell-content"]');
+        const footer = document.querySelector('[data-testid="admin-shell-footer"]');
+        const appRoot = document.getElementById('root');
+        const mainRect = main?.getBoundingClientRect();
+        const frameRect = frame?.getBoundingClientRect();
+        const pageShellRect = pageShell?.getBoundingClientRect();
+        const footerRect = footer?.getBoundingClientRect();
+        const windowScrollBeforeAttempt = window.scrollY;
+        window.scrollTo(0, 9999);
+        const windowScrollAfterAttempt = window.scrollY;
+        const horizontalOverflow = document.documentElement.scrollWidth - window.innerWidth;
+        const mainOverflowY = main instanceof HTMLElement ? getComputedStyle(main).overflowY : '';
+        const mainOverflowX = main instanceof HTMLElement ? getComputedStyle(main).overflowX : '';
+        const frameOverflowX = frame instanceof HTMLElement ? getComputedStyle(frame).overflowX : '';
+        const rootOverflowY = getComputedStyle(document.documentElement).overflowY;
+        const bodyOverflowY = getComputedStyle(document.body).overflowY;
+        const routeElements = Array.from(document.querySelectorAll('[data-testid="admin-content-frame"], [data-testid="admin-page-shell"], [data-testid="admin-page-shell-content"], [data-testid="admin-data-grid"]'));
+        const overflowingRouteElements = routeElements
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              testId: element.getAttribute('data-testid') || '',
+              contract: element.getAttribute('data-layout-contract') || '',
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              width: Math.round(rect.width),
+              scrollWidth: element.scrollWidth,
+              clientWidth: element.clientWidth,
+            };
+          })
+          .filter((element) => element.left < Math.round(mainRect?.left || 0) - 4 || element.right > window.innerWidth + 4)
+          .slice(0, 8);
+        return {
+          ready: shell instanceof HTMLElement &&
+            main instanceof HTMLElement &&
+            frame instanceof HTMLElement &&
+            footer instanceof HTMLElement &&
+            frame.getAttribute('data-layout-contract') === 'ordinary-route-contained' &&
+            appRoot?.getAttribute('data-admin-shell-scroll-lock') === 'document',
+          label: ${JSON.stringify(contract.label)},
+          path: window.location.pathname,
+          search: window.location.search,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          documentScrollHeight: document.documentElement.scrollHeight,
+          bodyScrollHeight: document.body?.scrollHeight || 0,
+          horizontalOverflow,
+          shellExists: shell instanceof HTMLElement,
+          mainExists: main instanceof HTMLElement,
+          frameExists: frame instanceof HTMLElement,
+          frameContract: frame?.getAttribute('data-layout-contract') || '',
+          pageShellExists: pageShell instanceof HTMLElement,
+          pageShellContract: pageShell?.getAttribute('data-layout-contract') || '',
+          pageShellContentContract: pageShellContent?.getAttribute('data-layout-contract') || '',
+          footerExists: footer instanceof HTMLElement,
+          footerBottom: Math.round(footerRect?.bottom || 0),
+          appRootScrollLock: appRoot?.getAttribute('data-admin-shell-scroll-lock') || '',
+          rootOverflowY,
+          bodyOverflowY,
+          mainOverflowY,
+          mainOverflowX,
+          frameOverflowX,
+          mainWidth: Math.round(mainRect?.width || 0),
+          frameWidth: Math.round(frameRect?.width || 0),
+          frameLeft: Math.round(frameRect?.left || 0),
+          frameRight: Math.round(frameRect?.right || 0),
+          pageShellWidth: Math.round(pageShellRect?.width || 0),
+          windowScrollBeforeAttempt,
+          windowScrollAfterAttempt,
+          overflowingRouteElements,
+          body: document.body?.innerText?.slice(0, 900) || '',
+        };
+      })()`,
+      `${contract.label} ordinary route shell containment`,
+    );
+
+    assert(
+      state.shellExists &&
+        state.mainExists &&
+        state.frameExists &&
+        state.frameContract === 'ordinary-route-contained' &&
+        state.footerExists &&
+        state.appRootScrollLock === 'document' &&
+        state.rootOverflowY !== 'visible' &&
+        state.bodyOverflowY !== 'visible',
+      `${contract.label} must use the shared contained admin route frame: ${JSON.stringify(state)}`,
+    );
+    assert(
+      state.windowScrollBeforeAttempt === 0 &&
+        state.windowScrollAfterAttempt === 0 &&
+        state.bodyScrollHeight <= state.viewportHeight + 8 &&
+        ['auto', 'scroll'].includes(state.mainOverflowY) &&
+        state.mainOverflowX === 'hidden' &&
+        ['clip', 'hidden'].includes(state.frameOverflowX),
+      `${contract.label} must keep all vertical route scrolling inside admin main, not the browser document: ${JSON.stringify(state)}`,
+    );
+    assert(
+      state.horizontalOverflow <= 8 &&
+        state.frameWidth <= state.mainWidth + 2 &&
+        state.frameRight <= state.viewportWidth + 4 &&
+        state.overflowingRouteElements.length === 0,
+      `${contract.label} must keep route content within the shell instead of leaking horizontal overflow: ${JSON.stringify(state)}`,
+    );
+    if (state.pageShellExists) {
+      assert(
+        state.pageShellContract === 'ordinary-admin-page-contained' &&
+          state.pageShellContentContract === 'route-content-overflow-contained' &&
+          state.pageShellWidth <= state.frameWidth + 2,
+        `${contract.label} PageShell must inherit the shared route containment contract: ${JSON.stringify(state)}`,
+      );
+    }
+
+    states.push(state);
+  }
+
+  return states;
+};
+
 const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
   await sleep(2500);
   await waitForState(
@@ -4184,7 +4364,9 @@ const assertSessionSurvivesIdleReloadAndNavigation = async (client) => {
     'Authenticated blog session stability',
   );
 
-  return { cachedPermissionMatrix, reloadedShell, reloadedPermissionMatrix, stableBlogSession };
+  const routeViewportContracts = await assertOrdinaryAdminRouteViewportContracts(client);
+
+  return { cachedPermissionMatrix, reloadedShell, reloadedPermissionMatrix, stableBlogSession, routeViewportContracts };
 };
 
 const seedStaleAdminProfile = async (client) => {
