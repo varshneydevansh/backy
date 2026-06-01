@@ -30,14 +30,21 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
 - `npm run test:public-security --workspace @backy/public --silent` -> PASS.
 - Live `POST https://backy-public.vercel.app/api/admin/auth/password-recovery` spot check -> returned `deliveryConfigured:false`, `provider:"local-outbox"`, `status:"not_configured"`, confirming no production email provider is active.
+- `git push` -> PASS; pushed `d8f56617` and `a188a7b6` to `main`.
+- Vercel production deployment inspection for `backy-public` -> Ready.
+- Vercel production deployment inspection for `backy-admin` -> Ready.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS with expected admin-auth-credentials-not-set warning.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9494 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS.
+- Live recovery endpoint after deploy -> returned the clearer `No recovery email was sent... owner-assisted reset` message with `local-outbox`/`not_configured`.
+- `npx vercel@latest logs backy-public.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs.
+- `npx vercel@latest logs backy-admin.vercel.app --level error --since 10m --expand --no-color --no-follow` -> PASS, no logs.
 
 **Operational answer:**
 - The real owner account is the production access path. Because email delivery is not configured, the immediate safe reset path is Supabase Authentication -> Users -> owner email -> set password, then login at `backy-admin`.
 - Once logged in, account creation/invites live under Users, domains/sites under Sites, and custom frontends should consume `backy-public` agent-handoff/manifest/OpenAPI/render APIs.
 
 **Next:**
-1. Run final diff hygiene, commit, and push the recovery-boundary slice plus the pending hosted-login-shell smoke slice.
-2. Re-read the survival guide and continue Batch 5 with the next visible editor/admin friction point.
+1. Re-read the survival guide and continue Batch 5 with the next visible editor/admin friction point.
 
 ## 2026-06-01 10:17 IST
 

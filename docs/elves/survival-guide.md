@@ -107,7 +107,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest production recovery polish:** Forgot Password now explicitly says no recovery email was sent when production is on `local-outbox`/no transactional provider, while keeping the neutral anti-enumeration envelope and documenting Supabase owner-assisted reset as the immediate access path.
 
-**Single next action:** Commit and push the hosted-login-shell smoke plus recovery-boundary slices, re-read this guide, then continue Batch 5 with the next visible admin/editor friction point.
+**Newest deploy verification:** `d8f56617` and `a188a7b6` are pushed. `backy-public` and `backy-admin` production deployments are Ready, live production readiness and hosted login-shell smokes pass, the deployed recovery endpoint reports no email sent/local-outbox not configured, and recent Vercel error logs are empty.
+
+**Single next action:** Continue Batch 5 with the next visible admin/editor friction point after the user's current access question is answered.
 
 ## Active Compute
 
