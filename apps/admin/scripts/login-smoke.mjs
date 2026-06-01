@@ -754,6 +754,7 @@ const assertAuthRecoverySource = () => {
       headerSource.includes('const latestSearchLoadKeyRef = useRef<string>') &&
       headerSource.includes("const searchHydrationStatus = searchLoading") &&
       headerSource.includes('if (searchInFlightRef.current === loadKey || searchLoadedForSiteId === loadKey) return;') &&
+      headerSource.includes('latestSearchLoadKeyRef.current = loadKey;') &&
       headerSource.includes('if (latestSearchLoadKeyRef.current !== loadKey) return;') &&
       headerSource.includes('if (!searchOpen || searchLoading || searchError || searchLoadedForSiteId === searchLoadKey) return;') &&
       headerSource.includes('data-search-hydration={searchHydrationStatus}') &&
@@ -808,9 +809,23 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
+    mainLayoutSource.includes("root.classList.add('backy-admin-shell-active')") &&
+      mainLayoutSource.includes("body.classList.add('backy-admin-shell-active')") &&
+      mainLayoutSource.includes("appRoot?.setAttribute('data-admin-shell-scroll-lock', 'document')") &&
+      mainLayoutSource.includes('window.scrollTo({ left: 0, top: 0, behavior:') &&
+      mainLayoutSource.includes('data-testid="admin-shell"') &&
+      mainLayoutSource.includes('data-testid="admin-shell-footer"') &&
+      mainLayoutSource.includes("data-document-scroll-lock=\"html-body-root\""),
+    'Authenticated admin shell must explicitly lock html/body/root scrolling, reset leaked document scroll on route changes, and render an operational footer inside the main pane.',
+  );
+
+  assert(
     loginSmokeSource.includes('assertSidebarViewportScrollContract') &&
       loginSmokeSource.includes('pointerClickTestId') &&
       loginSmokeSource.includes('document.documentElement.scrollHeight') &&
+      loginSmokeSource.includes('htmlShellClass') &&
+      loginSmokeSource.includes('windowScrollAfterAttempt') &&
+      loginSmokeSource.includes('footerExists') &&
       loginSmokeSource.includes("data-nav-ready") &&
       loginSmokeSource.includes('assertSidebarFilterInteraction') &&
       loginSmokeSource.includes('assertSidebarLayoutControlsInteraction') &&
@@ -2687,6 +2702,9 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const nav = document.querySelector('[data-testid="admin-sidebar-nav"]');
       const main = document.querySelector('[data-testid="admin-main-content"]');
       const header = document.querySelector('[data-testid="admin-header-shell"]');
+      const adminShell = document.querySelector('[data-testid="admin-shell"]');
+      const footer = document.querySelector('[data-testid="admin-shell-footer"]');
+      const appRoot = document.getElementById('root');
       const toggle = document.querySelector('[data-testid="admin-sidebar-toggle"]');
       const filter = document.querySelector('[data-testid="admin-sidebar-filter-input"]');
       const status = document.querySelector('[data-testid="admin-sidebar-action-status"]');
@@ -2717,8 +2735,16 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       const navRect = nav?.getBoundingClientRect();
       const mainRect = main?.getBoundingClientRect();
       const headerRect = header?.getBoundingClientRect();
+      const appRootRect = appRoot?.getBoundingClientRect();
       const navOverflowY = nav ? getComputedStyle(nav).overflowY : '';
       const mainOverflowY = main ? getComputedStyle(main).overflowY : '';
+      const rootOverflowY = getComputedStyle(document.documentElement).overflowY;
+      const bodyOverflowY = getComputedStyle(document.body).overflowY;
+      const htmlShellClass = document.documentElement.classList.contains('backy-admin-shell-active');
+      const bodyShellClass = document.body.classList.contains('backy-admin-shell-active');
+      const windowScrollBeforeAttempt = window.scrollY;
+      window.scrollTo(0, 9999);
+      const windowScrollAfterAttempt = window.scrollY;
       const navReady = sidebar?.getAttribute('data-nav-ready') || '';
       const permissionSource = sidebar?.getAttribute('data-permission-source') || '';
       const permissionSyncState = sidebar?.getAttribute('data-permission-sync-state') || '';
@@ -2757,10 +2783,20 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
       );
       return {
         ready: Boolean(shell) &&
+          adminShell instanceof HTMLElement &&
+          adminShell.getAttribute('data-document-scroll-lock') === 'html-body-root' &&
           Boolean(sidebar) &&
           Boolean(nav) &&
           Boolean(main) &&
           Boolean(header) &&
+          appRoot instanceof HTMLElement &&
+          appRoot.getAttribute('data-admin-shell-scroll-lock') === 'document' &&
+          htmlShellClass &&
+          bodyShellClass &&
+          rootOverflowY !== 'visible' &&
+          bodyOverflowY !== 'visible' &&
+          footer instanceof HTMLElement &&
+          footer.getAttribute('data-footer-role') === 'operational-shell-footer' &&
           navReady === 'true' &&
           sectionStateHydrated === 'true' &&
           renderedItems >= 8 &&
@@ -2884,6 +2920,19 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         navExists: Boolean(nav),
         mainExists: Boolean(main),
         headerExists: Boolean(header),
+        adminShellExists: adminShell instanceof HTMLElement,
+        adminShellScrollLock: adminShell?.getAttribute('data-document-scroll-lock') || '',
+        htmlShellClass,
+        bodyShellClass,
+        appRootScrollLock: appRoot?.getAttribute('data-admin-shell-scroll-lock') || '',
+        rootOverflowY,
+        bodyOverflowY,
+        windowScrollBeforeAttempt,
+        windowScrollAfterAttempt,
+        footerExists: footer instanceof HTMLElement,
+        footerRole: footer?.getAttribute('data-footer-role') || '',
+        footerApiBase: footer?.getAttribute('data-public-api-base') || '',
+        footerText: footer?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         shellHeight: Math.round(shellRect?.height || 0),
         shellWidth: Math.round(shellRect?.width || 0),
         shellRight: Math.round(shellRect?.right || 0),
@@ -2900,6 +2949,7 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
         mainClientHeight: main?.clientHeight || 0,
         mainOverflowY,
         headerHeight: Math.round(headerRect?.height || 0),
+        appRootHeight: Math.round(appRootRect?.height || 0),
         mainLeft: Math.round(mainRect?.left || 0),
         mainTop: Math.round(mainRect?.top || 0),
         navReady,
@@ -3005,14 +3055,36 @@ const assertSidebarViewportScrollContract = async (client, label = 'admin shell 
     `Admin shell pieces should render together: ${JSON.stringify(state)}`,
   );
   assert(
+    state.adminShellExists &&
+      state.adminShellScrollLock === 'html-body-root' &&
+      state.htmlShellClass &&
+      state.bodyShellClass &&
+      state.appRootScrollLock === 'document' &&
+      state.rootOverflowY !== 'visible' &&
+      state.bodyOverflowY !== 'visible' &&
+      state.appRootHeight <= state.viewportHeight + 4 &&
+      state.windowScrollBeforeAttempt === 0 &&
+      state.windowScrollAfterAttempt === 0,
+    `Authenticated admin shell should lock document scrolling so blank body space cannot cover route content: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.footerExists &&
+      state.footerRole === 'operational-shell-footer' &&
+      state.footerText.includes('Backy admin') &&
+      state.footerText.includes('Protected workspace') &&
+      state.footerApiBase.length > 0,
+    `Admin shell footer should close ordinary routes inside the main scroll pane: ${JSON.stringify(state)}`,
+  );
+  assert(
     Math.abs(state.shellHeight - state.viewportHeight) <= 4 &&
       Math.abs(state.sidebarHeight - state.viewportHeight) <= 4,
     `Desktop sidebar should be viewport-bound instead of page-content-height-bound: ${JSON.stringify(state)}`,
   );
   assert(
-    state.documentScrollHeight <= state.viewportHeight + 8 &&
-      state.bodyScrollHeight <= state.viewportHeight + 8,
-    `Document/body should not own admin scrolling; main and nav containers should: ${JSON.stringify(state)}`,
+    state.bodyScrollHeight <= state.viewportHeight + 8 &&
+      state.windowScrollBeforeAttempt === 0 &&
+      state.windowScrollAfterAttempt === 0,
+    `Browser window/body should not own admin scrolling; main and nav containers should: ${JSON.stringify(state)}`,
   );
   assert(
     ['auto', 'scroll'].includes(state.navOverflowY) &&

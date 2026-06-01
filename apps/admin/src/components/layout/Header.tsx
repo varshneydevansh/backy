@@ -649,9 +649,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     const loadKey = searchLoadKey;
     if (searchInFlightRef.current === loadKey || searchLoadedForSiteId === loadKey) return;
 
-    if (!latestSearchLoadKeyRef.current) {
-      latestSearchLoadKeyRef.current = loadKey;
-    }
+    latestSearchLoadKeyRef.current = loadKey;
     searchInFlightRef.current = loadKey;
     setSearchLoading(true);
     setSearchError(null);

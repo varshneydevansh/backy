@@ -143,6 +143,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest newsletter subscriber polish:** Newsletter now exposes All, Send-ready, Held, and Unsubscribed audience views with canonical readiness counts, search over subscriber/topic/source/form metadata, visible-count machine metadata, and CSV export scoped to the current visible audience.
 
+**Newest admin shell polish:** Authenticated admin routes now lock `html`/`body`/`#root` document scrolling, reset leaked browser scroll on route changes, and render an ordinary-route operational footer inside the main pane. `/sites/new` smoke coverage proves the browser window cannot scroll into blank body space while the main pane owns long-route overflow. Global search also refreshes its latest request key on each active-site load so site switching cannot leave search stuck in `loading`.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

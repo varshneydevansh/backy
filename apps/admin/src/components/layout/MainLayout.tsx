@@ -12,9 +12,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouterState } from '@tanstack/react-router';
+import { Link, useRouterState } from '@tanstack/react-router';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { getHeaderPageTitle } from './headerModel';
 import { cn } from '@/lib/utils';
 
 // ============================================
@@ -43,6 +44,8 @@ const SIDEBAR_DEFAULT_COLLAPSED_ROUTES = [
   /^\/users(?:\/|$)/,
   /^\/settings(?:\/|$)/,
 ];
+const PUBLIC_API_BASE_LABEL = (import.meta.env.VITE_BACKY_PUBLIC_API_BASE_URL || 'Public API configured in Settings')
+  .replace(/\/$/, '');
 
 const getStoredBoolean = (key: string) => {
   if (typeof window === 'undefined') return null;
@@ -91,6 +94,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   ), [pathname]);
   const isFocusedEditorWorkspace = isEditorWorkspace && routeSearch.focus === 'canvas';
   const isDenseAdminSurface = getDefaultSidebarCollapsed(pathname);
+  const pageTitle = getHeaderPageTitle(pathname);
 
   /** Whether the user prefers the standard admin sidebar collapsed */
   const [standardSidebarCollapsed, setStandardSidebarCollapsed] = useState(() => getStoredSidebarCollapsed() ?? false);
@@ -103,6 +107,34 @@ export function MainLayout({ children }: MainLayoutProps) {
   const previousMobileFocusRef = useRef<HTMLElement | null>(null);
   const sidebarCollapsed = isDenseAdminSurface ? denseSidebarCollapsed : standardSidebarCollapsed;
   const effectiveSidebarCollapsed = sidebarCollapsed;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    const root = document.documentElement;
+    const body = document.body;
+    const appRoot = document.getElementById('root');
+
+    root.classList.add('backy-admin-shell-active');
+    body.classList.add('backy-admin-shell-active');
+    appRoot?.setAttribute('data-admin-shell-scroll-lock', 'document');
+
+    return () => {
+      root.classList.remove('backy-admin-shell-active');
+      body.classList.remove('backy-admin-shell-active');
+      appRoot?.removeAttribute('data-admin-shell-scroll-lock');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    window.requestAnimationFrame(() => {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+    });
+  }, [pathname]);
 
   useEffect(() => {
     if (!hasStoredSidebarPreference && !isDenseAdminSurface) {
@@ -189,7 +221,11 @@ export function MainLayout({ children }: MainLayoutProps) {
   }, [mobileSidebarOpen]);
 
   return (
-    <div className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background">
+    <div
+      className="flex h-dvh min-h-0 min-w-0 overflow-hidden bg-background"
+      data-testid="admin-shell"
+      data-document-scroll-lock="html-body-root"
+    >
       <a
         href="#admin-main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:ring-2 focus:ring-ring"
@@ -278,6 +314,12 @@ export function MainLayout({ children }: MainLayoutProps) {
         >
           <div className={cn(isEditorWorkspace ? 'w-full min-w-0' : 'mx-auto w-full max-w-[1680px]')}>
             {children}
+            {!isEditorWorkspace && (
+              <AdminShellFooter
+                pageTitle={pageTitle}
+                publicApiBaseLabel={PUBLIC_API_BASE_LABEL}
+              />
+            )}
           </div>
         </main>
       </div>
@@ -286,3 +328,41 @@ export function MainLayout({ children }: MainLayoutProps) {
 }
 
 export default MainLayout;
+
+function AdminShellFooter({
+  pageTitle,
+  publicApiBaseLabel,
+}: {
+  pageTitle: string;
+  publicApiBaseLabel: string;
+}) {
+  return (
+    <footer
+      className="mt-8 flex flex-col gap-3 border-t border-border/80 pt-4 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between"
+      data-testid="admin-shell-footer"
+      data-footer-role="operational-shell-footer"
+      data-public-api-base={publicApiBaseLabel}
+    >
+      <div className="min-w-0">
+        <div className="font-semibold text-foreground">Backy admin</div>
+        <div className="mt-1 break-all font-mono">
+          {pageTitle} · Protected workspace · {publicApiBaseLabel}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          to="/help"
+          className="rounded-md border border-border bg-card px-2.5 py-1.5 font-medium text-foreground transition hover:bg-accent focus-ring"
+        >
+          Help
+        </Link>
+        <Link
+          to="/sites"
+          className="rounded-md border border-border bg-card px-2.5 py-1.5 font-medium text-foreground transition hover:bg-accent focus-ring"
+        >
+          Sites
+        </Link>
+      </div>
+    </footer>
+  );
+}

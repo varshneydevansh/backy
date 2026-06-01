@@ -90,6 +90,18 @@
     @apply scroll-smooth;
   }
 
+  html.backy-admin-shell-active,
+  body.backy-admin-shell-active {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body.backy-admin-shell-active #root {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: Geist, Aptos, ui-sans-serif, system-ui, sans-serif;

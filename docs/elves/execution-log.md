@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 17:36 IST
+- **Last updated:** 2026-06-01 18:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 18:26 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Admin shell status:** Authenticated route scrolling is now owned by the shell, not the browser document
+
+**What changed:**
+- `apps/admin/src/components/layout/MainLayout.tsx` now locks `html`, `body`, and `#root` while authenticated admin routes are mounted, resets leaked document scroll on route changes, and renders a shared operational footer inside ordinary main-scroll routes.
+- `apps/admin/src/index.css` adds the corresponding admin-shell document scroll lock.
+- `apps/admin/src/components/layout/Header.tsx` now refreshes the latest global-search load key on every new site-aware search request so active-site changes cannot leave search stuck in `loading`.
+- `apps/admin/scripts/login-smoke.mjs` guards the shell lock/footer and global-search stale-load behavior.
+- `apps/admin/scripts/sites-smoke.mjs` now validates `/sites/new` specifically: browser `window` scroll remains pinned, the main pane owns overflow, the create form is reachable, and the shared footer terminates the route.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:sites --workspace @backy-cms/admin --silent` -> PASS after one transient local backend `ECONNRESET` retry.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This fixes the cross-route blank-body scroll issue the user saw on `/sites/new`; the change is shell-level so it applies to all non-editor admin pages.
+- Editor routes still keep their specialized canvas workspace layout and are not given the new ordinary-route footer.
+
+**Next:**
+1. Commit and push this shell polish slice, then verify production deployment.
 
 ## 2026-06-01 17:36 IST
 

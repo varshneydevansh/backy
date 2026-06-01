@@ -887,6 +887,82 @@ const navigateToCreateSite = (client) => navigate(
   'Create site page',
 );
 
+const assertCreateSiteViewportShell = async (client) => {
+  const state = await evaluate(client, `(() => {
+    const adminShell = document.querySelector('[data-testid="admin-shell"]');
+    const main = document.querySelector('[data-testid="admin-main-content"]');
+    const sidebarShell = document.querySelector('[data-testid="admin-sidebar-shell"]');
+    const footer = document.querySelector('[data-testid="admin-shell-footer"]');
+    const form = document.querySelector('[data-testid="site-create-form"]');
+    const submit = document.querySelector('button[type="submit"]');
+    const appRoot = document.getElementById('root');
+    const mainRect = main?.getBoundingClientRect();
+    const rootRect = appRoot?.getBoundingClientRect();
+    const windowScrollBeforeAttempt = window.scrollY;
+    window.scrollTo(0, 9999);
+    const windowScrollAfterAttempt = window.scrollY;
+    return {
+      viewportHeight: window.innerHeight,
+      documentScrollHeight: document.documentElement.scrollHeight,
+      bodyScrollHeight: document.body?.scrollHeight || 0,
+      windowScrollBeforeAttempt,
+      windowScrollAfterAttempt,
+      adminShellExists: adminShell instanceof HTMLElement,
+      adminShellScrollLock: adminShell?.getAttribute('data-document-scroll-lock') || '',
+      htmlShellClass: document.documentElement.classList.contains('backy-admin-shell-active'),
+      bodyShellClass: document.body.classList.contains('backy-admin-shell-active'),
+      rootOverflowY: getComputedStyle(document.documentElement).overflowY,
+      bodyOverflowY: getComputedStyle(document.body).overflowY,
+      appRootScrollLock: appRoot?.getAttribute('data-admin-shell-scroll-lock') || '',
+      appRootHeight: Math.round(rootRect?.height || 0),
+      mainExists: main instanceof HTMLElement,
+      mainOverflowY: main instanceof HTMLElement ? getComputedStyle(main).overflowY : '',
+      mainScrollHeight: main instanceof HTMLElement ? main.scrollHeight : 0,
+      mainClientHeight: main instanceof HTMLElement ? main.clientHeight : 0,
+      mainTop: Math.round(mainRect?.top || 0),
+      mainBottom: Math.round(mainRect?.bottom || 0),
+      sidebarExists: sidebarShell instanceof HTMLElement,
+      footerExists: footer instanceof HTMLElement,
+      footerText: footer?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      formExists: form instanceof HTMLFormElement,
+      submitExists: submit instanceof HTMLButtonElement,
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    };
+  })()`);
+
+  assert(
+    state.adminShellExists &&
+      state.adminShellScrollLock === 'html-body-root' &&
+      state.htmlShellClass &&
+      state.bodyShellClass &&
+      state.appRootScrollLock === 'document' &&
+      state.rootOverflowY !== 'visible' &&
+      state.bodyOverflowY !== 'visible' &&
+      state.windowScrollBeforeAttempt === 0 &&
+      state.windowScrollAfterAttempt === 0 &&
+      state.bodyScrollHeight <= state.viewportHeight + 8 &&
+      state.appRootHeight <= state.viewportHeight + 4,
+    `Create-site page leaked document/body scrolling and can expose blank shell space: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.mainExists &&
+      ['auto', 'scroll'].includes(state.mainOverflowY) &&
+      state.mainClientHeight <= state.viewportHeight &&
+      state.mainScrollHeight > state.mainClientHeight &&
+      state.formExists &&
+      state.submitExists,
+    `Create-site content should scroll inside admin main, not the browser document: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.footerExists &&
+      state.footerText.includes('Backy admin') &&
+      state.footerText.includes('Protected workspace'),
+    `Create-site page should finish with the shared operational footer inside the main pane: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
 const navigateToSites = (client, expectedText = 'Sites command center', siteId = '') => navigate(
   client,
   `${ADMIN_BASE_URL}/sites${siteId ? `?siteId=${encodeURIComponent(siteId)}` : ''}`,
@@ -2043,6 +2119,7 @@ const main = async () => {
     });
 
     await navigateToCreateSite(client);
+    await assertCreateSiteViewportShell(client);
     const { site: created, pages } = await createSiteThroughUi(client, {
       siteName,
       slug,
