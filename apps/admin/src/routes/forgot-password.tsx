@@ -11,6 +11,19 @@ type ForgotPasswordSearch = {
 
 type RecoveryState = 'ready' | 'sent' | 'error';
 
+const formatRecoveryDeliveryStatus = (
+  resetDelivery: Awaited<ReturnType<typeof requestAdminPasswordRecovery>>['resetDelivery'],
+): string | null => {
+  if (!resetDelivery) return null;
+  const provider = resetDelivery.provider.replace(/-/g, ' ');
+  if (!resetDelivery.deliveryConfigured || resetDelivery.status === 'not_configured') {
+    return `Provider ${provider}: recovery email is not configured.`;
+  }
+
+  const status = resetDelivery.status.replace(/_/g, ' ');
+  return `Provider ${provider}, status ${status}.`;
+};
+
 export const Route = createFileRoute('/forgot-password')({
   validateSearch: (search: Record<string, unknown>): ForgotPasswordSearch => ({
     email: typeof search.email === 'string' ? search.email : undefined,
@@ -58,9 +71,7 @@ function ForgotPasswordPage() {
       const recovery = await requestAdminPasswordRecovery(normalizedEmail);
       setRecoveryState('sent');
       setMessage(recovery.message || 'Password recovery was requested. Check your configured delivery channel for next steps.');
-      setDeliveryStatus(recovery.resetDelivery
-        ? `Provider ${recovery.resetDelivery.provider}, status ${recovery.resetDelivery.status}.`
-        : null);
+      setDeliveryStatus(formatRecoveryDeliveryStatus(recovery.resetDelivery));
       setLocalRecoveryUrl(recovery.localRecovery?.resetUrl || null);
     } catch (error) {
       setRecoveryState('error');

@@ -13049,7 +13049,7 @@ export interface BackyAdminUser {
 export interface BackyAdminUserDeliveryResult {
   attempted?: boolean;
   provider?: "local-outbox" | "http-endpoint" | "resend" | "smtp" | string;
-  status?: "queued" | "failed" | string;
+  status?: "queued" | "failed" | "not_configured" | string;
   deliveryConfigured?: boolean;
   statusCode?: number;
   error?: string;

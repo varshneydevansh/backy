@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 08:41 IST
+- **Last updated:** 2026-06-01 09:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,38 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 09:26 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Auth/deploy status:** Password recovery no longer claims local outbox delivery is queued
+
+**What changed:**
+- `apps/public/src/lib/formEmailDelivery.ts`: added `isExternalEmailDeliveryConfigured` so recovery UI can distinguish a real transactional provider from local/manual outbox behavior.
+- `apps/public/src/app/api/admin/auth/password-recovery/route.ts`: neutral recovery responses now report `local-outbox` as `not_configured`, keep known/unknown envelopes identical, and skip reset-token creation unless external email delivery is configured or local recovery-token exposure is explicitly enabled.
+- `apps/admin/src/routes/forgot-password.tsx`: production/admin UI now renders the not-configured state as a recovery-provider boundary instead of saying a reset email was queued.
+- `apps/public/scripts/admin-auth-smoke.mjs`, `apps/public/scripts/public-security-regression-smoke.mjs`, and `apps/admin/scripts/login-smoke.mjs`: updated coverage for the neutral not-configured recovery envelope and UI copy.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- Direct local recovery endpoint proof against the active `127.0.0.1:3001` server -> PASS; known and unknown accounts returned the same envelope, `local-outbox`, `not_configured`, `attempted: false`, and no `localRecovery`.
+- `npm run test:public-security --workspace @backy/public --silent` -> PASS.
+- `npm run test:frontend-contract-types --silent` -> PASS.
+- `npm run test:vercel-preview-readiness --silent` -> PASS with expected repo-root relink warning.
+- `npm run test:vercel-production-readiness --silent` -> PASS with expected no-live-production-URL warning.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `npm run build:vercel:public --silent` -> PASS.
+- `npm run build:vercel:admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Notes:**
+- The already-running local public dev server owned `.next/dev/lock`, so a separate full `test:admin-auth` server could not be started without disrupting the user's browser session. The unauthenticated recovery endpoint was validated directly against the active hot-reload server instead.
+
+**Next:**
+1. Commit and push this production password-recovery hardening slice.
+2. Inspect Vercel deploys/logs after push, then continue Batch 5 with the next admin/editor friction point.
 
 ## 2026-06-01 08:57 IST
 

@@ -1050,6 +1050,8 @@ const passwordRecoveryRoute = read(
 for (const needle of [
   "createAdminPasswordResetToken",
   "getEmailDeliveryConfig",
+  "isExternalEmailDeliveryConfigured",
+  "canIssueRecoveryToken",
   "deliverAdminPasswordResetEmail",
   "validateAdminInviteOnlyActivationPolicy",
   "getRequiredDatabaseRepositories",

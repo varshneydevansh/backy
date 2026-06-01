@@ -186,7 +186,7 @@ interface AdminPasswordRecoveryResponse {
     resetDelivery?: {
       attempted: boolean;
       provider: 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
-      status: 'queued' | 'failed';
+      status: 'queued' | 'failed' | 'not_configured';
       deliveryConfigured: boolean;
       statusCode?: number;
       error?: string;

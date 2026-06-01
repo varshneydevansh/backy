@@ -7,7 +7,7 @@ import {
   type EmailDeliveryProvider,
 } from '@/lib/formEmailDelivery';
 
-export type AdminUserDeliveryStatus = 'queued' | 'failed';
+export type AdminUserDeliveryStatus = 'queued' | 'failed' | 'not_configured';
 
 export interface AdminUserDeliveryResult {
   attempted: boolean;

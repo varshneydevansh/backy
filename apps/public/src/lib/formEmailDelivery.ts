@@ -122,6 +122,22 @@ export const getEmailDeliveryConfig = (): EmailDeliveryConfig => {
   return { provider: 'local-outbox', from };
 };
 
+export const isExternalEmailDeliveryConfigured = (config: EmailDeliveryConfig): boolean => {
+  if (config.provider === 'http-endpoint') {
+    return Boolean(config.endpoint);
+  }
+
+  if (config.provider === 'resend') {
+    return Boolean(config.apiKey);
+  }
+
+  if (config.provider === 'smtp') {
+    return Boolean(config.smtp?.host);
+  }
+
+  return false;
+};
+
 const summarizeValuesForEmail = (values: Record<string, unknown>): string => (
   Object.entries(values)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value ?? '')}`)

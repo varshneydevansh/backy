@@ -92,6 +92,7 @@ Durable reusable lessons for the Backy Elves run. Do not use this file for one-o
 - [2026-06-01] Production readiness should separate public contract proof from optional admin-auth proof. Keep public handoff/manifest/OpenAPI/render checks mandatory for promotion, but let operators require login/session/logout with `BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1` and credentials supplied only through local shell or CI secrets.
 - [2026-06-01] Host-aware custom frontend routing must be explicit in the OpenAPI operation parameters, not only in Backy's `x-backy-*` handoff extension. Frontend agents should see `domain`, `host`, and `x-forwarded-host` on both resolve and render operations.
 - [2026-06-01] Live production OpenAPI checks must tolerate canonical site ids in `paths`. A request alias such as `site-demo` can resolve to a database UUID, so smokes should find resolve/render operations by suffix when validating parameter contracts.
+- [2026-06-01] Unauthenticated admin password recovery must never advertise `local-outbox` as queued external delivery. Keep known/unknown responses identical, but report `not_configured` and skip unreachable reset-token creation unless a real external email provider or explicit local recovery token exposure is available.
 
 ## Known Traps
 

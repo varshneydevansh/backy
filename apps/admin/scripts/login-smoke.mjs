@@ -4293,15 +4293,19 @@ const main = async () => {
       `(() => {
         const body = document.body?.innerText || '';
         const queued = body.includes('If recovery is available for this account') &&
-          body.includes('reset email was queued') &&
+          body.includes('queued through the configured recovery channel') &&
           body.includes('Provider ') &&
           body.includes('status queued');
+        const needsProvider = body.includes('If recovery is available for this account') &&
+          body.includes('password recovery needs a configured email provider') &&
+          body.includes('Provider local outbox: recovery email is not configured.');
         const rateLimited = body.includes('Too many recovery requests. Please wait before trying again.');
         return {
           ready: window.location.pathname === '/forgot-password' &&
-            (queued || rateLimited),
+            (queued || needsProvider || rateLimited),
           path: window.location.pathname,
           queued,
+          needsProvider,
           rateLimited,
           body: body.slice(0, 900),
         };

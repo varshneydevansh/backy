@@ -99,6 +99,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification polish:** The live production readiness check now handles canonical database site ids in OpenAPI path keys when the requested site identifier is an alias such as `site-demo`.
 
+**Newest production auth polish:** Unauthenticated admin password recovery now reports `local-outbox` as `not_configured`, keeps known/unknown envelopes identical, and skips unreachable reset-token creation unless external email delivery or explicit local recovery exposure is configured.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point after pushing the page-create quota/readiness slice.
 
 ## Active Compute
