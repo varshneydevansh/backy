@@ -151,6 +151,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `2cca0970` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
+**Newest all-route verification polish:** The login smoke now verifies ordinary route containment across Dashboard, Sites, Site Detail, New Site, Pages, New Page, Blog, Media, Collections, Reusable Sections, Forms, Contacts, Comments, Newsletter, Products, Orders, Users, New User, User Detail, Teams, Settings, and Help, while preserving editor routes on their separate unframed canvas contract.
+
 **Single next action:** Continue Batch 5 with the next visible admin/editor friction point.
 
 ## Active Compute

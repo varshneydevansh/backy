@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-01 20:05 IST
+- **Last updated:** 2026-06-01 20:28 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-01 20:28 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Admin shell status:** Global route-containment smoke now covers ordinary admin routes broadly
+
+**What changed:**
+- `apps/admin/scripts/login-smoke.mjs` now verifies the ordinary admin route frame across Dashboard, Sites, Site Detail, New Site, Pages, New Page, Blog, Media, Collections, Reusable Sections, Forms, Contacts, Comments, Newsletter, Products, Orders, Users, New User, User Detail, Teams, Settings, and Help.
+- The account-menu close assertion now uses a real pointer path so it follows the rendered header/backdrop behavior instead of calling the button handler directly.
+
+**Commands run:**
+- `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:login --workspace @backy-cms/admin --silent` -> PASS, with all expanded ordinary route containment states green.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This responds to the user's clarification that the layout issue is global, not only visible on `/sites/new`.
+- Editor routes keep their separate `editor-route-unframed` canvas contract; this smoke covers ordinary management pages where the blank body scroll/overlap issue belongs.
+
+**Next:**
+1. Commit and push this verification hardening slice, then continue Batch 5 with the next visible admin/editor friction point.
 
 ## 2026-06-01 20:05 IST
 

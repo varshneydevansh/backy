@@ -2005,13 +2005,7 @@ const assertHeaderAccountMenuInteraction = async (client) => {
     `Header account menu actions should expose shared ready status and route profile by the signed-in admin id: ${JSON.stringify(openedState)}`,
   );
 
-  const closeClick = await evaluate(client, `(() => {
-    const toggle = document.querySelector('[data-testid="header-account-toggle"]');
-    if (!(toggle instanceof HTMLButtonElement)) return { ok: false, reason: 'account-toggle-missing' };
-    toggle.click();
-    return { ok: true };
-  })()`);
-  assert(closeClick.ok, `Unable to close account menu: ${JSON.stringify(closeClick)}`);
+  const closeClick = await pointerClickTestId(client, 'header-account-toggle', 'account menu outside-click close');
 
   const closedState = await waitForState(
     client,
@@ -2027,7 +2021,7 @@ const assertHeaderAccountMenuInteraction = async (client) => {
     'Header account menu closed',
   );
 
-  return { initialState, openedState, closedState };
+  return { initialState, openedState, closeClick, closedState };
 };
 
 const assertMobileNavigationInteraction = async (client) => {
@@ -4115,10 +4109,27 @@ const assertSidebarPermissionMatrixCache = async (client, label = 'Sidebar permi
 const assertOrdinaryAdminRouteViewportContracts = async (client) => {
   const routeContracts = [
     { label: 'Dashboard', path: '/', marker: '[data-testid="dashboard-command-center"]' },
-    { label: 'Pages', path: '/pages?siteId=site-demo', marker: '[data-testid="pages-command-center"]' },
-    { label: 'Users', path: '/users', marker: '[data-testid="users-command-center"]' },
-    { label: 'Settings', path: '/settings', marker: '[data-testid="settings-command-center"]' },
+    { label: 'Sites', path: '/sites', marker: '[data-testid="sites-command-center"]' },
+    { label: 'Site workspace', path: '/sites/site-demo', marker: '[data-testid="site-workspace-command-center"]' },
     { label: 'New site', path: '/sites/new', marker: '[data-testid="site-creation-command-center"]' },
+    { label: 'Pages', path: '/pages?siteId=site-demo', marker: '[data-testid="pages-command-center"]' },
+    { label: 'New page', path: '/pages/new?siteId=site-demo', marker: '[data-testid="page-creation-command-center"]' },
+    { label: 'Blog', path: '/blog?siteId=site-demo', marker: '[data-testid="blog-command-center"]' },
+    { label: 'Media', path: '/media?siteId=site-demo', marker: '[data-testid="media-library-command-center"]' },
+    { label: 'Collections', path: '/collections?siteId=site-demo', marker: '[data-testid="collections-command-center"]' },
+    { label: 'Reusable sections', path: '/reusable-sections?siteId=site-demo', marker: '[data-testid="reusable-sections-command-center"]' },
+    { label: 'Forms', path: '/forms?siteId=site-demo', marker: '[data-testid="forms-command-center"]' },
+    { label: 'Contacts', path: '/contacts?siteId=site-demo', marker: '[data-testid="contacts-command-center"]' },
+    { label: 'Comments', path: '/comments?siteId=site-demo', marker: '[data-testid="comments-command-center"]' },
+    { label: 'Newsletter', path: '/newsletter?siteId=site-demo', marker: '[data-testid="newsletter-command-center"]' },
+    { label: 'Products', path: '/products?siteId=site-demo', marker: '[data-testid="products-command-center"]' },
+    { label: 'Orders', path: '/orders?siteId=site-demo', marker: '[data-testid="orders-command-center"]' },
+    { label: 'Users', path: '/users', marker: '[data-testid="users-command-center"]' },
+    { label: 'New user', path: '/users/new', marker: '[data-testid="user-invite-command-center"]' },
+    { label: 'User detail', path: '/users/user-admin', marker: '[data-testid="user-detail-command-center"]' },
+    { label: 'Teams', path: '/teams', marker: '[data-testid="admin-page-shell"]', bodyIncludes: 'Teams' },
+    { label: 'Settings', path: '/settings', marker: '[data-testid="settings-command-center"]' },
+    { label: 'Help', path: '/help', marker: '[data-testid="help-command-center"]' },
   ];
   const states = [];
 
@@ -4128,11 +4139,13 @@ const assertOrdinaryAdminRouteViewportContracts = async (client) => {
       `${ADMIN_BASE_URL}${contract.path}`,
       `(() => {
         const body = document.body?.innerText || '';
+        const expectedBody = ${JSON.stringify(contract.bodyIncludes || '')};
         return {
           ready: Boolean(document.querySelector(${JSON.stringify(contract.marker)})) &&
             Boolean(document.querySelector('[data-testid="admin-main-content"]')) &&
             Boolean(document.querySelector('[data-testid="admin-content-frame"]')) &&
             Boolean(document.querySelector('[data-testid="admin-shell-footer"]')) &&
+            (!expectedBody || body.includes(expectedBody)) &&
             !body.includes('Authenticated admin access'),
           path: window.location.pathname,
           search: window.location.search,
