@@ -28101,6 +28101,50 @@ const testResizeCanvasAutoGrow = async (client, pageId) => {
   };
 };
 
+const testInspectorCanvasAutoGrow = async (client, pageId) => {
+  const beforePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const beforeSize = beforePayload.data?.page?.content?.canvasSize || beforePayload.page?.content?.canvasSize || null;
+  assert(beforeSize?.height, `Inspector auto-grow smoke could not read initial canvas size: ${JSON.stringify(beforePayload).slice(0, 500)}`);
+
+  await selectElement(client, 'smoke-flow-after');
+  await switchToPropertiesPanel(client);
+
+  const beforeState = (await readEditorElementState(client, ['smoke-flow-after']))['smoke-flow-after'];
+  assert(beforeState?.height, `Inspector auto-grow smoke could not read selected section state: ${JSON.stringify(beforeState)}`);
+
+  const targetHeight = Math.ceil(beforeState.height + 260);
+  await setLayoutNumberInput(client, 'Height', targetHeight);
+
+  const afterState = (await readEditorElementState(client, ['smoke-flow-after']))['smoke-flow-after'];
+  const expectedMinimumHeight = Math.ceil(afterState.y + afterState.height + 48);
+  assert(
+    afterState.height >= targetHeight - 1,
+    `Inspector height edit did not apply before save: target ${targetHeight}, state ${JSON.stringify(afterState)}`,
+  );
+  assert(
+    expectedMinimumHeight > beforeSize.height,
+    `Inspector height edit did not require canvas growth: before ${JSON.stringify(beforeSize)}, state ${JSON.stringify(afterState)}`,
+  );
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after inspector canvas auto-grow save');
+  const persistedSize = await waitForPersistedCanvasSize(
+    pageId,
+    (size) => size.height > beforeSize.height && size.height >= expectedMinimumHeight,
+    'inspector canvas auto-grow persisted height',
+  );
+
+  return {
+    beforeSize,
+    beforeState,
+    targetHeight,
+    afterState,
+    expectedMinimumHeight,
+    persistedSize,
+    savedStatus,
+  };
+};
+
 const testResizeControls = async (client, pageId = null) => {
   await selectElement(client, 'smoke-image');
   const edgeHandleInventory = await evaluate(client, `(() => {
@@ -28163,6 +28207,9 @@ const testResizeControls = async (client, pageId = null) => {
   const canvasAutoGrow = pageId
     ? await testResizeCanvasAutoGrow(client, pageId)
     : { skipped: true, reason: 'No smoke page id supplied for persisted canvas size check.' };
+  const inspectorCanvasAutoGrow = pageId
+    ? await testInspectorCanvasAutoGrow(client, pageId)
+    : { skipped: true, reason: 'No smoke page id supplied for persisted canvas size check.' };
 
   return {
     edgeHandleInventory,
@@ -28171,6 +28218,7 @@ const testResizeControls = async (client, pageId = null) => {
     shiftAspectResize,
     altCenterResize,
     canvasAutoGrow,
+    inspectorCanvasAutoGrow,
   };
 };
 

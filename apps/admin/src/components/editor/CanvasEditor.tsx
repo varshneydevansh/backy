@@ -6603,6 +6603,7 @@ export function CanvasEditor({
     (updates: { [key: string]: unknown }) => {
       if (!selectedId) return;
       const selectedElementId = selectedId;
+      let boundsElementsForGrowth: CanvasElement[] | null = null;
       updateElementsWithHistory((currentElements) => {
         const result = updateElementById(currentElements, selectedElementId, (element) => (
           isLayerLocked(element) ? element : applyUpdatesForBreakpoint(element, updates, breakpoint)
@@ -6615,10 +6616,14 @@ export function CanvasEditor({
         const previousDisplayedElements = applyResponsiveOverridesToElements(currentElements, breakpoint);
         const nextDisplayedElements = applyResponsiveOverridesToElements(result.elements, breakpoint);
         const flowedDisplayedElements = applyRootSectionFlow(previousDisplayedElements, nextDisplayedElements);
+        boundsElementsForGrowth = flowedDisplayedElements;
         return mergeDisplayedElementsIntoBreakpoint(result.elements, flowedDisplayedElements, breakpoint);
       }, selectedElementId);
+      if (boundsElementsForGrowth) {
+        growCanvasSizeForElements(boundsElementsForGrowth);
+      }
     },
-    [breakpoint, selectedId, updateElementsWithHistory]
+    [breakpoint, growCanvasSizeForElements, selectedId, updateElementsWithHistory]
   );
 
   const handleClearSelectedBreakpointOverride = useCallback(() => {

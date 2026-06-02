@@ -3764,3 +3764,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
+## Checkpoint: 2026-06-02 22:16 IST - Inspector Canvas Auto-Grow Persistence
+
+**Scope:** Batch 5 editor persistence polish, focused on the Spark-identified gap where Inspector/property-panel numeric geometry edits could resize long-page sections without growing the saved canvas frame.
+
+**Changed:**
+- `CanvasEditor.handleElementUpdate` now sends the flowed displayed element tree through the same `growCanvasSizeForElements` helper used by committed drag/resize paths.
+- Inspector layout edits for selected elements can now expand persisted `content.canvasSize` instead of only changing element bounds.
+- Resize smoke now includes a second persisted long-page check that edits `smoke-flow-after` through `editor-layout-height`, saves, and polls the saved page payload.
+
+**Validation:**
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-resize --workspace @backy-cms/admin`
+- PASS: `git diff --check`
+
+**Notes:**
+- The rendered smoke proved the Inspector path grew `smoke-flow-after` from `height=1020` to `height=1280` and persisted `content.canvasSize.height` from `2148` to `2408`.
+- Spark sidecar `019e8936-af32-7f61-ba3c-1f1db9ba7f5a` reviewed the insertion point and confirmed `testResizeControls` plus `editor-layout-height` was the right focused coverage.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
