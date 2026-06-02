@@ -297,6 +297,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest production login guard:** The hosted admin login shell had regressed because a stale `VITE_BACKY_SHOW_DEMO_ACCESS=1` env could still expose the local/demo credentials block in a production build. Source now hard-disables demo access when `import.meta.env.MODE === 'production'`; admin typecheck, production admin build with stale demo env, built-bundle credential scan, login source-only smoke, diff check, and repo-public hygiene are green.
 
+**Newest hosted login verification:** `c8101f07` is pushed and the latest `backy-admin` production deployment is Ready. The deployed admin bundle no longer contains visible `Demo access`; hosted login-shell smoke passes against `https://backy-admin.vercel.app/login` with no seeded credentials/dev MFA and no demo buttons. The smoke now accepts both `BACKY_ADMIN_*` and `BACKY_LOGIN_*` URL env aliases and retries Chrome temp profile cleanup.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

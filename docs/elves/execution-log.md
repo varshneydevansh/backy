@@ -3628,3 +3628,20 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Next:**
 - Commit and push the production login guard, wait for `backy-admin` to redeploy, then rerun hosted login shell plus live production/custom-frontend gates.
+
+## Checkpoint: 2026-06-02 20:38 IST - Hosted Login Shell Verification Fix
+
+**Scope:** Batch 5 verification polish after deploying `c8101f07`, focused on making the hosted login-shell gate unambiguous and robust.
+
+**Changed:**
+- `test:login-production-shell` now accepts both canonical `BACKY_ADMIN_BASE_URL` / `BACKY_PUBLIC_API_BASE_URL` and the previously used `BACKY_LOGIN_BASE_URL` / `BACKY_LOGIN_PUBLIC_API_BASE_URL` aliases, preventing accidental localhost fallback during hosted checks.
+- Chrome temp profile cleanup now retries `fs.rmSync` so an `ENOTEMPTY` race after a successful browser assertion does not fail the smoke.
+
+**Validation:**
+- PASS: `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent`
+
+**Notes:**
+- The deployed admin bundle at `https://backy-admin.vercel.app/assets/index-CrEuwQli.js` no longer contains the visible `Demo access` helper. The earlier failed smoke was testing the local default URL because the script did not recognize the `BACKY_LOGIN_*` aliases.

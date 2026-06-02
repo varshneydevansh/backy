@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || 'http://localhost:5173';
-const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const ADMIN_BASE_URL = process.env.BACKY_ADMIN_BASE_URL || process.env.BACKY_LOGIN_BASE_URL || 'http://localhost:5173';
+const API_BASE_URL = process.env.BACKY_PUBLIC_API_BASE_URL || process.env.BACKY_LOGIN_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 const CHROME_BIN = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = Number(process.env.BACKY_LOGIN_CDP_PORT || 9392);
 const SOURCE_ONLY_MODE = process.env.BACKY_LOGIN_SOURCE_ONLY === '1'
@@ -349,6 +349,12 @@ const assertAuthRecoverySource = () => {
       adminAuthApiSource.includes('VITE_BACKY_ADMIN_API_BASE_URL / VITE_BACKY_PUBLIC_API_BASE_URL') &&
       adminAuthApiSource.includes('Admin API base:'),
     'Admin auth API requests must time out with environment-aware troubleshooting instead of trapping local and Vercel shells behind an infinite loader.',
+  );
+
+  assert(
+    loginSmokeSource.includes('process.env.BACKY_ADMIN_BASE_URL || process.env.BACKY_LOGIN_BASE_URL') &&
+      loginSmokeSource.includes('process.env.BACKY_PUBLIC_API_BASE_URL || process.env.BACKY_LOGIN_PUBLIC_API_BASE_URL'),
+    'Login production-shell smoke must accept the documented BACKY_LOGIN_* URL aliases so hosted checks cannot accidentally fall back to localhost.',
   );
 
   assert(
@@ -4470,7 +4476,15 @@ const cleanup = async ({ client, childProcess, userDataDir }) => {
   }
 
   if (userDataDir) {
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+        break;
+      } catch (error) {
+        if (attempt === 4) throw error;
+        await sleep(150);
+      }
+    }
   }
 };
 
