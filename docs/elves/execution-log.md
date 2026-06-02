@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 08:19 IST
+- **Last updated:** 2026-06-02 08:38 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 08:38 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Starter typecheck now generates Next route types before TypeScript
+
+**What changed:**
+- Updated the checked Next.js custom frontend starter `typecheck` script to run `next typegen && tsc --noEmit`.
+- Regenerated the protected starter file-list template so future admin downloads and CLI scaffolds inherit the route-type generation step.
+- Updated the starter smoke to require the `next typegen` preflight and to run the starter's own typecheck script in the optional deep typecheck path.
+- Updated the existing separate `devanshvarshney-frontend` repo locally with the richer `backy.custom-frontend-control-plane.v1` probe and the same typecheck script; that separate repo still needs its own commit/push/deploy in the next step.
+
+**Commands run:**
+- `node scripts/generate-custom-frontend-starter-template.mjs` -> PASS.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 93 checks.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 94 checks.
+- Separate frontend `npm run typecheck` with safe Backy env -> PASS.
+- Separate frontend `npm run build` with safe Backy env -> PASS.
+- Local separate frontend `/api/backy-connection` probe on port 3037 -> PASS, exposes `backy.custom-frontend-control-plane.v1`, render reachability, editable-map proof, no forbidden env.
+- Local separate frontend connection gate with production Backy + probe required -> PASS, 65 checks.
+
+**Next:**
+1. Run Backy diff/hygiene gates, commit and push the starter typecheck slice.
+2. Commit/push the separate frontend repo update.
+3. Redeploy the separate frontend and rerun the deployed 65-check connection gate.
 
 ## 2026-06-02 08:19 IST
 

@@ -21,7 +21,7 @@ export const CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES = [
     "path": "package.json",
     "role": "runtime-package",
     "source": "examples/custom-frontend-next",
-    "content": "{\n  \"name\": \"backy-custom-frontend-next-starter\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"description\": \"Minimal Next.js custom website frontend that consumes Backy public APIs.\",\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"typecheck\": \"tsc --noEmit\"\n  },\n  \"dependencies\": {\n    \"next\": \"^16.1.6\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\"\n  },\n  \"overrides\": {\n    \"postcss\": \"^8.5.15\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"@types/react\": \"^18.2.0\",\n    \"@types/react-dom\": \"^18.2.0\",\n    \"typescript\": \"^5.3.0\"\n  }\n}\n"
+    "content": "{\n  \"name\": \"backy-custom-frontend-next-starter\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"description\": \"Minimal Next.js custom website frontend that consumes Backy public APIs.\",\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"typecheck\": \"next typegen && tsc --noEmit\"\n  },\n  \"dependencies\": {\n    \"next\": \"^16.1.6\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\"\n  },\n  \"overrides\": {\n    \"postcss\": \"^8.5.15\"\n  },\n  \"devDependencies\": {\n    \"@types/node\": \"^20.0.0\",\n    \"@types/react\": \"^18.2.0\",\n    \"@types/react-dom\": \"^18.2.0\",\n    \"typescript\": \"^5.3.0\"\n  }\n}\n"
   },
   {
     "path": "next.config.mjs",

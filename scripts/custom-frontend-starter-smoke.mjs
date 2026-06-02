@@ -73,6 +73,11 @@ if (packageJson.dependencies?.next && packageJson.dependencies?.react && package
 } else {
   fail('Starter must declare Next/React runtime dependencies');
 }
+if (packageJson.scripts?.typecheck === 'next typegen && tsc --noEmit') {
+  pass('Starter typecheck generates Next route types before TypeScript');
+} else {
+  fail('Starter typecheck must run next typegen before tsc --noEmit');
+}
 if (packageJson.overrides?.postcss) {
   pass('Starter pins PostCSS override for the Next.js dependency graph');
 } else {
@@ -276,8 +281,8 @@ if (
 }
 
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {
-  const typecheck = spawnSync('npx', ['tsc', '--noEmit', '-p', 'examples/custom-frontend-next/tsconfig.json'], {
-    cwd: repoRoot,
+  const typecheck = spawnSync('npm', ['run', 'typecheck', '--silent'], {
+    cwd: starterRoot,
     encoding: 'utf8',
     timeout: 30000,
   });
