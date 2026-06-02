@@ -160,6 +160,9 @@ assertIncludes(files.render, 'data-backy-editable-map-pointer', 'Renderer expose
 assertIncludes(files.render, 'payload.navigation.primary', 'Renderer consumes Backy navigation payload');
 assertIncludes(files.render, 'extractBackyElements', 'Renderer has a reusable element extraction boundary');
 assertIncludes(files.newsletter, 'subscribeNewsletter', 'Starter exposes public newsletter signup bridge');
+assertIncludes(files.newsletter, 'export async function DELETE', 'Starter exposes public newsletter unsubscribe route');
+assertIncludes(files.newsletter, 'backy.unsubscribeNewsletter', 'Starter newsletter route calls the public unsubscribe bridge');
+assertIncludes(files.client, 'unsubscribeNewsletter', 'Starter local client exposes public newsletter unsubscribe bridge');
 assertIncludes(files.form, 'buildBackyFormSubmissionInput', 'Starter normalizes Backy form submissions');
 assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form submissions');
 assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter README begins with agent handoff read path');
@@ -201,6 +204,8 @@ assertIncludes(files.generatedTemplate, 'function buildBackyResponsiveCss', 'Gen
 assertIncludes(files.generatedTemplate, 'data-backy-responsive-style-pointer', 'Generated starter bundle preserves responsive CSS pointer attributes');
 assertIncludes(files.generatedTemplate, 'render.generatedResponsiveCss', 'Generated starter bundle preserves generated responsive CSS pointer value');
 assertIncludes(files.generatedTemplate, 'subscribeNewsletter', 'Generated starter bundle includes newsletter signup support');
+assertIncludes(files.generatedTemplate, 'unsubscribeNewsletter', 'Generated starter bundle includes newsletter unsubscribe support');
+assertIncludes(files.generatedTemplate, 'export async function DELETE', 'Generated starter bundle includes the newsletter unsubscribe route');
 assertIncludes(files.generatedTemplate, 'submitForm', 'Generated starter bundle includes public form submission support');
 if (!files.generatedTemplate.includes('"path": ".next')) {
   pass('Generated starter bundle excludes local Next build artifacts');

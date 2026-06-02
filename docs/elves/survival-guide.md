@@ -321,6 +321,12 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Blog-create source guard, admin typecheck, compact custom-frontend control-plane gate, diff check, and repo-public hygiene are green for the blog starter intent/custom frontend parity slice.
 
+**Newest custom frontend newsletter polish:** The checked and generated Next.js custom frontend starter now exposes public newsletter unsubscribe alongside signup. `src/lib/backy-client.ts` has `unsubscribeNewsletter(...)`, `/api/newsletter` supports `DELETE` with `email` plus optional `formId`/`source`/`signup_source`, and unknown subscribers are normalized into an idempotent success response at the separate website bridge to avoid email enumeration.
+
+**Newest verification:** Starter source/type smoke with `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1`, source custom-frontend connection smoke, public typecheck, diff check, and repo-public hygiene are green for the newsletter unsubscribe starter slice.
+
+**Newest Spark scout:** Spark sidecar `019e8943-fb2b-79f3-80ec-c4fc2a63ecc6` recommends the next larger custom-frontend parity slice: Dashboard custom-frontend content creation should expose all template-backed create entry points - page, blog post, form, product, collection, and reusable section - instead of only page/blog.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

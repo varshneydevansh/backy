@@ -3630,6 +3630,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-02 22:45 IST - Custom Frontend Newsletter Unsubscribe Bridge
+
+**Scope:** Batch 5 custom-frontend/newsletter polish, focused on making the separate Next.js starter match Backy's public newsletter contract for both subscribe and unsubscribe without exposing admin/provider secrets.
+
+**Changed:**
+- The vendored custom frontend Backy client now exposes `unsubscribeNewsletter(...)` against the public site-scoped `DELETE /api/sites/:siteId/newsletter/subscribers` endpoint.
+- The starter `/api/newsletter` route now supports `DELETE` payloads with `email` plus optional `formId`, `source`, or `signup_source`, accepting both root fields and `{ values: ... }` envelopes.
+- Unknown subscribers are normalized into an idempotent successful unsubscribe response at the public frontend bridge layer, so a deployed website does not reveal whether an email address is on the list.
+- The custom frontend starter README now documents the public subscribe/unsubscribe bridge boundary.
+- Starter and connection smokes now guard unsubscribe support in the checked source and regenerated public starter file-list template.
+
+**Validation:**
+- PASS: `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent`
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- Spark explorer `019e8947-a3f1-79c0-89ad-d172b375f811` confirmed the implementation shape and flagged the email-enumeration risk, which is handled by the idempotent bridge response.
+- Spark scout `019e8943-fb2b-79f3-80ec-c4fc2a63ecc6` identified the next larger custom-frontend parity slice: dashboard creation links should cover forms, products, collections, and reusable sections in addition to pages/blog posts.
+
+**Next:**
+- Commit, push, re-read the survival guide, then implement the dashboard custom-frontend create-parity slice.
+
 ## Checkpoint: 2026-06-02 21:48 IST - Custom Frontend Route Alias Contract Fix
 
 **Scope:** Batch 5 live deployment verification follow-up after pushing `e34f543`, focused on the stricter custom-frontend template actionability gate.

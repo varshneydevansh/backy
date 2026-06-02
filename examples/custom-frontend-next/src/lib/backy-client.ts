@@ -322,6 +322,20 @@ export class BackyCustomFrontendClient {
     });
   }
 
+  async unsubscribeNewsletter(input: {
+    values: {
+      email: string;
+      formId?: string;
+      source?: string;
+      signup_source?: string;
+    };
+  }): Promise<BackyEnvelope<Record<string, unknown>>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/newsletter/subscribers`, {
+      method: "DELETE",
+      body: input,
+    });
+  }
+
   private async request<TData>(
     pathname: string,
     options: {
