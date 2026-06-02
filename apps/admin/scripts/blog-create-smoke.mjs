@@ -59,6 +59,12 @@ const assertBlogCreateSourceContract = () => {
       source.includes('aria-describedby={blogTemplateSelectionActionStatusId}') &&
       source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'backy-canvas\')}') &&
       source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'custom-frontend\')}') &&
+      source.includes('data-testid="blog-starter-library-shell"') &&
+      source.includes('BLOG_STARTER_INTENTS.map((intent) =>') &&
+      source.includes('findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)') &&
+      source.includes('data-testid={`blog-starter-intent-${intent.id}`}') &&
+      source.includes('data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}') &&
+      source.includes('data-action-status={getBlogStarterIntentActionStatus(intent)}') &&
       source.includes('data-action-status={getBlogFrontendTemplateActionStatus(template)}') &&
       source.includes('data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}') &&
       source.includes('const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);') &&

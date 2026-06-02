@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 19:03 IST
+- **Last updated:** 2026-06-02 20:49 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 20:49 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Blog/custom frontend status:** Blog creation now mirrors page starter intent matching
+
+**What changed:**
+- Added a visible Blog starter intent shelf to `/blog/new` with Article post, Investigation report, Audio transcript, Newsletter issue, and Case study intents.
+- Kept the shelf visible in Custom frontend mode so blog creation uses the same intent-first surface as New Page instead of switching to a raw captured-template-only list.
+- Added deterministic matching from each starter intent to captured `frontendDesign.templates[]` blog-post templates, with matched/missing states exposed through data attributes and visible badges.
+- Preserved explicit captured-template selection and the existing persistence path for `templateSource=custom-frontend`, `frontendDesignTemplateId`, tokens, chrome, editable maps, custom CSS/JS, bindings, assets, animations, and canvas content.
+
+**Commands run:**
+- `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:custom-frontend-control-plane --silent` -> PASS with source-mode warnings for unset live/deployed URLs.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit and push the Blog starter intent/custom frontend parity slice.
+2. Re-read the survival guide after push.
+3. Continue the highest-friction Batch 5 UX/editor pass without closing the four external provider/certification partials.
 
 ## 2026-06-02 19:03 IST
 

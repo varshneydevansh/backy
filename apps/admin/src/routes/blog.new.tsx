@@ -58,6 +58,7 @@ interface BlogNewSearch {
 }
 
 type BlogTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
+type BlogStarterIntent = 'article' | 'investigation' | 'audio-transcript' | 'newsletter' | 'case-study';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -199,6 +200,50 @@ const BLOG_CREATE_WORKFLOW = [
     { label: 'Check', detail: 'Confirm summary, route, schedule state, and canvas content before saving.' },
     { label: 'Ship', detail: 'Save draft, publish immediately, or schedule the post for the selected site.' },
 ] as const;
+
+const BLOG_STARTER_INTENTS: Array<{
+    id: BlogStarterIntent;
+    name: string;
+    desc: string;
+    sections: string[];
+    aliases: string[];
+}> = [
+    {
+        id: 'article',
+        name: 'Article post',
+        desc: 'Editorial hero, body, taxonomy, and related story structure.',
+        sections: ['Hero', 'Body', 'Related'],
+        aliases: ['article', 'blog post', 'post', 'story', 'editorial'],
+    },
+    {
+        id: 'investigation',
+        name: 'Investigation report',
+        desc: 'Long-form reporting with evidence, timeline, sources, and quote blocks.',
+        sections: ['Report', 'Evidence', 'Sources'],
+        aliases: ['investigation', 'report', 'journalism', 'analysis', 'scam', 'evidence'],
+    },
+    {
+        id: 'audio-transcript',
+        name: 'Audio transcript',
+        desc: 'Audio player, transcript body, notes, and downloadable source files.',
+        sections: ['Audio', 'Transcript', 'Files'],
+        aliases: ['audio', 'podcast', 'transcript', 'recording', 'voice'],
+    },
+    {
+        id: 'newsletter',
+        name: 'Newsletter issue',
+        desc: 'Issue header, intro, curated links, subscriber CTA, and archive metadata.',
+        sections: ['Issue', 'Links', 'Subscribe'],
+        aliases: ['newsletter', 'issue', 'digest', 'subscriber', 'email'],
+    },
+    {
+        id: 'case-study',
+        name: 'Case study',
+        desc: 'Problem, process, media, outcomes, and reusable proof sections.',
+        sections: ['Problem', 'Process', 'Outcome'],
+        aliases: ['case study', 'case', 'portfolio', 'proof', 'project'],
+    },
+];
 
 const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
     createCanvasElement('section', 0, 0, {
@@ -491,6 +536,53 @@ function collectFrontendTemplateBindingHints(elements: CanvasElement[], template
     return hints;
 }
 
+const normalizeFrontendBlogTemplateMatchText = (value?: string) => (
+    (value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+);
+
+const frontendTemplateScoreForBlogStarter = (
+    template: SiteFrontendDesignTemplate,
+    starterIntent: BlogStarterIntent,
+) => {
+    const intent = BLOG_STARTER_INTENTS.find((entry) => entry.id === starterIntent);
+    if (!intent) return 0;
+
+    const routeSlug = routeSlugFromPattern(template.routePattern);
+    const aliases = Array.from(new Set([
+        starterIntent,
+        intent.name,
+        ...intent.aliases,
+    ].map(normalizeFrontendBlogTemplateMatchText).filter(Boolean)));
+    const id = normalizeFrontendBlogTemplateMatchText(template.id);
+    const name = normalizeFrontendBlogTemplateMatchText(template.name);
+    const route = normalizeFrontendBlogTemplateMatchText(routeSlug || template.routePattern || '');
+    const description = normalizeFrontendBlogTemplateMatchText(template.description);
+    const haystack = [id, name, route, description].filter(Boolean).join(' ');
+
+    return aliases.reduce((score, alias) => {
+        if (!alias) return score;
+        if (id === alias || name === alias || route === alias) return score + 100;
+        if (id.includes(alias) || name.includes(alias) || route.includes(alias)) return score + 45;
+        if (haystack.includes(alias)) return score + 18;
+        return score;
+    }, 0);
+};
+
+const findFrontendBlogTemplateForStarter = (
+    templates: SiteFrontendDesignTemplate[],
+    starterIntent: BlogStarterIntent,
+) => templates
+    .map((template, index) => ({
+        template,
+        index,
+        score: frontendTemplateScoreForBlogStarter(template, starterIntent),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.template || null;
+
 function collectCanvasText(elements: CanvasElement[]): string {
     const chunks: string[] = [];
     const visit = (element: CanvasElement) => {
@@ -730,6 +822,7 @@ function NewBlogPostPage() {
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
     const [templateSourceMode, setTemplateSourceMode] = useState<BlogTemplateSourceMode>(initialTemplateSourceMode);
     const [designTemplateId, setDesignTemplateId] = useState(search.designTemplate || '');
+    const [selectedBlogStarterIntent, setSelectedBlogStarterIntent] = useState<BlogStarterIntent>('article');
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(user?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -1044,11 +1137,32 @@ function NewBlogPostPage() {
         [frontendDesign?.templates],
     );
     const isCustomFrontendTemplateSource = templateSourceMode === 'custom-frontend';
-    const selectedFrontendTemplate = useMemo(
+    const explicitSelectedFrontendTemplate = useMemo(
+        () => frontendBlogTemplates.find((template) => template.id === designTemplateId) || null,
+        [designTemplateId, frontendBlogTemplates],
+    );
+    const matchedFrontendBlogTemplate = useMemo(
         () => isCustomFrontendTemplateSource
-            ? frontendBlogTemplates.find((template) => template.id === designTemplateId) || null
+            ? findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)
             : null,
-        [designTemplateId, frontendBlogTemplates, isCustomFrontendTemplateSource],
+        [frontendBlogTemplates, isCustomFrontendTemplateSource, selectedBlogStarterIntent],
+    );
+    const selectedFrontendTemplate = isCustomFrontendTemplateSource
+        ? explicitSelectedFrontendTemplate || matchedFrontendBlogTemplate
+        : null;
+    const selectedFrontendTemplateMatchMode = selectedFrontendTemplate
+        ? explicitSelectedFrontendTemplate
+            ? 'selected'
+            : 'starter-matched'
+        : 'none';
+    const frontendTemplateByStarterIntent = useMemo(
+        () => new Map<BlogStarterIntent, SiteFrontendDesignTemplate | null>(
+            BLOG_STARTER_INTENTS.map((intent) => [
+                intent.id,
+                findFrontendBlogTemplateForStarter(frontendBlogTemplates, intent.id),
+            ]),
+        ),
+        [frontendBlogTemplates],
     );
     const recoveredFrontendTemplate = useMemo<SiteFrontendDesignTemplate | null>(() => {
         if (!isCustomFrontendTemplateSource || selectedFrontendTemplate || !designTemplateId) {
@@ -1094,11 +1208,13 @@ function NewBlogPostPage() {
     const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? effectiveFrontendTemplate
-            ? `Custom frontend blog template selected: ${effectiveFrontendTemplate.name}.`
+            ? selectedFrontendTemplateMatchMode === 'starter-matched'
+                ? `Custom frontend starter matched: ${BLOG_STARTER_INTENTS.find((intent) => intent.id === selectedBlogStarterIntent)?.name || 'Selected starter'} uses ${effectiveFrontendTemplate.name}.`
+                : `Custom frontend blog template selected: ${effectiveFrontendTemplate.name}.`
             : frontendDesignLoading
                 ? 'Loading custom frontend blog templates.'
                 : frontendBlogTemplates.length > 0
-                    ? 'Choose a custom frontend blog template before creating this post.'
+                    ? 'No captured custom frontend blog template matches this starter. Choose another starter or select a captured template.'
                     : 'No custom frontend blog templates are captured for this site yet.'
         : 'Backy canvas blog article template selected.';
     const blogTemplateSelectionActionStatusId = 'blog-template-selection-action-status';
@@ -1143,9 +1259,32 @@ function NewBlogPostPage() {
             ? `${template.name} blog frontend template selected with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`
             : `Select ${template.name} blog frontend template with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`;
     };
+    const getBlogStarterIntentActionStatus = (intent: (typeof BLOG_STARTER_INTENTS)[number]) => {
+        if (blogTemplateSelectionDisabledReason) {
+            return `${intent.name} starter unavailable: ${blogTemplateSelectionDisabledReason}`;
+        }
+
+        const matchedTemplate = frontendTemplateByStarterIntent.get(intent.id) || null;
+        if (!isCustomFrontendTemplateSource) {
+            return selectedBlogStarterIntent === intent.id
+                ? `${intent.name} article starter selected for Backy canvas generation.`
+                : `Select ${intent.name} article starter with ${intent.sections.length} section${intent.sections.length === 1 ? '' : 's'}.`;
+        }
+
+        if (selectedBlogStarterIntent === intent.id) {
+            return matchedTemplate
+                ? `${intent.name} custom frontend starter selected; it will use ${matchedTemplate.name}.`
+                : `${intent.name} custom frontend starter selected, but no captured template matches it.`;
+        }
+
+        return matchedTemplate
+            ? `Select ${intent.name}; Backy will use ${matchedTemplate.name}.`
+            : `Select ${intent.name}; no captured custom frontend blog template currently matches this intent.`;
+    };
     const blogTemplateSelectionActionStatus = [
         getBlogTemplateSourceActionStatus('backy-canvas'),
         getBlogTemplateSourceActionStatus('custom-frontend'),
+        `${BLOG_STARTER_INTENTS.length} blog starter intent${BLOG_STARTER_INTENTS.length === 1 ? '' : 's'} available.`,
         `${visibleFrontendBlogTemplates.length} custom frontend blog template${visibleFrontendBlogTemplates.length === 1 ? '' : 's'} available.`,
     ].join(' ');
     const effectiveFrontendDesignSource = effectiveFrontendTemplate
@@ -1207,9 +1346,39 @@ function NewBlogPostPage() {
         }
 
         setTemplateSourceMode('custom-frontend');
-        const nextTemplate = selectedFrontendTemplate || frontendBlogTemplates[0] || null;
+        const nextTemplate = findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)
+            || selectedFrontendTemplate
+            || frontendBlogTemplates[0]
+            || null;
         if (!nextTemplate) {
             setDesignTemplateId('');
+            navigate({
+                to: '/blog/new',
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const },
+                replace: true,
+            });
+            return;
+        }
+
+        applyFrontendTemplate(nextTemplate, { syncRoute: true });
+    };
+
+    const handleBlogStarterIntentChange = (nextIntent: BlogStarterIntent) => {
+        if (blogTemplateSelectionControlDisabled || !canEditBlog) return;
+
+        clearCreationFeedback();
+        setSelectedBlogStarterIntent(nextIntent);
+
+        if (!isCustomFrontendTemplateSource) {
+            setNotice(`${BLOG_STARTER_INTENTS.find((intent) => intent.id === nextIntent)?.name || 'Blog starter'} selected.`);
+            return;
+        }
+
+        const nextTemplate = findFrontendBlogTemplateForStarter(frontendBlogTemplates, nextIntent);
+        if (!nextTemplate) {
+            setDesignTemplateId('');
+            setNotice(null);
+            setError('No captured custom frontend blog template matches that starter yet.');
             navigate({
                 to: '/blog/new',
                 search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const },
@@ -2957,6 +3126,99 @@ function NewBlogPostPage() {
                                         </div>
                                         <div className="mt-2 text-xs text-muted-foreground" data-testid="blog-template-source-status">
                                             {templateSourceStatus}
+                                        </div>
+                                    </div>
+
+                                    <div
+                                        className="rounded-lg border border-border bg-background p-3"
+                                        data-testid="blog-starter-library-shell"
+                                        data-template-source={templateSourceMode}
+                                        data-selected-starter={selectedBlogStarterIntent}
+                                        data-custom-frontend-match-mode={isCustomFrontendTemplateSource ? selectedFrontendTemplateMatchMode : undefined}
+                                        data-custom-frontend-template-id={isCustomFrontendTemplateSource ? effectiveFrontendTemplate?.id || '' : undefined}
+                                    >
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-foreground">Blog starter intents</h3>
+                                                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                                    {isCustomFrontendTemplateSource
+                                                        ? 'Pick the article purpose; Backy matches it to captured custom frontend blog structure when available.'
+                                                        : 'Pick the article purpose before writing into the editable blog canvas.'}
+                                                </p>
+                                            </div>
+                                            <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                                                {BLOG_STARTER_INTENTS.length} starters
+                                            </span>
+                                        </div>
+                                        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                            {BLOG_STARTER_INTENTS.map((intent) => {
+                                                const frontendMatch = frontendTemplateByStarterIntent.get(intent.id) || null;
+                                                const frontendMatchState = !isCustomFrontendTemplateSource
+                                                    ? ''
+                                                    : frontendMatch
+                                                        ? 'matched'
+                                                        : 'missing';
+
+                                                return (
+                                                    <label
+                                                        key={intent.id}
+                                                        data-testid={`blog-starter-intent-${intent.id}`}
+                                                        data-active={selectedBlogStarterIntent === intent.id}
+                                                        data-template-source={templateSourceMode}
+                                                        data-frontend-template-id={isCustomFrontendTemplateSource ? frontendMatch?.id || '' : undefined}
+                                                        data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}
+                                                        data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterIntent === intent.id)}
+                                                        data-action-status={getBlogStarterIntentActionStatus(intent)}
+                                                        data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
+                                                        className={cn(
+                                                            'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
+                                                            selectedBlogStarterIntent === intent.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
+                                                            blogTemplateSelectionControlDisabled && 'cursor-not-allowed opacity-70',
+                                                        )}
+                                                    >
+                                                        <input
+                                                            type="radio"
+                                                            name="blogStarterIntent"
+                                                            value={intent.id}
+                                                            checked={selectedBlogStarterIntent === intent.id}
+                                                            onChange={(event) => handleBlogStarterIntentChange(event.target.value as BlogStarterIntent)}
+                                                            disabled={blogTemplateSelectionControlDisabled}
+                                                            aria-describedby={blogTemplateSelectionActionStatusId}
+                                                            data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterIntent === intent.id)}
+                                                            data-action-status={getBlogStarterIntentActionStatus(intent)}
+                                                            data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
+                                                            className="sr-only"
+                                                        />
+                                                        <div className="mb-1 flex min-w-0 items-center gap-2">
+                                                            <FileText className={cn(
+                                                                'h-4 w-4 shrink-0',
+                                                                selectedBlogStarterIntent === intent.id ? 'text-primary' : 'text-muted-foreground',
+                                                            )} />
+                                                            <span className="min-w-0 truncate font-semibold">{intent.name}</span>
+                                                        </div>
+                                                        <span className="text-xs leading-5 text-muted-foreground">{intent.desc}</span>
+                                                        <span className="mt-3 flex flex-wrap gap-1">
+                                                            {intent.sections.map((section) => (
+                                                                <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                                    {section}
+                                                                </span>
+                                                            ))}
+                                                            {isCustomFrontendTemplateSource && (
+                                                                <span
+                                                                    className={cn(
+                                                                        'rounded-md px-2 py-1 text-[11px] font-semibold',
+                                                                        frontendMatch
+                                                                            ? 'bg-teal-100 text-teal-800'
+                                                                            : 'bg-amber-100 text-amber-800',
+                                                                    )}
+                                                                >
+                                                                    {frontendMatch ? `Uses ${frontendMatch.name}` : 'Needs captured template'}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
