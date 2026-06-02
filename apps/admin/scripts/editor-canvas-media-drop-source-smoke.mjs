@@ -13,6 +13,8 @@ const mediaPickerActionsSource = read('../src/components/editor/editorMediaPicke
 const propertyPanelSource = read('../src/components/editor/PropertyPanel.tsx');
 const editorTypesSource = read('../src/types/editor.ts');
 const apiTypesSource = read('../src/types/api.ts');
+const editorDragSmokeSource = read('./editor-drag-smoke.mjs');
+const packageJsonSource = read('../package.json');
 const publicRendererSource = fs.readFileSync(new URL('../../public/src/components/PageRenderer.tsx', import.meta.url), 'utf8');
 const starterRendererSource = fs.readFileSync(new URL('../../../examples/custom-frontend-next/src/lib/render.tsx', import.meta.url), 'utf8');
 const handoffSource = fs.readFileSync(new URL('../../../packages/core/src/custom-frontend-agent-handoff.ts', import.meta.url), 'utf8');
@@ -31,6 +33,7 @@ assertIncludes(canvasSource, [
   'canvas-url-drop',
   'isDroppedUrlLike',
   'getPrimaryDroppedUrl',
+  "^data:audio\\/",
   'type CanvasDropKind',
   "case 'audio'",
   'data-backy-audio-player',
@@ -86,6 +89,7 @@ assertIncludes(propertyPanelSource, [
   'editor-audio-upload-media',
   'editor-audio-caption',
   'editor-audio-transcript',
+  "'video',\n    'audio',\n    'icon'",
   "data-testid={`editor-audio-${setting.key}`}",
   "{ key: 'controls', label: 'Show controls', fallback: true }",
   "{ key: 'autoplay', label: 'Autoplay', fallback: false }",
@@ -126,6 +130,20 @@ assertIncludes(handoffSource, [
   'props.transcript',
   'supportsMediaAssets: true',
 ], 'custom frontend handoff');
+
+assertIncludes(editorDragSmokeSource, [
+  'BACKY_EDITOR_CANVAS_MEDIA_DROP_RENDERED_SMOKE',
+  'testRenderedCanvasMediaDrop',
+  'dispatchCanvasAudioFileDrop',
+  'CANVAS_DROP_SMOKE_TRANSCRIPT',
+  'waitForPersistedCanvasMediaDrop',
+  'page?.content?.canvasSize?.height > 2100',
+], 'editor rendered media-drop smoke');
+
+assertIncludes(packageJsonSource, [
+  'test:editor-canvas-media-drop-rendered',
+  'BACKY_EDITOR_CANVAS_MEDIA_DROP_RENDERED_SMOKE=1 node scripts/editor-drag-smoke.mjs',
+], 'admin package scripts');
 
 console.log(JSON.stringify({
   ok: true,

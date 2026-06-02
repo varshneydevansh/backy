@@ -763,6 +763,7 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'nav',
     'divider',
     'video',
+    'audio',
     'icon',
     'form',
     'input',

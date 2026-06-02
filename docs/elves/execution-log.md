@@ -3517,3 +3517,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - The first strict custom frontend gate run with the slug `devanshvarshney` passed 68 checks and failed only the probe site-id equality check because the deployed frontend is configured with the canonical database site id. Public discovery resolves the slug to that canonical id.
 - Recent Vercel error-log filtering was not recorded because this local Vercel CLI rejected the documented log filter flags (`--project`, `--environment`, `--level`) despite showing them in help.
 - Continue the remaining editor polish around custom-frontend template creation ergonomics, flow-aware section insertion/resizing, and rendered browser verification for the new drop/long-page behaviors when a live dev session is available.
+
+## Checkpoint: 2026-06-02 18:20 IST - Rendered Canvas Media Drop Proof
+
+**Scope:** Batch 5 editor/media verification polish, focused on proving the new direct-drop/audio/long-page canvas behavior through the real browser editor instead of source contracts only.
+
+**Changed:**
+- Added `BACKY_EDITOR_CANVAS_MEDIA_DROP_RENDERED_SMOKE=1` plus `test:editor-canvas-media-drop-rendered` and wired it into `test:editor-workflows`.
+- The rendered smoke creates a disposable editor page, dispatches external image/video/audio URL drops, dispatches a local audio-file drop, selects the uploaded audio layer, edits caption and transcript in Inspector, saves, and verifies persisted media provenance plus canvas height growth.
+- Tightened URL-kind detection for MIME-style data URLs so `data:image/*`, `data:video/*`, and `data:audio/*` drops resolve to media elements instead of generic links.
+- Fixed `PropertyPanel` element normalization so selected `audio` layers actually render the audio URL, media-library/upload, caption, transcript, and playback controls.
+- Updated editor source guards for the split canvas width/height limits and added a regression guard that `audio` remains in the PropertyPanel canonical element-type list.
+
+**Validation:**
+- PASS: `npm run test:editor-canvas-media-drop-rendered --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-canvas-media-drop --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- Rendered proof persisted an uploaded audio element with `mediaInsertedVia=canvas-file-drop`, `mediaType=audio`, `assetIds`, caption, transcript, and a grown canvas height above the original viewport. This covers the user concern that pages/posts must continue vertically while width remains the desktop/tablet/mobile viewport concern.
+- Automatic transcription generation is still a future provider/job integration; this slice proves authored or pasted transcripts are editable, renderable, and persisted.
+
+**Next:**
+- Commit and push this rendered verification slice.
+- Continue highest-friction editor work around custom-frontend template chrome, flow-aware section insertion/resizing, and Canva-like component/media insertion ergonomics.

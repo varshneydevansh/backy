@@ -1671,9 +1671,13 @@ const getPrimaryDroppedUrl = (dataTransfer: DataTransfer): string => {
 };
 
 const inferDroppedUrlKind = (value: string): 'image' | 'video' | 'audio' | 'url' => {
-  if (MEDIA_URL_PATTERNS.image.test(value)) return 'image';
-  if (MEDIA_URL_PATTERNS.video.test(value)) return 'video';
-  if (MEDIA_URL_PATTERNS.audio.test(value)) return 'audio';
+  const normalized = value.trim();
+  if (/^data:image\//i.test(normalized)) return 'image';
+  if (/^data:video\//i.test(normalized)) return 'video';
+  if (/^data:audio\//i.test(normalized)) return 'audio';
+  if (MEDIA_URL_PATTERNS.image.test(normalized)) return 'image';
+  if (MEDIA_URL_PATTERNS.video.test(normalized)) return 'video';
+  if (MEDIA_URL_PATTERNS.audio.test(normalized)) return 'audio';
   return 'url';
 };
 

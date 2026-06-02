@@ -37,6 +37,7 @@ const PREVIEW_SCROLL_SMOKE = process.env.BACKY_EDITOR_PREVIEW_SCROLL_SMOKE === '
 const GRID_SNAP_SMOKE = process.env.BACKY_EDITOR_GRID_SNAP_SMOKE === '1';
 const ALIGNMENT_GUIDES_SMOKE = process.env.BACKY_EDITOR_ALIGNMENT_GUIDES_SMOKE === '1';
 const MEDIA_UPLOAD_SMOKE = process.env.BACKY_EDITOR_MEDIA_UPLOAD_SMOKE === '1';
+const CANVAS_MEDIA_DROP_RENDERED_SMOKE = process.env.BACKY_EDITOR_CANVAS_MEDIA_DROP_RENDERED_SMOKE === '1';
 const RESIZE_SMOKE = process.env.BACKY_EDITOR_RESIZE_SMOKE === '1';
 const RENDER_PARITY_SMOKE = process.env.BACKY_EDITOR_RENDER_PARITY_SMOKE === '1';
 const STRESS_SMOKE = process.env.BACKY_EDITOR_STRESS_SMOKE === '1';
@@ -168,6 +169,21 @@ const createSmokeUploadVideoFile = () => {
       0x69, 0x73, 0x6f, 0x6d, 0x00, 0x00, 0x02, 0x00,
       0x69, 0x73, 0x6f, 0x6d, 0x69, 0x73, 0x6f, 0x32,
       0x00, 0x00, 0x00, 0x08, 0x6d, 0x64, 0x61, 0x74,
+    ]),
+  );
+
+  return { filename, filePath };
+};
+const createSmokeUploadAudioFile = () => {
+  const filename = `backy-editor-upload-smoke-${Date.now().toString(36)}.mp3`;
+  const filePath = path.join(os.tmpdir(), filename);
+  fs.writeFileSync(
+    filePath,
+    Buffer.from([
+      0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x0f, 0x54, 0x49, 0x54, 0x32, 0x00, 0x00,
+      0x00, 0x05, 0x00, 0x00, 0x53, 0x6d, 0x6f, 0x6b,
+      0x65,
     ]),
   );
 
@@ -761,7 +777,8 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-testid="editor-canvas-compact-height-input"') &&
       source.includes('className="group relative xl:hidden"') &&
       source.includes("min={MIN_CANVAS_DIMENSION}") &&
-      source.includes("max={MAX_CANVAS_DIMENSION}") &&
+      source.includes("max={MAX_CANVAS_WIDTH}") &&
+      source.includes("max={MAX_CANVAS_HEIGHT}") &&
       smokeSource.includes('assertCompactCanvasSizeControls') &&
       smokeSource.includes('assertEditorViewportControls'),
     'Editor viewport controls must expose stable breakpoint/preset/dimension action status metadata, compact size controls, and rendered coverage',
@@ -1446,7 +1463,7 @@ const assertPropertyPanelColorControlsSource = () => {
       source.includes("LinkBehaviorProperties,") &&
       source.includes("} from './LinkBehaviorProperties';") &&
       source.includes("} from './editorMediaPickerActions';") &&
-      mediaPickerActionSource.includes("export type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';") &&
+      mediaPickerActionSource.includes("export type EditorMediaField = 'src' | 'video' | 'audio' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';") &&
       mediaPickerActionSource.includes('export const buildEditorMediaPickerAction =') &&
       linkBehaviorSource.includes('const behaviorActionStatusId = `editor-${prefix}-behavior-action-status`;') &&
       linkBehaviorSource.includes('const behaviorActionLabel = isButton ?') &&
@@ -11304,7 +11321,7 @@ const assertEditorViewportControls = async (client, options = {}) => {
         height.getAttribute('aria-describedby') === status.id &&
         height.getAttribute('data-action-state') === controlsState &&
         height.min === '320' &&
-        height.max === '3840' &&
+        height.max === '24000' &&
         height.step === '10' &&
         compactDisclosure instanceof HTMLDetailsElement &&
         compactDisclosure.getAttribute('aria-label') === 'Canvas size controls' &&
@@ -11336,7 +11353,7 @@ const assertEditorViewportControls = async (client, options = {}) => {
         compactHeight.getAttribute('aria-describedby') === status.id &&
         compactHeight.getAttribute('data-action-state') === controlsState &&
         compactHeight.min === '320' &&
-        compactHeight.max === '3840' &&
+        compactHeight.max === '24000' &&
         compactHeight.step === '10' &&
         Number(compactHeight.value) === Number(controls.getAttribute('data-canvas-height') || 0),
       role: controls?.getAttribute('role') || '',
@@ -23660,6 +23677,316 @@ const waitForPersistedHeadingFontFamily = async (pageId, selectedMedia, expected
   throw new Error(`Persisted uploaded font family mismatch: ${JSON.stringify({ selectedMedia, expectedFontFamily, lastState })}`);
 };
 
+const CANVAS_DROP_SMOKE_IMAGE_URL = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%23ecfeff%22%2F%3E%3Ccircle%20cx%3D%22242%22%20cy%3D%2254%22%20r%3D%2236%22%20fill%3D%22%2314b8a6%22%2F%3E%3Cpath%20d%3D%22M28%20148l72-64%2056%2056%2036-34%2090%2056z%22%20fill%3D%22%230f766e%22%2F%3E%3C%2Fsvg%3E';
+const CANVAS_DROP_SMOKE_VIDEO_URL = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb20=';
+const CANVAS_DROP_SMOKE_AUDIO_URL = 'data:audio/mpeg;base64,SUQzAwAAAAAAD1RJVDAAAAAFU21va2U=';
+const CANVAS_DROP_SMOKE_TRANSCRIPT = 'Rendered smoke transcript saved from a dropped audio element.';
+const CANVAS_DROP_SMOKE_CAPTION = 'Canvas drop interview excerpt';
+
+const dispatchCanvasUrlDrop = async (client, url, point, label) => {
+  const dropped = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    if (!(canvas instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-canvas' };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / Math.max(1, Number(canvas.getAttribute('data-canvas-width') || canvas.style.width.replace('px', '') || 1));
+    const scaleY = rect.height / Math.max(1, Number(canvas.getAttribute('data-canvas-height') || canvas.style.height.replace('px', '') || 1));
+    const clientX = rect.left + ${point.x} * (Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1);
+    const clientY = rect.top + ${point.y} * (Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1);
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData('text/uri-list', ${JSON.stringify(url)});
+    dataTransfer.setData('text/plain', ${JSON.stringify(url)});
+
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      dataTransfer,
+    };
+    canvas.dispatchEvent(new DragEvent('dragenter', init));
+    canvas.dispatchEvent(new DragEvent('dragover', init));
+    const accepted = canvas.dispatchEvent(new DragEvent('drop', init));
+
+    return {
+      ok: true,
+      accepted,
+      label: ${JSON.stringify(label)},
+      clientX: Math.round(clientX),
+      clientY: Math.round(clientY),
+      files: dataTransfer.files.length,
+      types: Array.from(dataTransfer.types),
+    };
+  })()`);
+
+  assert(dropped?.ok, `Unable to dispatch canvas URL drop for ${label}: ${JSON.stringify(dropped)}`);
+  await sleep(350);
+  return dropped;
+};
+
+const dispatchCanvasAudioFileDrop = async (client, audioFile, point) => {
+  const bytes = Array.from(fs.readFileSync(audioFile.filePath));
+  const dropped = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    if (!(canvas instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-canvas' };
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / Math.max(1, Number(canvas.getAttribute('data-canvas-width') || canvas.style.width.replace('px', '') || 1));
+    const scaleY = rect.height / Math.max(1, Number(canvas.getAttribute('data-canvas-height') || canvas.style.height.replace('px', '') || 1));
+    const clientX = rect.left + ${point.x} * (Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1);
+    const clientY = rect.top + ${point.y} * (Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1);
+    const dataTransfer = new DataTransfer();
+    const file = new File([new Uint8Array(${JSON.stringify(bytes)})], ${JSON.stringify(audioFile.filename)}, { type: 'audio/mpeg' });
+    dataTransfer.items.add(file);
+
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      dataTransfer,
+    };
+    canvas.dispatchEvent(new DragEvent('dragenter', init));
+    canvas.dispatchEvent(new DragEvent('dragover', init));
+    const accepted = canvas.dispatchEvent(new DragEvent('drop', init));
+
+    return {
+      ok: true,
+      accepted,
+      clientX: Math.round(clientX),
+      clientY: Math.round(clientY),
+      files: dataTransfer.files.length,
+      fileName: dataTransfer.files[0]?.name || '',
+      fileType: dataTransfer.files[0]?.type || '',
+      types: Array.from(dataTransfer.types),
+    };
+  })()`);
+
+  assert(
+    dropped?.ok && dropped.files === 1 && dropped.fileName === audioFile.filename,
+    `Unable to dispatch canvas audio file drop: ${JSON.stringify(dropped)}`,
+  );
+  await sleep(500);
+  return dropped;
+};
+
+const readDroppedCanvasElements = async (client) => (
+  evaluate(client, `(() => {
+    const elements = Array.from(document.querySelectorAll('[data-element-id]')).map((node) => {
+      const root = node instanceof HTMLElement ? node : null;
+      const image = root?.querySelector('img');
+      const video = root?.querySelector('video');
+      const audioWrapper = root?.querySelector('[data-backy-audio-player]');
+      const audio = root?.querySelector('audio');
+      const link = root?.querySelector('a');
+      const type = audio ? 'audio' : video ? 'video' : image ? 'image' : link ? 'link' : '';
+      const src = audio?.getAttribute('src') || video?.getAttribute('src') || image?.getAttribute('src') || link?.getAttribute('href') || '';
+      return {
+        id: root?.getAttribute('data-element-id') || '',
+        type,
+        src,
+        x: Number(root?.getAttribute('data-canvas-x') || 0),
+        y: Number(root?.getAttribute('data-canvas-y') || 0),
+        width: Number(root?.getAttribute('data-canvas-width') || 0),
+        height: Number(root?.getAttribute('data-canvas-height') || 0),
+        audioMediaId: audioWrapper?.getAttribute('data-backy-audio-media-id') || '',
+        audioTranscriptState: audioWrapper?.getAttribute('data-backy-audio-transcript') || '',
+        text: root?.textContent?.replace(/\\s+/g, ' ').trim().slice(0, 220) || '',
+      };
+    });
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    return {
+      canvas: {
+        width: Number(canvas?.getAttribute('data-canvas-width') || canvas?.style.width.replace('px', '') || 0),
+        height: Number(canvas?.getAttribute('data-canvas-height') || canvas?.style.height.replace('px', '') || 0),
+        renderedHeight: Math.round(canvas?.getBoundingClientRect().height || 0),
+      },
+      elements,
+    };
+  })()`)
+);
+
+const waitForDroppedCanvasElement = async (client, predicate, label) => {
+  let state = null;
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    state = await readDroppedCanvasElements(client);
+    const match = state.elements.find(predicate);
+    if (match) {
+      return { state, element: match };
+    }
+    await sleep(250);
+  }
+
+  throw new Error(`Dropped canvas element did not appear for ${label}: ${JSON.stringify(state)}`);
+};
+
+const waitForPersistedCanvasMediaDrop = async (pageId, expected) => {
+  let lastState = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const page = payload.data?.page || payload.page || null;
+    const elements = page?.content?.elements || [];
+    const byId = new Map(expected.ids.map((id) => [id, findCanvasElement(elements, id)]));
+    const image = byId.get(expected.ids[0]);
+    const video = byId.get(expected.ids[1]);
+    const externalAudio = byId.get(expected.ids[2]);
+    const uploadedAudio = byId.get(expected.ids[3]);
+    lastState = {
+      canvasSize: page?.content?.canvasSize || null,
+      image,
+      video,
+      externalAudio,
+      uploadedAudio,
+    };
+
+    if (
+      image?.type === 'image' &&
+      image.props?.mediaInsertedVia === 'canvas-url-drop' &&
+      image.props?.mediaExternalUrl === CANVAS_DROP_SMOKE_IMAGE_URL &&
+      video?.type === 'video' &&
+      video.props?.mediaInsertedVia === 'canvas-url-drop' &&
+      video.props?.mediaExternalUrl === CANVAS_DROP_SMOKE_VIDEO_URL &&
+      externalAudio?.type === 'audio' &&
+      externalAudio.props?.mediaInsertedVia === 'canvas-url-drop' &&
+      externalAudio.props?.mediaExternalUrl === CANVAS_DROP_SMOKE_AUDIO_URL &&
+      uploadedAudio?.type === 'audio' &&
+      uploadedAudio.props?.mediaInsertedVia === 'canvas-file-drop' &&
+      uploadedAudio.props?.mediaName === expected.uploadedFilename &&
+      uploadedAudio.props?.mediaType === 'audio' &&
+      uploadedAudio.props?.mediaId &&
+      Array.isArray(uploadedAudio.assetIds) &&
+      uploadedAudio.assetIds.includes(uploadedAudio.props.mediaId) &&
+      uploadedAudio.props?.caption === CANVAS_DROP_SMOKE_CAPTION &&
+      uploadedAudio.props?.transcript === CANVAS_DROP_SMOKE_TRANSCRIPT &&
+      page?.content?.canvasSize?.height > 2100 &&
+      page?.content?.canvasSize?.height <= 24000
+    ) {
+      return lastState;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`Persisted canvas media drop mismatch: ${JSON.stringify(lastState).slice(0, 2000)}`);
+};
+
+const testRenderedCanvasMediaDrop = async (client, pageId) => {
+  const audioUploadFile = createSmokeUploadAudioFile();
+  const imagePoint = { x: 80, y: 2040 };
+  const videoPoint = { x: 540, y: 2040 };
+  const externalAudioPoint = { x: 80, y: 2360 };
+  const fileAudioPoint = { x: 540, y: 2360 };
+
+  try {
+    const imageDrop = await dispatchCanvasUrlDrop(client, CANVAS_DROP_SMOKE_IMAGE_URL, imagePoint, 'image');
+    const droppedImage = await waitForDroppedCanvasElement(
+      client,
+      (element) => element.type === 'image' && element.src === CANVAS_DROP_SMOKE_IMAGE_URL,
+      'external image URL',
+    );
+
+    const videoDrop = await dispatchCanvasUrlDrop(client, CANVAS_DROP_SMOKE_VIDEO_URL, videoPoint, 'video');
+    const droppedVideo = await waitForDroppedCanvasElement(
+      client,
+      (element) => element.type === 'video' && element.src === CANVAS_DROP_SMOKE_VIDEO_URL,
+      'external video URL',
+    );
+
+    const externalAudioDrop = await dispatchCanvasUrlDrop(client, CANVAS_DROP_SMOKE_AUDIO_URL, externalAudioPoint, 'audio');
+    const droppedExternalAudio = await waitForDroppedCanvasElement(
+      client,
+      (element) => element.type === 'audio' && element.src === CANVAS_DROP_SMOKE_AUDIO_URL && !element.audioMediaId,
+      'external audio URL',
+    );
+
+    const fileAudioDrop = await dispatchCanvasAudioFileDrop(client, audioUploadFile, fileAudioPoint);
+    const droppedUploadedAudio = await waitForDroppedCanvasElement(
+      client,
+      (element) => (
+        element.type === 'audio' &&
+        element.audioMediaId &&
+        element.text.includes(audioUploadFile.filename)
+      ),
+      'uploaded audio file',
+    );
+
+    await selectLayerById(client, droppedUploadedAudio.element.id);
+    await switchToPropertiesPanel(client);
+    await setFormControlByTestId(client, 'editor-audio-caption', CANVAS_DROP_SMOKE_CAPTION);
+    await setFormControlByTestId(client, 'editor-audio-transcript', CANVAS_DROP_SMOKE_TRANSCRIPT);
+    await setCheckboxByTestId(client, 'editor-audio-controls', true);
+
+    const inspectorAudio = await evaluate(client, `(() => {
+      const caption = document.querySelector('[data-testid="editor-audio-caption"]');
+      const transcript = document.querySelector('[data-testid="editor-audio-transcript"]');
+      const controls = document.querySelector('[data-testid="editor-audio-controls"]');
+      const selected = document.querySelector('[data-element-id="${droppedUploadedAudio.element.id}"]');
+      const audioWrapper = selected?.querySelector('[data-backy-audio-player]');
+      return {
+        caption: caption instanceof HTMLInputElement ? caption.value : '',
+        transcript: transcript instanceof HTMLTextAreaElement ? transcript.value : '',
+        controls: controls instanceof HTMLInputElement ? controls.checked : null,
+        selectedAudioTranscriptState: audioWrapper?.getAttribute('data-backy-audio-transcript') || '',
+        selectedAudioMediaId: audioWrapper?.getAttribute('data-backy-audio-media-id') || '',
+      };
+    })()`);
+
+    assert(
+      inspectorAudio.caption === CANVAS_DROP_SMOKE_CAPTION &&
+        inspectorAudio.transcript === CANVAS_DROP_SMOKE_TRANSCRIPT &&
+        inspectorAudio.controls === true &&
+        inspectorAudio.selectedAudioTranscriptState === 'available' &&
+        inspectorAudio.selectedAudioMediaId === droppedUploadedAudio.element.audioMediaId,
+      `Audio inspector transcript controls did not update dropped audio: ${JSON.stringify(inspectorAudio)}`,
+    );
+
+    await clickSave(client);
+    const savedStatus = await waitForEditorMutationReady(client, 'after rendered canvas media drop save');
+    const persisted = await waitForPersistedCanvasMediaDrop(pageId, {
+      uploadedFilename: audioUploadFile.filename,
+      ids: [
+        droppedImage.element.id,
+        droppedVideo.element.id,
+        droppedExternalAudio.element.id,
+        droppedUploadedAudio.element.id,
+      ],
+    });
+
+    return {
+      imageDrop,
+      videoDrop,
+      externalAudioDrop,
+      fileAudioDrop,
+      droppedImage: droppedImage.element,
+      droppedVideo: droppedVideo.element,
+      droppedExternalAudio: droppedExternalAudio.element,
+      droppedUploadedAudio: droppedUploadedAudio.element,
+      inspectorAudio,
+      savedStatus,
+      persistedCanvasSize: persisted.canvasSize,
+      persistedUploadedAudio: {
+        id: persisted.uploadedAudio.id,
+        mediaId: persisted.uploadedAudio.props.mediaId,
+        mediaType: persisted.uploadedAudio.props.mediaType,
+        mediaInsertedVia: persisted.uploadedAudio.props.mediaInsertedVia,
+        transcript: persisted.uploadedAudio.props.transcript,
+      },
+    };
+  } finally {
+    try {
+      fs.rmSync(audioUploadFile.filePath, { force: true });
+    } catch {
+      // Temp smoke audio file cleanup is best-effort.
+    }
+  }
+};
+
 const testMediaUploadModalControls = async (client, pageId) => {
   const imageUploadFile = createSmokeUploadImageFile();
   const videoUploadFile = createSmokeUploadVideoFile();
@@ -27785,7 +28112,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || RESPONSIVE_NEXT_ACTION_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || PREVIEW_SCROLL_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || RESPONSIVE_NEXT_ACTION_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || PREVIEW_SCROLL_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || CANVAS_MEDIA_DROP_RENDERED_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -27818,7 +28145,7 @@ const main = async () => {
       resetPageEditPermission = true;
     }
 
-    if (MEDIA_UPLOAD_SMOKE) {
+    if (MEDIA_UPLOAD_SMOKE || CANVAS_MEDIA_DROP_RENDERED_SMOKE) {
       editorMediaSmokeSettings = await allowAllMediaTypesForEditorMediaSmoke();
     }
 
@@ -28256,6 +28583,21 @@ const main = async () => {
         mode: 'media-upload',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         mediaUpload,
+      }, null, 2));
+      return;
+    }
+
+    if (CANVAS_MEDIA_DROP_RENDERED_SMOKE) {
+      assert(!EDITOR_PATH, 'Canvas media drop rendered smoke currently requires an internally created smoke page');
+      const canvasMediaDrop = await testRenderedCanvasMediaDrop(client, tempPageId);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'canvas-media-drop-rendered',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageEditorRouteActions,
+        primaryActionStatus,
+        canvasMediaDrop,
       }, null, 2));
       return;
     }
