@@ -3655,6 +3655,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run diff check and repo public hygiene, commit/push this contract fix, re-read the survival guide, then implement the property-panel canvas auto-grow gap.
 
+## Checkpoint: 2026-06-02 22:00 IST - Live Custom Frontend Canonical Site Gate
+
+**Scope:** Batch 5 live gate hardening after deploying `f5dd4ee`, focused on making the stricter custom-frontend template registry assertion work against database-backed production sites addressed by slug.
+
+**Changed:**
+- `test:custom-frontend-connection` now remembers the canonical site id returned by public discovery, agent handoff, and manifest responses.
+- Template registry endpoint assertions now accept either the requested site identifier path or the resolved canonical site id path, matching production behavior where public slug requests emit protected admin endpoints with the database id.
+- The actionability assertion now reads both canonical handoff payloads and public `/agent-handoff` response wrappers, where `contentCreation` is mirrored at the top level and `endpoints` remains under `data.handoff.endpoints`.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent`
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`
+
+**Notes:**
+- The live custom-frontend gate now passes 86 checks against production and only warns that deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
+- This keeps the template registry endpoint requirement strict while allowing the already-correct canonical database id emitted by the protected admin endpoint contract.
+
+**Next:**
+- Run diff check and repo public hygiene, commit/push this smoke hardening, re-read the survival guide, then implement the property-panel canvas auto-grow gap.
+
 ## Checkpoint: 2026-06-02 20:24 IST - Production Login Demo Guard
 
 **Scope:** Batch 5 hosted admin security polish, focused on the live `backy-admin` regression where the production login shell still displayed the local/demo credential helper because a stale demo env flag was present.

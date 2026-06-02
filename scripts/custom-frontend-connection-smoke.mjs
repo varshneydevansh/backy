@@ -463,9 +463,11 @@ const findOpenApiOperation = (openapi, suffix) => (
   null
 );
 
-const assertTemplateActionability = (handoffData, label) => {
-  const contentCreation = handoffData?.contentCreation || {};
-  const endpoints = handoffData?.endpoints || {};
+const templateEndpointForSiteIds = (siteIds) => siteIds.map((id) => `/api/admin/sites/${id}/templates`);
+
+const assertTemplateActionability = (handoffData, label, acceptedSiteIdPaths = [siteIdPath]) => {
+  const contentCreation = handoffData?.contentCreation || handoffData?.handoff?.contentCreation || {};
+  const endpoints = handoffData?.endpoints || handoffData?.handoff?.endpoints || {};
   const templateCloneFields = Array.isArray(contentCreation.templateCloneFields)
     ? contentCreation.templateCloneFields
     : [];
@@ -500,7 +502,7 @@ const assertTemplateActionability = (handoffData, label) => {
   );
   assert(
     typeof endpoints.templates === 'string' &&
-      endpoints.templates.includes(`/api/admin/sites/${siteIdPath}/templates`),
+      templateEndpointForSiteIds(acceptedSiteIdPaths).some((endpoint) => endpoints.templates.includes(endpoint)),
     `${label} exposes the template registry endpoint`,
   );
   assert(
@@ -546,6 +548,12 @@ const checkPublicApi = async (apiBaseUrl) => {
   const encodedSiteId = encodeURIComponent(siteId);
   const renderQuery = { path: '/', ...(sitePublicHost ? { domain: sitePublicHost } : {}) };
   const resolveQuery = { path: '/', ...(sitePublicHost ? { domain: sitePublicHost } : {}) };
+  const acceptedTemplateSiteIdPaths = new Set([siteIdPath]);
+  const rememberSiteId = (value) => {
+    if (typeof value === 'string' && value.trim()) {
+      acceptedTemplateSiteIdPaths.add(encodeURIComponent(value.trim()));
+    }
+  };
 
   const siteDiscovery = await requestJson(
     queryUrl(apiBaseUrl, '/sites', { identifier: siteId }),
@@ -555,6 +563,7 @@ const checkPublicApi = async (apiBaseUrl) => {
     const site = siteDiscovery.data?.site || siteDiscovery.site;
     assert(siteDiscovery.success === true, 'Public site discovery returns success=true');
     assert(Boolean(site?.id), 'Public site discovery returns site identity');
+    rememberSiteId(site?.id);
   }
 
   const agentHandoff = await requestJson(
@@ -588,7 +597,8 @@ const checkPublicApi = async (apiBaseUrl) => {
       topology.verification?.customFrontendConnectionSmoke === 'npm run test:custom-frontend-connection',
       'Agent handoff exposes the custom frontend connection smoke',
     );
-    assertTemplateActionability(data, 'Agent handoff');
+    rememberSiteId(data.site?.id);
+    assertTemplateActionability(data, 'Agent handoff', [...acceptedTemplateSiteIdPaths]);
   }
 
   const manifest = await requestJson(
@@ -604,7 +614,8 @@ const checkPublicApi = async (apiBaseUrl) => {
       'Manifest mirrors the custom frontend agent handoff',
     );
     if (handoffData) {
-      assertTemplateActionability(handoffData, 'Manifest handoff mirror');
+      rememberSiteId(manifest.data?.site?.id);
+      assertTemplateActionability(handoffData, 'Manifest handoff mirror', [...acceptedTemplateSiteIdPaths]);
     }
     const frontendDesign = manifest.data?.site?.frontendDesign;
     if (frontendDesign?.status === 'synced' || frontendDesign?.source?.type === 'custom-frontend') {
