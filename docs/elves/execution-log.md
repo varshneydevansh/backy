@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 07:08 IST
+- **Last updated:** 2026-06-02 07:29 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 07:29 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate website frontend is scaffolded and locally verified
+
+**What changed:**
+- Materialized the real `devanshvarshney.com` separate Next.js custom frontend from Backy's public scaffold path using the published production Backy site.
+- The generated frontend uses only browser-safe `NEXT_PUBLIC_BACKY_*` env plus optional server-loader `BACKY_*` env. No Supabase, database, provider, admin, session, bootstrap, cron, or SMTP secrets are present in the scaffold.
+- The starter dependency graph now overrides PostCSS to a patched range so future exports do not inherit the known vulnerable transitive range from the Next.js toolchain.
+- `npm run test:custom-frontend-starter` now fails if the checked starter drops the PostCSS override.
+- Regenerated the public starter file-list template so protected admin exports and no-browser scaffolds inherit the same hardened `package.json`.
+
+**Commands run:**
+- `npm run custom-frontend:scaffold -- --site-id devanshvarshney --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out <separate-frontend-dir>` -> PASS, resolved the production Backy site and wrote the separate Next starter.
+- Separate frontend `npm install` -> first audit found a Next/PostCSS transitive moderate advisory; after the Backy starter override, reinstall completed with zero audit findings.
+- Separate frontend `npm audit --audit-level=moderate` -> PASS, 0 vulnerabilities.
+- Separate frontend `npm run typecheck` with safe Backy env -> PASS.
+- Separate frontend `npm run build` with safe Backy env -> PASS.
+- Separate frontend `/api/backy-connection` probe on local dev server -> PASS, `success: true`, manifest reachable, no forbidden env values exposed.
+- Local strict connection gate with `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` -> PASS, 61 checks against production Backy and the local separate frontend.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 78 checks.
+
+**Next:**
+1. Deploy the separate website frontend as its own Vercel project.
+2. Attach `devanshvarshney.com` to that separate frontend project, not to `backy-admin` or `backy-public`.
+3. Run the deployed DOM/probe gate with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
 
 ## 2026-06-02 06:59 IST
 

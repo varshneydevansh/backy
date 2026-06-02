@@ -73,6 +73,11 @@ if (packageJson.dependencies?.next && packageJson.dependencies?.react && package
 } else {
   fail('Starter must declare Next/React runtime dependencies');
 }
+if (packageJson.overrides?.postcss) {
+  pass('Starter pins PostCSS override for the Next.js dependency graph');
+} else {
+  fail('Starter must override PostCSS so new scaffolds do not inherit known vulnerable transitive ranges');
+}
 
 assertIncludes(files.env, 'NEXT_PUBLIC_BACKY_API_BASE_URL=', 'Starter env exposes browser-safe Backy API base');
 assertIncludes(files.env, 'NEXT_PUBLIC_BACKY_SITE_ID=', 'Starter env exposes browser-safe site id');

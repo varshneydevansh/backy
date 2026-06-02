@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Continue Batch 5: Ongoing UX Scout And Polish.
+- **Next required action:** Deploy the already-scaffolded separate custom frontend as its own Vercel website project, attach the public website domain there, then run the deployed DOM/probe custom-frontend connection gate.
 
 ## Effort Standard
 
@@ -219,9 +219,13 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter source smoke, starter typecheck, production API connection smoke, Help source/rendered smokes, Site Detail smoke, admin typecheck, public typecheck, SDK typecheck, diff check, env-backed starter production build, and a full 49-check local starter connection proof against production Backy are green. The full proof uses `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
 
+**Newest custom frontend materialization:** The real separate Next.js website frontend has been scaffolded from production Backy using the published `devanshvarshney` site and safe public/server-loader env only. The generated project audits clean after the Backy starter PostCSS override, typechecks, builds, exposes `/api/backy-connection`, and passes the strict 61-check local custom frontend connection gate with DOM attributes plus probe enabled.
+
+**Newest starter security polish:** `examples/custom-frontend-next` now pins a PostCSS override in `package.json`, the generated public starter file-list template includes the same override, and `npm run test:custom-frontend-starter` fails if future starter edits remove it.
+
 **Newest deploy verification:** `7e651962` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, the real-site live custom frontend connection gate passes 50 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes with no demo credentials/dev MFA, and recent Vercel logs for both latest production deployments are empty.
 
-**Single next action:** Create the separate custom website frontend repo/project from the now-published real Backy site. Use `npm run custom-frontend:scaffold -- --site-id devanshvarshney --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out <target-dir>` or the Site Detail starter download/materializer path, attach the public website domain to that separate frontend Vercel project, then use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
+**Single next action:** Deploy the already-scaffolded separate custom website frontend as its own Vercel project, attach the public website domain to that frontend project when ready to move DNS from the current host, then use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
 
 ## Active Compute
 
