@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 07:29 IST
+- **Last updated:** 2026-06-02 07:44 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 07:44 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate website Vercel project created with safe env
+
+**What changed:**
+- Created and deployed the separate custom website frontend as its own Vercel project from the scaffolded Next.js starter.
+- The deploy used only safe Backy public/read env values for the Backy API base, canonical site id, and public host.
+- Persisted those same safe env names for the Vercel production and development targets on the separate frontend project.
+- Preview branch env could not be persisted yet because the new frontend project has no connected Git repository; Vercel requires a connected repo before branch-scoped Preview env can be saved.
+- No live website domain was moved. The public website domain should be attached to the separate frontend project only when ready to switch DNS away from the current host.
+
+**Commands run:**
+- `npx --yes vercel@latest deploy . -y ...` from the separate frontend project -> PASS, Vercel build Ready.
+- `npx --yes vercel@latest env add <safe Backy env> production --value <public/read value> --yes --force --no-sensitive` -> PASS for six variables.
+- `npx --yes vercel@latest env add <safe Backy env> development --value <public/read value> --yes --force --no-sensitive` -> PASS for six variables.
+- `npx --yes vercel@latest env add <safe Backy env> preview main ...` -> expected Vercel failure, project has no connected Git repository.
+- `npx --yes vercel@latest env list production` -> PASS, only the six safe Backy frontend env names are present.
+- `npx --yes vercel@latest env list development` -> PASS, only the six safe Backy frontend env names are present.
+
+**Next:**
+1. Connect the separate frontend project to its own Git repository when ready.
+2. Add Preview env after Git connection if branch previews are needed.
+3. Run the deployed DOM/probe custom frontend gate against the deployed frontend URL.
+4. Attach the public website domain to the separate frontend project only when ready to move DNS.
 
 ## 2026-06-02 07:29 IST
 

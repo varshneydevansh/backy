@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Deploy the already-scaffolded separate custom frontend as its own Vercel website project, attach the public website domain there, then run the deployed DOM/probe custom-frontend connection gate.
+- **Next required action:** Run the deployed DOM/probe custom-frontend connection gate against the separate website Vercel deployment, connect that frontend project to its own Git repository for future previews, and attach the public website domain there only when ready to move DNS.
 
 ## Effort Standard
 
@@ -223,9 +223,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest starter security polish:** `examples/custom-frontend-next` now pins a PostCSS override in `package.json`, the generated public starter file-list template includes the same override, and `npm run test:custom-frontend-starter` fails if future starter edits remove it.
 
+**Newest separate frontend deploy:** The separate custom website frontend has been deployed as its own Vercel project with only safe Backy public/read env values. Production and development env targets contain the six safe Backy frontend env names; Preview branch env is pending because the separate frontend project does not yet have a connected Git repository. No live website domain has been moved.
+
 **Newest deploy verification:** `7e651962` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, the real-site live custom frontend connection gate passes 50 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes with no demo credentials/dev MFA, and recent Vercel logs for both latest production deployments are empty.
 
-**Single next action:** Deploy the already-scaffolded separate custom website frontend as its own Vercel project, attach the public website domain to that frontend project when ready to move DNS from the current host, then use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` before broad UI polish.
+**Single next action:** Use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`; then connect the separate frontend project to its own Git repo and attach the public website domain there when ready to move DNS from the current host.
 
 ## Active Compute
 
