@@ -327,6 +327,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Spark scout:** Spark sidecar `019e8943-fb2b-79f3-80ec-c4fc2a63ecc6` recommends the next larger custom-frontend parity slice: Dashboard custom-frontend content creation should expose all template-backed create entry points - page, blog post, form, product, collection, and reusable section - instead of only page/blog.
 
+**Newest Dashboard create-parity polish:** Dashboard custom-frontend content creation now exposes all six template-backed create entry points in `backy.dashboard-custom-frontend-content-creation.v1` and the agent brief: page, blogPost, form, product, collection, and section. Page/blog routes keep `frontendDesignTemplateId` plus `templateSource=custom-frontend`; form/product/collection/reusable-section routes use `frontendTemplate`.
+
+**Newest verification:** Dashboard source smoke, rendered Dashboard smoke, admin typecheck, diff check, and repo-public hygiene are green for the six-way custom-frontend create-parity slice.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

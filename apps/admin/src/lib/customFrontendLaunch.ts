@@ -68,10 +68,10 @@ export interface DashboardCustomFrontendControlReadiness {
 }
 
 export interface DashboardCustomFrontendContentCreationItem {
-  id: 'page' | 'blogPost';
+  id: DashboardCustomFrontendTemplateType;
   label: string;
   status: 'ready' | 'review';
-  templateType: 'page' | 'blogPost';
+  templateType: DashboardCustomFrontendTemplateType;
   templateId: string | null;
   templateName: string | null;
   createRoute: string | null;
@@ -88,6 +88,10 @@ export interface DashboardCustomFrontendContentCreation {
   items: {
     page: DashboardCustomFrontendContentCreationItem;
     blogPost: DashboardCustomFrontendContentCreationItem;
+    form: DashboardCustomFrontendContentCreationItem;
+    product: DashboardCustomFrontendContentCreationItem;
+    collection: DashboardCustomFrontendContentCreationItem;
+    section: DashboardCustomFrontendContentCreationItem;
   };
   rules: string[];
 }
@@ -139,7 +143,7 @@ const isUsableFrontendTemplate = (
 
 const findPreferredFrontendTemplate = (
   frontendDesign: SiteFrontendDesignContract | null | undefined,
-  type: 'page' | 'blogPost',
+  type: DashboardCustomFrontendTemplateType,
 ) => {
   const templates = (frontendDesign?.templates || []).filter((template) => (
     template.type === type && isUsableFrontendTemplate(template)
@@ -151,22 +155,25 @@ const findPreferredFrontendTemplate = (
 const buildCreateRoute = ({
   siteId,
   route,
-  templateSource,
   templateId,
 }: {
   siteId: string;
-  route: '/pages/new' | '/blog/new';
-  templateSource: 'backy-canvas' | 'custom-frontend';
+  route: '/pages/new' | '/blog/new' | '/forms' | '/products' | '/collections' | '/reusable-sections';
   templateId?: string | null;
 }) => {
-  const params = new URLSearchParams({
-    siteId,
-    templateSource,
-    focus: 'canvas',
-  });
+  const params = new URLSearchParams({ siteId });
 
   if (templateId) {
-    params.set('frontendDesignTemplateId', templateId);
+    if (route === '/pages/new' || route === '/blog/new') {
+      params.set('templateSource', 'custom-frontend');
+      params.set('frontendDesignTemplateId', templateId);
+      params.set('focus', 'canvas');
+    } else {
+      params.set('frontendTemplate', templateId);
+    }
+  } else if (route === '/pages/new' || route === '/blog/new') {
+    params.set('templateSource', 'backy-canvas');
+    params.set('focus', 'canvas');
   }
 
   return `${route}?${params.toString()}`;
@@ -238,6 +245,10 @@ export const buildDashboardCustomFrontendContentCreation = ({
   const setupRoute = `/sites/${encodeURIComponent(activeSiteId)}#site-custom-frontend-verifier`;
   const pageTemplate = findPreferredFrontendTemplate(frontendDesign, 'page');
   const blogPostTemplate = findPreferredFrontendTemplate(frontendDesign, 'blogPost');
+  const formTemplate = findPreferredFrontendTemplate(frontendDesign, 'form');
+  const productTemplate = findPreferredFrontendTemplate(frontendDesign, 'product');
+  const collectionTemplate = findPreferredFrontendTemplate(frontendDesign, 'collection');
+  const sectionTemplate = findPreferredFrontendTemplate(frontendDesign, 'section');
   const buildItem = ({
     id,
     label,
@@ -250,19 +261,17 @@ export const buildDashboardCustomFrontendContentCreation = ({
     label: string;
     templateType: DashboardCustomFrontendContentCreationItem['templateType'];
     template: SiteFrontendDesignContract['templates'][number] | null;
-    route: '/pages/new' | '/blog/new';
+    route: '/pages/new' | '/blog/new' | '/forms' | '/products' | '/collections' | '/reusable-sections';
     missingDetail: string;
   }): DashboardCustomFrontendContentCreationItem => {
     const fallbackRoute = buildCreateRoute({
       siteId: activeSiteId,
       route,
-      templateSource: 'backy-canvas',
     });
     const createRoute = template
       ? buildCreateRoute({
         siteId: activeSiteId,
         route,
-        templateSource: 'custom-frontend',
         templateId: template.id,
       })
       : null;
@@ -298,16 +307,50 @@ export const buildDashboardCustomFrontendContentCreation = ({
     route: '/blog/new',
     missingDetail: 'Capture or sync a blogPost template before starting custom-designed posts from the dashboard.',
   });
+  const form = buildItem({
+    id: 'form',
+    label: 'New custom form',
+    templateType: 'form',
+    template: formTemplate,
+    route: '/forms',
+    missingDetail: 'Capture or sync a form template before starting custom-designed forms from the dashboard.',
+  });
+  const product = buildItem({
+    id: 'product',
+    label: 'New custom product',
+    templateType: 'product',
+    template: productTemplate,
+    route: '/products',
+    missingDetail: 'Capture or sync a product template before starting custom-designed catalog items from the dashboard.',
+  });
+  const collection = buildItem({
+    id: 'collection',
+    label: 'New custom collection',
+    templateType: 'collection',
+    template: collectionTemplate,
+    route: '/collections',
+    missingDetail: 'Capture or sync a collection template before starting custom-designed structured content from the dashboard.',
+  });
+  const section = buildItem({
+    id: 'section',
+    label: 'New custom section',
+    templateType: 'section',
+    template: sectionTemplate,
+    route: '/reusable-sections',
+    missingDetail: 'Capture or sync a reusable section template before starting custom-designed shared sections from the dashboard.',
+  });
+  const items = { page, blogPost, form, product, collection, section };
+  const allItems = Object.values(items);
 
   return {
     schemaVersion: 'backy.dashboard-custom-frontend-content-creation.v1',
     source: 'custom-frontend-template-registry',
-    status: page.status === 'ready' && blogPost.status === 'ready' ? 'ready' : 'review',
+    status: allItems.every((item) => item.status === 'ready') ? 'ready' : 'review',
     siteId: activeSiteId,
-    items: { page, blogPost },
+    items,
     rules: [
       'Use createRoute when present to start new content from the synced custom frontend design template.',
-      'Preserve frontendDesignTemplateId, templateSource=custom-frontend, and focus=canvas in page/blog creation entry points.',
+      'Preserve frontendDesignTemplateId/templateSource for page and blog creation, and frontendTemplate for form, product, collection, and reusable-section entry points.',
       'Use fallbackRoute only when the author intentionally wants Backy canvas starter content instead of the custom frontend template.',
     ],
   };
@@ -514,7 +557,7 @@ export const buildDashboardCustomFrontendAgentBrief = ({
     },
     rules: [
       'Start from agent-handoff, manifest, OpenAPI, and render payloads before writing frontend routes.',
-      'Use contentCreation.items.page.createRoute and contentCreation.items.blogPost.createRoute to create Backy-authored content from the synced frontend template registry.',
+      'Use contentCreation.items.*.createRoute to create Backy-authored pages, posts, forms, products, collections, and reusable sections from the synced frontend template registry.',
       'Preserve data-backy-* element ids, component contract pointers, editable-map pointers, and responsive CSS metadata.',
       'Put only NEXT_PUBLIC_BACKY_* in browser bundles; keep database, Supabase service-role, provider, admin, cron, SMTP, and session secrets out of the custom frontend.',
       'Attach the public website domain to the separate custom frontend Vercel project after the Backy verifier is Ready.',

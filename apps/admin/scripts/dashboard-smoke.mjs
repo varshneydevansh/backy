@@ -116,7 +116,7 @@ const assertDashboardSourceContracts = () => {
     'customFrontendControlReadiness',
     'customFrontendContentCreation',
     'customFrontendAgentBrief',
-    "templateSource: 'custom-frontend'",
+    "params.set('templateSource', 'custom-frontend')",
     'frontendDesignTemplateId',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'NEXT_PUBLIC_BACKY_SITE_ID',
@@ -130,8 +130,14 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-copy-custom-frontend-agent-brief"',
     'data-agent-brief-content-creation-schema',
     'data-testid="dashboard-custom-frontend-content-creation"',
-    'data-testid="dashboard-create-custom-frontend-page"',
-    'data-testid="dashboard-create-custom-frontend-post"',
+    'dashboard-create-custom-frontend-${item.id}',
+    "'dashboard-create-custom-frontend-post'",
+    'data-testid={actionTestId}',
+    'data-form-create-route',
+    'data-product-create-route',
+    'data-collection-create-route',
+    'data-section-create-route',
+    'frontendTemplate',
     'data-testid={`dashboard-custom-frontend-content-item-${item.id}`}',
     'data-testid="dashboard-open-custom-frontend-verifier"',
     'data-testid={`dashboard-custom-frontend-control-check-${check.id}`}',
@@ -745,6 +751,10 @@ const assertDashboardLayout = async (client, siteName) => {
         contentCreationSchema: customAgentBrief?.getAttribute('data-agent-brief-content-creation-schema') || '',
         pageCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-page-create-route') || '',
         blogCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-blog-create-route') || '',
+        formCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-form-create-route') || '',
+        productCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-product-create-route') || '',
+        collectionCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-collection-create-route') || '',
+        sectionCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-section-create-route') || '',
         readOrderCount: Number(customAgentBrief?.getAttribute('data-agent-brief-read-order-count') || 0),
         manualGates: Number(customAgentBrief?.getAttribute('data-agent-brief-manual-gates') || 0),
         scaffoldCommand: customAgentBrief?.getAttribute('data-agent-brief-scaffold-command') || '',
@@ -763,6 +773,19 @@ const assertDashboardLayout = async (client, siteName) => {
         blogTemplateId: customContentCreation?.getAttribute('data-blog-template-id') || '',
         blogCreateRoute: customContentCreation?.getAttribute('data-blog-create-route') || '',
         blogFallbackRoute: customContentCreation?.getAttribute('data-blog-fallback-route') || '',
+        formTemplateId: customContentCreation?.getAttribute('data-form-template-id') || '',
+        formCreateRoute: customContentCreation?.getAttribute('data-form-create-route') || '',
+        formFallbackRoute: customContentCreation?.getAttribute('data-form-fallback-route') || '',
+        productTemplateId: customContentCreation?.getAttribute('data-product-template-id') || '',
+        productCreateRoute: customContentCreation?.getAttribute('data-product-create-route') || '',
+        productFallbackRoute: customContentCreation?.getAttribute('data-product-fallback-route') || '',
+        collectionTemplateId: customContentCreation?.getAttribute('data-collection-template-id') || '',
+        collectionCreateRoute: customContentCreation?.getAttribute('data-collection-create-route') || '',
+        collectionFallbackRoute: customContentCreation?.getAttribute('data-collection-fallback-route') || '',
+        sectionTemplateId: customContentCreation?.getAttribute('data-section-template-id') || '',
+        sectionCreateRoute: customContentCreation?.getAttribute('data-section-create-route') || '',
+        sectionFallbackRoute: customContentCreation?.getAttribute('data-section-fallback-route') || '',
+        itemCount: Number(customContentCreation?.getAttribute('data-item-count') || 0),
         pageAction: {
           exists: Boolean(customPageCreate),
           templateSource: customPageCreate?.getAttribute('data-template-source') || '',
@@ -775,6 +798,8 @@ const assertDashboardLayout = async (client, siteName) => {
           templateId: customPostCreate?.getAttribute('data-template-id') || '',
           route: customPostCreate?.getAttribute('data-create-route') || '',
         },
+        actionIds: Array.from(customContentCreation?.querySelectorAll('[data-testid^="dashboard-create-custom-frontend-"]') || [])
+          .map((node) => node.getAttribute('data-item-id') || ''),
         itemStatuses: Array.from(customContentCreation?.querySelectorAll('[data-testid^="dashboard-custom-frontend-content-item-"]') || []).map((node) => ({
           id: node.getAttribute('data-testid') || '',
           status: node.getAttribute('data-status') || '',
@@ -864,6 +889,7 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchText.includes('Frontend agent brief ready') &&
       customLaunchText.includes('Create from custom frontend design') &&
       customLaunchText.includes('frontendDesignTemplateId') &&
+      customLaunchText.includes('frontendTemplate') &&
       customLaunchText.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       customLaunchState.schema === 'backy.dashboard-custom-frontend-launch.v1' &&
       customLaunchState.domainOwner === 'custom-frontend-vercel-project' &&
@@ -906,12 +932,22 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchState.contentCreation.pageFallbackRoute.includes('templateSource=backy-canvas') &&
       customLaunchState.contentCreation.blogFallbackRoute.includes('/blog/new') &&
       customLaunchState.contentCreation.blogFallbackRoute.includes('templateSource=backy-canvas') &&
+      customLaunchState.contentCreation.formFallbackRoute.includes('/forms') &&
+      customLaunchState.contentCreation.productFallbackRoute.includes('/products') &&
+      customLaunchState.contentCreation.collectionFallbackRoute.includes('/collections') &&
+      customLaunchState.contentCreation.sectionFallbackRoute.includes('/reusable-sections') &&
+      customLaunchState.contentCreation.itemCount >= 6 &&
       customLaunchState.contentCreation.pageAction.exists &&
       customLaunchState.contentCreation.pageAction.templateSource === 'custom-frontend' &&
       customLaunchState.contentCreation.postAction.exists &&
       customLaunchState.contentCreation.postAction.templateSource === 'custom-frontend' &&
+      ['page', 'blogPost', 'form', 'product', 'collection', 'section'].every((id) => customLaunchState.contentCreation.actionIds.includes(id)) &&
       customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'page') &&
       customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'blogPost') &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'form') &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'product') &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'collection') &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'section') &&
       (!customLaunchState.contentCreation.pageCreateRoute || (
         customLaunchState.contentCreation.pageCreateRoute.includes('/pages/new') &&
         customLaunchState.contentCreation.pageCreateRoute.includes('templateSource=custom-frontend') &&
@@ -921,6 +957,22 @@ const assertDashboardLayout = async (client, siteName) => {
         customLaunchState.contentCreation.blogCreateRoute.includes('/blog/new') &&
         customLaunchState.contentCreation.blogCreateRoute.includes('templateSource=custom-frontend') &&
         customLaunchState.contentCreation.blogCreateRoute.includes('frontendDesignTemplateId=')
+      )) &&
+      (!customLaunchState.contentCreation.formCreateRoute || (
+        customLaunchState.contentCreation.formCreateRoute.includes('/forms') &&
+        customLaunchState.contentCreation.formCreateRoute.includes('frontendTemplate=')
+      )) &&
+      (!customLaunchState.contentCreation.productCreateRoute || (
+        customLaunchState.contentCreation.productCreateRoute.includes('/products') &&
+        customLaunchState.contentCreation.productCreateRoute.includes('frontendTemplate=')
+      )) &&
+      (!customLaunchState.contentCreation.collectionCreateRoute || (
+        customLaunchState.contentCreation.collectionCreateRoute.includes('/collections') &&
+        customLaunchState.contentCreation.collectionCreateRoute.includes('frontendTemplate=')
+      )) &&
+      (!customLaunchState.contentCreation.sectionCreateRoute || (
+        customLaunchState.contentCreation.sectionCreateRoute.includes('/reusable-sections') &&
+        customLaunchState.contentCreation.sectionCreateRoute.includes('frontendTemplate=')
       )) &&
       customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&

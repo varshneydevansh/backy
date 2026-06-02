@@ -3797,6 +3797,10 @@ function Index() {
                 data-agent-brief-content-creation-schema={customFrontendAgentBrief.contentCreation.schemaVersion}
                 data-agent-brief-page-create-route={customFrontendAgentBrief.contentCreation.items.page.createRoute || ''}
                 data-agent-brief-blog-create-route={customFrontendAgentBrief.contentCreation.items.blogPost.createRoute || ''}
+                data-agent-brief-form-create-route={customFrontendAgentBrief.contentCreation.items.form.createRoute || ''}
+                data-agent-brief-product-create-route={customFrontendAgentBrief.contentCreation.items.product.createRoute || ''}
+                data-agent-brief-collection-create-route={customFrontendAgentBrief.contentCreation.items.collection.createRoute || ''}
+                data-agent-brief-section-create-route={customFrontendAgentBrief.contentCreation.items.section.createRoute || ''}
                 data-agent-brief-read-order-count={customFrontendAgentBrief.readOrder.length}
                 data-agent-brief-manual-gates={customFrontendAgentBrief.readiness.manualGates.length}
                 data-agent-brief-scaffold-command={customFrontendAgentBrief.commands.scaffold}
@@ -3819,85 +3823,55 @@ function Index() {
                 data-blog-template-id={customFrontendContentCreation.items.blogPost.templateId || ''}
                 data-blog-create-route={customFrontendContentCreation.items.blogPost.createRoute || ''}
                 data-blog-fallback-route={customFrontendContentCreation.items.blogPost.fallbackRoute}
+                data-form-template-id={customFrontendContentCreation.items.form.templateId || ''}
+                data-form-create-route={customFrontendContentCreation.items.form.createRoute || ''}
+                data-form-fallback-route={customFrontendContentCreation.items.form.fallbackRoute}
+                data-product-template-id={customFrontendContentCreation.items.product.templateId || ''}
+                data-product-create-route={customFrontendContentCreation.items.product.createRoute || ''}
+                data-product-fallback-route={customFrontendContentCreation.items.product.fallbackRoute}
+                data-collection-template-id={customFrontendContentCreation.items.collection.templateId || ''}
+                data-collection-create-route={customFrontendContentCreation.items.collection.createRoute || ''}
+                data-collection-fallback-route={customFrontendContentCreation.items.collection.fallbackRoute}
+                data-section-template-id={customFrontendContentCreation.items.section.templateId || ''}
+                data-section-create-route={customFrontendContentCreation.items.section.createRoute || ''}
+                data-section-fallback-route={customFrontendContentCreation.items.section.fallbackRoute}
+                data-item-count={Object.keys(customFrontendContentCreation.items).length}
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
                     <div className="font-semibold text-foreground">Create from custom frontend design</div>
                     <p className="mt-1 leading-5 text-muted-foreground">
-                      Start pages and blog posts from the synced template registry so Backy persists the same fonts, tokens, chrome, editable map, and frontendDesignTemplateId.
+                      Start pages, posts, forms, products, collections, and reusable sections from the synced template registry so Backy persists the same fonts, tokens, chrome, editable map, frontendDesignTemplateId, and frontendTemplate routes.
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    {customFrontendContentCreation.items.page.createRoute ? (
-                      <Link
-                        to="/pages/new"
-                        search={{
-                          siteId: activeSiteId,
-                          templateSource: 'custom-frontend',
-                          frontendDesignTemplateId: customFrontendContentCreation.items.page.templateId || undefined,
-                          focus: 'canvas',
-                        }}
-                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
-                        data-testid="dashboard-create-custom-frontend-page"
-                        data-template-source="custom-frontend"
-                        data-template-id={customFrontendContentCreation.items.page.templateId || ''}
-                        data-create-route={customFrontendContentCreation.items.page.createRoute}
-                      >
-                        New custom page
-                        <ArrowRight className="size-3.5" />
-                      </Link>
-                    ) : (
-                      <Link
-                        to="/sites/$siteId"
-                        params={{ siteId: activeSiteId }}
-                        hash="site-custom-frontend-verifier"
-                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
-                        data-testid="dashboard-create-custom-frontend-page"
-                        data-template-source="custom-frontend"
-                        data-template-id=""
-                        data-create-route=""
-                      >
-                        Sync page template
-                        <ArrowRight className="size-3.5" />
-                      </Link>
-                    )}
-                    {customFrontendContentCreation.items.blogPost.createRoute ? (
-                      <Link
-                        to="/blog/new"
-                        search={{
-                          siteId: activeSiteId,
-                          templateSource: 'custom-frontend',
-                          frontendDesignTemplateId: customFrontendContentCreation.items.blogPost.templateId || undefined,
-                          focus: 'canvas',
-                        }}
-                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
-                        data-testid="dashboard-create-custom-frontend-post"
-                        data-template-source="custom-frontend"
-                        data-template-id={customFrontendContentCreation.items.blogPost.templateId || ''}
-                        data-create-route={customFrontendContentCreation.items.blogPost.createRoute}
-                      >
-                        New custom post
-                        <ArrowRight className="size-3.5" />
-                      </Link>
-                    ) : (
-                      <Link
-                        to="/sites/$siteId"
-                        params={{ siteId: activeSiteId }}
-                        hash="site-custom-frontend-verifier"
-                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
-                        data-testid="dashboard-create-custom-frontend-post"
-                        data-template-source="custom-frontend"
-                        data-template-id=""
-                        data-create-route=""
-                      >
-                        Sync blog template
-                        <ArrowRight className="size-3.5" />
-                      </Link>
-                    )}
+                    {Object.values(customFrontendContentCreation.items).map((item) => {
+                      const actionTestId = item.id === 'blogPost'
+                        ? 'dashboard-create-custom-frontend-post'
+                        : `dashboard-create-custom-frontend-${item.id}`;
+                      const href = item.createRoute || item.setupRoute;
+                      return (
+                        <a
+                          key={item.id}
+                          href={href}
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                          data-testid={actionTestId}
+                          data-item-id={item.id}
+                          data-template-type={item.templateType}
+                          data-template-source="custom-frontend"
+                          data-template-id={item.templateId || ''}
+                          data-create-route={item.createRoute || ''}
+                          data-fallback-route={item.fallbackRoute}
+                        >
+                          {item.createRoute ? item.label : `Sync ${item.templateType} template`}
+                          <ArrowRight className="size-3.5" />
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  {[customFrontendContentCreation.items.page, customFrontendContentCreation.items.blogPost].map((item) => (
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {Object.values(customFrontendContentCreation.items).map((item) => (
                     <div
                       key={item.id}
                       className="rounded-md border border-border bg-background px-3 py-2"

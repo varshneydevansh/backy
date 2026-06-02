@@ -3655,6 +3655,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit, push, re-read the survival guide, then implement the dashboard custom-frontend create-parity slice.
 
+## Checkpoint: 2026-06-02 23:15 IST - Dashboard Custom Frontend Create Parity
+
+**Scope:** Batch 5 custom-frontend handoff polish, focused on the Spark-identified gap where Dashboard custom-frontend creation advertised page/blog only while the template registry and downstream routes already support forms, products, collections, and reusable sections.
+
+**Changed:**
+- `buildDashboardCustomFrontendContentCreation` now emits all six template-backed content creation items: page, blogPost, form, product, collection, and section.
+- Page/blog create routes keep `templateSource=custom-frontend`, `frontendDesignTemplateId`, and `focus=canvas`.
+- Form/product/collection/reusable-section create routes use the established `frontendTemplate=<templateId>` route convention.
+- Dashboard agent-brief metadata now exposes all six create routes.
+- The Dashboard custom-frontend launch panel renders actions and status cards for every content kind, with visible copy explaining the two route-field conventions.
+- Dashboard smoke now guards six item cards, six action ids, page/blog `frontendDesignTemplateId` routes, and form/product/collection/section `frontendTemplate` routes.
+
+**Validation:**
+- PASS: `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:dashboard --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- The rendered dashboard smoke proved all six actions exist on the dashboard even when the local smoke site has not synced templates yet; those routes correctly fall back to review/setup state until templates are available.
+- This patch only changes dashboard handoff/actionability; the downstream forms/products/collections/reusable-sections routes already had `frontendTemplate` handling.
+
+**Next:**
+- Commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor/custom-frontend gap.
+
 ## Checkpoint: 2026-06-02 21:48 IST - Custom Frontend Route Alias Contract Fix
 
 **Scope:** Batch 5 live deployment verification follow-up after pushing `e34f543`, focused on the stricter custom-frontend template actionability gate.
