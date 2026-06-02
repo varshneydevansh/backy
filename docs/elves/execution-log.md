@@ -3383,3 +3383,23 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push this focused dashboard control-readiness slice.
 - Continue the release path from the survival guide: Vercel GitHub App access remains external/manual for the private separate frontend repo, and public-domain DNS cutover should wait until the operator is ready.
+
+## Checkpoint: 2026-06-02 13:48 IST - Dashboard Custom Frontend Agent Brief
+
+**Scope:** Batch 5 custom-frontend launch polish, focused on making the Dashboard copyable enough for another frontend agent to continue without chat history.
+
+**Changed:**
+- Extracted Dashboard custom-frontend launch/readiness/agent-brief construction into a typed `customFrontendLaunch` helper instead of growing the already-large Dashboard route file.
+- Added `backy.dashboard-custom-frontend-agent-brief.v1` with the active site, read order, browser-safe env, server-loader env, forbidden env names, scaffold command, deployed verification command, readiness summary, next action, and manual domain/Git gates.
+- Added a visible Dashboard “Frontend agent brief ready” strip plus “Copy agent brief” action beside the custom frontend next action.
+- Included the agent brief in the downloadable Dashboard handoff JSON.
+- Extended Dashboard smoke coverage to guard the agent-brief schema, source, read-order count, manual-gate count, scaffold command, deployed verification command, and copy action.
+
+**Validation:**
+- PASS: `npm run test:dashboard --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+
+**Next:**
+- Run repo public hygiene, commit, push, and re-check production deployment.
+- Remaining non-code launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public DNS cutover only when ready.

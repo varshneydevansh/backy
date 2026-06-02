@@ -265,6 +265,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Dashboard control polish:** Dashboard now mirrors the custom frontend control state through `backy.dashboard-custom-frontend-control-readiness.v1` and copyable `backy.dashboard-custom-frontend-next-action.v1`. The Custom frontend launch panel separates Backy-owned checks from operator-owned domain/Git preview gates, links directly to the Site Detail verifier, and includes the readiness block in the downloadable dashboard handoff. Dashboard rendered smoke, admin typecheck, diff check, and repo-public hygiene are green.
 
+**Newest Dashboard agent-brief polish:** Dashboard custom-frontend launch state is now built by a typed helper and exposes copyable `backy.dashboard-custom-frontend-agent-brief.v1` with read order, safe browser/server-loader env, forbidden env names, scaffold command, deployed verification command, readiness summary, next action, and manual domain/Git gates. Dashboard rendered smoke, admin typecheck, and diff check are green; repo-public hygiene and commit/push are next.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

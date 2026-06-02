@@ -24,6 +24,8 @@ const assert = (condition, message) => {
 
 const assertDashboardSourceContracts = () => {
   const source = fs.readFileSync(new URL('../src/routes/index.tsx', import.meta.url), 'utf8');
+  const customFrontendLaunchSource = fs.readFileSync(new URL('../src/lib/customFrontendLaunch.ts', import.meta.url), 'utf8');
+  const contractSource = `${source}\n${customFrontendLaunchSource}`;
   const sidebarSource = fs.readFileSync(new URL('../src/components/layout/Sidebar.tsx', import.meta.url), 'utf8');
   for (const snippet of [
     "schemaVersion: 'backy.dashboard-handoff.v1'",
@@ -103,10 +105,14 @@ const assertDashboardSourceContracts = () => {
     "schemaVersion: 'backy.dashboard-custom-frontend-launch.v1'",
     "schemaVersion: 'backy.dashboard-custom-frontend-control-readiness.v1'",
     "schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1'",
+    'backy.dashboard-custom-frontend-agent-brief.v1',
     "domainOwner: 'custom-frontend-vercel-project'",
+    'buildDashboardCustomFrontendLaunch',
+    'buildDashboardCustomFrontendControlReadiness',
+    'buildDashboardCustomFrontendAgentBrief',
     'customFrontendLaunch',
     'customFrontendControlReadiness',
-    'DASHBOARD_CUSTOM_FRONTEND_TEMPLATE_TYPES',
+    'customFrontendAgentBrief',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'NEXT_PUBLIC_BACKY_SITE_ID',
     'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
@@ -115,13 +121,15 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-custom-frontend-control-readiness"',
     'data-testid="dashboard-custom-frontend-next-action"',
     'data-testid="dashboard-copy-custom-frontend-next-action"',
+    'data-testid="dashboard-custom-frontend-agent-brief"',
+    'data-testid="dashboard-copy-custom-frontend-agent-brief"',
     'data-testid="dashboard-open-custom-frontend-verifier"',
     'data-testid={`dashboard-custom-frontend-control-check-${check.id}`}',
     'data-testid="dashboard-custom-frontend-browser-env"',
     'data-testid="dashboard-custom-frontend-server-env"',
     'Open Sites handoff',
   ]) {
-    assert(source.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
+    assert(contractSource.includes(snippet), `Dashboard handoff contract is missing ${snippet}`);
   }
   {
     const commandCenterStart = source.indexOf('data-testid="dashboard-command-center"');
@@ -679,6 +687,7 @@ const assertDashboardLayout = async (client, siteName) => {
     const customLaunch = document.querySelector('[data-testid="dashboard-custom-frontend-launch"]');
     const customReadiness = document.querySelector('[data-testid="dashboard-custom-frontend-control-readiness"]');
     const customNextAction = document.querySelector('[data-testid="dashboard-custom-frontend-next-action"]');
+    const customAgentBrief = document.querySelector('[data-testid="dashboard-custom-frontend-agent-brief"]');
     const customLaunchText = customLaunch?.textContent || '';
     const customLaunchState = {
       exists: Boolean(customLaunch),
@@ -715,6 +724,17 @@ const assertDashboardLayout = async (client, siteName) => {
         copyAction: Boolean(document.querySelector('[data-testid="dashboard-copy-custom-frontend-next-action"]')),
         copySchema: document.querySelector('[data-testid="dashboard-copy-custom-frontend-next-action"]')?.getAttribute('data-copy-schema') || '',
         verifierLink: Boolean(document.querySelector('[data-testid="dashboard-open-custom-frontend-verifier"]')),
+      },
+      agentBrief: {
+        exists: Boolean(customAgentBrief),
+        schema: customAgentBrief?.getAttribute('data-agent-brief-schema') || '',
+        source: customAgentBrief?.getAttribute('data-agent-brief-source') || '',
+        readOrderCount: Number(customAgentBrief?.getAttribute('data-agent-brief-read-order-count') || 0),
+        manualGates: Number(customAgentBrief?.getAttribute('data-agent-brief-manual-gates') || 0),
+        scaffoldCommand: customAgentBrief?.getAttribute('data-agent-brief-scaffold-command') || '',
+        verifyCommand: customAgentBrief?.getAttribute('data-agent-brief-verify-command') || '',
+        copyAction: Boolean(document.querySelector('[data-testid="dashboard-copy-custom-frontend-agent-brief"]')),
+        copySchema: document.querySelector('[data-testid="dashboard-copy-custom-frontend-agent-brief"]')?.getAttribute('data-copy-schema') || '',
       },
       text: customLaunchText.slice(0, 1000),
     };
@@ -794,6 +814,7 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchText.includes('Server loader env') &&
       customLaunchText.includes('Control readiness') &&
       customLaunchText.includes('Next action') &&
+      customLaunchText.includes('Frontend agent brief ready') &&
       customLaunchText.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       customLaunchState.schema === 'backy.dashboard-custom-frontend-launch.v1' &&
       customLaunchState.domainOwner === 'custom-frontend-vercel-project' &&
@@ -818,6 +839,15 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchState.nextAction.copyAction &&
       customLaunchState.nextAction.copySchema === 'backy.dashboard-custom-frontend-next-action.v1' &&
       customLaunchState.nextAction.verifierLink &&
+      customLaunchState.agentBrief.exists &&
+      customLaunchState.agentBrief.schema === 'backy.dashboard-custom-frontend-agent-brief.v1' &&
+      customLaunchState.agentBrief.source === 'backy-dashboard' &&
+      customLaunchState.agentBrief.readOrderCount >= 4 &&
+      customLaunchState.agentBrief.manualGates >= 1 &&
+      customLaunchState.agentBrief.scaffoldCommand.includes('custom-frontend:scaffold') &&
+      customLaunchState.agentBrief.verifyCommand.includes('test:custom-frontend-connection') &&
+      customLaunchState.agentBrief.copyAction &&
+      customLaunchState.agentBrief.copySchema === 'backy.dashboard-custom-frontend-agent-brief.v1' &&
       customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
       document.body?.innerText?.includes('Persistence and Supabase readiness') &&
