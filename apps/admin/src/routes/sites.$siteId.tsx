@@ -157,6 +157,15 @@ type SiteStatusFilter = "published" | "draft" | "archived";
 type CommentTargetFilter = "all" | "page" | "post";
 type NavigationMenuKey = "primary" | "footer";
 type SiteFrontendDesignContract = NonNullable<SiteSettings["frontendDesign"]>;
+type CustomFrontendControlStatus = "ready" | "review" | "manual";
+type CustomFrontendControlOwner = "backy" | "operator";
+type CustomFrontendControlCheck = {
+  id: string;
+  label: string;
+  detail: string;
+  status: CustomFrontendControlStatus;
+  owner: CustomFrontendControlOwner;
+};
 type SiteThemeDraft = {
   colors: {
     primary: string;
@@ -321,6 +330,33 @@ const SITE_WORKSPACE_AREAS = [
     href: "#site-handoff",
   },
 ] as const;
+
+const CUSTOM_FRONTEND_TEMPLATE_TYPES = [
+  "page",
+  "blogPost",
+  "section",
+  "form",
+  "product",
+  "collection",
+] as const;
+
+const CUSTOM_FRONTEND_CONTROL_STATUS_LABELS: Record<
+  CustomFrontendControlStatus,
+  string
+> = {
+  ready: "Ready",
+  review: "Review",
+  manual: "Manual",
+};
+
+const CUSTOM_FRONTEND_CONTROL_STATUS_CLASSES: Record<
+  CustomFrontendControlStatus,
+  string
+> = {
+  ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  review: "border-amber-200 bg-amber-50 text-amber-700",
+  manual: "border-sky-200 bg-sky-50 text-sky-700",
+};
 
 interface SiteNavigationEditorState {
   navigation: SiteNavigationConfig;
@@ -5878,6 +5914,134 @@ function EditSitePage() {
     [customFrontendProjectLaunchPlan],
   );
   const customFrontendDefaultVerifyUrl = `https://${customFrontendPrimaryHost}`;
+  const customFrontendControlReadiness = useMemo(() => {
+    const frontendDesign = frontendDesignState.frontendDesign;
+    const hasDesignContract = frontendDesign.status !== "unconfigured";
+    const templateTypes = new Set(
+      frontendDesign.templates.map((template) => template.type),
+    );
+    const missingTemplateTypes = CUSTOM_FRONTEND_TEMPLATE_TYPES.filter(
+      (type) => !templateTypes.has(type),
+    );
+    const templatesReady =
+      missingTemplateTypes.length === 0 && templateVersionReadiness.ready;
+    const domainStatusLabel = hasCustomDomain
+      ? domainVerificationStatusLabel[domainVerification?.status || "not_started"]
+      : "Managed host";
+    const domainReady =
+      !hasCustomDomain || domainVerification?.status === "verified";
+    const deployedVerificationStatus =
+      customFrontendVerification?.status || "not_run";
+    const deployedVerificationReady =
+      customFrontendVerification?.status === "ready";
+    const sourceLabel =
+      frontendDesign.source.label ||
+      frontendDesign.source.url ||
+      frontendDesign.source.type;
+    const checks: CustomFrontendControlCheck[] = [
+      {
+        id: "public-api-contract",
+        label: "Public API contract",
+        status: "ready",
+        owner: "backy",
+        detail: `Agent handoff, manifest, OpenAPI, resolve, and render are addressed from ${publicApiBase}.`,
+      },
+      {
+        id: "frontend-design-contract",
+        label: "Frontend design source",
+        status: hasDesignContract ? "ready" : "review",
+        owner: "backy",
+        detail: hasDesignContract
+          ? `${sourceLabel} is stored with ${frontendDesign.editableMap.length} editable binding${frontendDesign.editableMap.length === 1 ? "" : "s"}.`
+          : "Capture or sync a frontend design contract before using custom-designed content creation.",
+      },
+      {
+        id: "template-registry",
+        label: "Template registry",
+        status: templatesReady ? "ready" : "review",
+        owner: "backy",
+        detail: templatesReady
+          ? `${frontendDesign.templates.length} templates are version-ready for page, blog, section, form, product, and collection creation.`
+          : missingTemplateTypes.length > 0
+            ? `Missing custom-frontend template types: ${missingTemplateTypes.join(", ")}.`
+            : `${templateVersionReadiness.readyCount}/${templateVersionReadiness.templateCount} templates have version metadata.`,
+      },
+      {
+        id: "starter-export",
+        label: "Starter/export path",
+        status: "ready",
+        owner: "backy",
+        detail:
+          "Download starter project and custom-frontend:scaffold both produce a file-list frontend bundle with safe env and verification runbook.",
+      },
+      {
+        id: "deployed-frontend-verifier",
+        label: "Deployed frontend verifier",
+        status: deployedVerificationReady ? "ready" : "review",
+        owner: "backy",
+        detail: customFrontendVerification
+          ? `${customFrontendVerification.summary.passed} passed, ${customFrontendVerification.summary.warnings} warnings, ${customFrontendVerification.summary.failed} failed for the last checked frontend.`
+          : `Run Verify connection against ${customFrontendDefaultVerifyUrl} after the separate frontend deploys.`,
+      },
+      {
+        id: "domain-cutover",
+        label: "Public domain cutover",
+        status: domainReady ? "ready" : "manual",
+        owner: "operator",
+        detail: domainReady
+          ? hasCustomDomain
+            ? `${savedCustomDomain} is marked ${domainStatusLabel}.`
+            : `${customFrontendPrimaryHost} uses the managed Backy host until a custom domain is saved.`
+          : `${savedCustomDomain} is ${domainStatusLabel}; move DNS only when the custom frontend Vercel project is ready to own the website domain.`,
+      },
+      {
+        id: "vercel-git-previews",
+        label: "Vercel Git branch previews",
+        status: "manual",
+        owner: "operator",
+        detail:
+          "Production can run without this, but branch-scoped Preview env waits for Vercel GitHub App access to the private custom frontend repository.",
+      },
+    ];
+    const readyCount = checks.filter((check) => check.status === "ready").length;
+    const reviewCount = checks.filter((check) => check.status === "review").length;
+    const manualCount = checks.filter((check) => check.status === "manual").length;
+    const backyReadyCount = checks.filter(
+      (check) => check.owner === "backy" && check.status === "ready",
+    ).length;
+    const backyTotal = checks.filter((check) => check.owner === "backy").length;
+
+    return {
+      schemaVersion: "backy.custom-frontend-control-readiness.v1",
+      status:
+        reviewCount > 0
+          ? "needs-review"
+          : manualCount > 0
+            ? "backy-ready-manual-externals"
+            : "ready",
+      expectedProbe: "/api/backy-connection",
+      deployedVerificationStatus,
+      readyCount,
+      reviewCount,
+      manualCount,
+      total: checks.length,
+      backyReadyCount,
+      backyTotal,
+      checks,
+    };
+  }, [
+    customFrontendDefaultVerifyUrl,
+    customFrontendPrimaryHost,
+    customFrontendVerification,
+    domainVerification?.status,
+    frontendDesignState.frontendDesign,
+    hasCustomDomain,
+    publicApiBase,
+    savedCustomDomain,
+    templateVersionReadiness.ready,
+    templateVersionReadiness.readyCount,
+    templateVersionReadiness.templateCount,
+  ]);
 
   useEffect(() => {
     setCustomFrontendVerifyUrlTouched(false);
@@ -5971,6 +6135,7 @@ function EditSitePage() {
       },
       customFrontendAgentHandoff: siteCustomFrontendAgentHandoff,
       customFrontendProjectLaunch: customFrontendProjectLaunchPlan,
+      customFrontendControlReadiness,
       theme: siteThemeDraftToTheme(themeDraft),
       navigation: {
         primaryItems: navigationState.navigation.primary.length,
@@ -6096,6 +6261,7 @@ function EditSitePage() {
       savedDomainAliases,
       siteCustomFrontendAgentHandoff,
       customFrontendProjectLaunchPlan,
+      customFrontendControlReadiness,
       site?.customDomain,
       site?.id,
       site?.name,
@@ -7102,6 +7268,98 @@ function EditSitePage() {
                       <Code className="h-3.5 w-3.5" />
                       Copy scaffold command
                     </button>
+                  </div>
+                </div>
+                <div
+                  className="mt-4 overflow-hidden rounded-lg border border-teal-200 bg-teal-50/50"
+                  data-testid="site-custom-frontend-control-readiness"
+                  data-readiness-schema={customFrontendControlReadiness.schemaVersion}
+                  data-readiness-status={customFrontendControlReadiness.status}
+                  data-ready-count={customFrontendControlReadiness.readyCount}
+                  data-review-count={customFrontendControlReadiness.reviewCount}
+                  data-manual-count={customFrontendControlReadiness.manualCount}
+                  data-backy-ready-count={customFrontendControlReadiness.backyReadyCount}
+                  data-backy-total={customFrontendControlReadiness.backyTotal}
+                  data-expected-probe={customFrontendControlReadiness.expectedProbe}
+                >
+                  <div className="flex flex-col gap-2 border-b border-teal-200 bg-background/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                        Custom frontend control readiness
+                      </div>
+                      <p className="mt-0.5 text-xs leading-5 text-teal-950">
+                        Backy-controlled checks cover API, design, templates,
+                        starter export, and deployed DOM/probe verification;
+                        manual rows are external operator gates. Expected probe:
+                        <code className="mx-1 rounded bg-teal-100 px-1 py-0.5 font-mono text-[11px] text-teal-950">
+                          {customFrontendControlReadiness.expectedProbe}
+                        </code>
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-semibold">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                        {customFrontendControlReadiness.backyReadyCount}/
+                        {customFrontendControlReadiness.backyTotal} Backy ready
+                      </span>
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-700">
+                        {customFrontendControlReadiness.manualCount} manual
+                      </span>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-teal-100">
+                    {customFrontendControlReadiness.checks.map((check) => {
+                      const StatusIcon =
+                        check.status === "ready"
+                          ? CheckCircle
+                          : check.status === "manual"
+                            ? Globe
+                            : AlertTriangle;
+
+                      return (
+                        <div
+                          key={check.id}
+                          className="grid gap-2 px-3 py-2.5 text-xs sm:grid-cols-[minmax(170px,0.38fr)_minmax(0,1fr)]"
+                          data-testid={`site-custom-frontend-control-check-${check.id}`}
+                          data-check-status={check.status}
+                          data-check-owner={check.owner}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <StatusIcon
+                              className={cn(
+                                "h-3.5 w-3.5 shrink-0",
+                                check.status === "ready"
+                                  ? "text-emerald-600"
+                                  : check.status === "manual"
+                                    ? "text-sky-600"
+                                    : "text-amber-600",
+                              )}
+                            />
+                            <span className="truncate font-semibold text-teal-950">
+                              {check.label}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <span
+                              className={cn(
+                                "mr-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                                CUSTOM_FRONTEND_CONTROL_STATUS_CLASSES[
+                                  check.status
+                                ],
+                              )}
+                            >
+                              {
+                                CUSTOM_FRONTEND_CONTROL_STATUS_LABELS[
+                                  check.status
+                                ]
+                              }
+                            </span>
+                            <span className="leading-5 text-teal-900/80">
+                              {check.detail}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">

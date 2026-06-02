@@ -45,6 +45,10 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-agent-canvas-first-rule"') &&
       source.includes('data-testid="site-agent-routing-handoff"') &&
       source.includes('data-testid="site-custom-frontend-project-launch"') &&
+      source.includes('data-testid="site-custom-frontend-control-readiness"') &&
+      source.includes('backy.custom-frontend-control-readiness.v1') &&
+      source.includes('customFrontendControlReadiness') &&
+      source.includes('Vercel GitHub App access') &&
       source.includes('data-testid="site-copy-custom-frontend-project-env"') &&
       source.includes('data-testid="site-copy-custom-frontend-project-launch"') &&
       source.includes('data-testid="site-custom-frontend-download-starter"') &&
@@ -1355,6 +1359,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
     const disabledFrontendDraftControls = frontendDraftControls.filter((control) => control.disabled);
     const routingPanel = document.querySelector('[data-testid="site-agent-routing-handoff"]');
     const launchPanel = document.querySelector('[data-testid="site-custom-frontend-project-launch"]');
+    const controlReadinessPanel = document.querySelector('[data-testid="site-custom-frontend-control-readiness"]');
     const frontendDesign = {
       hasPanel: Boolean(frontendPanel),
       hydrated: frontendPanel?.getAttribute('data-hydrated') === 'true',
@@ -1456,6 +1461,23 @@ const assertSiteDetailLayout = async (client, siteName) => {
           apiBase: launchPanel?.getAttribute('data-launch-api-base') || '',
           siteId: launchPanel?.getAttribute('data-launch-site-id') || '',
           primaryHost: launchPanel?.getAttribute('data-launch-primary-host') || '',
+          controlReadiness: {
+            visible: Boolean(controlReadinessPanel),
+            schema: controlReadinessPanel?.getAttribute('data-readiness-schema') || '',
+            status: controlReadinessPanel?.getAttribute('data-readiness-status') || '',
+            readyCount: Number(controlReadinessPanel?.getAttribute('data-ready-count') || 0),
+            reviewCount: Number(controlReadinessPanel?.getAttribute('data-review-count') || 0),
+            manualCount: Number(controlReadinessPanel?.getAttribute('data-manual-count') || 0),
+            backyReadyCount: Number(controlReadinessPanel?.getAttribute('data-backy-ready-count') || 0),
+            backyTotal: Number(controlReadinessPanel?.getAttribute('data-backy-total') || 0),
+            expectedProbe: controlReadinessPanel?.getAttribute('data-expected-probe') || '',
+            checkIds: Array.from(controlReadinessPanel?.querySelectorAll('[data-testid^="site-custom-frontend-control-check-"]') || []).map((node) => node.getAttribute('data-testid') || ''),
+            ownerStatuses: Array.from(controlReadinessPanel?.querySelectorAll('[data-testid^="site-custom-frontend-control-check-"]') || []).map((node) => ({
+              status: node.getAttribute('data-check-status') || '',
+              owner: node.getAttribute('data-check-owner') || '',
+            })),
+            text: controlReadinessPanel?.textContent || '',
+          },
           copyEnv: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-env"]')),
           copyLaunch: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-launch"]')),
           starterButton: Boolean(document.querySelector('[data-testid="site-custom-frontend-download-starter"]')),
@@ -1560,6 +1582,19 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.apiBase.includes('/api') &&
       layout.customFrontendAgentHandoff.projectLaunch.siteId.length > 0 &&
       layout.customFrontendAgentHandoff.projectLaunch.primaryHost.length > 0 &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.visible &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.schema === 'backy.custom-frontend-control-readiness.v1' &&
+      ['needs-review', 'backy-ready-manual-externals', 'ready'].includes(layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.status) &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.expectedProbe === '/api/backy-connection' &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.backyTotal >= 5 &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-public-api-contract') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-template-registry') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-deployed-frontend-verifier') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.ownerStatuses.some((entry) => entry.status === 'manual' && entry.owner === 'operator') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Custom frontend control readiness') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Backy-controlled checks') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Vercel Git branch previews') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('/api/backy-connection') &&
       layout.customFrontendAgentHandoff.projectLaunch.copyEnv &&
       layout.customFrontendAgentHandoff.projectLaunch.copyLaunch &&
       layout.customFrontendAgentHandoff.projectLaunch.starterButton &&

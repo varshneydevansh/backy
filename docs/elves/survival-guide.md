@@ -245,6 +245,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest source push:** The custom-frontend template-registry source slice has been committed and pushed to `main`. The latest verified runtime evidence for this slice is the real-site live custom frontend connection gate at 69 checks, production readiness at 47 checks, and a public manifest proof of six generated custom-frontend templates with no GitHub repository URL in `frontendDesign`. If Vercel auto-deploys from `main`, the next release pass should check the fresh `backy-public`/`backy-admin` deployment logs.
 
+**Newest Site Detail control polish:** Site Detail now exposes `backy.custom-frontend-control-readiness.v1` inside the Separate custom frontend project panel and site workspace handoff. The panel separates Backy-controlled readiness from operator/manual gates: public API contract, frontend design source, template registry, starter/export path, deployed frontend verifier, public-domain cutover, and Vercel Git branch previews. Focused Site Detail smoke, admin typecheck, live custom frontend connection gate, production readiness, hosted login-shell smoke, diff check, and repo-public hygiene are green for this slice.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

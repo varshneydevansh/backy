@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 09:34 IST
+- **Last updated:** 2026-06-02 10:00 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 10:00 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Site Detail now shows an explicit custom-frontend control-readiness panel
+
+**What changed:**
+- Added `backy.custom-frontend-control-readiness.v1` to Site Detail so owners can see the custom frontend control path without reading the long handoff JSON.
+- The panel separates Backy-controlled checks from operator/manual gates: public API contract, frontend design source, template registry, starter/export path, deployed frontend verifier, public-domain cutover, and Vercel Git branch previews.
+- The same readiness payload is included in the copied/downloaded site workspace handoff under `customFrontendControlReadiness`.
+- Updated the Site Detail smoke so source and rendered browser coverage require the readiness schema, `/api/backy-connection` probe pointer, manual operator rows, and Vercel Git preview gate copy.
+
+**Commands run:**
+- `npx --yes vercel@latest whoami` -> PASS, Vercel CLI auth active.
+- `npx --yes vercel@latest ls backy-public` -> PASS, latest production deployment Ready.
+- `npx --yes vercel@latest ls backy-admin` -> PASS, latest production deployment Ready.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=<canonical-site-id> BACKY_CUSTOM_FRONTEND_SITE_PUBLIC_HOST=<custom-host> BACKY_CUSTOM_FRONTEND_URL=<separate-frontend-url> BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection --silent` -> PASS, 69 checks.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; optional admin-auth proof skipped by unset credentials.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9561 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS; hosted admin shell still exposes no demo credentials or dev MFA phrase.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS before doc updates.
+
+**Next:**
+1. Commit and push this Site Detail control-readiness slice after rerunning repo-public hygiene.
+2. Remaining custom frontend external/manual work: grant Vercel GitHub App access to the private separate frontend repo for branch previews, and attach/move the real public website domain only when DNS cutover is intended.
+3. Continue highest-friction Backy UX/editor polish if more release time remains.
 
 ## 2026-06-02 09:34 IST
 
