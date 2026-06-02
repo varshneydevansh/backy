@@ -113,6 +113,10 @@ includesAll(
     'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
     'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1',
     'forbiddenPrivateEnv',
+    '/sites?identifier=',
+    '/render?path=/',
+    '--skip-site-verify',
+    'publicSiteVerification',
   ],
   'Starter scaffold CLI emits the same safe file-list export and verification boundaries',
 );
@@ -285,6 +289,7 @@ includesAll(
     'Write every files[].path',
     'materializer.command=npm run custom-frontend:materialize',
     'scaffold.command=npm run custom-frontend:scaffold',
+    'scaffold verifies public site discovery, manifest, and render before writing files',
     'BACKY_FRONTEND_STARTER.md',
     'preserveFiles',
     'verification.cliCommand',

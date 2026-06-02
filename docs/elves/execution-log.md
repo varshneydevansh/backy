@@ -13,6 +13,37 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
 
+## 2026-06-02 06:08 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Scaffold now refuses missing or unpublished public sites before writing files
+
+**What changed:**
+- Hardened `npm run custom-frontend:scaffold` so it verifies public site discovery, manifest, and home render through the configured `backy-public` API before creating a starter manifest or materializing a separate website repo.
+- The scaffold command now canonicalizes the resolved public site id/name/slug into the starter export and records `publicSiteVerification` metadata for frontend agents.
+- Added an explicit `--skip-site-verify` escape hatch for offline fixture manifests only; the Help and Site Detail copy call out that real launch scaffolds should be verified first.
+- Production proof now shows `devanshvarshney` fails correctly with `SITE_NOT_FOUND`, which means the real Backy site must be created/published before the separate `devanshvarshney.com` frontend can be generated safely.
+- Production proof against `site-demo` still verifies discovery/manifest/render and materializes the starter file list successfully.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS, 68 checks.
+- Missing-site production scaffold proof with `--site-id devanshvarshney --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api` -> expected failure, `SITE_NOT_FOUND`, no starter created.
+- Production scaffold proof with `--site-id site-demo --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out <tmp>` -> PASS, verified resolved site id `69543f53-b4e6-4e2e-b614-96f96174febb` and wrote 15 starter files.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 20 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 69 checks.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 48 checks; deployed custom frontend DOM proof skipped because the separate website frontend URL does not exist yet.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Run repo-public hygiene.
+2. Commit/push this scaffold-readiness slice.
+3. In Backy admin, create and publish the real `devanshvarshney` site record before running the scaffold command for `devanshvarshney.com`.
+
 ## 2026-06-02 05:48 IST
 
 **Batch:** 5: Ongoing UX Scout And Polish

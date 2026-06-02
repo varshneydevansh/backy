@@ -7025,7 +7025,8 @@ function EditSitePage() {
                       Backy stays the protected admin plus public API/render
                       source, while the frontend project owns the public website
                       UI and fetches this site’s manifest, OpenAPI, resolve, and
-                      render payloads.
+                      render payloads. The local scaffold command checks public
+                      discovery, manifest, and home render before writing files.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">

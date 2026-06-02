@@ -70,13 +70,14 @@ const usage = () => {
   console.error(
     [
       'Usage:',
-      '  npm run custom-frontend:scaffold -- --site-id <site-id-or-slug> --public-host <domain> --api-base <https://backy-public-domain/api> --out <target-dir> [--manifest <starter-export.json>] [--force]',
+      '  npm run custom-frontend:scaffold -- --site-id <site-id-or-slug> --public-host <domain> --api-base <https://backy-public-domain/api> --out <target-dir> [--manifest <starter-export.json>] [--force] [--skip-site-verify]',
       '',
       'Examples:',
       '  npm run custom-frontend:scaffold -- --site-id site-demo --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out ../devanshvarshney-frontend',
       '  npm run custom-frontend:scaffold -- --site-id site-demo --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --manifest ./backy-starter.json',
       '',
       'Creates the same non-secret file-list starter export used by the protected admin download, then optionally materializes it into a separate frontend repo.',
+      'By default the command verifies the public Backy site discovery, manifest, and home render payload before writing files.',
     ].join('\n'),
   );
 };
@@ -111,6 +112,9 @@ const normalizeApiBaseUrl = (value) => {
   return url.toString().replace(/\/$/u, '');
 };
 
+const apiUrl = (apiBaseUrl, pathName) =>
+  `${apiBaseUrl}${pathName.startsWith('/') ? pathName : `/${pathName}`}`;
+
 const safeProjectName = (siteId, publicHost) =>
   `${publicHost || siteId || 'backy'}-frontend`
     .toLowerCase()
@@ -126,6 +130,63 @@ const readStarterFile = (relativePath) => {
     `Refusing to read outside starter root: ${relativePath}`,
   );
   return fs.readFileSync(absolutePath, 'utf8');
+};
+
+const requestJson = async (url, label) => {
+  const response = await fetch(url, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const text = await response.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`${label} did not return JSON from ${url}; body starts ${JSON.stringify(text.slice(0, 160))}`);
+  }
+  if (response.status !== 200 || json?.success === false) {
+    const code = json?.error?.code ? ` ${json.error.code}` : '';
+    const message = json?.error?.message ? `: ${json.error.message}` : '';
+    throw new Error(`${label} returned ${response.status}${code}${message}`);
+  }
+  return json;
+};
+
+const firstSiteRecord = (json) => {
+  if (json?.data?.site && typeof json.data.site === 'object') return json.data.site;
+  if (Array.isArray(json?.data?.sites) && json.data.sites[0]) return json.data.sites[0];
+  if (Array.isArray(json?.data) && json.data[0]) return json.data[0];
+  return null;
+};
+
+const verifyPublicSite = async ({ apiBaseUrl, siteId, publicHost }) => {
+  const discoveryUrl = apiUrl(apiBaseUrl, `/sites?identifier=${encodeURIComponent(siteId)}`);
+  const discovery = await requestJson(discoveryUrl, 'Public site discovery');
+  const site = firstSiteRecord(discovery);
+  if (!site?.id) {
+    throw new Error(`Public site discovery did not return a site record for ${siteId}.`);
+  }
+
+  const canonicalSiteId = String(site.id);
+  const manifestUrl = apiUrl(apiBaseUrl, `/sites/${encodeURIComponent(canonicalSiteId)}/manifest`);
+  const manifest = await requestJson(manifestUrl, 'Public site manifest');
+  const renderUrl = apiUrl(
+    apiBaseUrl,
+    `/sites/${encodeURIComponent(canonicalSiteId)}/render?path=/&domain=${encodeURIComponent(publicHost)}`,
+  );
+  const render = await requestJson(renderUrl, 'Public site home render');
+
+  return {
+    status: 'verified',
+    siteId: canonicalSiteId,
+    siteSlug: typeof site.slug === 'string' ? site.slug : siteId,
+    siteName: typeof site.name === 'string' ? site.name : siteId,
+    discoveryUrl,
+    manifestUrl,
+    renderUrl,
+    manifestSchemaVersion: manifest?.data?.schemaVersion || '',
+    renderRoute: render?.data?.route?.path || render?.data?.path || '/',
+  };
 };
 
 const envExample = ({ apiBaseUrl, siteId, publicHost }) =>
@@ -308,6 +369,7 @@ const apiBaseUrl = option('--api-base') ? normalizeApiBaseUrl(option('--api-base
 const outPath = option('--out');
 const manifestPath = option('--manifest');
 const force = hasFlag('--force');
+const skipSiteVerify = hasFlag('--skip-site-verify');
 
 if (hasFlag('--help') || hasFlag('-h')) {
   usage();
@@ -320,14 +382,34 @@ try {
   assert(apiBaseUrl, '--api-base is required.');
   assert(outPath || manifestPath, 'Provide --out to materialize a project, --manifest to write JSON, or both.');
 
+  let publicSiteVerification = {
+    status: 'skipped',
+    reason: '--skip-site-verify',
+    siteId,
+  };
+  if (!skipSiteVerify) {
+    try {
+      publicSiteVerification = await verifyPublicSite({ apiBaseUrl, siteId, publicHost });
+    } catch (error) {
+      throw new Error(
+        [
+          'Backy public site is not ready for custom frontend scaffolding.',
+          error instanceof Error ? error.message : String(error),
+          'Create/publish the Backy site first, or pass --skip-site-verify only for an offline manifest that will be verified before deployment.',
+        ].join('\n'),
+      );
+    }
+  }
+
   const starterExport = buildStarterExport({
     apiBaseUrl,
-    siteId,
+    siteId: publicSiteVerification.siteId || siteId,
     publicHost,
-    siteName: option('--site-name'),
-    siteSlug: option('--site-slug'),
+    siteName: option('--site-name') || publicSiteVerification.siteName,
+    siteSlug: option('--site-slug') || publicSiteVerification.siteSlug,
     outPath,
   });
+  starterExport.data.publicSiteVerification = publicSiteVerification;
 
   let manifestForMaterializer = '';
   if (manifestPath) {
@@ -366,8 +448,10 @@ try {
       {
         schemaVersion: 'backy.custom-frontend-scaffold.v1',
         siteId,
+        resolvedSiteId: starterExport.data.site.id,
         publicHost,
         apiBaseUrl,
+        publicSiteVerification,
         manifestPath: manifestPath ? manifestForMaterializer : null,
         materialized: Boolean(outPath),
         materializer: materializerSummary,

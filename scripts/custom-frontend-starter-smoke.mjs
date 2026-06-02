@@ -139,6 +139,10 @@ assertIncludes(files.scaffold, 'custom-frontend:materialize', 'Starter scaffold 
 assertIncludes(files.scaffold, 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST', 'Starter scaffold writes browser-safe public host env');
 assertIncludes(files.scaffold, 'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1', 'Starter scaffold writes strict deployed-frontend verification command');
 assertIncludes(files.scaffold, 'forbiddenPrivateEnv', 'Starter scaffold carries forbidden private env boundaries');
+assertIncludes(files.scaffold, '/sites?identifier=', 'Starter scaffold verifies public site discovery before writing');
+assertIncludes(files.scaffold, '/render?path=/', 'Starter scaffold verifies the home render payload before writing');
+assertIncludes(files.scaffold, '--skip-site-verify', 'Starter scaffold keeps an explicit offline escape hatch for fixture manifests');
+assertIncludes(files.scaffold, 'publicSiteVerification', 'Starter scaffold records public site verification metadata');
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
@@ -214,6 +218,7 @@ const scaffoldRun = spawnSync(
     'smoke.example.com',
     '--api-base',
     'https://backy-public.example.com/api',
+    '--skip-site-verify',
     '--manifest',
     scaffoldManifestPath,
     '--out',
