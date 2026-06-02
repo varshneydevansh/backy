@@ -12,6 +12,8 @@ const REQUIRED_DOM_ATTRIBUTES = [
   "data-backy-element-type",
   "data-backy-component-contract-pointer",
   "data-backy-editable-map-pointer",
+  "data-backy-responsive-css",
+  "data-backy-responsive-style-pointer",
 ] as const;
 
 const CONTROL_READ_ORDER = [
@@ -79,6 +81,7 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
     requiredAttributes: [...REQUIRED_DOM_ATTRIBUTES],
     editableMapPointer: "render.data.editableMap",
     componentContractPointer: "agent-handoff.componentApiContract",
+    responsiveStylePointer: "render.generatedResponsiveCss",
   },
   controlPlane: {
     schemaVersion: "backy.custom-frontend-control-plane.v1",
@@ -97,6 +100,7 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
       propertyMap: "agent-handoff.componentApiContract.propertyMap",
       renderElements: "render.data.content.elements[]",
       editableMap: "render.data.editableMap",
+      responsiveStyles: "render.generatedResponsiveCss",
       frontendDesign: "manifest.data.site.frontendDesign",
       deploymentTopology: "agent-handoff.deploymentTopology",
     },
@@ -106,6 +110,8 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
         "data-backy-prop-keys",
         "data-backy-style-keys",
         "data-backy-responsive-breakpoints",
+        "data-backy-responsive-css",
+        "data-backy-responsive-style-pointer",
         "data-backy-token-ref-keys",
         "data-backy-asset-ids",
         "data-backy-action-count",

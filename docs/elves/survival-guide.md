@@ -259,6 +259,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter source/type smoke with `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1`, source custom-frontend connection smoke, public typecheck, diff check, and repo-public hygiene are green for the responsive starter slice.
 
+**Newest custom frontend verifier polish:** Responsive control is now part of the required custom frontend connection contract. The starter probe, protected admin verifier, protected starter export, scaffold manifest, Help copy, and `npm run test:custom-frontend-connection` all require `data-backy-responsive-css`, `data-backy-responsive-style-pointer`, and the `render.generatedResponsiveCss` pointer.
+
+**Newest separate frontend deploy:** The separate private `devanshvarshney-frontend` repo is pushed at `c0c4998` and redeployed to Vercel production. Its `/api/backy-connection` probe reports the responsive required attributes, `responsiveStylePointer=render.generatedResponsiveCss`, no forbidden private env, and `includesSecretValues=false`; the strict deployed custom frontend connection gate passes 69 checks.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

@@ -413,7 +413,7 @@ const FRONTEND_AGENT_STARTERS = [
     id: 'connection-smoke',
     label: 'Connection smoke',
     value: 'BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=:siteId npm run test:custom-frontend-connection  |  BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain> BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection',
-    detail: 'Run this in the Backy repo or use Site Detail -> Separate custom frontend project -> Verify deployed frontend to prove the deployed custom website keeps Backy DOM control attributes and exposes a secret-free /api/backy-connection probe.',
+    detail: 'Run this in the Backy repo or use Site Detail -> Separate custom frontend project -> Verify deployed frontend to prove the deployed custom website keeps Backy DOM control attributes, responsive CSS pointers, and a secret-free /api/backy-connection probe.',
   },
 ];
 
@@ -499,6 +499,7 @@ const CUSTOM_FRONTEND_ENV_CARDS = [
       'Checks /api/backy-connection',
       'Checks data-backy-site-id, data-backy-route, data-backy-element-id, data-backy-element-type',
       'Checks data-backy-component-contract-pointer and data-backy-editable-map-pointer',
+      'Checks data-backy-responsive-css and data-backy-responsive-style-pointer',
       'Checks expected Backy API base, site id, public host, and forbidden private env names',
     ].join('\n'),
   },

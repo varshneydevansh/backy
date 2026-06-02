@@ -3335,3 +3335,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push this focused custom-frontend starter slice.
 - The remaining external/manual launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public-domain DNS cutover only when ready.
+
+## Checkpoint: 2026-06-02 12:48 IST - Responsive Custom Frontend Connection Gate
+
+**Scope:** Batch 5 custom-frontend control polish, focused on making responsive rendering part of the required deployed frontend contract instead of a starter-only implementation detail.
+
+**Changed:**
+- Added `data-backy-responsive-css` and `data-backy-responsive-style-pointer` to the required custom frontend DOM contract used by the starter probe, protected admin verifier, protected starter export, no-browser scaffold manifest, Help copy, and `npm run test:custom-frontend-connection`.
+- Added `render.generatedResponsiveCss` to the public `/api/backy-connection` control-plane pointers so frontend agents know where responsive CSS generation is traced.
+- Regenerated the protected starter project file list after updating the checked starter probe.
+- Synced the separate `devanshvarshney-frontend` repo with the latest responsive renderer and probe, committed it as `c0c4998`, and deployed it to Vercel production.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent`
+- PASS: `npm run test:help --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:help-rendered --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: separate frontend `npm run typecheck --silent`
+- PASS: separate frontend production build with safe Backy public/server-loader env
+- PASS: strict local custom frontend gate against `http://127.0.0.1:3037` with `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`
+- PASS: strict deployed custom frontend gate against `https://devanshvarshney-frontend.vercel.app` with `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` -> 69 checks
+- PASS: deployed `/api/backy-connection` probe reports responsive required attributes, `responsiveStylePointer=render.generatedResponsiveCss`, no forbidden private env, and `includesSecretValues=false`
+
+**Next:**
+- Commit and push the Backy verifier/source slice.
+- After Backy Vercel redeploys, rerun production readiness, hosted admin login shell, and the strict deployed custom frontend gate so the production Backy verifier source and separate frontend deployment are proven together.

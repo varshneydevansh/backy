@@ -64,6 +64,8 @@ const REQUIRED_DOM_ATTRIBUTES = [
   'data-backy-element-type',
   'data-backy-component-contract-pointer',
   'data-backy-editable-map-pointer',
+  'data-backy-responsive-css',
+  'data-backy-responsive-style-pointer',
 ];
 
 const usage = () => {
