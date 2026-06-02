@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 06:59 IST
+- **Last updated:** 2026-06-02 07:08 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -43,9 +43,18 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `git diff --check` -> PASS.
 
 **Next:**
-1. Run repo-public hygiene.
-2. Commit/push this ensure-site and production custom-frontend readiness slice.
-3. Use the scaffold command to create the separate `devanshvarshney.com` frontend repo/project, deploy it on Vercel, then run the deployed frontend DOM/probe verification gate.
+1. Use the scaffold command to create the separate `devanshvarshney.com` frontend repo/project.
+2. Deploy that separate website frontend on Vercel and attach the public website domain there, not to `backy-admin` or `backy-public`.
+3. Run the deployed frontend DOM/probe verification gate with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.
+
+**Post-push deploy verification:**
+- Commit `7e651962` pushed to `main`.
+- Latest `backy-public` production deployment is Ready.
+- Latest `backy-admin` production deployment is Ready.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=<canonical-site-id> BACKY_CUSTOM_FRONTEND_SITE_PUBLIC_HOST=devanshvarshney.com BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 50 checks; deployed custom frontend DOM proof skipped because the separate website frontend is not deployed yet.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; optional live admin-auth proof skipped by unset credentials.
+- `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app BACKY_LOGIN_CDP_PORT=9491 npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> PASS; no demo credentials or dev MFA in hosted admin shell.
+- Recent Vercel logs for the latest `backy-public` and `backy-admin` production deployments are empty.
 
 ## 2026-06-02 06:08 IST
 
