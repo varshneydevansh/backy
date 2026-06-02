@@ -275,6 +275,12 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor priority:** Audio files are supported in the media/upload boundary, but automatic transcription is not wired as a provider-backed feature yet. The next high-friction editor slice should focus on direct canvas asset insertion/drop behavior, long-page auto-height/flow editing, and Canva-like media insertion ergonomics while preserving custom frontend template chrome for new pages/blog posts.
 
+**Newest canvas media polish:** Audio is now a first-class canvas/API/custom-frontend component with catalog entry, component-library icon, Inspector URL/media/upload/caption/transcript/toggle controls, admin canvas render, public renderer output, custom frontend starter output, and `componentTypeContract('audio')` handoff metadata. Direct canvas file drops upload through the existing media API, preserve `assetIds`, media ids, scope/folder/signed-url metadata, and `backy.canvas-asset-drop.v1` provenance; URL-like drops from other tabs create image/video/audio/link elements at the pointer without stealing ordinary component drags.
+
+**Newest long-page canvas polish:** Canvas width and height now have separate clamps: width remains bounded to 3840px for desktop/tablet/mobile viewport semantics, while page height can grow to 24000px so pages/blog posts can continue vertically with content instead of being forced into a fixed hero-sized frame.
+
+**Newest verification:** `test:editor-canvas-media-drop`, editor smoke coverage, admin/public/SDK typechecks, SDK generated-types smoke, custom frontend starter smoke, source custom-frontend connection smoke, diff check, and repo-public hygiene are green for the audio/direct-drop/long-page-height slice. Automatic transcription remains future provider-backed work, not a completed local feature.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

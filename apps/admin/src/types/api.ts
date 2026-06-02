@@ -25,6 +25,7 @@ export type ElementType =
     | 'paragraph'
     | 'image'
     | 'video'
+    | 'audio'
     | 'button'
     | 'link'
     | 'input'
@@ -89,10 +90,16 @@ export interface ElementProps {
     opacity?: number;          // 0-1 opacity
 
     // ===== MEDIA =====
-    src?: string;          // Image/Video/Embed URL
+    src?: string;          // Image/Video/Audio/Embed URL
+    mediaId?: string;      // Backy media asset id for image/video/audio/file references
+    caption?: string;      // Media caption or audio episode title
+    transcript?: string;   // Audio transcript or accessible media notes
     alt?: string;          // Image alt text
     objectFit?: 'cover' | 'contain' | 'fill' | 'none';
-    autoplay?: boolean;    // Video autoplay
+    autoplay?: boolean;    // Video/audio autoplay
+    controls?: boolean;    // Video/audio controls
+    loop?: boolean;        // Video/audio loop
+    muted?: boolean;       // Video/audio muted playback
 
     // ===== LINKS/ACTIONS =====
     href?: string;         // Link/Button URL

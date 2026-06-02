@@ -40,6 +40,7 @@ import {
   Pencil,
   Trash2,
   Plus,
+  Volume2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -67,6 +68,7 @@ const ESSENTIAL_ITEM_KEYS = new Set([
   'text',
   'button',
   'image',
+  'audio',
   'box',
   'section',
   'columns',
@@ -1460,6 +1462,8 @@ function LibraryItem({
         return MousePointerClick;
       case 'Video':
         return Video;
+      case 'Volume2':
+        return Volume2;
       case 'Code':
         return Code;
       case 'Minus':

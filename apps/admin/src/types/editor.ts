@@ -86,6 +86,7 @@ export type ElementType =
   | 'nav'
   | 'divider'
   | 'video'
+  | 'audio'
   | 'icon'
   | 'form'
   | 'input'

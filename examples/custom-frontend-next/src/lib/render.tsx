@@ -206,7 +206,7 @@ export function extractBackyElements(payload: BackyRenderPayload): BackyElement[
 
 function mediaUrl(element: BackyElement, assets: BackyMediaAsset[]): string {
   const props = asRecord(element.props);
-  const id = asText(props.mediaId, props.imageId, props.assetId);
+  const id = asText(props.mediaId, props.imageId, props.videoId, props.audioId, props.fileMediaId, props.assetId);
   const direct = asText(props.src, props.url, props.deliveryUrl);
   const asset = id ? assets.find((candidate) => candidate.id === id) : undefined;
   return direct || asset?.deliveryUrl || asset?.url || asset?.src || "";
@@ -291,6 +291,30 @@ export function BackyElementView({
     return (
       <BackyElementFrame element={element} payload={payload}>
         {src ? <img src={src} alt={asText(props.alt, props.title)} /> : null}
+      </BackyElementFrame>
+    );
+  }
+
+  if (element.type === "video") {
+    const src = mediaUrl(element, payload.assets.media);
+    return (
+      <BackyElementFrame element={element} payload={payload}>
+        {src ? <video src={src} controls={props.controls !== false} /> : null}
+      </BackyElementFrame>
+    );
+  }
+
+  if (element.type === "audio") {
+    const src = mediaUrl(element, payload.assets.media);
+    return (
+      <BackyElementFrame element={element} payload={payload}>
+        {src ? (
+          <figure data-backy-audio-player="">
+            {asText(props.caption, props.title, props.mediaName) ? <figcaption>{asText(props.caption, props.title, props.mediaName)}</figcaption> : null}
+            <audio src={src} controls={props.controls !== false} />
+            {asText(props.transcript) ? <figcaption data-backy-audio-transcript-text="">{asText(props.transcript)}</figcaption> : null}
+          </figure>
+        ) : null}
       </BackyElementFrame>
     );
   }

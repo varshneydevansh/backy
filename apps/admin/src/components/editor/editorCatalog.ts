@@ -336,6 +336,25 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     description: 'Video player with controls',
   },
   {
+    type: 'audio',
+    name: 'Audio',
+    icon: 'Volume2',
+    category: 'media',
+    defaultProps: {
+      controls: true,
+      autoplay: false,
+      loop: false,
+      transcript: '',
+      caption: 'Audio clip',
+    },
+    defaultSize: { width: 420, height: 96 },
+    defaultResponsive: {
+      tablet: { width: 380, height: 104 },
+      mobile: { width: 335, height: 116 },
+    },
+    description: 'Audio player for podcasts, interviews, voice notes, and transcripts',
+  },
+  {
     id: 'interactive-figure-rounds',
     type: 'interactiveFigure',
     name: 'Self-correction figure',

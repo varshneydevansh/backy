@@ -3481,3 +3481,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push this creator/dynamic-content contract slice.
 - Continue highest-friction editor work next: direct canvas asset insertion/drop behavior, long-page auto-height/flow editing, and Canva-like media insertion ergonomics.
+
+## Checkpoint: 2026-06-02 17:24 IST - Canvas Audio And Direct Media Drops
+
+**Scope:** Batch 5 editor/media polish, focused on making audio/transcripts and Canva-like direct asset insertion part of the same Backy canvas/custom-frontend contract instead of a media-library-only path.
+
+**Changed:**
+- Added `audio` as a first-class canvas/API element type across admin editor types, API types, component catalog, component library icons, media picker target fields, Inspector controls, public page renderer, custom frontend starter renderer, and custom frontend component handoff.
+- Added selected-layer Inspector controls for audio URL, media-library selection, upload, caption, transcript, controls, autoplay, loop, and muted state.
+- Added direct canvas drop support for local files and URL-like media dragged from other tabs. Dropped files upload through the existing media API, keep `assetIds`, media ids, scope/folder metadata, signed-url metadata, and `backy.canvas-asset-drop.v1` provenance; dropped media URLs create image/video/audio/link elements at the pointer.
+- Added an in-canvas drop target overlay that distinguishes upload-and-place, place-url, and normal component placement without stealing ordinary component drags.
+- Split canvas width and height clamps: width stays capped at 3840px for device/breakpoint control, while authored page height can grow to 24000px so long pages and posts are not artificially stuck at hero-section height.
+- Added `test:editor-canvas-media-drop` source smoke and wired it into `test:editor-workflows` so audio, transcript, media-drop, public render, starter render, handoff, and long-page-height contracts stay guarded.
+
+**Validation:**
+- PASS: `npm run test:editor-canvas-media-drop --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `npm run typecheck --workspace @backy/sdk-js --silent`
+- PASS: `npm run test:generated-types --workspace @backy/sdk-js --silent`
+- PASS: `npm run test:custom-frontend-starter --silent`
+- PASS: `npm run test:custom-frontend-connection --silent` (source mode; live API/frontend env not set)
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This stores and renders transcript text but does not generate automatic transcripts. Auto-transcription remains a future provider/job integration and should not be faked without a configured provider and secret boundary.
+- Direct file drops use the existing upload/media API path, so storage/provider behavior remains consistent with the media library.
+
+**Next:**
+- Commit and push this editor media slice.
+- Continue the remaining editor polish around custom-frontend template creation ergonomics, flow-aware section insertion/resizing, and rendered browser verification for the new drop/long-page behaviors when a live dev session is available.

@@ -36,6 +36,7 @@ export type KnownElementType =
   | 'paragraph'
   | 'image'
   | 'video'
+  | 'audio'
   | 'button'
   | 'link'
   | 'container'
@@ -823,6 +824,7 @@ const normalizeRendererType = (value: string): KnownElementType => {
     'paragraph',
     'image',
     'video',
+    'audio',
     'button',
     'link',
     'container',
@@ -2282,6 +2284,50 @@ function VideoElement({ element }: ElementRendererProps) {
       }}
       playsInline={getBooleanWithFallback(props.playsInline, true)}
     />
+  );
+}
+
+/**
+ * Render an audio element
+ */
+function AudioElement({ element }: ElementRendererProps) {
+  const { props, styles } = element;
+  const autoPlay = getBooleanWithFallback(props.autoplay ?? props.autoPlay, false);
+  const src = resolveElementMediaSource(props as Record<string, unknown>, 'src');
+  const caption = getNameClass(props.caption) || getNameClass(props.title) || getNameClass(props.mediaName);
+  const transcript = getNameClass(props.transcript);
+
+  return (
+    <figure
+      style={{
+        display: 'grid',
+        gap: 8,
+        alignItems: 'center',
+        margin: 0,
+        padding: getLength(props.padding, '12px'),
+        borderRadius: getLength(props.borderRadius, '12px'),
+        border: getNameClass(props.border) || `1px ${getNameClass(props.borderStyle) || 'solid'} ${getNameClass(props.borderColor) || '#dbe3ef'}`,
+        background: getNameClass(props.backgroundColor) || '#ffffff',
+        ...getAppearanceStyle(props as Record<string, unknown>),
+        ...styles,
+      }}
+      data-backy-audio-player=""
+      data-backy-audio-media-id={getNameClass(props.mediaId) || undefined}
+      data-backy-audio-transcript={transcript ? 'available' : 'missing'}
+    >
+      {caption ? <figcaption>{caption}</figcaption> : null}
+      <audio
+        src={src}
+        title={getNameClass(props.title) || caption || undefined}
+        autoPlay={autoPlay}
+        loop={getBooleanWithFallback(props.loop, false)}
+        muted={getBooleanWithFallback(props.muted, false)}
+        controls={getBooleanWithFallback(props.controls, true)}
+        preload={getNameClass(props.preload) || 'metadata'}
+        style={{ width: '100%' }}
+      />
+      {transcript ? <figcaption data-backy-audio-transcript-text="">{transcript}</figcaption> : null}
+    </figure>
   );
 }
 
@@ -5259,6 +5305,7 @@ const ELEMENT_RENDERERS: Record<
   paragraph: TextElement,
   image: ImageElement,
   video: VideoElement,
+  audio: AudioElement,
   button: ButtonElement,
   link: LinkElement,
   container: ContainerElement,

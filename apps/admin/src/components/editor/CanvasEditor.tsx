@@ -100,8 +100,8 @@ import type {
   EditorBreakpoint,
   ResponsiveElementOverride,
 } from '@/types/editor';
-import { useStore } from '@/stores/mockStore';
-import { listMedia } from '@/lib/mediaApi';
+import { useStore, type MediaAsset } from '@/stores/mockStore';
+import { getPublicMediaFileUrl, listMedia, uploadMedia } from '@/lib/mediaApi';
 import {
   createReusableSection,
   deleteReusableSection,
@@ -125,6 +125,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'nav',
   'divider',
   'video',
+  'audio',
   'icon',
   'form',
   'input',
@@ -192,7 +193,7 @@ type CanvasWheelZoomEvent = WheelEvent & {
   wheelDeltaY?: number;
 };
 
-const CANVAS_CONTEXT_QUICK_ADD_KEYS = ['heading', 'text', 'image', 'button', 'section', 'form'] as const;
+const CANVAS_CONTEXT_QUICK_ADD_KEYS = ['heading', 'text', 'image', 'audio', 'button', 'section', 'form'] as const;
 
 const getComponentLibraryItemKey = (item: ComponentLibraryItem): string => item.id ?? item.type;
 
@@ -438,8 +439,10 @@ const EDITOR_COMPACT_SHELL_MEDIA_QUERY = '(max-width: 1023px)';
 const MIN_GRID_SIZE = 1;
 const MAX_GRID_SIZE = 100;
 const MIN_CANVAS_DIMENSION = 320;
-const MAX_CANVAS_DIMENSION = 3840;
+const MAX_CANVAS_WIDTH = 3840;
+const MAX_CANVAS_HEIGHT = 24000;
 const CANVAS_CONTENT_PADDING = 48;
+const CANVAS_MEDIA_DROP_GAP = 18;
 const EDITOR_SHORTCUT_BLOCK_SELECTOR = [
   '[contenteditable="true"]',
   '[role="textbox"]',
@@ -1711,9 +1714,238 @@ const formatCanvasBreakpointLabel = (value: EditorBreakpoint) => (
   `${value.charAt(0).toUpperCase()}${value.slice(1)} canvas`
 );
 
-const clampCanvasDimension = (value: number) => (
-  Math.min(MAX_CANVAS_DIMENSION, Math.max(MIN_CANVAS_DIMENSION, Math.round(value)))
+const clampCanvasDimension = (value: number, axis: 'width' | 'height') => (
+  Math.min(axis === 'height' ? MAX_CANVAS_HEIGHT : MAX_CANVAS_WIDTH, Math.max(MIN_CANVAS_DIMENSION, Math.round(value)))
 );
+
+const mediaElementTypeForAsset = (mediaType: MediaAsset['type']): CanvasElement['type'] => {
+  if (mediaType === 'image') return 'image';
+  if (mediaType === 'video') return 'video';
+  if (mediaType === 'audio') return 'audio';
+  return 'link';
+};
+
+const mediaElementSizeForType = (elementType: CanvasElement['type']): Pick<CanvasElement, 'width' | 'height'> => {
+  if (elementType === 'image') return { width: 420, height: 280 };
+  if (elementType === 'video') return { width: 520, height: 292 };
+  if (elementType === 'audio') return { width: 420, height: 104 };
+  return { width: 300, height: 48 };
+};
+
+const mediaUrlElementType = (kind: 'image' | 'video' | 'audio' | 'url'): CanvasElement['type'] => {
+  if (kind === 'image' || kind === 'video' || kind === 'audio') return kind;
+  return 'link';
+};
+
+const readableUrlLabel = (value: string): string => {
+  try {
+    const parsed = new URL(value);
+    const filename = parsed.pathname.split('/').filter(Boolean).pop();
+    return filename ? decodeURIComponent(filename) : parsed.hostname;
+  } catch {
+    return value;
+  }
+};
+
+const mediaIdentityPropsForCanvasDrop = (
+  media: MediaAsset,
+  mediaContext: MediaContext | undefined,
+  source: 'canvas-file-drop' | 'canvas-url-drop',
+) => ({
+  mediaId: media.id,
+  mediaIds: [media.id],
+  mediaType: media.type,
+  mediaName: media.name,
+  mediaUrl: media.url,
+  mediaVisibility: media.visibility || 'public',
+  mediaScope: media.scope || mediaContext?.scope || 'global',
+  mediaScopeTargetId: media.scopeTargetId || mediaContext?.targetId || null,
+  mediaInsertedVia: source,
+  mediaFolderId: media.folderId || null,
+  mediaFolderPath: media.organization?.folderPath || null,
+});
+
+const buildCanvasElementForMediaAsset = (
+  media: MediaAsset,
+  point: { x: number; y: number },
+  zIndex: number,
+  mediaContext: MediaContext | undefined,
+): CanvasElement => {
+  const type = mediaElementTypeForAsset(media.type);
+  const size = mediaElementSizeForType(type);
+  const deliveryUrl = media.url || (mediaContext?.siteId ? getPublicMediaFileUrl(media.id, mediaContext.siteId) : '');
+  const identity = mediaIdentityPropsForCanvasDrop(media, mediaContext, 'canvas-file-drop');
+  const signedDelivery = media.visibility === 'private';
+
+  if (type === 'link') {
+    const downloadHref = mediaContext?.siteId
+      ? `${getPublicMediaFileUrl(media.id, mediaContext.siteId)}?disposition=attachment`
+      : deliveryUrl;
+    return {
+      id: generateId(),
+      type: 'link',
+      name: `Download ${media.name}`,
+      x: point.x,
+      y: point.y,
+      width: size.width,
+      height: size.height,
+      zIndex,
+      props: {
+        content: media.name,
+        href: downloadHref,
+        download: true,
+        target: '_self',
+        ...identity,
+        fileId: media.id,
+        fileIds: [media.id],
+        fileMediaId: media.id,
+        fileMediaIds: [media.id],
+        downloadMediaId: media.id,
+        downloadMediaIds: [media.id],
+        fileMediaType: media.type,
+        fileMediaName: media.name,
+        fileMediaUrl: downloadHref,
+        fileMediaVisibility: media.visibility || 'public',
+        fileSignedUrlRequired: signedDelivery,
+        fileSignedUrlEndpoint: signedDelivery && mediaContext?.siteId
+          ? `/api/sites/${mediaContext.siteId}/media/${media.id}/signed-url`
+          : '',
+      },
+      assetIds: [media.id],
+      styles: {
+        color: '#0f766e',
+        fontSize: 16,
+        fontWeight: 700,
+        textDecoration: 'underline',
+      },
+    };
+  }
+
+  const commonProps = {
+    src: deliveryUrl,
+    ...identity,
+    caption: media.caption || (type === 'audio' ? media.name : ''),
+    title: media.caption || media.name,
+    fileSignedUrlRequired: signedDelivery,
+    fileSignedUrlEndpoint: signedDelivery && mediaContext?.siteId
+      ? `/api/sites/${mediaContext.siteId}/media/${media.id}/signed-url`
+      : '',
+  };
+
+  return {
+    id: generateId(),
+    type,
+    name: media.name,
+    x: point.x,
+    y: point.y,
+    width: size.width,
+    height: size.height,
+    zIndex,
+    props: type === 'image'
+      ? {
+          ...commonProps,
+          alt: media.altText || media.caption || media.name,
+          objectFit: 'cover',
+        }
+      : type === 'video'
+        ? {
+            ...commonProps,
+            controls: true,
+            autoplay: false,
+            loop: false,
+            muted: false,
+            playsInline: true,
+            objectFit: 'cover',
+          }
+        : {
+            ...commonProps,
+            controls: true,
+            autoplay: false,
+            loop: false,
+            transcript: '',
+          },
+    assetIds: [media.id],
+  };
+};
+
+const buildCanvasElementForExternalMediaUrl = (
+  url: string,
+  kind: 'image' | 'video' | 'audio' | 'url',
+  point: { x: number; y: number },
+  zIndex: number,
+): CanvasElement => {
+  const type = mediaUrlElementType(kind);
+  const size = mediaElementSizeForType(type);
+  const label = readableUrlLabel(url);
+
+  if (type === 'link') {
+    return {
+      id: generateId(),
+      type: 'link',
+      name: `External link ${label}`,
+      x: point.x,
+      y: point.y,
+      width: size.width,
+      height: size.height,
+      zIndex,
+      props: {
+        content: label,
+        href: url,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        mediaInsertedVia: 'canvas-url-drop',
+        mediaExternalUrl: url,
+      },
+      styles: {
+        color: '#2563eb',
+        fontSize: 16,
+        fontWeight: 700,
+        textDecoration: 'underline',
+      },
+    };
+  }
+
+  return {
+    id: generateId(),
+    type,
+    name: `External ${type} ${label}`,
+    x: point.x,
+    y: point.y,
+    width: size.width,
+    height: size.height,
+    zIndex,
+    props: type === 'image'
+      ? {
+          src: url,
+          alt: label,
+          objectFit: 'cover',
+          mediaInsertedVia: 'canvas-url-drop',
+          mediaExternalUrl: url,
+        }
+      : type === 'video'
+        ? {
+            src: url,
+            controls: true,
+            autoplay: false,
+            loop: false,
+            muted: false,
+            playsInline: true,
+            objectFit: 'cover',
+            mediaInsertedVia: 'canvas-url-drop',
+            mediaExternalUrl: url,
+          }
+        : {
+            src: url,
+            controls: true,
+            autoplay: false,
+            loop: false,
+            caption: label,
+            transcript: '',
+            mediaInsertedVia: 'canvas-url-drop',
+            mediaExternalUrl: url,
+          },
+  };
+};
 
 const clampElementWithinParent = (
   element: CanvasElement,
@@ -2944,8 +3176,8 @@ export function CanvasEditor({
     }
     const normalizedSize = {
       ...nextSize,
-      width: clampCanvasDimension(nextSize.width),
-      height: clampCanvasDimension(nextSize.height),
+      width: clampCanvasDimension(nextSize.width, 'width'),
+      height: clampCanvasDimension(nextSize.height, 'height'),
     };
     setBreakpoint(nextBreakpoint);
     setSize(normalizedSize);
@@ -3803,6 +4035,140 @@ export function CanvasEditor({
       markChanges();
     }
   }, [addToHistory, isCanvasMutationDisabled, markChanges, selectedId, selectedIds]);
+
+  const insertRootCanvasElements = useCallback((newElements: CanvasElement[]) => {
+    if (newElements.length === 0 || isCanvasMutationDisabled) {
+      return;
+    }
+
+    const currentElements = elementsRef.current;
+    const nextElements = [...currentElements, ...newElements];
+    const expandedSize = expandCanvasSizeToContent(size, collectCanvasContentBounds(nextElements));
+    const nextSize: CanvasSize = {
+      ...size,
+      width: clampCanvasDimension(expandedSize.width, 'width'),
+      height: clampCanvasDimension(expandedSize.height, 'height'),
+    };
+    const shouldGrowCanvas = nextSize.width !== size.width || nextSize.height !== size.height;
+    const nextSelectedIds = newElements.map((element) => element.id);
+
+    if (shouldGrowCanvas) {
+      setSize(nextSize);
+    }
+
+    updateElementsWithHistory(nextElements, newElements[0]?.id || null, nextSelectedIds);
+    setSelectedId(newElements[0]?.id || null);
+    setSelectedIds(nextSelectedIds);
+    setRightPanel('properties');
+  }, [isCanvasMutationDisabled, size, updateElementsWithHistory]);
+
+  const handleCanvasMediaFilesDrop = useCallback(async (
+    files: File[],
+    point: { x: number; y: number },
+  ) => {
+    if (isCanvasMutationDisabled) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
+
+    if (!canCreateMedia) {
+      setEditorNotice(mediaCreateDisabledReason || 'You do not have permission to upload media.');
+      return;
+    }
+
+    if (!activeSiteId) {
+      setEditorNotice('Select a site before uploading media into the canvas.');
+      return;
+    }
+
+    const acceptedFiles = files.filter((file) => file.size >= 0);
+    if (acceptedFiles.length === 0) {
+      return;
+    }
+
+    setEditorNotice(`Uploading ${acceptedFiles.length} media file${acceptedFiles.length === 1 ? '' : 's'} into the canvas...`);
+
+    try {
+      const uploadedAssets: MediaAsset[] = [];
+
+      for (const file of acceptedFiles) {
+        const uploaded = await uploadMedia(file, {
+          siteId: activeSiteId,
+          scope: mediaContext?.scope || 'global',
+          scopeTargetId: mediaContext?.targetId || null,
+          visibility: 'public',
+          metadata: {
+            schemaVersion: 'backy.canvas-asset-drop.v1',
+            source: 'canvas-file-drop',
+            editorMode: mode,
+            canvasPoint: point,
+            originalFileName: file.name,
+          },
+        });
+        uploadedAssets.push(uploaded);
+      }
+
+      if (uploadedAssets.length === 0) {
+        return;
+      }
+
+      const existingById = new Map(media.map((item) => [item.id, item]));
+      uploadedAssets.forEach((item) => existingById.set(item.id, item));
+      setMedia(Array.from(existingById.values()));
+
+      let cursorY = point.y;
+      const startingZIndex = Math.max(walkTreeMaxZ(elementsRef.current), 0) + 1;
+      const newElements = uploadedAssets.map((asset, index) => {
+        const element = buildCanvasElementForMediaAsset(
+          asset,
+          { x: point.x, y: cursorY },
+          startingZIndex + index,
+          mediaContext,
+        );
+        cursorY += element.height + CANVAS_MEDIA_DROP_GAP;
+        return element;
+      });
+
+      insertRootCanvasElements(newElements);
+      setEditorNotice(`Placed ${uploadedAssets.length} uploaded media file${uploadedAssets.length === 1 ? '' : 's'} on the canvas.`);
+    } catch (error) {
+      setEditorNotice(error instanceof Error ? error.message : 'Unable to upload dropped media files.');
+    }
+  }, [
+    activeSiteId,
+    canCreateMedia,
+    editDisabledReason,
+    insertRootCanvasElements,
+    isCanvasMutationDisabled,
+    media,
+    mediaContext,
+    mediaCreateDisabledReason,
+    mode,
+    setMedia,
+  ]);
+
+  const handleCanvasExternalMediaUrlDrop = useCallback((
+    url: string,
+    point: { x: number; y: number },
+    metadata: { kind: 'image' | 'video' | 'audio' | 'url' },
+  ) => {
+    if (isCanvasMutationDisabled) {
+      setEditorNotice(editDisabledReason);
+      return;
+    }
+
+    const element = buildCanvasElementForExternalMediaUrl(
+      url,
+      metadata.kind,
+      point,
+      Math.max(walkTreeMaxZ(elementsRef.current), 0) + 1,
+    );
+
+    insertRootCanvasElements([element]);
+    setEditorNotice(metadata.kind === 'url'
+      ? 'Placed external link on the canvas.'
+      : `Placed external ${metadata.kind} media on the canvas.`);
+  }, [editDisabledReason, insertRootCanvasElements, isCanvasMutationDisabled]);
 
   /**
    * Copy
@@ -8486,7 +8852,7 @@ export function CanvasEditor({
               <input
                 type="number"
                 min={MIN_CANVAS_DIMENSION}
-                max={MAX_CANVAS_DIMENSION}
+                max={MAX_CANVAS_WIDTH}
                 step={10}
                 value={size.width}
                 onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
@@ -8504,7 +8870,7 @@ export function CanvasEditor({
               <input
                 type="number"
                 min={MIN_CANVAS_DIMENSION}
-                max={MAX_CANVAS_DIMENSION}
+                max={MAX_CANVAS_HEIGHT}
                 step={10}
                 value={size.height}
                 onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
@@ -8574,7 +8940,7 @@ export function CanvasEditor({
                     <input
                       type="number"
                       min={MIN_CANVAS_DIMENSION}
-                      max={MAX_CANVAS_DIMENSION}
+                      max={MAX_CANVAS_WIDTH}
                       step={10}
                       value={size.width}
                       onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
@@ -8595,7 +8961,7 @@ export function CanvasEditor({
                     <input
                       type="number"
                       min={MIN_CANVAS_DIMENSION}
-                      max={MAX_CANVAS_DIMENSION}
+                      max={MAX_CANVAS_HEIGHT}
                       step={10}
                       value={size.height}
                       onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
@@ -9824,6 +10190,8 @@ export function CanvasEditor({
                       snapEnabled={snapEnabled}
                       gridSize={gridSize}
                       showGrid={showGrid}
+                      onMediaFilesDrop={handleCanvasMediaFilesDrop}
+                      onExternalMediaUrlDrop={handleCanvasExternalMediaUrlDrop}
                     />
                   </div>
                 ) : (
@@ -9920,6 +10288,8 @@ export function CanvasEditor({
                           snapEnabled={snapEnabled}
                           gridSize={gridSize}
                           showGrid={showGrid}
+                          onMediaFilesDrop={handleCanvasMediaFilesDrop}
+                          onExternalMediaUrlDrop={handleCanvasExternalMediaUrlDrop}
                         />
                       </div>
                     </div>

@@ -1119,6 +1119,9 @@ export function PropertyPanel({
     if (field === 'video') {
       setMediaAllowedTypes('video');
       setMediaUploadFilter('video');
+    } else if (field === 'audio') {
+      setMediaAllowedTypes('audio');
+      setMediaUploadFilter('audio');
     } else if (field === 'embed') {
       setMediaAllowedTypes('any');
       setMediaUploadFilter('all');
@@ -1876,7 +1879,7 @@ export function PropertyPanel({
             return;
           }
 
-          const mediaPropKey = mediaField === 'video' || mediaField === 'embed' ? 'src' : mediaField;
+          const mediaPropKey = mediaField === 'video' || mediaField === 'audio' || mediaField === 'embed' ? 'src' : mediaField;
           const currentFallback = element.props.fallback && typeof element.props.fallback === 'object' && !Array.isArray(element.props.fallback)
             ? element.props.fallback
             : {};
@@ -2433,6 +2436,7 @@ function ContentProperties({
   const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(normalizedType);
   const hasImageContent = normalizedType === 'image';
   const hasVideoContent = normalizedType === 'video';
+  const hasAudioContent = normalizedType === 'audio';
   const hasLinkContent = normalizedType === 'link';
   const hasButtonContent = normalizedType === 'button';
   const hasNavContent = normalizedType === 'nav';
@@ -3290,6 +3294,97 @@ function ContentProperties({
                   checked={parseBooleanSetting(element.props[setting.key], setting.fallback)}
                   onChange={(e) => onChange({ [setting.key]: e.target.checked })}
                   data-testid={`editor-video-${setting.key}`}
+                  className="rounded"
+                />
+                {setting.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Audio Source */}
+      {hasAudioContent && (
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Audio URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={element.props.src || ''}
+                onChange={(e) => onChange({ src: e.target.value })}
+                data-testid="editor-audio-src"
+                className={cn(
+                  'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
+                  'focus:outline-none focus:ring-2 focus:ring-ring'
+                )}
+                placeholder="https://example.com/audio.mp3"
+              />
+              {renderMediaPickerButton({
+                field: 'audio',
+                testId: 'editor-audio-select-media',
+                title: 'Select audio from Media Library',
+                children: 'Select',
+              })}
+              {renderMediaPickerButton({
+                field: 'audio',
+                mode: 'upload',
+                testId: 'editor-audio-upload-media',
+                title: 'Upload audio',
+                children: 'Upload',
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Add an interview, podcast, voice note, or article narration.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Caption
+            </label>
+            <input
+              type="text"
+              value={typeof element.props.caption === 'string' ? element.props.caption : ''}
+              onChange={(e) => onChange({ caption: e.target.value })}
+              data-testid="editor-audio-caption"
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Audio title or episode name"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">
+              Transcript
+            </label>
+            <textarea
+              value={typeof element.props.transcript === 'string' ? element.props.transcript : ''}
+              onChange={(e) => onChange({ transcript: e.target.value })}
+              data-testid="editor-audio-transcript"
+              rows={4}
+              className={cn(
+                'w-full px-2 py-1.5 text-sm rounded-md border bg-background',
+                'focus:outline-none focus:ring-2 focus:ring-ring'
+              )}
+              placeholder="Paste transcript text for accessibility and article references"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'controls', label: 'Show controls', fallback: true },
+              { key: 'autoplay', label: 'Autoplay', fallback: false },
+              { key: 'loop', label: 'Loop', fallback: false },
+              { key: 'muted', label: 'Muted', fallback: false },
+            ].map((setting) => (
+              <label key={setting.key} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={parseBooleanSetting(element.props[setting.key], setting.fallback)}
+                  onChange={(e) => onChange({ [setting.key]: e.target.checked })}
+                  data-testid={`editor-audio-${setting.key}`}
                   className="rounded"
                 />
                 {setting.label}

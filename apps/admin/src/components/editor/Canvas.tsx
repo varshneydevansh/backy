@@ -1617,6 +1617,18 @@ interface CanvasProps {
   gridSize?: number;
   /** Whether the visual canvas grid is rendered */
   showGrid?: boolean;
+  /** Upload and place files dropped directly on the canvas */
+  onMediaFilesDrop?: (
+    files: File[],
+    point: { x: number; y: number },
+    metadata: { source: 'canvas-file-drop' },
+  ) => Promise<void> | void;
+  /** Place a remote media URL dragged from another tab */
+  onExternalMediaUrlDrop?: (
+    url: string,
+    point: { x: number; y: number },
+    metadata: { source: 'canvas-url-drop'; kind: 'image' | 'video' | 'audio' | 'url' },
+  ) => void;
 }
 
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
@@ -1630,6 +1642,45 @@ type DragInteraction = {
   pointerId?: number;
   startX: number;
   startY: number;
+};
+
+type CanvasDropKind = 'component' | 'file' | 'url' | null;
+
+const MEDIA_URL_PATTERNS = {
+  image: /\.(avif|gif|jpe?g|png|svg|webp)(\?.*)?$/i,
+  video: /\.(mp4|m4v|mov|ogg|ogv|webm)(\?.*)?$/i,
+  audio: /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav|webm)(\?.*)?$/i,
+};
+
+const isDroppedUrlLike = (value: string): boolean => (
+  /^(https?:\/\/|blob:|data:(image|video|audio)\/)/i.test(value.trim())
+);
+
+const getPrimaryDroppedUrl = (dataTransfer: DataTransfer): string => {
+  const uriList = dataTransfer.getData('text/uri-list')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('#'));
+
+  if (uriList && isDroppedUrlLike(uriList)) {
+    return uriList;
+  }
+
+  const plainText = dataTransfer.getData('text/plain').trim();
+  return isDroppedUrlLike(plainText) ? plainText : '';
+};
+
+const inferDroppedUrlKind = (value: string): 'image' | 'video' | 'audio' | 'url' => {
+  if (MEDIA_URL_PATTERNS.image.test(value)) return 'image';
+  if (MEDIA_URL_PATTERNS.video.test(value)) return 'video';
+  if (MEDIA_URL_PATTERNS.audio.test(value)) return 'audio';
+  return 'url';
+};
+
+const getCanvasDropKind = (dataTransfer: DataTransfer): CanvasDropKind => {
+  if (dataTransfer.files?.length) return 'file';
+  if (getPrimaryDroppedUrl(dataTransfer)) return 'url';
+  return 'component';
 };
 
 type ResizeInteraction = {
@@ -1795,10 +1846,13 @@ export function Canvas({
   snapEnabled = true,
   gridSize = DEFAULT_GRID_SIZE,
   showGrid = true,
+  onMediaFilesDrop,
+  onExternalMediaUrlDrop,
 }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
+  const [dropKind, setDropKind] = useState<CanvasDropKind>(null);
   const { clearActiveEditor } = useActiveEditor();
   const elementsRef = useRef(elements);
   const dragStateRef = useRef<DragInteraction | null>(null);
@@ -2010,6 +2064,16 @@ export function Canvas({
       y: Math.max(0, Math.min(size.height, y)),
     };
   }, [getMeasuredCanvasScale, size.height, size.width]);
+
+  const getCanvasDropPoint = useCallback((event: React.DragEvent): { x: number; y: number } | null => {
+    const point = getCanvasPoint(event.clientX, event.clientY, { clamp: false });
+    if (!point) return null;
+
+    return {
+      x: snapToGrid(Math.max(0, point.x), safeGridSize, snapEnabled),
+      y: snapToGrid(Math.max(0, point.y), safeGridSize, snapEnabled),
+    };
+  }, [getCanvasPoint, safeGridSize, snapEnabled]);
 
   const startMarqueeSelection = useCallback((
     event: React.PointerEvent<Element> | React.MouseEvent<Element>,
@@ -2697,6 +2761,38 @@ export function Canvas({
     [disabled, elements, isPreview, onElementsChange, onSelect, safeGridSize, snapEnabled, toCanvasDelta]
   );
 
+  const handleCanvasAssetDrop = useCallback((event: React.DragEvent): boolean => {
+    if (disabled || isPreview) {
+      return false;
+    }
+
+    const point = getCanvasDropPoint(event);
+    if (!point) {
+      return false;
+    }
+
+    const files = Array.from(event.dataTransfer.files || []).filter((file) => file.size >= 0);
+    if (files.length > 0 && onMediaFilesDrop) {
+      event.preventDefault();
+      event.stopPropagation();
+      void onMediaFilesDrop(files, point, { source: 'canvas-file-drop' });
+      return true;
+    }
+
+    const url = getPrimaryDroppedUrl(event.dataTransfer);
+    if (url && onExternalMediaUrlDrop) {
+      event.preventDefault();
+      event.stopPropagation();
+      onExternalMediaUrlDrop(url, point, {
+        source: 'canvas-url-drop',
+        kind: inferDroppedUrlKind(url),
+      });
+      return true;
+    }
+
+    return false;
+  }, [disabled, getCanvasDropPoint, isPreview, onExternalMediaUrlDrop, onMediaFilesDrop]);
+
   const handleElementPropsUpdate = useCallback(
     (elementId: string, updates: { [key: string]: unknown }) => {
       if (disabled || isPreview) {
@@ -2924,21 +3020,28 @@ export function Canvas({
         if (!isPreview && !disabled) {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
+          setDropKind(getCanvasDropKind(event.dataTransfer));
         }
       }}
       onDragEnter={(event) => {
         if (!isPreview && !disabled) {
           event.preventDefault();
           setIsDropActive(true);
+          setDropKind(getCanvasDropKind(event.dataTransfer));
         }
       }}
       onDragLeave={(event) => {
         if (!isPreview && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setIsDropActive(false);
+          setDropKind(null);
         }
       }}
       onDrop={(event) => {
         setIsDropActive(false);
+        setDropKind(null);
+        if (handleCanvasAssetDrop(event)) {
+          return;
+        }
         handleCanvasElementDrop(event);
       }}
       data-testid="editor-canvas"
@@ -2962,6 +3065,25 @@ export function Canvas({
       {!isPreview && elements.length === 0 && (
         <div className="pointer-events-none absolute inset-10 flex items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/70 text-sm font-medium text-slate-500">
           Drop components onto the canvas
+        </div>
+      )}
+
+      {!isPreview && isDropActive && (
+        <div
+          className="pointer-events-none absolute inset-3 z-[80] grid place-items-center rounded-xl border-2 border-dashed border-sky-400 bg-sky-50/70 text-center text-sm font-semibold text-sky-800 shadow-inner"
+          data-testid="canvas-asset-drop-target"
+          data-drop-kind={dropKind || 'component'}
+          data-media-drop-action={dropKind === 'file' ? 'upload-and-place' : dropKind === 'url' ? 'place-url' : 'place-component'}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="rounded-full border border-sky-200 bg-white/90 px-4 py-2 shadow-sm">
+            {dropKind === 'file'
+              ? 'Drop to upload and place media on the canvas'
+              : dropKind === 'url'
+                ? 'Drop to place this media URL on the canvas'
+                : 'Drop to place this component on the canvas'}
+          </span>
         </div>
       )}
 
@@ -3766,6 +3888,75 @@ function CanvasElementComponent({
           }}
         />
       );
+      }
+
+      case 'audio': {
+        const audioSrc = resolveElementMediaSource(p as Record<string, unknown>, 'src');
+        const caption = sanitizeText(p.caption) || sanitizeText(p.title) || sanitizeText(p.mediaName);
+        const transcript = sanitizeText(p.transcript);
+
+        if (!audioSrc) {
+          return (
+            <div
+              style={{
+                ...sharedStyle,
+                width: '100%',
+                height: '100%',
+                backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#f8fafc',
+                border: sharedStyle.border ?? '1px dashed #94a3b8',
+                borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 10),
+                display: 'grid',
+                placeItems: 'center',
+                color: '#64748b',
+                fontSize: 14,
+              }}
+            >
+              Add audio URL or upload an audio file
+            </div>
+          );
+        }
+
+        return (
+          <figure
+            style={{
+              ...sharedStyle,
+              width: '100%',
+              height: '100%',
+              margin: 0,
+              display: 'grid',
+              gridTemplateRows: caption ? 'auto minmax(0, 1fr)' : '1fr',
+              gap: 8,
+              alignItems: 'center',
+              padding: p.padding ?? sharedStyle.padding ?? 12,
+              backgroundColor: p.backgroundColor ?? sharedStyle.backgroundColor ?? '#ffffff',
+              border: sharedStyle.border ?? `1px ${p.borderStyle || 'solid'} ${p.borderColor || '#dbe3ef'}`,
+              borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 12),
+              overflow: 'hidden',
+            }}
+            data-backy-audio-player=""
+            data-backy-audio-media-id={sanitizeText(p.mediaId) || undefined}
+            data-backy-audio-transcript={transcript ? 'available' : 'missing'}
+          >
+            {caption ? (
+              <figcaption style={{ fontSize: 13, fontWeight: 600, color: p.color ?? sharedStyle.color ?? '#334155' }}>
+                {caption}
+              </figcaption>
+            ) : null}
+            <audio
+              src={audioSrc}
+              title={sanitizeText(p.title) || caption || undefined}
+              controls={isPreview ? getBooleanWithFallback(p.controls, true) : true}
+              autoPlay={isPreview ? getBooleanWithFallback(p.autoplay ?? p.autoPlay, false) : false}
+              loop={getBoolean(p.loop)}
+              muted={getBoolean(p.muted)}
+              preload={sanitizeText(p.preload) || 'metadata'}
+              style={{
+                width: '100%',
+                pointerEvents: isPreview ? 'auto' : 'none',
+              }}
+            />
+          </figure>
+        );
       }
 
       case 'codeBlock': {

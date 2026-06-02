@@ -1,4 +1,4 @@
-export type EditorMediaField = 'src' | 'video' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';
+export type EditorMediaField = 'src' | 'video' | 'audio' | 'embed' | 'interactiveFallbackImage' | 'downloadFile';
 export type EditorMediaPickerTarget = EditorMediaField | 'font';
 export type EditorMediaPickerMode = 'library' | 'upload';
 
@@ -14,6 +14,7 @@ interface EditorMediaPickerActionInput {
 
 const editorMediaPickerTargetLabel = (field: EditorMediaPickerTarget): string => {
   if (field === 'video') return 'video';
+  if (field === 'audio') return 'audio';
   if (field === 'embed') return 'embed media';
   if (field === 'interactiveFallbackImage') return 'fallback image';
   if (field === 'downloadFile') return 'download file';
