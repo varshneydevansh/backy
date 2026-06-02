@@ -151,6 +151,17 @@ includesAll(
     'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1',
     'forbiddenEnvPresent',
     'includesSecretValues: false',
+    'backy.custom-frontend-control-plane.v1',
+    'agentHandoff: siteEndpoint("/agent-handoff")',
+    'openapi: siteEndpoint("/openapi")',
+    'renderHome: renderEndpoint("/")',
+    'componentTypeContracts: "agent-handoff.componentApiContract.componentTypeContracts"',
+    'propertyMap: "agent-handoff.componentApiContract.propertyMap"',
+    'renderElements: "render.data.content.elements[]"',
+    'editableMap: "render.data.editableMap"',
+    'frontendDesign: "manifest.data.site.frontendDesign"',
+    'backy.render("/")',
+    'renderReachable: true',
     'data-backy-component-contract-pointer',
     'data-backy-editable-map-pointer',
   ],
@@ -604,6 +615,38 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
   }
   assert(probe.backy?.manifestReachable === true, 'Custom frontend probe can reach Backy manifest');
   assert(probe.backy?.hasCustomFrontendHandoff === true, 'Custom frontend probe sees the Backy custom frontend handoff');
+  if (probe.controlPlane) {
+    assert(
+      probe.controlPlane.schemaVersion === 'backy.custom-frontend-control-plane.v1',
+      'Custom frontend probe exposes the custom frontend control-plane schema',
+    );
+    includesAll(
+      (probe.controlPlane.readOrder || []).join('\n'),
+      ['agent-handoff', 'manifest', 'openapi', 'resolve', 'render', 'component-dom', 'probe'],
+      'Custom frontend probe exposes the Backy control-plane read order',
+    );
+    const endpointText = JSON.stringify(probe.controlPlane.endpoints || {});
+    includesAll(
+      endpointText,
+      ['/agent-handoff', '/manifest', '/openapi', '/resolve', '/render', '/api/backy-connection'],
+      'Custom frontend probe exposes the Backy control-plane endpoints',
+    );
+    const pointerText = JSON.stringify(probe.controlPlane.pointers || {});
+    includesAll(
+      pointerText,
+      [
+        'agent-handoff.componentApiContract.componentTypeContracts',
+        'agent-handoff.componentApiContract.propertyMap',
+        'render.data.content.elements[]',
+        'render.data.editableMap',
+        'manifest.data.site.frontendDesign',
+        'agent-handoff.deploymentTopology',
+      ],
+      'Custom frontend probe exposes the Backy control-plane pointers',
+    );
+  } else {
+    warn('Custom frontend probe does not expose the optional controlPlane block; regenerate from the latest starter before redesigning.');
+  }
   assert(probe.boundaries?.includesSecretValues === false, 'Custom frontend probe declares no secret values');
   assert(
     Array.isArray(probe.boundaries?.forbiddenEnvPresent) &&

@@ -118,9 +118,21 @@ assertIncludes(files.connection, 'backy.custom-frontend-connection.v1', 'Starter
 assertIncludes(files.connection, 'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1', 'Connection probe documents the strict probe smoke flag');
 assertIncludes(files.connection, 'forbiddenEnvPresent', 'Connection probe reports forbidden env presence without values');
 assertIncludes(files.connection, 'includesSecretValues: false', 'Connection probe declares that it does not include secret values');
+assertIncludes(files.connection, 'backy.custom-frontend-control-plane.v1', 'Connection probe exposes the custom frontend control-plane schema');
+assertIncludes(files.connection, 'agentHandoff: siteEndpoint("/agent-handoff")', 'Connection probe exposes the site-scoped agent handoff endpoint');
+assertIncludes(files.connection, 'openapi: siteEndpoint("/openapi")', 'Connection probe exposes the site-scoped OpenAPI endpoint');
+assertIncludes(files.connection, 'renderHome: renderEndpoint("/")', 'Connection probe exposes the host-aware home render endpoint');
+assertIncludes(files.connection, 'componentTypeContracts: "agent-handoff.componentApiContract.componentTypeContracts"', 'Connection probe exposes the component contract pointer');
+assertIncludes(files.connection, 'propertyMap: "agent-handoff.componentApiContract.propertyMap"', 'Connection probe exposes the property map pointer');
+assertIncludes(files.connection, 'renderElements: "render.data.content.elements[]"', 'Connection probe exposes the render element pointer');
+assertIncludes(files.connection, 'editableMap: "render.data.editableMap"', 'Connection probe exposes the editable-map pointer');
+assertIncludes(files.connection, 'frontendDesign: "manifest.data.site.frontendDesign"', 'Connection probe exposes the frontend design pointer');
+assertIncludes(files.connection, 'renderReachable: true', 'Connection probe verifies Backy render reachability');
+assertIncludes(files.connection, 'hasEditableMap: hasEditableMap(render.data)', 'Connection probe reports editable-map reachability without exposing values');
 assertIncludes(files.connection, 'data-backy-component-contract-pointer', 'Connection probe documents component contract DOM attributes');
 assertIncludes(files.connection, 'data-backy-editable-map-pointer', 'Connection probe documents editable-map DOM attributes');
 assertIncludes(files.connection, 'backy.manifest()', 'Connection probe verifies Backy manifest reachability');
+assertIncludes(files.connection, 'backy.render("/")', 'Connection probe verifies Backy render reachability');
 assertIncludes(files.render, 'data-backy-element-id', 'Renderer preserves element API id attributes');
 assertIncludes(files.render, 'data-backy-element-type', 'Renderer preserves element API type attributes');
 assertIncludes(files.render, 'data-backy-component-contract-pointer', 'Renderer exposes component contract pointers');
@@ -142,6 +154,7 @@ assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form subm
 assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter README begins with agent handoff read path');
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
+assertIncludes(files.readme, 'backy.custom-frontend-control-plane.v1', 'Starter README documents the deployed frontend control-plane probe');
 assertIncludes(files.generator, 'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES', 'Starter bundle generator writes the public template file list');
 assertIncludes(files.generator, 'examples/custom-frontend-next', 'Starter bundle generator reads the checked starter project');
 assertIncludes(files.materializer, 'backy.custom-frontend-starter-project.v1', 'Starter materializer validates the project schema');
@@ -166,6 +179,7 @@ assertIncludes(files.ensureSite, '/rest/v1/', 'Ensure-site command keeps Supabas
 assertIncludes(files.ensureSite, '/pages?includeUnpublished=true', 'Ensure-site command checks homepage readiness before handoff');
 assertIncludes(files.ensureSite, '/render?path=/', 'Ensure-site command verifies public home render before scaffold handoff');
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
+assertIncludes(files.generatedTemplate, 'backy.custom-frontend-control-plane.v1', 'Generated starter bundle includes the connection control-plane probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
 assertIncludes(files.generatedTemplate, 'data-backy-element-id', 'Generated starter bundle preserves element API id attributes');

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 08:05 IST
+- **Last updated:** 2026-06-02 08:19 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 08:19 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Future scaffolds expose a richer self-probe control plane
+
+**What changed:**
+- Enriched the checked Next.js custom frontend starter `GET /api/backy-connection` probe with `backy.custom-frontend-control-plane.v1`.
+- The probe now exposes the safe agent read order, site-scoped `agent-handoff`, `manifest`, `openapi`, `resolve`, and host-aware `render` endpoints, plus canonical component contract, property map, render elements, editable map, frontend design, and deployment topology pointers.
+- The probe now also verifies Backy home render reachability and reports element/editable-map presence as booleans/counts without exposing content secrets.
+- Kept the deployed-frontend connection smoke backwards-compatible: existing deployed frontends still pass, while new starter/source exports are required to include the richer control-plane block.
+- Regenerated the protected starter file-list template so admin downloads and CLI scaffolds inherit the updated probe.
+
+**Commands run:**
+- `node scripts/generate-custom-frontend-starter-template.mjs` -> PASS.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 92 checks.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 22 source checks; live API/frontend URL skipped by unset env.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 93 checks.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit/push the custom frontend control-plane probe slice.
+2. Re-read the survival guide after commit/push.
+3. If time remains, run the production custom frontend connection gate again and continue UX/editor polish.
 
 ## 2026-06-02 08:05 IST
 
