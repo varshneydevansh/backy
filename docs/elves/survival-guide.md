@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Connect the separate website frontend project to its own Git repository for future previews, attach the public website domain there only when ready to move DNS, then continue the highest-friction Backy UX/editor polish.
+- **Next required action:** Grant Vercel GitHub App access to the private separate frontend repository or connect it from the Vercel dashboard, add Preview env after Vercel confirms the Git connection, attach the public website domain only when ready to move DNS, and continue highest-friction Backy UX/editor polish.
 
 ## Effort Standard
 
@@ -227,9 +227,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deployed frontend verification:** The separate website frontend deployment passes the strict 61-check custom frontend connection gate with production Backy live checks, deployed DOM `data-backy-*` attributes, and `/api/backy-connection` probe required. Backy production readiness passes 47 checks, and the hosted admin login shell still exposes no demo credentials or dev MFA phrase.
 
+**Newest separate frontend Git state:** The separate website frontend now has a private GitHub repository with the initial scaffold committed and pushed. Vercel CLI could not connect the private repo to the existing Vercel frontend project because Vercel has not been granted access to that private repo yet, so branch-scoped Preview env is still pending. Production/development env and deployed frontend verification remain green.
+
 **Newest deploy verification:** `7e651962` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, the real-site live custom frontend connection gate passes 50 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes with no demo credentials/dev MFA, and recent Vercel logs for both latest production deployments are empty.
 
-**Single next action:** Connect the separate frontend project to its own Git repo, add Preview env once Git is connected, attach the public website domain there only when ready to move DNS from the current host, then continue the highest-friction Backy UX/editor polish.
+**Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
 

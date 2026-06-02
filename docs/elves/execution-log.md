@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 07:53 IST
+- **Last updated:** 2026-06-02 08:05 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 08:05 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate frontend source repo exists; Vercel Git connection pending app access
+
+**What changed:**
+- Initialized the separate website frontend as its own local Git repository on `main`.
+- Tightened its `.gitignore` before the first commit so `.next`, `node_modules`, local env files, TypeScript build info, and `.vercel` project metadata stay out of source control.
+- Created and pushed a private GitHub repository for the separate website frontend.
+- Attempted to connect the existing Vercel frontend project to that private GitHub repository through Vercel CLI.
+- Vercel rejected the Git connection because the project still does not have access to the private repository. This is consistent with Vercel's GitHub App needing access to the newly created private repo before CLI/project linkage can complete.
+- Preview env remains pending because Vercel requires a connected Git repository before branch-scoped Preview env can be saved.
+
+**Commands run:**
+- Separate frontend `git init -b main`, `git add .`, `git commit -m "Initial Backy custom frontend scaffold"` -> PASS.
+- `GITHUB_TOKEN= gh repo create <separate-frontend-github-repo> --private --source=. --remote=origin --push` -> PASS.
+- `npx --yes vercel@latest git connect <separate-frontend-github-repo-url> --yes` -> expected failure, Vercel cannot access/connect the private repo yet.
+- `npx --yes vercel@latest env add <safe Backy env> preview main ...` -> expected failure, no connected Git repository yet.
+
+**Next:**
+1. Grant the Vercel GitHub App access to the private separate frontend repository or connect the repo from the Vercel dashboard.
+2. Add branch-scoped Preview env after Vercel confirms the Git connection.
+3. Attach the public website domain to the separate frontend project only when ready to move DNS away from the current host.
+4. Continue Backy UX/editor polish while the external GitHub App access step is pending.
 
 ## 2026-06-02 07:53 IST
 
