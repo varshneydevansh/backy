@@ -3659,6 +3659,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 00:44 IST - Editor Command Executor Guard Deployment
+
+**Scope:** Batch 5 editor reliability/deploy verification, focused on proving the command registry no longer advertises executable editor commands that do not have an implementation.
+
+**Changed:**
+- The editor command registry now has an explicit executable-command invariant and disables future command ids without an executor.
+- Command palette and Inspector command-registry surfaces expose `unwiredCommandCount` plus ids for smoke tests and debug visibility.
+- The rendered command-palette smoke asserts zero unwired commands, keeps `zoom-fit` executable, and keeps unavailable `undo` behavior blocked with a clear notice.
+
+**Validation:**
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent`
+
+**Notes:**
+- `41817be0` is pushed to `origin/main`.
+- Fresh `backy-admin` and `backy-public` production deployments are Ready on the stable aliases.
+- Deployed custom frontend DOM proof remains intentionally skipped unless `BACKY_CUSTOM_FRONTEND_URL` is supplied.
+
 ## Checkpoint: 2026-06-03 00:28 IST - Editor Command Registry Executor Guard
 
 **Scope:** Batch 5 editor interaction completeness, focused on preventing command palette/toolbar actions from advertising registered commands that do not have an executor path.
