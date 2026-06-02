@@ -3403,3 +3403,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, and re-check production deployment.
 - Remaining non-code launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public DNS cutover only when ready.
+
+## Checkpoint: 2026-06-02 14:10 IST - Dashboard Custom Frontend Content Creation
+
+**Scope:** Batch 5 custom-frontend control polish, focused on making Backy-authored pages and blog posts start from the synced custom frontend template registry instead of requiring owners or frontend agents to guess create-route query params.
+
+**Changed:**
+- Added `backy.dashboard-custom-frontend-content-creation.v1` to the Dashboard custom-frontend helper.
+- The contract derives the preferred active page and blogPost templates from `frontendDesign.templates[]`, emits custom-frontend create routes with `templateSource=custom-frontend`, `frontendDesignTemplateId`, and `focus=canvas`, and also keeps explicit Backy-canvas fallback routes.
+- Dashboard now shows “Create from custom frontend design” with New custom page/post actions, or Sync template actions when the registry is not ready.
+- The copyable `backy.dashboard-custom-frontend-agent-brief.v1` now includes the same content-creation contract so a separate frontend agent can keep Backy in control of new pages/posts.
+- Dashboard smoke now guards the schema, visible actions, template source metadata, fallback routes, and create-route attributes.
+
+**Validation:**
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:dashboard --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Next:**
+- Commit and push this focused dashboard content-control slice.
+- Remaining non-code launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public DNS cutover only when ready.

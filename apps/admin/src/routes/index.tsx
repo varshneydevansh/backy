@@ -66,6 +66,7 @@ import { useStore, type BlogPost, type Page, type Site, type User, type MediaAss
 import { getSitePrimaryHost, siteMatchesIdentifier } from '@/lib/siteSelection';
 import {
   buildDashboardCustomFrontendAgentBrief,
+  buildDashboardCustomFrontendContentCreation,
   buildDashboardCustomFrontendControlReadiness,
   buildDashboardCustomFrontendLaunch,
 } from '@/lib/customFrontendLaunch';
@@ -1583,10 +1584,15 @@ function Index() {
     frontendDesign: activeSite?.settings?.frontendDesign || null,
     publicApiBase: customFrontendLaunch.publicApiBase,
   }), [activeSite?.settings?.frontendDesign, activeSiteId, customFrontendLaunch.publicApiBase]);
+  const customFrontendContentCreation = useMemo(() => buildDashboardCustomFrontendContentCreation({
+    activeSiteId,
+    frontendDesign: activeSite?.settings?.frontendDesign || null,
+  }), [activeSite?.settings?.frontendDesign, activeSiteId]);
   const customFrontendAgentBrief = useMemo(() => buildDashboardCustomFrontendAgentBrief({
     launch: customFrontendLaunch,
     readiness: customFrontendControlReadiness,
-  }), [customFrontendControlReadiness, customFrontendLaunch]);
+    contentCreation: customFrontendContentCreation,
+  }), [customFrontendContentCreation, customFrontendControlReadiness, customFrontendLaunch]);
   const customFrontendBrowserEnvText = useMemo(() => Object.entries(customFrontendLaunch.browserSafeEnv)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n'), [customFrontendLaunch.browserSafeEnv]);
@@ -1635,6 +1641,7 @@ function Index() {
     adminEndpoints: Object.fromEntries(adminContractUrlEntries),
     customFrontendLaunch,
     customFrontendControlReadiness,
+    customFrontendContentCreation,
     customFrontendAgentBrief,
     apiConsumers: {
       publicEndpointCount: apiConsumerReadiness.publicEndpoints,
@@ -1763,6 +1770,7 @@ function Index() {
     backendHealthy,
     buildDashboardPageCreateRoute,
     customFrontendAgentBrief,
+    customFrontendContentCreation,
     customFrontendControlReadiness,
     customFrontendLaunch,
     dashboard.collections.length,
@@ -3786,6 +3794,9 @@ function Index() {
                 data-testid="dashboard-custom-frontend-agent-brief"
                 data-agent-brief-schema={customFrontendAgentBrief.schemaVersion}
                 data-agent-brief-source={customFrontendAgentBrief.source}
+                data-agent-brief-content-creation-schema={customFrontendAgentBrief.contentCreation.schemaVersion}
+                data-agent-brief-page-create-route={customFrontendAgentBrief.contentCreation.items.page.createRoute || ''}
+                data-agent-brief-blog-create-route={customFrontendAgentBrief.contentCreation.items.blogPost.createRoute || ''}
                 data-agent-brief-read-order-count={customFrontendAgentBrief.readOrder.length}
                 data-agent-brief-manual-gates={customFrontendAgentBrief.readiness.manualGates.length}
                 data-agent-brief-scaffold-command={customFrontendAgentBrief.commands.scaffold}
@@ -3795,6 +3806,121 @@ function Index() {
                 <p className="mt-1 text-muted-foreground">
                   Copy one bundle with read order, safe env, scaffold and verify commands, forbidden env names, and manual domain/Git gates.
                 </p>
+              </div>
+              <div
+                className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-3 text-xs"
+                data-testid="dashboard-custom-frontend-content-creation"
+                data-schema={customFrontendContentCreation.schemaVersion}
+                data-status={customFrontendContentCreation.status}
+                data-source={customFrontendContentCreation.source}
+                data-page-template-id={customFrontendContentCreation.items.page.templateId || ''}
+                data-page-create-route={customFrontendContentCreation.items.page.createRoute || ''}
+                data-page-fallback-route={customFrontendContentCreation.items.page.fallbackRoute}
+                data-blog-template-id={customFrontendContentCreation.items.blogPost.templateId || ''}
+                data-blog-create-route={customFrontendContentCreation.items.blogPost.createRoute || ''}
+                data-blog-fallback-route={customFrontendContentCreation.items.blogPost.fallbackRoute}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-foreground">Create from custom frontend design</div>
+                    <p className="mt-1 leading-5 text-muted-foreground">
+                      Start pages and blog posts from the synced template registry so Backy persists the same fonts, tokens, chrome, editable map, and frontendDesignTemplateId.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {customFrontendContentCreation.items.page.createRoute ? (
+                      <Link
+                        to="/pages/new"
+                        search={{
+                          siteId: activeSiteId,
+                          templateSource: 'custom-frontend',
+                          frontendDesignTemplateId: customFrontendContentCreation.items.page.templateId || undefined,
+                          focus: 'canvas',
+                        }}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                        data-testid="dashboard-create-custom-frontend-page"
+                        data-template-source="custom-frontend"
+                        data-template-id={customFrontendContentCreation.items.page.templateId || ''}
+                        data-create-route={customFrontendContentCreation.items.page.createRoute}
+                      >
+                        New custom page
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/sites/$siteId"
+                        params={{ siteId: activeSiteId }}
+                        hash="site-custom-frontend-verifier"
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                        data-testid="dashboard-create-custom-frontend-page"
+                        data-template-source="custom-frontend"
+                        data-template-id=""
+                        data-create-route=""
+                      >
+                        Sync page template
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    )}
+                    {customFrontendContentCreation.items.blogPost.createRoute ? (
+                      <Link
+                        to="/blog/new"
+                        search={{
+                          siteId: activeSiteId,
+                          templateSource: 'custom-frontend',
+                          frontendDesignTemplateId: customFrontendContentCreation.items.blogPost.templateId || undefined,
+                          focus: 'canvas',
+                        }}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                        data-testid="dashboard-create-custom-frontend-post"
+                        data-template-source="custom-frontend"
+                        data-template-id={customFrontendContentCreation.items.blogPost.templateId || ''}
+                        data-create-route={customFrontendContentCreation.items.blogPost.createRoute}
+                      >
+                        New custom post
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/sites/$siteId"
+                        params={{ siteId: activeSiteId }}
+                        hash="site-custom-frontend-verifier"
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                        data-testid="dashboard-create-custom-frontend-post"
+                        data-template-source="custom-frontend"
+                        data-template-id=""
+                        data-create-route=""
+                      >
+                        Sync blog template
+                        <ArrowRight className="size-3.5" />
+                      </Link>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {[customFrontendContentCreation.items.page, customFrontendContentCreation.items.blogPost].map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-md border border-border bg-background px-3 py-2"
+                      data-testid={`dashboard-custom-frontend-content-item-${item.id}`}
+                      data-status={item.status}
+                      data-template-type={item.templateType}
+                      data-template-id={item.templateId || ''}
+                      data-create-route={item.createRoute || ''}
+                      data-fallback-route={item.fallbackRoute}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-foreground">{item.label}</span>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 font-semibold',
+                          item.status === 'ready' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning',
+                        )}>
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 leading-5 text-muted-foreground">{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

@@ -105,14 +105,19 @@ const assertDashboardSourceContracts = () => {
     "schemaVersion: 'backy.dashboard-custom-frontend-launch.v1'",
     "schemaVersion: 'backy.dashboard-custom-frontend-control-readiness.v1'",
     "schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1'",
+    "schemaVersion: 'backy.dashboard-custom-frontend-content-creation.v1'",
     'backy.dashboard-custom-frontend-agent-brief.v1',
     "domainOwner: 'custom-frontend-vercel-project'",
     'buildDashboardCustomFrontendLaunch',
     'buildDashboardCustomFrontendControlReadiness',
+    'buildDashboardCustomFrontendContentCreation',
     'buildDashboardCustomFrontendAgentBrief',
     'customFrontendLaunch',
     'customFrontendControlReadiness',
+    'customFrontendContentCreation',
     'customFrontendAgentBrief',
+    "templateSource: 'custom-frontend'",
+    'frontendDesignTemplateId',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'NEXT_PUBLIC_BACKY_SITE_ID',
     'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
@@ -123,6 +128,11 @@ const assertDashboardSourceContracts = () => {
     'data-testid="dashboard-copy-custom-frontend-next-action"',
     'data-testid="dashboard-custom-frontend-agent-brief"',
     'data-testid="dashboard-copy-custom-frontend-agent-brief"',
+    'data-agent-brief-content-creation-schema',
+    'data-testid="dashboard-custom-frontend-content-creation"',
+    'data-testid="dashboard-create-custom-frontend-page"',
+    'data-testid="dashboard-create-custom-frontend-post"',
+    'data-testid={`dashboard-custom-frontend-content-item-${item.id}`}',
     'data-testid="dashboard-open-custom-frontend-verifier"',
     'data-testid={`dashboard-custom-frontend-control-check-${check.id}`}',
     'data-testid="dashboard-custom-frontend-browser-env"',
@@ -688,6 +698,9 @@ const assertDashboardLayout = async (client, siteName) => {
     const customReadiness = document.querySelector('[data-testid="dashboard-custom-frontend-control-readiness"]');
     const customNextAction = document.querySelector('[data-testid="dashboard-custom-frontend-next-action"]');
     const customAgentBrief = document.querySelector('[data-testid="dashboard-custom-frontend-agent-brief"]');
+    const customContentCreation = document.querySelector('[data-testid="dashboard-custom-frontend-content-creation"]');
+    const customPageCreate = document.querySelector('[data-testid="dashboard-create-custom-frontend-page"]');
+    const customPostCreate = document.querySelector('[data-testid="dashboard-create-custom-frontend-post"]');
     const customLaunchText = customLaunch?.textContent || '';
     const customLaunchState = {
       exists: Boolean(customLaunch),
@@ -729,12 +742,46 @@ const assertDashboardLayout = async (client, siteName) => {
         exists: Boolean(customAgentBrief),
         schema: customAgentBrief?.getAttribute('data-agent-brief-schema') || '',
         source: customAgentBrief?.getAttribute('data-agent-brief-source') || '',
+        contentCreationSchema: customAgentBrief?.getAttribute('data-agent-brief-content-creation-schema') || '',
+        pageCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-page-create-route') || '',
+        blogCreateRoute: customAgentBrief?.getAttribute('data-agent-brief-blog-create-route') || '',
         readOrderCount: Number(customAgentBrief?.getAttribute('data-agent-brief-read-order-count') || 0),
         manualGates: Number(customAgentBrief?.getAttribute('data-agent-brief-manual-gates') || 0),
         scaffoldCommand: customAgentBrief?.getAttribute('data-agent-brief-scaffold-command') || '',
         verifyCommand: customAgentBrief?.getAttribute('data-agent-brief-verify-command') || '',
         copyAction: Boolean(document.querySelector('[data-testid="dashboard-copy-custom-frontend-agent-brief"]')),
         copySchema: document.querySelector('[data-testid="dashboard-copy-custom-frontend-agent-brief"]')?.getAttribute('data-copy-schema') || '',
+      },
+      contentCreation: {
+        exists: Boolean(customContentCreation),
+        schema: customContentCreation?.getAttribute('data-schema') || '',
+        source: customContentCreation?.getAttribute('data-source') || '',
+        status: customContentCreation?.getAttribute('data-status') || '',
+        pageTemplateId: customContentCreation?.getAttribute('data-page-template-id') || '',
+        pageCreateRoute: customContentCreation?.getAttribute('data-page-create-route') || '',
+        pageFallbackRoute: customContentCreation?.getAttribute('data-page-fallback-route') || '',
+        blogTemplateId: customContentCreation?.getAttribute('data-blog-template-id') || '',
+        blogCreateRoute: customContentCreation?.getAttribute('data-blog-create-route') || '',
+        blogFallbackRoute: customContentCreation?.getAttribute('data-blog-fallback-route') || '',
+        pageAction: {
+          exists: Boolean(customPageCreate),
+          templateSource: customPageCreate?.getAttribute('data-template-source') || '',
+          templateId: customPageCreate?.getAttribute('data-template-id') || '',
+          route: customPageCreate?.getAttribute('data-create-route') || '',
+        },
+        postAction: {
+          exists: Boolean(customPostCreate),
+          templateSource: customPostCreate?.getAttribute('data-template-source') || '',
+          templateId: customPostCreate?.getAttribute('data-template-id') || '',
+          route: customPostCreate?.getAttribute('data-create-route') || '',
+        },
+        itemStatuses: Array.from(customContentCreation?.querySelectorAll('[data-testid^="dashboard-custom-frontend-content-item-"]') || []).map((node) => ({
+          id: node.getAttribute('data-testid') || '',
+          status: node.getAttribute('data-status') || '',
+          templateType: node.getAttribute('data-template-type') || '',
+          createRoute: node.getAttribute('data-create-route') || '',
+          fallbackRoute: node.getAttribute('data-fallback-route') || '',
+        })),
       },
       text: customLaunchText.slice(0, 1000),
     };
@@ -815,6 +862,8 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchText.includes('Control readiness') &&
       customLaunchText.includes('Next action') &&
       customLaunchText.includes('Frontend agent brief ready') &&
+      customLaunchText.includes('Create from custom frontend design') &&
+      customLaunchText.includes('frontendDesignTemplateId') &&
       customLaunchText.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       customLaunchState.schema === 'backy.dashboard-custom-frontend-launch.v1' &&
       customLaunchState.domainOwner === 'custom-frontend-vercel-project' &&
@@ -842,12 +891,37 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchState.agentBrief.exists &&
       customLaunchState.agentBrief.schema === 'backy.dashboard-custom-frontend-agent-brief.v1' &&
       customLaunchState.agentBrief.source === 'backy-dashboard' &&
+      customLaunchState.agentBrief.contentCreationSchema === 'backy.dashboard-custom-frontend-content-creation.v1' &&
       customLaunchState.agentBrief.readOrderCount >= 4 &&
       customLaunchState.agentBrief.manualGates >= 1 &&
       customLaunchState.agentBrief.scaffoldCommand.includes('custom-frontend:scaffold') &&
       customLaunchState.agentBrief.verifyCommand.includes('test:custom-frontend-connection') &&
       customLaunchState.agentBrief.copyAction &&
       customLaunchState.agentBrief.copySchema === 'backy.dashboard-custom-frontend-agent-brief.v1' &&
+      customLaunchState.contentCreation.exists &&
+      customLaunchState.contentCreation.schema === 'backy.dashboard-custom-frontend-content-creation.v1' &&
+      customLaunchState.contentCreation.source === 'custom-frontend-template-registry' &&
+      ['ready', 'review'].includes(customLaunchState.contentCreation.status) &&
+      customLaunchState.contentCreation.pageFallbackRoute.includes('/pages/new') &&
+      customLaunchState.contentCreation.pageFallbackRoute.includes('templateSource=backy-canvas') &&
+      customLaunchState.contentCreation.blogFallbackRoute.includes('/blog/new') &&
+      customLaunchState.contentCreation.blogFallbackRoute.includes('templateSource=backy-canvas') &&
+      customLaunchState.contentCreation.pageAction.exists &&
+      customLaunchState.contentCreation.pageAction.templateSource === 'custom-frontend' &&
+      customLaunchState.contentCreation.postAction.exists &&
+      customLaunchState.contentCreation.postAction.templateSource === 'custom-frontend' &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'page') &&
+      customLaunchState.contentCreation.itemStatuses.some((item) => item.templateType === 'blogPost') &&
+      (!customLaunchState.contentCreation.pageCreateRoute || (
+        customLaunchState.contentCreation.pageCreateRoute.includes('/pages/new') &&
+        customLaunchState.contentCreation.pageCreateRoute.includes('templateSource=custom-frontend') &&
+        customLaunchState.contentCreation.pageCreateRoute.includes('frontendDesignTemplateId=')
+      )) &&
+      (!customLaunchState.contentCreation.blogCreateRoute || (
+        customLaunchState.contentCreation.blogCreateRoute.includes('/blog/new') &&
+        customLaunchState.contentCreation.blogCreateRoute.includes('templateSource=custom-frontend') &&
+        customLaunchState.contentCreation.blogCreateRoute.includes('frontendDesignTemplateId=')
+      )) &&
       customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
       document.body?.innerText?.includes('Persistence and Supabase readiness') &&
