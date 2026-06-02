@@ -3312,3 +3312,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push the bounded smoke slice.
 - Keep custom frontend connection work prioritized: the Backy production site and custom frontend contract are green, while Vercel GitHub App access for the private separate frontend repo and eventual DNS cutover remain operator/manual gates.
+
+## Checkpoint: 2026-06-02 12:19 IST - Custom Frontend Responsive Starter Rendering
+
+**Scope:** Batch 5 custom-frontend control polish, focused on making separate website frontends apply Backy responsive design metadata instead of only preserving it as passive attributes.
+
+**Changed:**
+- Updated the checked Next.js starter renderer to generate tablet/mobile media-query CSS from Backy responsive layout/style overrides.
+- Kept hidden-by-default elements renderable when a breakpoint override can reveal them, while preserving base hidden state otherwise.
+- Added generated responsive CSS control pointers and metadata attributes so frontend agents can trace rendered behavior back to `render.generatedResponsiveCss`.
+- Sanitized generated CSS declaration values so unsafe text is skipped instead of interpolated into the starter `<style>` block.
+- Regenerated the protected starter file-list template used by the admin starter export and no-browser scaffold flow.
+- Strengthened the starter smoke so the generated bundle proves responsive CSS generation, pointer metadata, and clean source typechecking without leaving transient `next-env.d.ts` output in the repo.
+
+**Validation:**
+- PASS: `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent`
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Next:**
+- Commit and push this focused custom-frontend starter slice.
+- The remaining external/manual launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public-domain DNS cutover only when ready.

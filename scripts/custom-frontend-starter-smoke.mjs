@@ -145,6 +145,12 @@ assertIncludes(files.render, 'data-backy-property-map-pointer', 'Renderer expose
 assertIncludes(files.render, 'data-backy-prop-keys', 'Renderer exposes element prop key metadata');
 assertIncludes(files.render, 'data-backy-style-keys', 'Renderer exposes element style key metadata');
 assertIncludes(files.render, 'data-backy-responsive-breakpoints', 'Renderer exposes responsive breakpoint metadata');
+assertIncludes(files.render, 'const responsiveBreakpointMedia', 'Renderer defines responsive breakpoint media queries');
+assertIncludes(files.render, 'const cssTextValue', 'Renderer sanitizes generated responsive CSS text values');
+assertIncludes(files.render, 'function buildBackyResponsiveCss', 'Renderer builds Backy responsive override CSS');
+assertIncludes(files.render, 'data-backy-responsive-css="media-query"', 'Renderer exposes generated responsive CSS metadata');
+assertIncludes(files.render, 'data-backy-responsive-style-pointer="render.generatedResponsiveCss"', 'Renderer exposes the generated responsive CSS pointer');
+assertIncludes(files.render, 'responsiveStyleDeclarations', 'Renderer converts responsive layout/style overrides into CSS declarations');
 assertIncludes(files.render, 'data-backy-token-ref-keys', 'Renderer exposes token reference metadata');
 assertIncludes(files.render, 'data-backy-asset-ids', 'Renderer exposes media asset id metadata');
 assertIncludes(files.render, 'data-backy-action-count', 'Renderer exposes action count metadata');
@@ -160,6 +166,7 @@ assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter RE
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
 assertIncludes(files.readme, 'backy.custom-frontend-control-plane.v1', 'Starter README documents the deployed frontend control-plane probe');
+assertIncludes(files.readme, 'generates tablet/mobile media-query CSS from Backy responsive layout/style overrides', 'Starter README documents responsive override rendering');
 assertIncludes(files.generator, 'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES', 'Starter bundle generator writes the public template file list');
 assertIncludes(files.generator, 'examples/custom-frontend-next', 'Starter bundle generator reads the checked starter project');
 assertIncludes(files.materializer, 'backy.custom-frontend-starter-project.v1', 'Starter materializer validates the project schema');
@@ -189,6 +196,10 @@ assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generat
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
 assertIncludes(files.generatedTemplate, 'data-backy-element-id', 'Generated starter bundle preserves element API id attributes');
 assertIncludes(files.generatedTemplate, 'data-backy-component-contract-pointer', 'Generated starter bundle preserves component contract pointers');
+assertIncludes(files.generatedTemplate, 'const cssTextValue', 'Generated starter bundle sanitizes generated responsive CSS text values');
+assertIncludes(files.generatedTemplate, 'function buildBackyResponsiveCss', 'Generated starter bundle applies Backy responsive override CSS');
+assertIncludes(files.generatedTemplate, 'data-backy-responsive-style-pointer', 'Generated starter bundle preserves responsive CSS pointer attributes');
+assertIncludes(files.generatedTemplate, 'render.generatedResponsiveCss', 'Generated starter bundle preserves generated responsive CSS pointer value');
 assertIncludes(files.generatedTemplate, 'subscribeNewsletter', 'Generated starter bundle includes newsletter signup support');
 assertIncludes(files.generatedTemplate, 'submitForm', 'Generated starter bundle includes public form submission support');
 if (!files.generatedTemplate.includes('"path": ".next')) {
@@ -281,11 +292,16 @@ if (
 }
 
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {
+  const nextEnvPath = path.join(starterRoot, 'next-env.d.ts');
+  const hadNextEnv = fs.existsSync(nextEnvPath);
   const typecheck = spawnSync('npm', ['run', 'typecheck', '--silent'], {
     cwd: starterRoot,
     encoding: 'utf8',
     timeout: 30000,
   });
+  if (!hadNextEnv && fs.existsSync(nextEnvPath)) {
+    fs.rmSync(nextEnvPath);
+  }
   if (typecheck.status === 0) {
     pass('Starter TypeScript typecheck passed');
   } else {

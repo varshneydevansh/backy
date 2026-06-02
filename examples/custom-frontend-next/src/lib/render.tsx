@@ -41,6 +41,143 @@ const countAttr = (values: unknown): number | undefined =>
 const typeAttr = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value : undefined;
 
+const responsiveBreakpointOrder = ["tablet", "mobile"] as const;
+
+const responsiveBreakpointMedia: Record<(typeof responsiveBreakpointOrder)[number], string> = {
+  tablet: "(max-width: 1024px)",
+  mobile: "(max-width: 767px)",
+};
+
+const cssIdentifierValue = (value: unknown): string =>
+  String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\A ");
+
+const cssPropertyName = (value: string): string =>
+  value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+
+const cssTextValue = (value: unknown): string | undefined => {
+  const text = asText(value);
+  if (!text || /[{};<>]/.test(text) || /[\r\n]/.test(text)) return undefined;
+  return text;
+};
+
+const cssLengthValue = (value: unknown): string | undefined => {
+  const numeric = asNumber(value);
+  if (numeric !== undefined) return `${numeric}px`;
+  return cssTextValue(value);
+};
+
+const cssRawValue = (value: unknown): string | undefined => {
+  const numeric = asNumber(value);
+  if (numeric !== undefined) return String(numeric);
+  return cssTextValue(value);
+};
+
+const addCssDeclaration = (
+  declarations: string[],
+  property: string,
+  value: unknown,
+  options: { important?: boolean; length?: boolean } = {},
+) => {
+  const renderedValue = options.length ? cssLengthValue(value) : cssRawValue(value);
+  if (!renderedValue) return;
+  declarations.push(`${property}: ${renderedValue}${options.important === false ? "" : " !important"};`);
+};
+
+const responsiveOverrideRecord = (
+  element: BackyElement,
+  breakpoint: (typeof responsiveBreakpointOrder)[number],
+): Record<string, unknown> => asRecord(asRecord(element.responsive)[breakpoint]);
+
+const responsiveStyleDeclarations = (
+  element: BackyElement,
+  breakpoint: (typeof responsiveBreakpointOrder)[number],
+): string[] => {
+  const override = responsiveOverrideRecord(element, breakpoint);
+  if (Object.keys(override).length === 0) return [];
+
+  const style = asRecord(override.style);
+  const styles = asRecord(override.styles);
+  const props = asRecord(override.props);
+  const declarations: string[] = [];
+
+  addCssDeclaration(declarations, "left", override.x, { length: true });
+  addCssDeclaration(declarations, "top", override.y, { length: true });
+  addCssDeclaration(declarations, "width", override.width, { length: true });
+  addCssDeclaration(declarations, "min-height", override.height, { length: true });
+  addCssDeclaration(declarations, "z-index", override.zIndex);
+
+  if (override.visible === false || override.hidden === true) {
+    declarations.push("display: none !important;");
+  } else if (override.visible === true || override.hidden === false) {
+    declarations.push("display: block !important;");
+  }
+
+  const knownStyleValues: Record<string, unknown> = {
+    color: styles.color ?? style.color ?? props.color,
+    background: styles.background ?? style.background ?? styles.backgroundColor ?? style.backgroundColor ?? props.backgroundColor,
+    borderRadius: styles.borderRadius ?? style.borderRadius ?? props.borderRadius,
+    borderColor: styles.borderColor ?? style.borderColor ?? props.borderColor,
+    borderStyle: styles.borderStyle ?? style.borderStyle ?? props.borderStyle,
+    borderWidth: styles.borderWidth ?? style.borderWidth ?? props.borderWidth,
+    fontFamily: styles.fontFamily ?? style.fontFamily ?? props.fontFamily,
+    fontSize: styles.fontSize ?? style.fontSize ?? props.fontSize,
+    fontWeight: styles.fontWeight ?? style.fontWeight ?? props.fontWeight,
+    lineHeight: styles.lineHeight ?? style.lineHeight ?? props.lineHeight,
+    opacity: styles.opacity ?? style.opacity ?? props.opacity,
+    padding: styles.padding ?? style.padding ?? props.padding,
+    margin: styles.margin ?? style.margin ?? props.margin,
+    transform: styles.transform ?? style.transform ?? props.transform,
+  };
+
+  for (const [property, value] of Object.entries(knownStyleValues)) {
+    addCssDeclaration(
+      declarations,
+      cssPropertyName(property),
+      value,
+      { length: ["borderRadius", "borderWidth", "fontSize", "padding", "margin"].includes(property) },
+    );
+  }
+
+  return declarations;
+};
+
+const elementHasResponsiveVisibilityOverride = (element: BackyElement): boolean =>
+  responsiveBreakpointOrder.some((breakpoint) => {
+    const override = responsiveOverrideRecord(element, breakpoint);
+    return override.visible === true || override.hidden === false;
+  });
+
+const collectResponsiveElements = (elements: BackyElement[], collected: BackyElement[] = []): BackyElement[] => {
+  for (const element of elements) {
+    if (Object.keys(asRecord(element.responsive)).length > 0) collected.push(element);
+    collectResponsiveElements(elementChildren(element), collected);
+  }
+  return collected;
+};
+
+function buildBackyResponsiveCss(elements: BackyElement[]): string {
+  const responsiveElements = collectResponsiveElements(elements);
+  const rules: string[] = [];
+
+  for (const breakpoint of responsiveBreakpointOrder) {
+    const breakpointRules = responsiveElements
+      .map((element) => {
+        const declarations = responsiveStyleDeclarations(element, breakpoint);
+        if (declarations.length === 0) return "";
+        return `  [data-backy-element-id="${cssIdentifierValue(element.id)}"] {\n    ${declarations.join("\n    ")}\n  }`;
+      })
+      .filter(Boolean);
+    if (breakpointRules.length > 0) {
+      rules.push(`@media ${responsiveBreakpointMedia[breakpoint]} {\n${breakpointRules.join("\n")}\n}`);
+    }
+  }
+
+  return rules.join("\n\n");
+}
+
 function editableEntryCount(payload: BackyRenderPayload, elementId: string): number | undefined {
   const editableMap = payload.editableMap;
   if (Array.isArray(editableMap)) {
@@ -90,6 +227,7 @@ function elementStyle(element: BackyElement): CSSProperties {
     top: y,
     width,
     minHeight: height,
+    display: element.visible === false || element.hidden === true ? "none" : undefined,
     zIndex,
     color: asText(styles.color, style.color, props.color) || undefined,
     background: asText(styles.background, style.background, props.backgroundColor) || undefined,
@@ -106,7 +244,7 @@ function BackyElementFrame({
   payload: BackyRenderPayload;
   children: ReactNode;
 }) {
-  if (element.visible === false || element.hidden === true) return null;
+  if ((element.visible === false || element.hidden === true) && !elementHasResponsiveVisibilityOverride(element)) return null;
   const animation = asRecord(element.animation);
   const accessibility = asRecord(element.accessibility);
   return (
@@ -119,6 +257,8 @@ function BackyElementFrame({
       data-backy-prop-keys={keyList(element.props)}
       data-backy-style-keys={keyList(element.styles || element.style)}
       data-backy-responsive-breakpoints={keyList(element.responsive)}
+      data-backy-responsive-css="media-query"
+      data-backy-responsive-style-pointer="render.generatedResponsiveCss"
       data-backy-token-ref-keys={keyList(element.tokenRefs)}
       data-backy-asset-ids={attrList(element.assetIds)}
       data-backy-action-count={countAttr(element.actions)}
@@ -226,6 +366,7 @@ export function BackyPage({
   const canvas = asRecord(payload.content.canvas);
   const width = asNumber(canvas.width) || 1200;
   const height = asNumber(canvas.height) || 900;
+  const responsiveCss = buildBackyResponsiveCss(elements);
 
   return (
     <main
@@ -234,8 +375,12 @@ export function BackyPage({
       data-backy-component-contract-pointer="agent-handoff.componentApiContract.componentTypeContracts"
       data-backy-property-map-pointer="agent-handoff.componentApiContract.propertyMap"
       data-backy-editable-map-pointer="render.data.editableMap"
+      data-backy-responsive-style-pointer="render.generatedResponsiveCss"
       style={{ position: "relative", minHeight: height, width: "100%", maxWidth: width, margin: "0 auto" }}
     >
+      {responsiveCss ? (
+        <style data-backy-responsive-css="media-query">{responsiveCss}</style>
+      ) : null}
       {elements.map((element) => (
         <BackyElementView key={element.id} element={element} payload={payload} />
       ))}
