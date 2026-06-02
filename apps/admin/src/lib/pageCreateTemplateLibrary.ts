@@ -46,8 +46,11 @@ export const PAGE_TEMPLATE_LIBRARY_CATEGORIES: Array<{
     },
 ];
 
-export function getVisiblePageTemplateOptions<TTemplate extends string>(
-    templates: Array<PageTemplateLibraryOption<TTemplate>>,
+export function getVisiblePageTemplateOptions<
+    TTemplate extends string,
+    TOption extends PageTemplateLibraryOption<TTemplate> = PageTemplateLibraryOption<TTemplate>,
+>(
+    templates: TOption[],
     categoryId: PageTemplateLibraryCategory,
     searchQuery: string,
 ) {

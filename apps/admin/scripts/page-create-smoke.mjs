@@ -1416,6 +1416,12 @@ const assertPageCreateSourceContracts = () => {
       source.includes('data-testid="page-template-library-empty"') &&
       source.includes('data-testid="page-template-library-scroll"') &&
       source.includes('max-h-[34rem] overflow-y-auto') &&
+      source.includes('PAGE_CREATE_BLOG_CHILD_TEMPLATES') &&
+      source.includes('data-testid="page-blog-child-template-shell"') &&
+      source.includes('data-testid={`page-blog-child-template-${blogTemplate.id}`}') &&
+      source.includes("to: '/blog/new'") &&
+      source.includes('starterTemplate: blogTemplate.id') &&
+      source.includes('Page creation is the parent surface; open these as specialized blog posts') &&
       source.includes('options?: { markEdited?: boolean }') &&
       source.includes('const draftLocked = isPageCreateMutating;') &&
       source.includes('const canSyncSlugFromTitle = !isPageCreateMutating') &&

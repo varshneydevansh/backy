@@ -615,6 +615,44 @@ const PAGE_CREATION_AREAS = [
     },
 ] as const;
 
+const PAGE_CREATE_BLOG_CHILD_TEMPLATES: Array<{
+    id: 'blog-post' | 'survey' | 'gallery' | 'newsletter' | 'portfolio';
+    name: string;
+    detail: string;
+    sections: string[];
+}> = [
+    {
+        id: 'blog-post',
+        name: 'Blog post',
+        detail: 'Article hero, post body, author, taxonomy, and related posts.',
+        sections: ['Article hero', 'Body', 'Related'],
+    },
+    {
+        id: 'survey',
+        name: 'Investigation report',
+        detail: 'Long-form reporting with evidence, timeline, sources, and quote blocks.',
+        sections: ['Report', 'Evidence', 'Sources'],
+    },
+    {
+        id: 'gallery',
+        name: 'Audio transcript',
+        detail: 'Audio player, transcript body, notes, and downloadable source files.',
+        sections: ['Audio', 'Transcript', 'Files'],
+    },
+    {
+        id: 'newsletter',
+        name: 'Newsletter issue',
+        detail: 'Issue header, curated links, subscriber CTA, and archive metadata.',
+        sections: ['Issue', 'Links', 'Subscribe'],
+    },
+    {
+        id: 'portfolio',
+        name: 'Case study',
+        detail: 'Problem, process, media, outcomes, and reusable proof sections.',
+        sections: ['Problem', 'Process', 'Outcome'],
+    },
+];
+
 const slugify = (value: string) => (
     value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 );
@@ -4735,6 +4773,62 @@ function NewPageRoute() {
                                             No starter templates match this filter.
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                            <div
+                                className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-background p-3"
+                                data-testid="page-blog-child-template-shell"
+                            >
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-foreground">Blog child templates</h3>
+                                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                            Page creation is the parent surface; open these as specialized blog posts when the route needs author, taxonomy, newsletter, audio, or reporting metadata.
+                                        </p>
+                                    </div>
+                                    <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
+                                        {PAGE_CREATE_BLOG_CHILD_TEMPLATES.length} post templates
+                                    </span>
+                                </div>
+                                <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                                    {PAGE_CREATE_BLOG_CHILD_TEMPLATES.map((blogTemplate) => (
+                                        <button
+                                            key={blogTemplate.id}
+                                            type="button"
+                                            onClick={() => {
+                                                if (templateSelectionControlDisabled) return;
+                                                navigate({
+                                                    to: '/blog/new',
+                                                    search: {
+                                                        siteId: formData.siteId,
+                                                        starterTemplate: blogTemplate.id,
+                                                        templateSource: formData.templateSourceMode,
+                                                        focus: 'canvas',
+                                                    },
+                                                });
+                                            }}
+                                            disabled={templateSelectionControlDisabled}
+                                            aria-describedby={pageTemplateSelectionActionStatusId}
+                                            data-testid={`page-blog-child-template-${blogTemplate.id}`}
+                                            data-action-state={templateSelectionControlDisabled ? 'blocked' : 'ready'}
+                                            data-action-status={`${blogTemplate.name} opens in blog creation with ${blogTemplate.sections.length} specialized section${blogTemplate.sections.length === 1 ? '' : 's'}.`}
+                                            data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
+                                            className="min-w-0 rounded-lg border border-border bg-card p-3 text-left transition hover:border-primary/50 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <div className="mb-1 flex min-w-0 items-center gap-2">
+                                                <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                <span className="min-w-0 truncate font-semibold">{blogTemplate.name}</span>
+                                            </div>
+                                            <p className="text-xs leading-5 text-muted-foreground">{blogTemplate.detail}</p>
+                                            <span className="mt-3 flex flex-wrap gap-1">
+                                                {blogTemplate.sections.map((section) => (
+                                                    <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                        {section}
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
                         </div>

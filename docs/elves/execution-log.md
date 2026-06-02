@@ -3659,6 +3659,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-02 23:58 IST - Blog Child Starter Template Library
+
+**Scope:** Batch 5 blog/page creation polish, focused on the user's requested inheritance model: New Page stays the parent creation surface, while Blog creation is the child surface with its own blog-specific templates that can still preserve Backy canvas and custom frontend design contracts.
+
+**Changed:**
+- `/blog/new` now accepts and persists `starterTemplate` alongside the existing source mode, so blog templates are addressable by route and recoverable through autosave.
+- Blog creation now exposes a full 33-template starter library aligned with the New Page catalog, with blog-specific titles, descriptions, sections, aliases, and search/category filtering.
+- Each blog child template maps to a concrete seeded authoring flow: article, investigation, audio transcript, newsletter, or case study, preserving the real APIable element canvas instead of only changing metadata.
+- Custom frontend blog creation now auto-matches the selected blog child starter to captured `frontendDesign.templates[]` blog-post templates when possible, while retaining explicit captured-template selection and Backy-canvas fallback behavior.
+- New Page now advertises blog child entry points for Blog post, Investigation report, Audio transcript, Newsletter issue, and Case study, routing into `/blog/new` with `starterTemplate`, `templateSource`, and `focus=canvas`.
+- Page/blog create smoke guards now assert the parent/child routing contract, blog template library UI, route persistence, custom frontend matching, autosave recovery, and serialized design metadata.
+
+**Validation:**
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_BLOG_CREATE_CDP_PORT=9375 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_PAGE_CREATE_STARTER_FILTER=landing BACKY_PAGE_CREATE_CDP_PORT=9374 BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+
+**Notes:**
+- Spark sidecars `019e8977-9f82-7a70-98cb-cd764d97e3b0` and `019e8981-902e-7a93-bb75-740006884eaf` independently confirmed the gap: blog create had only five intent controls while page create had the richer 33-template parent catalog. The implemented shape keeps page creation canonical and opens specialized blog child templates from page creation instead of duplicating page creation logic.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-02 22:45 IST - Custom Frontend Newsletter Unsubscribe Bridge
 
 **Scope:** Batch 5 custom-frontend/newsletter polish, focused on making the separate Next.js starter match Backy's public newsletter contract for both subscribe and unsubscribe without exposing admin/provider secrets.

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, RefreshCw, Save, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, RefreshCw, Save, Search, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     createBlogPostPreview,
@@ -37,6 +37,12 @@ import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
+import {
+  getVisiblePageTemplateOptions,
+  PAGE_TEMPLATE_LIBRARY_CATEGORIES,
+  type PageTemplateLibraryCategory,
+  type PageTemplateLibraryOption,
+} from '@/lib/pageCreateTemplateLibrary';
 import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
@@ -52,6 +58,7 @@ interface BlogNewSearch {
     siteId?: string;
     focus?: 'canvas';
     templateSource?: BlogTemplateSourceMode;
+    starterTemplate?: BlogStarterTemplate;
     designTemplate?: string;
     frontendDesignTemplateId?: string;
     frontendTemplate?: string;
@@ -59,6 +66,7 @@ interface BlogNewSearch {
 
 type BlogTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
 type BlogStarterIntent = 'article' | 'investigation' | 'audio-transcript' | 'newsletter' | 'case-study';
+type BlogStarterTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -84,6 +92,7 @@ interface BlogCreateAutosaveDraft {
     canvasElements: CanvasElement[];
     canvasSize: CanvasSize;
     selectedBlogStarterIntent?: BlogStarterIntent;
+    selectedBlogStarterTemplate?: BlogStarterTemplate;
     templateSourceMode?: BlogTemplateSourceMode;
     designTemplateId?: string;
     frontendDesignSource?: SiteFrontendDesignContract['source'] | null;
@@ -117,6 +126,7 @@ export const Route = createFileRoute('/blog/new')({
         siteId: normalizedSearchString(search.siteId),
         focus: search.focus === 'canvas' ? 'canvas' : undefined,
         templateSource: isBlogTemplateSourceMode(search.templateSource) ? search.templateSource : undefined,
+        starterTemplate: isBlogStarterTemplate(search.starterTemplate) ? search.starterTemplate : undefined,
         designTemplate: normalizedFrontendDesignTemplateSearch(search),
         frontendDesignTemplateId: normalizedSearchString(search.frontendDesignTemplateId),
         frontendTemplate: normalizedSearchString(search.frontendTemplate),
@@ -245,6 +255,73 @@ const BLOG_STARTER_INTENTS: Array<{
         aliases: ['case study', 'case', 'portfolio', 'proof', 'project'],
     },
 ];
+
+type BlogStarterTemplateOption = PageTemplateLibraryOption<BlogStarterTemplate> & {
+    intent: BlogStarterIntent;
+    aliases: string[];
+};
+
+const BLOG_STARTER_TEMPLATE_OPTIONS: BlogStarterTemplateOption[] = [
+    { id: 'blank', name: 'Blank post', desc: 'A clean article canvas with title, excerpt, and body blocks.', detail: 'Best when you want to compose a custom story layout from scratch.', sections: ['Article hero', 'Body'], intent: 'article', aliases: ['blank', 'article', 'story', 'post'] },
+    { id: 'landing', name: 'Announcement post', desc: 'Hero, value points, and a reader call to action.', detail: 'Useful for launches, public notices, campaign updates, and editorial announcements.', sections: ['Hero', 'Highlights', 'CTA'], intent: 'article', aliases: ['landing', 'announcement', 'launch', 'update'] },
+    { id: 'storefront', name: 'Store update', desc: 'Product story, catalog references, and shopping CTA.', detail: 'Turns commerce updates into editable editorial posts that can bind to products.', sections: ['Product story', 'Catalog links', 'CTA'], intent: 'case-study', aliases: ['store', 'shop', 'product', 'commerce'] },
+    { id: 'product-detail', name: 'Product story', desc: 'Product media, details, use cases, and related items.', detail: 'Good for deep product articles, launch notes, and comparison posts.', sections: ['Product media', 'Details', 'Related'], intent: 'case-study', aliases: ['product', 'detail', 'feature'] },
+    { id: 'pricing', name: 'Pricing explainer', desc: 'Plan context, feature comparison, and buyer FAQ.', detail: 'Use when a post needs to explain packages, pricing changes, or subscription choices.', sections: ['Context', 'Plan table', 'FAQ'], intent: 'article', aliases: ['pricing', 'plans', 'subscription'] },
+    { id: 'services', name: 'Service guide', desc: 'Service overview, process, outcomes, and booking CTA.', detail: 'Creates a practical service article that can become an onboarding or sales resource.', sections: ['Overview', 'Process', 'Booking'], intent: 'case-study', aliases: ['services', 'guide', 'process'] },
+    { id: 'booking', name: 'Booking article', desc: 'Session intro, availability notes, and scheduling handoff.', detail: 'Good for explaining appointments, consultations, workshops, or public sessions.', sections: ['Intro', 'Availability', 'Schedule'], intent: 'article', aliases: ['booking', 'appointment', 'calendar'] },
+    { id: 'portfolio', name: 'Portfolio story', desc: 'Featured work, project context, media, and inquiry CTA.', detail: 'Turns portfolio work into a rich case-study post.', sections: ['Work hero', 'Project media', 'Inquiry'], intent: 'case-study', aliases: ['portfolio', 'work', 'project'] },
+    { id: 'gallery', name: 'Media essay', desc: 'Image, video, audio, and file-backed story blocks.', detail: 'Useful for photo essays, evidence galleries, travel logs, and visual reporting.', sections: ['Media hero', 'Gallery', 'Files'], intent: 'article', aliases: ['gallery', 'media', 'images', 'video', 'files'] },
+    { id: 'events', name: 'Event recap', desc: 'Event context, agenda, media, and RSVP/follow-up actions.', detail: 'Good for event reports, upcoming event announcements, and meeting notes.', sections: ['Event hero', 'Agenda', 'Follow-up'], intent: 'article', aliases: ['event', 'webinar', 'meetup', 'recap'] },
+    { id: 'privacy', name: 'Privacy update', desc: 'Policy summary, data-use sections, and reader action.', detail: 'Use for transparent public notes about privacy, data use, or policy changes.', sections: ['Summary', 'Data use', 'Contact'], intent: 'article', aliases: ['privacy', 'policy', 'data'] },
+    { id: 'terms', name: 'Terms update', desc: 'Service rule changes, acceptable use, and support handoff.', detail: 'Good for publishing terms changes or platform operation notes.', sections: ['Summary', 'Rules', 'Support'], intent: 'article', aliases: ['terms', 'rules', 'policy'] },
+    { id: 'cookie-policy', name: 'Cookie update', desc: 'Cookie category explanation and preference CTA.', detail: 'Use for consent, analytics, and tracking transparency posts.', sections: ['Categories', 'Consent', 'Preferences'], intent: 'article', aliases: ['cookie', 'consent', 'analytics'] },
+    { id: 'accessibility-statement', name: 'Accessibility note', desc: 'Access commitment, known limitations, and feedback CTA.', detail: 'Creates an accessibility progress post with public feedback routing.', sections: ['Commitment', 'Standards', 'Feedback'], intent: 'article', aliases: ['accessibility', 'wcag', 'assistive'] },
+    { id: 'refund-policy', name: 'Refund update', desc: 'Refund windows, exceptions, and customer support path.', detail: 'Good for commerce policy explainers and customer support updates.', sections: ['Rules', 'Exceptions', 'Support'], intent: 'article', aliases: ['refund', 'returns', 'support'] },
+    { id: 'shipping-policy', name: 'Shipping update', desc: 'Delivery timelines, methods, rates, and tracking notes.', detail: 'Use for shipping explainers, delay notices, and fulfillment updates.', sections: ['Timeline', 'Methods', 'Tracking'], intent: 'article', aliases: ['shipping', 'delivery', 'tracking'] },
+    { id: 'cart', name: 'Cart guide', desc: 'Cart behavior, discounts, checkout handoff, and FAQ.', detail: 'Creates a support article for shopping, cart, and checkout workflows.', sections: ['Cart items', 'Totals', 'FAQ'], intent: 'article', aliases: ['cart', 'checkout', 'shopping'] },
+    { id: 'checkout', name: 'Checkout guide', desc: 'Checkout steps, payment handoff, and customer details.', detail: 'Use to explain checkout flows without exposing payment secrets.', sections: ['Steps', 'Payment', 'Help'], intent: 'article', aliases: ['checkout', 'payment', 'order'] },
+    { id: 'order-confirmation', name: 'Order update', desc: 'Receipt status, fulfillment notes, and support actions.', detail: 'Good for post-purchase guides and fulfillment announcement posts.', sections: ['Status', 'Receipt', 'Next steps'], intent: 'article', aliases: ['order', 'receipt', 'confirmation'] },
+    { id: 'help-center', name: 'Help article', desc: 'Searchable support article with steps, FAQs, and escalation.', detail: 'Creates a practical knowledge-base style blog post.', sections: ['Problem', 'Steps', 'FAQ'], intent: 'article', aliases: ['help', 'support', 'knowledge base'] },
+    { id: 'faq', name: 'FAQ post', desc: 'Question list, category notes, and support CTA.', detail: 'Good for explainer posts where answers should be skimmable.', sections: ['Questions', 'Answers', 'Support'], intent: 'article', aliases: ['faq', 'questions', 'answers'] },
+    { id: 'testimonials', name: 'Proof story', desc: 'Quote, proof points, source context, and inquiry CTA.', detail: 'Turns testimonials and proof into a reusable public story.', sections: ['Proof hero', 'Quotes', 'Inquiry'], intent: 'case-study', aliases: ['testimonials', 'reviews', 'proof'] },
+    { id: 'blog-index', name: 'Editorial index note', desc: 'Publication intro, featured story, and article-list context.', detail: 'Use when explaining a publication series, beat, archive, or editorial package.', sections: ['Editorial intro', 'Featured story', 'Article list'], intent: 'article', aliases: ['blog index', 'archive', 'publication'] },
+    { id: 'blog-post', name: 'Blog post', desc: 'Article hero, post body, author card, taxonomy, and related posts.', detail: 'The default long-form post template for articles, reports, and essays.', sections: ['Article hero', 'Post body', 'Related posts'], intent: 'article', aliases: ['blog post', 'article', 'post', 'story', 'editorial'] },
+    { id: 'team', name: 'Profile story', desc: 'Person or team context, role notes, and hiring/contact CTA.', detail: 'Good for founder notes, team profiles, interviews, and organization updates.', sections: ['Profile', 'Role', 'CTA'], intent: 'case-study', aliases: ['team', 'profile', 'people'] },
+    { id: 'careers', name: 'Careers post', desc: 'Role story, benefits, hiring process, and application CTA.', detail: 'Creates an editorial job or hiring announcement with Backy-managed content.', sections: ['Role', 'Benefits', 'Apply'], intent: 'article', aliases: ['careers', 'jobs', 'hiring'] },
+    { id: 'about', name: 'About story', desc: 'Origin story, values, people, and trust-building sections.', detail: 'Good for personal updates, organization stories, and background essays.', sections: ['Story', 'Values', 'People'], intent: 'case-study', aliases: ['about', 'story', 'values'] },
+    { id: 'contact', name: 'Contact update', desc: 'Contact context, response expectations, and form CTA.', detail: 'Use for public callouts, intake posts, or reader-response workflows.', sections: ['Intro', 'Form CTA', 'Response'], intent: 'article', aliases: ['contact', 'intake', 'response'] },
+    { id: 'newsletter', name: 'Newsletter issue', desc: 'Issue header, intro, curated links, subscriber CTA, and archive metadata.', detail: 'Creates a newsletter-style blog post that can also appear as a public archive issue.', sections: ['Issue hero', 'Curated links', 'Subscribe'], intent: 'newsletter', aliases: ['newsletter', 'issue', 'digest', 'subscriber', 'email'] },
+    { id: 'survey', name: 'Survey results', desc: 'Question summary, response findings, and next-step CTA.', detail: 'Use to publish survey results or request structured reader feedback.', sections: ['Question', 'Findings', 'CTA'], intent: 'investigation', aliases: ['survey', 'results', 'feedback'] },
+    { id: 'registration', name: 'Registration post', desc: 'Signup context, fields, consent, and confirmation notes.', detail: 'Good for event, member, or campaign registration explainers.', sections: ['Signup intro', 'Fields', 'Consent'], intent: 'article', aliases: ['registration', 'signup', 'members'] },
+    { id: 'member-login', name: 'Member access note', desc: 'Access instructions, account copy, and registration handoff.', detail: 'Use to explain private-resource access without collecting passwords in content forms.', sections: ['Access', 'Account', 'Register'], intent: 'article', aliases: ['member login', 'access', 'account'] },
+    { id: 'member-account', name: 'Member account guide', desc: 'Profile, preferences, resources, and protected-content notes.', detail: 'Good for guides that explain member dashboards or private content workflows.', sections: ['Profile', 'Preferences', 'Resources'], intent: 'article', aliases: ['member account', 'profile', 'preferences'] },
+];
+
+const BLOG_STARTER_TEMPLATE_BY_ID = new Map(BLOG_STARTER_TEMPLATE_OPTIONS.map((template) => [template.id, template]));
+
+const getBlogStarterTemplate = (templateId: BlogStarterTemplate) => (
+    BLOG_STARTER_TEMPLATE_BY_ID.get(templateId) || BLOG_STARTER_TEMPLATE_BY_ID.get('blog-post') || BLOG_STARTER_TEMPLATE_OPTIONS[0]
+);
+
+const isBlogStarterTemplate = (value: unknown): value is BlogStarterTemplate => (
+    typeof value === 'string' && BLOG_STARTER_TEMPLATE_BY_ID.has(value as BlogStarterTemplate)
+);
+
+const blogStarterTemplateFromIntent = (intent: BlogStarterIntent | undefined): BlogStarterTemplate => {
+    switch (intent) {
+        case 'investigation':
+            return 'survey';
+        case 'audio-transcript':
+            return 'gallery';
+        case 'newsletter':
+            return 'newsletter';
+        case 'case-study':
+            return 'portfolio';
+        case 'article':
+        default:
+            return 'blog-post';
+    }
+};
 
 const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
     createCanvasElement('section', 0, 0, {
@@ -758,6 +835,10 @@ function createBlogStarterElements(intent: BlogStarterIntent): CanvasElement[] {
     }
 }
 
+function createBlogStarterTemplateElements(templateId: BlogStarterTemplate): CanvasElement[] {
+    return createBlogStarterElements(getBlogStarterTemplate(templateId).intent);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -982,18 +1063,23 @@ const normalizeFrontendBlogTemplateMatchText = (value?: string) => (
         .trim()
 );
 
-const frontendTemplateScoreForBlogStarter = (
+const frontendTemplateScoreForBlogStarterTemplate = (
     template: SiteFrontendDesignTemplate,
-    starterIntent: BlogStarterIntent,
+    starterTemplateId: BlogStarterTemplate,
 ) => {
-    const intent = BLOG_STARTER_INTENTS.find((entry) => entry.id === starterIntent);
-    if (!intent) return 0;
-
+    const starterTemplate = getBlogStarterTemplate(starterTemplateId);
+    const intent = BLOG_STARTER_INTENTS.find((entry) => entry.id === starterTemplate.intent);
     const routeSlug = routeSlugFromPattern(template.routePattern);
     const aliases = Array.from(new Set([
-        starterIntent,
-        intent.name,
-        ...intent.aliases,
+        starterTemplate.id,
+        starterTemplate.name,
+        starterTemplate.desc,
+        starterTemplate.detail,
+        ...starterTemplate.sections,
+        ...starterTemplate.aliases,
+        starterTemplate.intent,
+        intent?.name,
+        ...(intent?.aliases || []),
     ].map(normalizeFrontendBlogTemplateMatchText).filter(Boolean)));
     const id = normalizeFrontendBlogTemplateMatchText(template.id);
     const name = normalizeFrontendBlogTemplateMatchText(template.name);
@@ -1003,21 +1089,21 @@ const frontendTemplateScoreForBlogStarter = (
 
     return aliases.reduce((score, alias) => {
         if (!alias) return score;
-        if (id === alias || name === alias || route === alias) return score + 100;
-        if (id.includes(alias) || name.includes(alias) || route.includes(alias)) return score + 45;
-        if (haystack.includes(alias)) return score + 18;
+        if (id === alias || name === alias || route === alias) return score + 120;
+        if (id.includes(alias) || name.includes(alias) || route.includes(alias)) return score + 50;
+        if (haystack.includes(alias)) return score + 20;
         return score;
     }, 0);
 };
 
-const findFrontendBlogTemplateForStarter = (
+const findFrontendBlogTemplateForStarterTemplate = (
     templates: SiteFrontendDesignTemplate[],
-    starterIntent: BlogStarterIntent,
+    starterTemplateId: BlogStarterTemplate,
 ) => templates
     .map((template, index) => ({
         template,
         index,
-        score: frontendTemplateScoreForBlogStarter(template, starterIntent),
+        score: frontendTemplateScoreForBlogStarterTemplate(template, starterTemplateId),
     }))
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.template || null;
@@ -1261,7 +1347,11 @@ function NewBlogPostPage() {
     const [selectedAuthorId, setSelectedAuthorId] = useState(user?.id || 'admin');
     const [templateSourceMode, setTemplateSourceMode] = useState<BlogTemplateSourceMode>(initialTemplateSourceMode);
     const [designTemplateId, setDesignTemplateId] = useState(search.designTemplate || '');
-    const [selectedBlogStarterIntent, setSelectedBlogStarterIntent] = useState<BlogStarterIntent>('article');
+    const initialBlogStarterTemplate = search.starterTemplate || 'blog-post';
+    const [selectedBlogStarterIntent, setSelectedBlogStarterIntent] = useState<BlogStarterIntent>(getBlogStarterTemplate(initialBlogStarterTemplate).intent);
+    const [selectedBlogStarterTemplate, setSelectedBlogStarterTemplate] = useState<BlogStarterTemplate>(initialBlogStarterTemplate);
+    const [blogTemplateLibraryCategory, setBlogTemplateLibraryCategory] = useState<PageTemplateLibraryCategory>('all');
+    const [blogTemplateSearchQuery, setBlogTemplateSearchQuery] = useState('');
     const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
     const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(user?.id));
     const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -1485,13 +1575,14 @@ function NewBlogPostPage() {
                 search: {
                     siteId: fallbackSiteId,
                     ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                    ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
                     ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
                     ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
                 },
                 replace: true,
             });
         }
-    }, [activeSiteId, designTemplateId, isWorkspaceFocus, navigate, sites, templateSourceMode]);
+    }, [activeSiteId, designTemplateId, isWorkspaceFocus, navigate, selectedBlogStarterTemplate, sites, templateSourceMode]);
 
     useEffect(() => {
         const nextRequestedSite = search.siteId
@@ -1525,13 +1616,16 @@ function NewBlogPostPage() {
         setTemplateSourceMode('backy-canvas');
         setDesignTemplateId('');
         setSelectedBlogStarterIntent('article');
-        const nextElements = createBlogStarterElements('article');
+        setSelectedBlogStarterTemplate('blog-post');
+        setBlogTemplateLibraryCategory('all');
+        setBlogTemplateSearchQuery('');
+        const nextElements = createBlogStarterTemplateElements('blog-post');
         setCanvasElements(nextElements);
         setCanvasSize({
             ...DEFAULT_CANVAS_SIZE,
             height: getCanvasHeightForElements(nextElements),
         });
-        setCanvasSeedKey(`blog-starter-article-${Date.now()}`);
+        setCanvasSeedKey(`blog-starter-blog-post-${Date.now()}`);
         clearCreationFeedback();
         navigate({
             to: '/blog/new',
@@ -1561,7 +1655,7 @@ function NewBlogPostPage() {
     };
 
     // Canvas State
-    const initialElements: CanvasElement[] = useMemo(() => createBlogStarterElements('article'), []);
+    const initialElements: CanvasElement[] = useMemo(() => createBlogStarterTemplateElements(initialBlogStarterTemplate), [initialBlogStarterTemplate]);
     const initialCanvasSize = useMemo<CanvasSize>(() => ({
         ...DEFAULT_CANVAS_SIZE,
         height: getCanvasHeightForElements(initialElements),
@@ -1579,6 +1673,14 @@ function NewBlogPostPage() {
         : null;
     const interactivePublishReady = interactiveReadinessIssues.length === 0;
     const appliedSearchTemplateRef = useRef<string | null>(null);
+    const selectedBlogStarterTemplateOption = useMemo(
+        () => getBlogStarterTemplate(selectedBlogStarterTemplate),
+        [selectedBlogStarterTemplate],
+    );
+    const visibleBlogStarterTemplateOptions = useMemo(
+        () => getVisiblePageTemplateOptions(BLOG_STARTER_TEMPLATE_OPTIONS, blogTemplateLibraryCategory, blogTemplateSearchQuery),
+        [blogTemplateLibraryCategory, blogTemplateSearchQuery],
+    );
     const frontendBlogTemplates = useMemo(
         () => (frontendDesign?.templates || []).filter((template) => template.type === 'blogPost'),
         [frontendDesign?.templates],
@@ -1590,9 +1692,9 @@ function NewBlogPostPage() {
     );
     const matchedFrontendBlogTemplate = useMemo(
         () => isCustomFrontendTemplateSource
-            ? findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)
+            ? findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, selectedBlogStarterTemplate)
             : null,
-        [frontendBlogTemplates, isCustomFrontendTemplateSource, selectedBlogStarterIntent],
+        [frontendBlogTemplates, isCustomFrontendTemplateSource, selectedBlogStarterTemplate],
     );
     const selectedFrontendTemplate = isCustomFrontendTemplateSource
         ? explicitSelectedFrontendTemplate || matchedFrontendBlogTemplate
@@ -1602,11 +1704,11 @@ function NewBlogPostPage() {
             ? 'selected'
             : 'starter-matched'
         : 'none';
-    const frontendTemplateByStarterIntent = useMemo(
-        () => new Map<BlogStarterIntent, SiteFrontendDesignTemplate | null>(
-            BLOG_STARTER_INTENTS.map((intent) => [
-                intent.id,
-                findFrontendBlogTemplateForStarter(frontendBlogTemplates, intent.id),
+    const frontendTemplateByStarterTemplate = useMemo(
+        () => new Map<BlogStarterTemplate, SiteFrontendDesignTemplate | null>(
+            BLOG_STARTER_TEMPLATE_OPTIONS.map((template) => [
+                template.id,
+                findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, template.id),
             ]),
         ),
         [frontendBlogTemplates],
@@ -1656,14 +1758,14 @@ function NewBlogPostPage() {
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? effectiveFrontendTemplate
             ? selectedFrontendTemplateMatchMode === 'starter-matched'
-                ? `Custom frontend starter matched: ${BLOG_STARTER_INTENTS.find((intent) => intent.id === selectedBlogStarterIntent)?.name || 'Selected starter'} uses ${effectiveFrontendTemplate.name}.`
+                ? `Custom frontend starter matched: ${selectedBlogStarterTemplateOption.name} uses ${effectiveFrontendTemplate.name}.`
                 : `Custom frontend blog template selected: ${effectiveFrontendTemplate.name}.`
             : frontendDesignLoading
                 ? 'Loading custom frontend blog templates.'
                 : frontendBlogTemplates.length > 0
-                    ? 'No captured custom frontend blog template matches this starter. Choose another starter or select a captured template.'
+                    ? `No captured custom frontend blog template matches ${selectedBlogStarterTemplateOption.name}. Choose another starter or select a captured template.`
                     : 'No custom frontend blog templates are captured for this site yet.'
-        : 'Backy canvas blog article template selected.';
+        : `Backy canvas blog template selected: ${selectedBlogStarterTemplateOption.name}.`;
     const blogTemplateSelectionActionStatusId = 'blog-template-selection-action-status';
     const blogTemplateSelectionDisabledReason = isCreateBusy
         ? 'Blog post creation is already running.'
@@ -1706,32 +1808,42 @@ function NewBlogPostPage() {
             ? `${template.name} blog frontend template selected with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`
             : `Select ${template.name} blog frontend template with ${template.bindingHints?.length || 0} binding${(template.bindingHints?.length || 0) === 1 ? '' : 's'}.`;
     };
-    const getBlogStarterIntentActionStatus = (intent: (typeof BLOG_STARTER_INTENTS)[number]) => {
+    const getBlogStarterTemplateActionStatus = (template: BlogStarterTemplateOption) => {
         if (blogTemplateSelectionDisabledReason) {
-            return `${intent.name} starter unavailable: ${blogTemplateSelectionDisabledReason}`;
+            return `${template.name} starter unavailable: ${blogTemplateSelectionDisabledReason}`;
         }
 
-        const matchedTemplate = frontendTemplateByStarterIntent.get(intent.id) || null;
+        const matchedTemplate = frontendTemplateByStarterTemplate.get(template.id) || null;
         if (!isCustomFrontendTemplateSource) {
-            return selectedBlogStarterIntent === intent.id
-                ? `${intent.name} article starter selected for Backy canvas generation.`
-                : `Select ${intent.name} article starter with ${intent.sections.length} section${intent.sections.length === 1 ? '' : 's'}.`;
+            return selectedBlogStarterTemplate === template.id
+                ? `${template.name} starter selected for Backy canvas generation.`
+                : `Select ${template.name} starter with ${template.sections.length} section${template.sections.length === 1 ? '' : 's'}.`;
         }
 
-        if (selectedBlogStarterIntent === intent.id) {
+        if (selectedBlogStarterTemplate === template.id) {
             return matchedTemplate
-                ? `${intent.name} custom frontend starter selected; it will use ${matchedTemplate.name}.`
-                : `${intent.name} custom frontend starter selected, but no captured template matches it.`;
+                ? `${template.name} custom frontend starter selected; it will use ${matchedTemplate.name}.`
+                : `${template.name} custom frontend starter selected, but no captured template matches it.`;
         }
 
         return matchedTemplate
-            ? `Select ${intent.name}; Backy will use ${matchedTemplate.name}.`
-            : `Select ${intent.name}; no captured custom frontend blog template currently matches this intent.`;
+            ? `Select ${template.name}; Backy will use ${matchedTemplate.name}.`
+            : `Select ${template.name}; no captured custom frontend blog template currently matches this starter.`;
+    };
+    const getBlogTemplateCategoryActionStatus = (category: (typeof PAGE_TEMPLATE_LIBRARY_CATEGORIES)[number]) => {
+        if (blogTemplateSelectionDisabledReason) {
+            return `${category.label} blog template filter unavailable: ${blogTemplateSelectionDisabledReason}`;
+        }
+
+        const templateCount = category.templates?.length || BLOG_STARTER_TEMPLATE_OPTIONS.length;
+        return blogTemplateLibraryCategory === category.id
+            ? `${category.label} blog template filter selected with ${visibleBlogStarterTemplateOptions.length} visible template${visibleBlogStarterTemplateOptions.length === 1 ? '' : 's'}.`
+            : `Filter blog starter templates to ${category.label} (${templateCount} template${templateCount === 1 ? '' : 's'}).`;
     };
     const blogTemplateSelectionActionStatus = [
         getBlogTemplateSourceActionStatus('backy-canvas'),
         getBlogTemplateSourceActionStatus('custom-frontend'),
-        `${BLOG_STARTER_INTENTS.length} blog starter intent${BLOG_STARTER_INTENTS.length === 1 ? '' : 's'} available.`,
+        `${visibleBlogStarterTemplateOptions.length} of ${BLOG_STARTER_TEMPLATE_OPTIONS.length} blog starter template${BLOG_STARTER_TEMPLATE_OPTIONS.length === 1 ? '' : 's'} visible.`,
         `${visibleFrontendBlogTemplates.length} custom frontend blog template${visibleFrontendBlogTemplates.length === 1 ? '' : 's'} available.`,
     ].join(' ');
     const effectiveFrontendDesignSource = effectiveFrontendTemplate
@@ -1776,7 +1888,7 @@ function NewBlogPostPage() {
         clearCreationFeedback();
 
         if (nextSourceMode === 'backy-canvas') {
-            const nextElements = createBlogStarterElements(selectedBlogStarterIntent);
+            const nextElements = createBlogStarterTemplateElements(selectedBlogStarterTemplate);
             setTemplateSourceMode('backy-canvas');
             setDesignTemplateId('');
             setRecoveredFrontendDesignSnapshot(null);
@@ -1785,17 +1897,17 @@ function NewBlogPostPage() {
                 ...DEFAULT_CANVAS_SIZE,
                 height: getCanvasHeightForElements(nextElements),
             });
-            setCanvasSeedKey(`blog-starter-${selectedBlogStarterIntent}-${Date.now()}`);
+            setCanvasSeedKey(`blog-starter-${selectedBlogStarterTemplate}-${Date.now()}`);
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}) },
                 replace: true,
             });
             return;
         }
 
         setTemplateSourceMode('custom-frontend');
-        const nextTemplate = findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)
+        const nextTemplate = findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, selectedBlogStarterTemplate)
             || selectedFrontendTemplate
             || frontendBlogTemplates[0]
             || null;
@@ -1803,7 +1915,7 @@ function NewBlogPostPage() {
             setDesignTemplateId('');
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const },
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), starterTemplate: selectedBlogStarterTemplate, templateSource: 'custom-frontend' as const },
                 replace: true,
             });
             return;
@@ -1812,32 +1924,39 @@ function NewBlogPostPage() {
         applyFrontendTemplate(nextTemplate, { syncRoute: true });
     };
 
-    const handleBlogStarterIntentChange = (nextIntent: BlogStarterIntent) => {
+    const handleBlogStarterTemplateChange = (nextTemplateId: BlogStarterTemplate) => {
         if (blogTemplateSelectionControlDisabled || !canEditBlog) return;
 
+        const nextTemplateOption = getBlogStarterTemplate(nextTemplateId);
         clearCreationFeedback();
-        setSelectedBlogStarterIntent(nextIntent);
+        setSelectedBlogStarterTemplate(nextTemplateId);
+        setSelectedBlogStarterIntent(nextTemplateOption.intent);
 
         if (!isCustomFrontendTemplateSource) {
-            const nextElements = createBlogStarterElements(nextIntent);
+            const nextElements = createBlogStarterTemplateElements(nextTemplateId);
             setCanvasElements(nextElements);
             setCanvasSize({
                 ...DEFAULT_CANVAS_SIZE,
                 height: getCanvasHeightForElements(nextElements),
             });
-            setCanvasSeedKey(`blog-starter-${nextIntent}-${Date.now()}`);
-            setNotice(`${BLOG_STARTER_INTENTS.find((intent) => intent.id === nextIntent)?.name || 'Blog starter'} selected.`);
+            setCanvasSeedKey(`blog-starter-${nextTemplateId}-${Date.now()}`);
+            setNotice(`${nextTemplateOption.name} selected.`);
+            navigate({
+                to: '/blog/new',
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(nextTemplateId !== 'blog-post' ? { starterTemplate: nextTemplateId } : {}) },
+                replace: true,
+            });
             return;
         }
 
-        const nextTemplate = findFrontendBlogTemplateForStarter(frontendBlogTemplates, nextIntent);
+        const nextTemplate = findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, nextTemplateId);
         if (!nextTemplate) {
             setDesignTemplateId('');
             setNotice(null);
-            setError('No captured custom frontend blog template matches that starter yet.');
+            setError(`No captured custom frontend blog template matches ${nextTemplateOption.name} yet.`);
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const },
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), starterTemplate: nextTemplateId, templateSource: 'custom-frontend' as const },
                 replace: true,
             });
             return;
@@ -1887,7 +2006,7 @@ function NewBlogPostPage() {
         if (options.syncRoute) {
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), templateSource: 'custom-frontend' as const, designTemplate: template.id },
+                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), starterTemplate: selectedBlogStarterTemplate, templateSource: 'custom-frontend' as const, designTemplate: template.id },
                 replace: true,
             });
         }
@@ -1920,13 +2039,26 @@ function NewBlogPostPage() {
     useEffect(() => {
         const nextTemplateId = search.designTemplate || '';
         const nextTemplateSourceMode = search.templateSource || (nextTemplateId ? 'custom-frontend' : 'backy-canvas');
+        const nextStarterTemplate = search.starterTemplate || 'blog-post';
         if (nextTemplateSourceMode !== templateSourceMode) {
             setTemplateSourceMode(nextTemplateSourceMode);
+        }
+        if (nextStarterTemplate !== selectedBlogStarterTemplate && nextTemplateSourceMode !== 'custom-frontend') {
+            const nextStarterOption = getBlogStarterTemplate(nextStarterTemplate);
+            const nextElements = createBlogStarterTemplateElements(nextStarterTemplate);
+            setSelectedBlogStarterTemplate(nextStarterTemplate);
+            setSelectedBlogStarterIntent(nextStarterOption.intent);
+            setCanvasElements(nextElements);
+            setCanvasSize({
+                ...DEFAULT_CANVAS_SIZE,
+                height: getCanvasHeightForElements(nextElements),
+            });
+            setCanvasSeedKey(`blog-starter-${nextStarterTemplate}-${Date.now()}`);
         }
         if (nextTemplateId && nextTemplateId !== designTemplateId) {
             setDesignTemplateId(nextTemplateId);
         }
-    }, [designTemplateId, search.designTemplate, search.templateSource, templateSourceMode]);
+    }, [designTemplateId, search.designTemplate, search.starterTemplate, search.templateSource, selectedBlogStarterTemplate, templateSourceMode]);
 
     useEffect(() => {
         if (templateSourceMode !== 'custom-frontend' && designTemplateId) {
@@ -2085,7 +2217,7 @@ function NewBlogPostPage() {
         templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
         template: effectiveFrontendTemplate
             ? { id: effectiveFrontendTemplate.id, source: 'frontend-design', name: effectiveFrontendTemplate.name }
-            : { id: 'blog-article', source: 'backy-starter', name: 'Blog article' },
+            : { id: selectedBlogStarterTemplate, source: 'backy-starter', name: selectedBlogStarterTemplateOption.name },
         content: effectiveFrontendTemplate
             ? `${effectiveFrontendTemplate.name} frontend contract seed`
             : `${canvasElements.length} root layer${canvasElements.length === 1 ? '' : 's'}`,
@@ -2116,7 +2248,8 @@ function NewBlogPostPage() {
         routeConflict,
         scheduledAt,
         selectedAuthorId,
-        selectedBlogStarterIntent,
+        selectedBlogStarterTemplate,
+        selectedBlogStarterTemplateOption.name,
         selectedCategoryIds,
         selectedTagIds,
         slugValue,
@@ -2195,12 +2328,17 @@ function NewBlogPostPage() {
             tagIds: selectedTagIds,
         },
         template: {
-            id: effectiveFrontendTemplate?.id || 'blog-article',
-            name: effectiveFrontendTemplate?.name || 'Blog article',
+            id: effectiveFrontendTemplate?.id || selectedBlogStarterTemplate,
+            name: effectiveFrontendTemplate?.name || selectedBlogStarterTemplateOption.name,
             source: effectiveCanvasSource,
             templateSource: templateSourceMode,
             templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
-            sections: effectiveFrontendTemplate ? effectiveFrontendTemplate.bindingHints || [] : ['article hero', 'article body'],
+            blogStarterTemplate: selectedBlogStarterTemplate,
+            blogStarterTemplateName: selectedBlogStarterTemplateOption.name,
+            blogStarterIntent: selectedBlogStarterIntent,
+            backyCanvasTemplateId: effectiveFrontendTemplate ? null : `blog-${selectedBlogStarterTemplate}`,
+            backyCanvasSeedIntent: effectiveFrontendTemplate ? null : selectedBlogStarterIntent,
+            sections: effectiveFrontendTemplate ? effectiveFrontendTemplate.bindingHints || [] : selectedBlogStarterTemplateOption.sections,
             routePattern: effectiveFrontendTemplate?.routePattern || '/blog/{slug}',
         },
         canvas: {
@@ -2249,6 +2387,10 @@ function NewBlogPostPage() {
         selectedFeaturedImage,
         selectedFeaturedImageUrl,
         selectedAuthorId,
+        selectedBlogStarterIntent,
+        selectedBlogStarterTemplate,
+        selectedBlogStarterTemplateOption.name,
+        selectedBlogStarterTemplateOption.sections,
         selectedCategoryIds,
         selectedSite?.name,
         selectedSite?.slug,
@@ -2277,6 +2419,7 @@ function NewBlogPostPage() {
         || selectedCategoryIds.length > 0
         || selectedTagIds.length > 0
         || selectedAuthorId !== (user?.id || 'admin')
+        || selectedBlogStarterTemplate !== 'blog-post'
         || templateSourceMode !== 'backy-canvas'
         || designTemplateId.trim().length > 0
         || canvasSize.width !== initialCanvasSize.width
@@ -2298,6 +2441,7 @@ function NewBlogPostPage() {
         ogImage,
         scheduledAt,
         selectedAuthorId,
+        selectedBlogStarterTemplate,
         selectedCategoryIds.length,
         selectedTagIds.length,
         seoDescription,
@@ -2347,6 +2491,7 @@ function NewBlogPostPage() {
                     canvasElements,
                     canvasSize,
                     selectedBlogStarterIntent,
+                    selectedBlogStarterTemplate,
                     templateSourceMode,
                     designTemplateId,
                     frontendDesignSource: effectiveFrontendTemplate ? effectiveFrontendDesignSource || null : null,
@@ -2384,6 +2529,8 @@ function NewBlogPostPage() {
         ogImage,
         scheduledAt,
         selectedAuthorId,
+        selectedBlogStarterIntent,
+        selectedBlogStarterTemplate,
         selectedCategoryIds,
         selectedTagIds,
         seoDescription,
@@ -2422,7 +2569,10 @@ function NewBlogPostPage() {
         setSelectedCategoryIds(draftRecovery.selectedCategoryIds);
         setSelectedTagIds(draftRecovery.selectedTagIds);
         setSelectedAuthorId(draftRecovery.selectedAuthorId);
-        setSelectedBlogStarterIntent(draftRecovery.selectedBlogStarterIntent || 'article');
+        const recoveredStarterIntent = draftRecovery.selectedBlogStarterIntent || 'article';
+        const recoveredStarterTemplate = draftRecovery.selectedBlogStarterTemplate || blogStarterTemplateFromIntent(recoveredStarterIntent);
+        setSelectedBlogStarterIntent(recoveredStarterIntent);
+        setSelectedBlogStarterTemplate(recoveredStarterTemplate);
         const recoveredTemplateSourceMode = draftRecovery.templateSourceMode || (draftRecovery.designTemplateId ? 'custom-frontend' : 'backy-canvas');
         setTemplateSourceMode(recoveredTemplateSourceMode);
         setDesignTemplateId(draftRecovery.designTemplateId || '');
@@ -2451,6 +2601,7 @@ function NewBlogPostPage() {
             search: {
                 siteId: recoveredSiteId,
                 ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                ...(recoveredStarterTemplate !== 'blog-post' ? { starterTemplate: recoveredStarterTemplate } : {}),
                 ...(recoveredTemplateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
                 ...(recoveredTemplateSourceMode === 'custom-frontend' && draftRecovery.designTemplateId ? { designTemplate: draftRecovery.designTemplateId } : {}),
             },
@@ -2472,6 +2623,7 @@ function NewBlogPostPage() {
             search: {
                 siteId: activeSiteId,
                 ...(focused ? { focus: 'canvas' as const } : {}),
+                ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
                 ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
                 ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
             },
@@ -2563,9 +2715,12 @@ function NewBlogPostPage() {
             ...(frontendTemplateDesignState?.options?.metadata || {}),
             templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode,
             templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
+            blogStarterTemplate: selectedBlogStarterTemplate,
+            blogStarterTemplateName: selectedBlogStarterTemplateOption.name,
             blogStarterIntent: selectedBlogStarterIntent,
             ...(!effectiveFrontendTemplate ? {
-                backyCanvasTemplateId: selectedBlogStarterIntent === 'article' ? 'blog-article' : `blog-${selectedBlogStarterIntent}`,
+                backyCanvasTemplateId: `blog-${selectedBlogStarterTemplate}`,
+                backyCanvasSeedIntent: selectedBlogStarterIntent,
             } : {}),
             ...(effectiveFrontendTemplate?.id ? { frontendDesignTemplateId: effectiveFrontendTemplate.id } : {}),
             ...(effectiveFrontendTemplate?.name ? { frontendDesignTemplateName: effectiveFrontendTemplate.name } : {}),
@@ -2603,7 +2758,11 @@ function NewBlogPostPage() {
                 template: 'blog-article',
                 templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode,
                 templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
-                backyCanvasTemplateId: effectiveFrontendTemplate ? undefined : 'blog-article',
+                blogStarterTemplate: selectedBlogStarterTemplate,
+                blogStarterTemplateName: selectedBlogStarterTemplateOption.name,
+                blogStarterIntent: selectedBlogStarterIntent,
+                backyCanvasTemplateId: effectiveFrontendTemplate ? undefined : `blog-${selectedBlogStarterTemplate}`,
+                backyCanvasSeedIntent: effectiveFrontendTemplate ? undefined : selectedBlogStarterIntent,
                 frontendDesignTemplateId: effectiveFrontendTemplate?.id,
                 frontendDesignTemplateName: effectiveFrontendTemplate?.name,
                 frontendDesignSource: effectiveFrontendDesignSource,
@@ -3595,92 +3754,144 @@ function NewBlogPostPage() {
                                         className="rounded-lg border border-border bg-background p-3"
                                         data-testid="blog-starter-library-shell"
                                         data-template-source={templateSourceMode}
-                                        data-selected-starter={selectedBlogStarterIntent}
+                                        data-selected-starter={selectedBlogStarterTemplate}
+                                        data-selected-intent={selectedBlogStarterIntent}
                                         data-custom-frontend-match-mode={isCustomFrontendTemplateSource ? selectedFrontendTemplateMatchMode : undefined}
                                         data-custom-frontend-template-id={isCustomFrontendTemplateSource ? effectiveFrontendTemplate?.id || '' : undefined}
                                     >
                                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                             <div>
-                                                <h3 className="text-sm font-semibold text-foreground">Blog starter intents</h3>
+                                                <h3 className="text-sm font-semibold text-foreground">Starter templates</h3>
                                                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                                                     {isCustomFrontendTemplateSource
-                                                        ? 'Pick the article purpose; Backy matches it to captured custom frontend blog structure when available.'
-                                                        : 'Pick the article purpose before writing into the editable blog canvas.'}
+                                                        ? 'Pick the post purpose; Backy matches it to captured custom frontend blog structure when available.'
+                                                        : 'Pick a focused starting point, then write into the editable blog canvas.'}
                                                 </p>
                                             </div>
                                             <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
-                                                {BLOG_STARTER_INTENTS.length} starters
+                                                {visibleBlogStarterTemplateOptions.length} of {BLOG_STARTER_TEMPLATE_OPTIONS.length} templates
                                             </span>
                                         </div>
-                                        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                                            {BLOG_STARTER_INTENTS.map((intent) => {
-                                                const frontendMatch = frontendTemplateByStarterIntent.get(intent.id) || null;
-                                                const frontendMatchState = !isCustomFrontendTemplateSource
-                                                    ? ''
-                                                    : frontendMatch
-                                                        ? 'matched'
-                                                        : 'missing';
-
-                                                return (
-                                                    <label
-                                                        key={intent.id}
-                                                        data-testid={`blog-starter-intent-${intent.id}`}
-                                                        data-active={selectedBlogStarterIntent === intent.id}
-                                                        data-template-source={templateSourceMode}
-                                                        data-frontend-template-id={isCustomFrontendTemplateSource ? frontendMatch?.id || '' : undefined}
-                                                        data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}
-                                                        data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterIntent === intent.id)}
-                                                        data-action-status={getBlogStarterIntentActionStatus(intent)}
+                                        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)]" data-testid="blog-template-library-filters">
+                                            <label className="relative block min-w-0" htmlFor="blog-template-library-search">
+                                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                                <input
+                                                    id="blog-template-library-search"
+                                                    type="search"
+                                                    value={blogTemplateSearchQuery}
+                                                    onChange={(event) => setBlogTemplateSearchQuery(event.target.value)}
+                                                    disabled={blogTemplateSelectionControlDisabled}
+                                                    placeholder="Search templates"
+                                                    aria-label="Search blog starter templates"
+                                                    data-testid="blog-template-library-search"
+                                                    className="w-full rounded-lg border bg-background py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                                                />
+                                            </label>
+                                            <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Filter blog starter templates">
+                                                {PAGE_TEMPLATE_LIBRARY_CATEGORIES.map((category) => (
+                                                    <button
+                                                        key={category.id}
+                                                        type="button"
+                                                        onClick={() => setBlogTemplateLibraryCategory(category.id)}
+                                                        disabled={blogTemplateSelectionControlDisabled}
+                                                        aria-pressed={blogTemplateLibraryCategory === category.id}
+                                                        aria-describedby={blogTemplateSelectionActionStatusId}
+                                                        data-testid={`blog-template-category-${category.id}`}
+                                                        data-active={blogTemplateLibraryCategory === category.id}
+                                                        data-action-state={getBlogTemplateSelectionActionState(blogTemplateLibraryCategory === category.id)}
+                                                        data-action-status={getBlogTemplateCategoryActionStatus(category)}
                                                         data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
                                                         className={cn(
-                                                            'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
-                                                            selectedBlogStarterIntent === intent.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
-                                                            blogTemplateSelectionControlDisabled && 'cursor-not-allowed opacity-70',
+                                                            'inline-flex min-h-9 items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60',
+                                                            blogTemplateLibraryCategory === category.id
+                                                                ? 'border-primary bg-primary text-primary-foreground'
+                                                                : 'border-border bg-card text-muted-foreground hover:border-primary/50 hover:bg-accent',
                                                         )}
                                                     >
-                                                        <input
-                                                            type="radio"
-                                                            name="blogStarterIntent"
-                                                            value={intent.id}
-                                                            checked={selectedBlogStarterIntent === intent.id}
-                                                            onChange={(event) => handleBlogStarterIntentChange(event.target.value as BlogStarterIntent)}
-                                                            disabled={blogTemplateSelectionControlDisabled}
-                                                            aria-describedby={blogTemplateSelectionActionStatusId}
-                                                            data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterIntent === intent.id)}
-                                                            data-action-status={getBlogStarterIntentActionStatus(intent)}
-                                                            data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
-                                                            className="sr-only"
-                                                        />
-                                                        <div className="mb-1 flex min-w-0 items-center gap-2">
-                                                            <FileText className={cn(
-                                                                'h-4 w-4 shrink-0',
-                                                                selectedBlogStarterIntent === intent.id ? 'text-primary' : 'text-muted-foreground',
-                                                            )} />
-                                                            <span className="min-w-0 truncate font-semibold">{intent.name}</span>
-                                                        </div>
-                                                        <span className="text-xs leading-5 text-muted-foreground">{intent.desc}</span>
-                                                        <span className="mt-3 flex flex-wrap gap-1">
-                                                            {intent.sections.map((section) => (
-                                                                <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
-                                                                    {section}
-                                                                </span>
-                                                            ))}
-                                                            {isCustomFrontendTemplateSource && (
-                                                                <span
-                                                                    className={cn(
-                                                                        'rounded-md px-2 py-1 text-[11px] font-semibold',
-                                                                        frontendMatch
-                                                                            ? 'bg-teal-100 text-teal-800'
-                                                                            : 'bg-amber-100 text-amber-800',
+                                                        {category.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 max-h-[34rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]" data-testid="blog-template-library-scroll">
+                                            {visibleBlogStarterTemplateOptions.length > 0 ? (
+                                                <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                                                    {visibleBlogStarterTemplateOptions.map((starterTemplate) => {
+                                                        const frontendMatch = frontendTemplateByStarterTemplate.get(starterTemplate.id) || null;
+                                                        const frontendMatchState = !isCustomFrontendTemplateSource
+                                                            ? ''
+                                                            : frontendMatch
+                                                                ? 'matched'
+                                                                : 'missing';
+
+                                                        return (
+                                                            <label
+                                                                key={starterTemplate.id}
+                                                                data-testid={`blog-template-option-${starterTemplate.id}`}
+                                                                data-active={selectedBlogStarterTemplate === starterTemplate.id}
+                                                                data-template-source={templateSourceMode}
+                                                                data-starter-intent={starterTemplate.intent}
+                                                                data-frontend-template-id={isCustomFrontendTemplateSource ? frontendMatch?.id || '' : undefined}
+                                                                data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}
+                                                                data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterTemplate === starterTemplate.id)}
+                                                                data-action-status={getBlogStarterTemplateActionStatus(starterTemplate)}
+                                                                data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
+                                                                className={cn(
+                                                                    'min-w-0 cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm',
+                                                                    selectedBlogStarterTemplate === starterTemplate.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50',
+                                                                    blogTemplateSelectionControlDisabled && 'cursor-not-allowed opacity-70',
+                                                                )}
+                                                            >
+                                                                <input
+                                                                    type="radio"
+                                                                    name="blogStarterTemplate"
+                                                                    value={starterTemplate.id}
+                                                                    checked={selectedBlogStarterTemplate === starterTemplate.id}
+                                                                    onChange={(event) => handleBlogStarterTemplateChange(event.target.value as BlogStarterTemplate)}
+                                                                    disabled={blogTemplateSelectionControlDisabled}
+                                                                    aria-describedby={blogTemplateSelectionActionStatusId}
+                                                                    data-action-state={getBlogTemplateSelectionActionState(selectedBlogStarterTemplate === starterTemplate.id)}
+                                                                    data-action-status={getBlogStarterTemplateActionStatus(starterTemplate)}
+                                                                    data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}
+                                                                    className="sr-only"
+                                                                />
+                                                                <div className="mb-1 flex min-w-0 items-center gap-2">
+                                                                    <FileText className={cn(
+                                                                        'h-4 w-4 shrink-0',
+                                                                        selectedBlogStarterTemplate === starterTemplate.id ? 'text-primary' : 'text-muted-foreground',
+                                                                    )} />
+                                                                    <span className="min-w-0 truncate font-semibold">{starterTemplate.name}</span>
+                                                                </div>
+                                                                <span className="text-xs leading-5 text-muted-foreground">{starterTemplate.desc}</span>
+                                                                <span className="mt-3 flex flex-wrap gap-1">
+                                                                    {starterTemplate.sections.map((section) => (
+                                                                        <span key={section} className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                                            {section}
+                                                                        </span>
+                                                                    ))}
+                                                                    <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                                                        {BLOG_STARTER_INTENTS.find((intent) => intent.id === starterTemplate.intent)?.name || starterTemplate.intent}
+                                                                    </span>
+                                                                    {isCustomFrontendTemplateSource && (
+                                                                        <span
+                                                                            className={cn(
+                                                                                'rounded-md px-2 py-1 text-[11px] font-semibold',
+                                                                                frontendMatch ? 'bg-teal-100 text-teal-800' : 'bg-amber-100 text-amber-800',
+                                                                            )}
+                                                                        >
+                                                                            {frontendMatch ? `Uses ${frontendMatch.name}` : 'Needs captured template'}
+                                                                        </span>
                                                                     )}
-                                                                >
-                                                                    {frontendMatch ? `Uses ${frontendMatch.name}` : 'Needs captured template'}
                                                                 </span>
-                                                            )}
-                                                        </span>
-                                                    </label>
-                                                );
-                                            })}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground" data-testid="blog-template-library-empty">
+                                                    No blog starter templates match this filter.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -4362,6 +4573,10 @@ const isRecoverableBlogCreateDraft = (value: Partial<BlogCreateAutosaveDraft>): 
     && (
         value.selectedBlogStarterIntent === undefined
         || BLOG_STARTER_INTENTS.some((intent) => intent.id === value.selectedBlogStarterIntent)
+    )
+    && (
+        value.selectedBlogStarterTemplate === undefined
+        || isBlogStarterTemplate(value.selectedBlogStarterTemplate)
     )
     && (
         value.templateSourceMode === undefined

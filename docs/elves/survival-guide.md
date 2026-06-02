@@ -333,6 +333,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Dashboard source smoke, rendered Dashboard smoke, admin typecheck, diff check, and repo-public hygiene are green for the six-way custom-frontend create-parity slice.
 
+**Newest Blog child-template polish:** Blog creation now follows the requested parent/child model: New Page remains the parent starter surface, while `/blog/new` has a route-addressable 33-template blog child library aligned to the page catalog. Each child starter maps to a concrete APIable article, investigation, audio transcript, newsletter, or case-study canvas flow, and Custom frontend mode auto-matches the selected child starter against captured blog-post templates while preserving explicit captured-template selection, chrome, tokens, editable maps, and serialized metadata.
+
+**Newest verification:** Admin typecheck, Blog create source guard, Page create source guard, rendered Blog create smoke, rendered Page create smoke, and diff check are green for the Blog child-template slice. Repo-public hygiene and commit/push are still pending for this newest local slice.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

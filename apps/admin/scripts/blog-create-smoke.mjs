@@ -38,6 +38,7 @@ const assertBlogCreateSourceContract = () => {
   assert(
     source.includes('normalizedFrontendDesignTemplateSearch') &&
       source.includes("type BlogTemplateSourceMode = 'backy-canvas' | 'custom-frontend';") &&
+      source.includes('starterTemplate: isBlogStarterTemplate(search.starterTemplate) ? search.starterTemplate : undefined') &&
       source.includes('templateSource: isBlogTemplateSourceMode(search.templateSource) ? search.templateSource : undefined') &&
       source.includes('search.frontendDesignTemplateId') &&
       source.includes('search.frontendTemplate') &&
@@ -60,8 +61,16 @@ const assertBlogCreateSourceContract = () => {
       source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'backy-canvas\')}') &&
       source.includes('data-action-status={getBlogTemplateSourceActionStatus(\'custom-frontend\')}') &&
       source.includes('data-testid="blog-starter-library-shell"') &&
-      source.includes('BLOG_STARTER_INTENTS.map((intent) =>') &&
+      source.includes('BLOG_STARTER_TEMPLATE_OPTIONS') &&
+      source.includes('selectedBlogStarterTemplate') &&
+      source.includes('getVisiblePageTemplateOptions(BLOG_STARTER_TEMPLATE_OPTIONS, blogTemplateLibraryCategory, blogTemplateSearchQuery)') &&
+      source.includes('data-testid="blog-template-library-filters"') &&
+      source.includes('data-testid="blog-template-library-search"') &&
+      source.includes('data-testid={`blog-template-category-${category.id}`}') &&
+      source.includes('data-testid="blog-template-library-scroll"') &&
+      source.includes('data-testid={`blog-template-option-${starterTemplate.id}`}') &&
       source.includes('createBlogStarterElements') &&
+      source.includes('createBlogStarterTemplateElements') &&
       source.includes('createAudioTranscriptBlogElements') &&
       source.includes("id: 'blog-audio-player'") &&
       source.includes("createCanvasElement('audio'") &&
@@ -72,20 +81,24 @@ const assertBlogCreateSourceContract = () => {
       source.includes('createCaseStudyBlogElements') &&
       source.includes('blog-case-study-related-work') &&
       source.includes('setCanvasElements(nextElements);') &&
-      source.includes('setCanvasSeedKey(`blog-starter-${nextIntent}-${Date.now()}`);') &&
-      source.includes('findFrontendBlogTemplateForStarter(frontendBlogTemplates, selectedBlogStarterIntent)') &&
-      source.includes('data-testid={`blog-starter-intent-${intent.id}`}') &&
+      source.includes('setCanvasSeedKey(`blog-starter-${nextTemplateId}-${Date.now()}`);') &&
+      source.includes('findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, selectedBlogStarterTemplate)') &&
       source.includes('data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}') &&
-      source.includes('data-action-status={getBlogStarterIntentActionStatus(intent)}') &&
+      source.includes('data-action-status={getBlogStarterTemplateActionStatus(starterTemplate)}') &&
       source.includes('data-action-status={getBlogFrontendTemplateActionStatus(template)}') &&
       source.includes('data-disabled-reason={blogTemplateSelectionDisabledReason || undefined}') &&
       source.includes('const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);') &&
       source.includes("templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode") &&
       source.includes("templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas'") &&
+      source.includes('blogStarterTemplate: selectedBlogStarterTemplate') &&
+      source.includes('blogStarterTemplateName: selectedBlogStarterTemplateOption.name') &&
       source.includes('blogStarterIntent: selectedBlogStarterIntent') &&
-      source.includes("backyCanvasTemplateId: selectedBlogStarterIntent === 'article' ? 'blog-article' : `blog-${selectedBlogStarterIntent}`") &&
+      source.includes('backyCanvasTemplateId: `blog-${selectedBlogStarterTemplate}`') &&
+      source.includes('backyCanvasSeedIntent: selectedBlogStarterIntent') &&
       source.includes('selectedBlogStarterIntent,') &&
+      source.includes('selectedBlogStarterTemplate,') &&
       source.includes('value.selectedBlogStarterIntent === undefined') &&
+      source.includes('value.selectedBlogStarterTemplate === undefined') &&
       source.includes('metadata: templateMetadata,') &&
       source.includes('templateSourceMode,'),
     'Blog create must expose Backy canvas vs custom frontend source controls and persist template source into post meta, autosave, and serialized content metadata',
