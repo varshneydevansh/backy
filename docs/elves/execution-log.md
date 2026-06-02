@@ -3268,3 +3268,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Launch prompt:**
 > Continue the open-ended Backy Elves run from `docs/elves/survival-guide.md`. Do not stop unless explicitly stopped or genuinely blocked. Work batch by batch, validate, commit logical slices, and keep release UX/editor/custom-frontend readiness moving.
+
+## Checkpoint: 2026-06-02 11:25 IST - Editor Responsive Next Action
+
+**Scope:** Batch 5 UX/editor polish, focused on responsive editor clarity for custom frontend control.
+
+**Changed:**
+- Added a typed `backy.editor-responsive-next-action.v1` contract to `CanvasEditor`.
+- Derived the next responsive action from active breakpoint, selected layer, hidden/locked state, active override groups, and total breakpoint override counts.
+- Surfaced the action in viewport metadata, the wide toolbar, selected-layer Inspector breakpoint controls, and the empty Inspector state.
+- Made the action copyable so owners/frontend agents can inspect whether they should switch breakpoints, select a layer, create a local override, continue/reset overrides, or unblock a selected layer.
+- Added source guard coverage in `editor-smoke-script-coverage.mjs`.
+
+**Validation:**
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+- INCONCLUSIVE: `npm run test:editor-responsive --workspace @backy-cms/admin --silent` was stopped after several silent minutes; the process stayed alive with no output and no reliable pass/fail signal.
+
+**Next:**
+- Commit this focused contract slice.
+- Re-run a traced or bounded rendered responsive smoke in a later pass if the editor responsive UI changes beyond source/contract metadata.
+- Continue the release path from the survival guide: Vercel GitHub App access/Preview env for the separate frontend repo, public domain cutover only when ready, and remaining high-friction admin/editor polish.

@@ -242,6 +242,23 @@ const missingResponsiveGroupingSourceSnippets = collectMissingSnippets(canvasEdi
   'override.x = geometry.x - (bounds?.x ?? groupBase.x);',
   '...(responsiveGroup.responsive ? { responsive: responsiveGroup.responsive } : {})',
 ]);
+const missingResponsiveNextActionSourceSnippets = collectMissingSnippets(canvasEditorSource, [
+  "type EditorResponsiveNextAction = {",
+  "schemaVersion: 'backy.editor-responsive-next-action.v1'",
+  "const editorResponsiveNextAction = useMemo<EditorResponsiveNextAction>",
+  "id = 'select-layer-for-responsive-override';",
+  "id = 'edit-selected-layer-for-local-override';",
+  "id = 'continue-or-reset-local-overrides';",
+  'responsiveNextAction: editorResponsiveNextAction',
+  'copyEditorResponsiveNextAction',
+  'data-testid="editor-responsive-next-action"',
+  'data-testid="editor-copy-responsive-next-action"',
+  'data-testid="editor-inspector-responsive-next-action"',
+  'data-testid="editor-empty-responsive-next-action"',
+  'data-responsive-next-action-schema={editorResponsiveNextAction.schemaVersion}',
+  "renderPayload: 'render.data.content.elements[]'",
+  "selectedComponentApi: 'backy.editor-selected-component-api-contract.v1'",
+]);
 const missingSavedCanvasParentScopeSnippets = collectMissingSnippets(editorCatalogSource, [
   'function normalizeSavedCanvasElements(input: unknown, parentId?: string): CanvasElement[]',
   'typeof metadata.parentId === \'string\'',
@@ -491,6 +508,7 @@ if (
   missingTableRangeSmokeSnippets.length ||
   missingResponsiveSmokeSnippets.length ||
   missingResponsiveGroupingSourceSnippets.length ||
+  missingResponsiveNextActionSourceSnippets.length ||
   missingSavedCanvasParentScopeSnippets.length ||
   missingDistributionSourceSnippets.length ||
   missingEditorCommandRegistrySnippets.length ||
@@ -518,6 +536,7 @@ if (
     missingTableRangeSmokeSnippets,
     missingResponsiveSmokeSnippets,
     missingResponsiveGroupingSourceSnippets,
+    missingResponsiveNextActionSourceSnippets,
     missingSavedCanvasParentScopeSnippets,
     missingDistributionSourceSnippets,
     missingEditorCommandRegistrySnippets,
@@ -548,6 +567,7 @@ console.log(JSON.stringify({
   tableRangeSmokeSnippets: 10,
   responsiveSmokeSnippets: 116,
   responsiveGroupingSourceSnippets: 5,
+  responsiveNextActionSourceSnippets: 15,
   savedCanvasParentScopeSnippets: 5,
   distributionSourceSnippets: 2,
   editorCommandRegistrySnippets: 16,

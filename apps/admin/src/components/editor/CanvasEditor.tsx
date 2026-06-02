@@ -239,6 +239,43 @@ type EditorCommandRegistry = {
   };
   commands: EditorCommandRegistryItem[];
 };
+type EditorResponsiveNextActionState = 'ready' | 'blocked' | 'selected';
+type EditorResponsiveNextActionTarget =
+  | 'desktop-source'
+  | 'breakpoint-viewport'
+  | 'layer-selection'
+  | 'selected-layer';
+type EditorResponsiveNextActionSurface =
+  | 'viewport-toolbar'
+  | 'layers-panel'
+  | 'inspector-breakpoint-override';
+type EditorResponsiveNextAction = {
+  schemaVersion: 'backy.editor-responsive-next-action.v1';
+  generatedFrom: 'page-editor';
+  id: string;
+  label: string;
+  detail: string;
+  breakpoint: EditorBreakpoint;
+  breakpointLabel: string;
+  target: EditorResponsiveNextActionTarget;
+  actionSurface: EditorResponsiveNextActionSurface;
+  actionState: EditorResponsiveNextActionState;
+  inheritanceState: 'desktop-source' | 'inherits-desktop' | 'local-overrides';
+  selectedLayerId: string | null;
+  selectedLayerType: CanvasElement['type'] | null;
+  selectedLayerLabel: string | null;
+  overrideGroups: string[];
+  overrideGroupLabels: string[];
+  activeOverrideLayerCount: number;
+  totalOverrideLayerCount: number;
+  canvas: CanvasSize;
+  pointers: {
+    layerMap: 'editor-layers-panel';
+    inspector: 'editor-breakpoint-override';
+    renderPayload: 'render.data.content.elements[]';
+    selectedComponentApi: 'backy.editor-selected-component-api-contract.v1';
+  };
+};
 
 const buildEditorAgentHandoff = (siteId?: string) => {
   const sitePath = siteId || ':siteId';
@@ -4907,6 +4944,111 @@ export function CanvasEditor({
       ? `${selectedElementTypeLabel} - ${selectedElement.id}`
       : selectedElement.id
     : null;
+  const editorResponsiveNextAction = useMemo<EditorResponsiveNextAction>(() => {
+    const selectedLayerIsBlocked = Boolean(selectedElement && (isLayerLocked(selectedElement) || isLayerHidden(selectedElement)));
+    const selectedLayerBlockedReason = selectedElement && isLayerLocked(selectedElement)
+      ? 'Unlock this layer before creating or changing breakpoint overrides.'
+      : selectedElement && isLayerHidden(selectedElement)
+      ? 'Show this layer before creating or changing breakpoint overrides.'
+      : '';
+    let id = 'review-responsive-source';
+    let label = 'Review responsive source';
+    let detail = 'Desktop is the source of truth for tablet and mobile until a local breakpoint override is authored.';
+    let target: EditorResponsiveNextActionTarget = 'desktop-source';
+    let actionSurface: EditorResponsiveNextActionSurface = 'viewport-toolbar';
+    let actionState: EditorResponsiveNextActionState = isCanvasMutationDisabled ? 'blocked' : 'ready';
+
+    if (isCanvasMutationDisabled) {
+      id = 'responsive-controls-blocked';
+      label = 'Responsive controls blocked';
+      detail = canvasViewportDisabledReason || editDisabledReason || 'Canvas mutation is disabled.';
+      target = breakpoint === 'desktop' ? 'desktop-source' : 'breakpoint-viewport';
+      actionSurface = 'viewport-toolbar';
+    } else if (breakpoint === 'desktop') {
+      if (totalResponsiveOverrideLayerCount > 0) {
+        id = 'review-existing-breakpoint-overrides';
+        label = 'Review tablet/mobile overrides';
+        detail = `${totalResponsiveOverrideLayerCount} layer${totalResponsiveOverrideLayerCount === 1 ? '' : 's'} already carry tablet or mobile overrides. Switch breakpoints or open Layers > Overrides before publishing.`;
+      } else {
+        id = 'switch-to-tablet-or-mobile';
+        label = 'Check tablet and mobile';
+        detail = 'Switch to Tablet or Mobile to verify whether this desktop layout can be inherited as-is or needs local overrides.';
+      }
+    } else if (!selectedElement) {
+      id = 'select-layer-for-responsive-override';
+      label = `Select a layer for ${breakpointOverrideLabel}`;
+      detail = `${breakpointOverrideLabel} is active. Select a layer on the canvas or in Layers before creating local geometry, content, style, or state overrides.`;
+      target = 'layer-selection';
+      actionSurface = 'layers-panel';
+    } else if (selectedLayerIsBlocked) {
+      id = 'unlock-or-show-layer-for-responsive-override';
+      label = `Prepare ${selectedElementLabel || 'selected layer'}`;
+      detail = selectedLayerBlockedReason;
+      target = 'selected-layer';
+      actionSurface = 'inspector-breakpoint-override';
+      actionState = 'blocked';
+    } else if (selectedElementHasBreakpointOverride) {
+      id = 'continue-or-reset-local-overrides';
+      label = `${breakpointOverrideLabel} override is local`;
+      detail = `${selectedElementLabel || 'Selected layer'} has ${selectedBreakpointOverrideGroupLabels.join(', ')} override group${selectedBreakpointOverrideGroupLabels.length === 1 ? '' : 's'} active. Continue editing here, or reset groups to inherit desktop again.`;
+      target = 'selected-layer';
+      actionSurface = 'inspector-breakpoint-override';
+      actionState = 'selected';
+    } else {
+      id = 'edit-selected-layer-for-local-override';
+      label = `Create ${breakpointOverrideLabel} override`;
+      detail = `Edit ${selectedElementLabel || 'the selected layer'} geometry, content, layout, style, or state while ${breakpointOverrideLabel} is active to create a local override.`;
+      target = 'selected-layer';
+      actionSurface = 'inspector-breakpoint-override';
+    }
+
+    return {
+      schemaVersion: 'backy.editor-responsive-next-action.v1',
+      generatedFrom: 'page-editor',
+      id,
+      label,
+      detail,
+      breakpoint,
+      breakpointLabel: activeBreakpointLabel,
+      target,
+      actionSurface,
+      actionState,
+      inheritanceState: breakpoint === 'desktop'
+        ? 'desktop-source'
+        : selectedElementHasBreakpointOverride || activeBreakpointOverrideLayerCount > 0
+        ? 'local-overrides'
+        : 'inherits-desktop',
+      selectedLayerId: selectedElement?.id || null,
+      selectedLayerType: selectedElement?.type || null,
+      selectedLayerLabel: selectedElementLabel,
+      overrideGroups: selectedBreakpointOverrideGroups,
+      overrideGroupLabels: selectedBreakpointOverrideGroupLabels,
+      activeOverrideLayerCount: activeBreakpointOverrideLayerCount,
+      totalOverrideLayerCount: totalResponsiveOverrideLayerCount,
+      canvas: size,
+      pointers: {
+        layerMap: 'editor-layers-panel',
+        inspector: 'editor-breakpoint-override',
+        renderPayload: 'render.data.content.elements[]',
+        selectedComponentApi: 'backy.editor-selected-component-api-contract.v1',
+      },
+    };
+  }, [
+    activeBreakpointLabel,
+    activeBreakpointOverrideLayerCount,
+    breakpoint,
+    breakpointOverrideLabel,
+    canvasViewportDisabledReason,
+    editDisabledReason,
+    isCanvasMutationDisabled,
+    selectedBreakpointOverrideGroupLabels,
+    selectedBreakpointOverrideGroups,
+    selectedElement,
+    selectedElementHasBreakpointOverride,
+    selectedElementLabel,
+    size,
+    totalResponsiveOverrideLayerCount,
+  ]);
   const handleEditSelectedText = useCallback(() => {
     if (!canEditSelectedText || !selectedId) {
       return;
@@ -5582,6 +5724,7 @@ export function CanvasEditor({
         canSelectChildren: canSelectChildLayerScope,
       },
       commandRegistry: editorCommandRegistry,
+      responsiveNextAction: editorResponsiveNextAction,
       shortcuts: {
         group: 'Cmd/Ctrl+G',
         ungroup: 'Shift+Cmd/Ctrl+G',
@@ -5630,6 +5773,7 @@ export function CanvasEditor({
         },
         agentHandoff,
         commandRegistry: editorCommandRegistry,
+        responsiveNextAction: editorResponsiveNextAction,
         shortcuts: {
           group: 'Cmd/Ctrl+G',
           ungroup: 'Shift+Cmd/Ctrl+G',
@@ -5647,6 +5791,7 @@ export function CanvasEditor({
     canSelectChildLayerScope,
     canUngroupSelected,
     editorCommandRegistry,
+    editorResponsiveNextAction,
     elements,
     selectedEntriesShareParent,
     selectedIds,
@@ -5682,6 +5827,15 @@ export function CanvasEditor({
       setEditorNotice('Unable to copy the editor command registry.');
     }
   }, [editorCompositionReadiness.commandRegistry]);
+  const copyEditorResponsiveNextAction = useCallback(async () => {
+    const nextAction = JSON.stringify(editorResponsiveNextAction, null, 2);
+    try {
+      await navigator.clipboard.writeText(nextAction);
+      setEditorNotice('Responsive next action copied.');
+    } catch {
+      setEditorNotice('Unable to copy the responsive next action.');
+    }
+  }, [editorResponsiveNextAction]);
 
   const handleSelectedVisibilityToggle = useCallback(() => {
     if (!canToggleSelectedVisibility || selectedActiveElements.length === 0) return;
@@ -8168,6 +8322,11 @@ export function CanvasEditor({
             data-responsive-inheritance-state={responsiveViewportInheritanceState}
             data-responsive-active-override-layer-count={activeBreakpointOverrideLayerCount}
             data-responsive-total-override-layer-count={totalResponsiveOverrideLayerCount}
+            data-responsive-next-action-schema={editorResponsiveNextAction.schemaVersion}
+            data-responsive-next-action-id={editorResponsiveNextAction.id}
+            data-responsive-next-action-state={editorResponsiveNextAction.actionState}
+            data-responsive-next-action-target={editorResponsiveNextAction.target}
+            data-responsive-next-action-surface={editorResponsiveNextAction.actionSurface}
             data-disabled-reason={canvasViewportDisabledReason || undefined}
           >
             <span
@@ -8269,6 +8428,40 @@ export function CanvasEditor({
                 <span className="truncate">{responsiveViewportSummaryLabel}</span>
               </div>
             )}
+            <div
+              className={cn(
+                'hidden max-w-64 items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold 2xl:flex',
+                editorResponsiveNextAction.actionState === 'blocked'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : editorResponsiveNextAction.actionState === 'selected'
+                  ? 'border-sky-200 bg-sky-50 text-sky-800'
+                  : 'border-slate-200 bg-white text-slate-600',
+              )}
+              title={editorResponsiveNextAction.detail}
+              data-testid="editor-responsive-next-action"
+              data-responsive-next-action-schema={editorResponsiveNextAction.schemaVersion}
+              data-responsive-next-action-id={editorResponsiveNextAction.id}
+              data-responsive-next-action-breakpoint={editorResponsiveNextAction.breakpoint}
+              data-responsive-next-action-state={editorResponsiveNextAction.actionState}
+              data-responsive-next-action-target={editorResponsiveNextAction.target}
+              data-responsive-next-action-surface={editorResponsiveNextAction.actionSurface}
+              data-responsive-next-action-selected-layer-id={editorResponsiveNextAction.selectedLayerId || ''}
+              data-responsive-next-action-override-groups={editorResponsiveNextAction.overrideGroups.join(',')}
+            >
+              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">Next</span>
+              <span className="truncate">{editorResponsiveNextAction.label}</span>
+              <button
+                type="button"
+                onClick={() => void copyEditorResponsiveNextAction()}
+                className="rounded p-0.5 text-slate-500 hover:bg-white hover:text-slate-900"
+                title="Copy responsive next action"
+                aria-label="Copy responsive next action"
+                data-testid="editor-copy-responsive-next-action"
+                data-copy-schema={editorResponsiveNextAction.schemaVersion}
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
             <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm xl:flex">
               <select
                 value={activeCanvasPresetId}
@@ -10951,6 +11144,37 @@ export function CanvasEditor({
                               Reset all
                             </button>
                           </div>
+                          <div
+                            className="mt-2 rounded border border-sky-200 bg-white px-2 py-1.5"
+                            data-testid="editor-inspector-responsive-next-action"
+                            data-responsive-next-action-schema={editorResponsiveNextAction.schemaVersion}
+                            data-responsive-next-action-id={editorResponsiveNextAction.id}
+                            data-responsive-next-action-breakpoint={editorResponsiveNextAction.breakpoint}
+                            data-responsive-next-action-state={editorResponsiveNextAction.actionState}
+                            data-responsive-next-action-target={editorResponsiveNextAction.target}
+                            data-responsive-next-action-surface={editorResponsiveNextAction.actionSurface}
+                            data-responsive-next-action-selected-layer-id={editorResponsiveNextAction.selectedLayerId || ''}
+                            data-responsive-next-action-override-groups={editorResponsiveNextAction.overrideGroups.join(',')}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-sky-900">Next: {editorResponsiveNextAction.label}</div>
+                                <p className="mt-0.5 text-sky-700">{editorResponsiveNextAction.detail}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void copyEditorResponsiveNextAction()}
+                                className="inline-flex shrink-0 items-center gap-1 rounded border border-sky-200 bg-sky-50 px-2 py-1 font-semibold text-sky-700 hover:bg-sky-100"
+                                title="Copy responsive next action"
+                                aria-label="Copy responsive next action"
+                                data-testid="editor-inspector-copy-responsive-next-action"
+                                data-copy-schema={editorResponsiveNextAction.schemaVersion}
+                              >
+                                <Copy className="h-3 w-3" />
+                                Copy
+                              </button>
+                            </div>
+                          </div>
                           <div className="mt-2 flex flex-wrap gap-1" data-testid="editor-breakpoint-override-groups">
                             {BREAKPOINT_OVERRIDE_GROUPS.map((group) => {
                               const isActive = selectedBreakpointOverrideGroups.includes(group.id);
@@ -11004,6 +11228,37 @@ export function CanvasEditor({
                           {visibleCanvasElementIds.length}/{totalCanvasElementCount} visible
                         </span>
                       </div>
+                      {breakpoint !== 'desktop' && (
+                        <div
+                          className="rounded-md border border-sky-100 bg-sky-50 px-2.5 py-2 text-[11px] leading-4 text-sky-800"
+                          data-testid="editor-empty-responsive-next-action"
+                          data-responsive-next-action-schema={editorResponsiveNextAction.schemaVersion}
+                          data-responsive-next-action-id={editorResponsiveNextAction.id}
+                          data-responsive-next-action-breakpoint={editorResponsiveNextAction.breakpoint}
+                          data-responsive-next-action-state={editorResponsiveNextAction.actionState}
+                          data-responsive-next-action-target={editorResponsiveNextAction.target}
+                          data-responsive-next-action-surface={editorResponsiveNextAction.actionSurface}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-sky-900">Next: {editorResponsiveNextAction.label}</div>
+                              <p className="mt-0.5 text-sky-700">{editorResponsiveNextAction.detail}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void copyEditorResponsiveNextAction()}
+                              className="inline-flex shrink-0 items-center gap-1 rounded border border-sky-200 bg-white px-2 py-1 font-semibold text-sky-700 hover:bg-sky-100"
+                              title="Copy responsive next action"
+                              aria-label="Copy responsive next action"
+                              data-testid="editor-empty-copy-responsive-next-action"
+                              data-copy-schema={editorResponsiveNextAction.schemaVersion}
+                            >
+                              <Copy className="h-3 w-3" />
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       <div
                         className="grid grid-cols-2 gap-1.5"
                         data-testid="editor-inspector-empty-actions"
