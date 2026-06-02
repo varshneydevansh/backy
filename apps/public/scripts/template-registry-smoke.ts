@@ -246,6 +246,72 @@ assert.equal(
   "Partial frontend-design patch should merge newly patched nested template design state",
 );
 
+const fullyReplacedFrontendDesign = normalizeFrontendDesignContract(
+  {
+    schemaVersion: "backy.frontend-design.v1",
+    status: "synced",
+    source: {
+      type: "custom-frontend",
+      label: "Replacement frontend",
+      url: "https://replacement.example",
+    },
+    tokens: {
+      colors: {
+        primary: "#111827",
+      },
+    },
+    chrome: {
+      footer: {
+        variant: "minimal",
+      },
+    },
+    templates: [
+      {
+        id: "replacement-page",
+        type: "page",
+        name: "Replacement Page",
+        content: {
+          elements: [{ id: "replacement-hero", type: "section" }],
+        },
+      },
+    ],
+    editableMap: [
+      {
+        elementId: "replacement-hero",
+        targetPath: "elements.replacement-hero.props.title",
+        label: "Replacement hero title",
+      },
+    ],
+  },
+  {
+    fallback: {
+      ...frontendDesign,
+      chrome: {
+        header: {
+          variant: "legacy",
+        },
+      },
+    },
+    mergeFallback: true,
+  },
+);
+assert.equal(fullyReplacedFrontendDesign.source.label, "Replacement frontend");
+assert.equal(fullyReplacedFrontendDesign.tokens.colors?.primary, "#111827");
+assert.equal(fullyReplacedFrontendDesign.tokens.colors?.accent, undefined);
+assert.equal(fullyReplacedFrontendDesign.tokens.motion, undefined);
+assert.equal(fullyReplacedFrontendDesign.chrome.header, undefined);
+assert.equal(fullyReplacedFrontendDesign.chrome.footer?.variant, "minimal");
+assert.deepEqual(
+  fullyReplacedFrontendDesign.templates.map((template) => template.id),
+  ["replacement-page"],
+  "Complete frontend-design contracts must replace stale fallback templates",
+);
+assert.deepEqual(
+  fullyReplacedFrontendDesign.editableMap.map((entry) => entry.elementId),
+  ["replacement-hero"],
+  "Complete frontend-design contracts must replace stale fallback editable maps",
+);
+
 const registry = buildTemplateRegistry("site-template-smoke", frontendDesign);
 
 assert.equal(registry.schemaVersion, "backy.template-registry.v1");

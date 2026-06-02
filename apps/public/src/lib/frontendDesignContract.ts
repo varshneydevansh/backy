@@ -221,6 +221,11 @@ const mergeFrontendDesignContractInput = (
     return cloneRecord(value) || {};
   }
 
+  const replacesCompleteContract =
+    hasOwn(value, 'schemaVersion') &&
+    hasOwn(value, 'source') &&
+    hasOwn(value, 'templates');
+
   const merged: Record<string, unknown> = {
     ...(cloneRecord(fallback) || {}),
     ...(cloneRecord(value) || {}),
@@ -229,40 +234,48 @@ const mergeFrontendDesignContractInput = (
   if (!hasOwn(value, 'source')) {
     merged.source = fallback.source;
   } else if (isRecord(value.source)) {
-    merged.source = mergeRecord(fallback.source, value.source);
+    merged.source = replacesCompleteContract
+      ? cloneRecord(value.source)
+      : mergeRecord(fallback.source, value.source);
   }
 
   if (!hasOwn(value, 'tokens')) {
     merged.tokens = fallback.tokens;
   } else if (isRecord(value.tokens)) {
-    merged.tokens = mergeNestedRecordGroup(fallback.tokens, value.tokens, [
-      'colors',
-      'fonts',
-      'typography',
-      'spacing',
-      'radii',
-      'shadows',
-      'motion',
-      'breakpoints',
-      'layout',
-    ]);
+    merged.tokens = replacesCompleteContract
+      ? cloneRecord(value.tokens)
+      : mergeNestedRecordGroup(fallback.tokens, value.tokens, [
+          'colors',
+          'fonts',
+          'typography',
+          'spacing',
+          'radii',
+          'shadows',
+          'motion',
+          'breakpoints',
+          'layout',
+        ]);
   }
 
   if (!hasOwn(value, 'chrome')) {
     merged.chrome = fallback.chrome;
   } else if (isRecord(value.chrome)) {
-    merged.chrome = mergeNestedRecordGroup(fallback.chrome, value.chrome, [
-      'header',
-      'navigation',
-      'footer',
-    ]);
+    merged.chrome = replacesCompleteContract
+      ? cloneRecord(value.chrome)
+      : mergeNestedRecordGroup(fallback.chrome, value.chrome, [
+          'header',
+          'navigation',
+          'footer',
+        ]);
   }
 
   if (!hasOwn(value, 'templates')) {
     merged.templates = fallback.templates;
   } else if (Array.isArray(value.templates)) {
     const patchTemplates = value.templates.filter(isRecord);
-    if (patchTemplates.length === 0) {
+    if (replacesCompleteContract) {
+      merged.templates = patchTemplates.map((template) => cloneRecord(template) || {});
+    } else if (patchTemplates.length === 0) {
       merged.templates = [];
     } else {
       const patchedIds = new Set(

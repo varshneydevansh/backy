@@ -761,8 +761,24 @@ const fetchRecordBySlug = async (collectionId, recordSlug) => {
 };
 
 const fetchCollections = async () => {
-  const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections`);
-  return payload.data?.collections || payload.collections || [];
+  const collections = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?includeUnpublished=true&limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.collections || payload.collections || [];
+    collections.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collections;
 };
 
 const fetchCollection = async (collectionId) => {
@@ -825,6 +841,56 @@ const assertCollectionBillingLimitEnforced = async (suffix) => {
     await updateSite(SITE_ID, { settings: originalSiteSettings });
     await updateSettings({ integrations: originalIntegrations });
   }
+};
+
+const temporarilyAllowCollectionsSmokeFixtureQuotas = async (extraCollections = 32, extraPages = 4) => {
+  const site = await getSite();
+  const existingCollections = await fetchCollections();
+  const originalSiteSettings = site.settings || {};
+  const originalBillingQuota = originalSiteSettings.billingQuota || {};
+  const originalLimits = originalBillingQuota.limits || {};
+  const currentCollectionLimit = Number(originalLimits.collections || 0);
+  const currentPageLimit = Number(originalLimits.pages || 0);
+  const nextCollectionLimit = Math.max(
+    Number.isFinite(currentCollectionLimit) ? currentCollectionLimit : 0,
+    existingCollections.length + extraCollections,
+  );
+  const nextPageLimit = Math.max(
+    Number.isFinite(currentPageLimit) ? currentPageLimit : 0,
+    extraPages,
+  );
+
+  if (nextCollectionLimit === currentCollectionLimit && nextPageLimit === currentPageLimit) {
+    return null;
+  }
+
+  const updated = await updateSite(SITE_ID, {
+    settings: {
+      ...originalSiteSettings,
+      billingQuota: {
+        ...originalBillingQuota,
+        limits: {
+          ...originalLimits,
+          collections: nextCollectionLimit,
+          pages: nextPageLimit,
+        },
+      },
+    },
+  });
+  const persistedSite = await getSite();
+  const updatedLimits = persistedSite?.settings?.billingQuota?.limits || updated?.settings?.billingQuota?.limits || {};
+  assert(
+    Number(updatedLimits.collections || 0) >= nextCollectionLimit &&
+      Number(updatedLimits.pages || 0) >= nextPageLimit,
+    `Collections smoke quota patch did not persist: ${JSON.stringify(updatedLimits)}`,
+  );
+
+  return originalSiteSettings;
+};
+
+const restoreCollectionsSmokeFixtureQuotas = async (settings) => {
+  if (!settings) return;
+  await updateSite(SITE_ID, { settings });
 };
 
 const waitForRecordStatus = async (collectionId, recordSlug, status) => {
@@ -2250,11 +2316,7 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       ?.querySelector('input');
     const statusSelect = Array.from(form?.querySelectorAll('select') || [])
       .find((select) => Array.from(select.options).some((option) => option.value === 'draft'));
-    const fieldRows = Array.from(form?.querySelectorAll('tbody tr') || []);
-    const customFieldRow = fieldRows[1];
-    const fieldInputs = Array.from(customFieldRow?.querySelectorAll('input') || []);
-    const fieldKeyInput = fieldInputs[0];
-    const fieldLabelInput = fieldInputs[1];
+    const fieldKeyInput = document.querySelector('[data-testid="collections-field-key-1"]');
     const saveButton = form
       ? Array.from(form.querySelectorAll('button')).find((candidate) => (candidate.textContent || '').includes('Save schema'))
       : null;
@@ -2262,9 +2324,7 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
     if (!(nameInput instanceof HTMLInputElement)) return { ok: false, reason: 'name-input-missing' };
     if (!(slugInput instanceof HTMLInputElement)) return { ok: false, reason: 'slug-input-missing' };
     if (!(statusSelect instanceof HTMLSelectElement)) return { ok: false, reason: 'status-select-missing' };
-    if (fieldRows.length < 2) return { ok: false, reason: 'custom-field-row-missing', rowCount: fieldRows.length };
     if (!(fieldKeyInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-key-input-missing' };
-    if (!(fieldLabelInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-label-input-missing' };
     if (!(saveButton instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
     if (saveButton.disabled) return { ok: false, reason: 'save-button-disabled' };
 
@@ -2276,8 +2336,6 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
     statusSelect.dispatchEvent(new Event('change', { bubbles: true }));
     setNativeValue(fieldKeyInput, ${JSON.stringify(customFieldKey)});
     fieldKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
-    setNativeValue(fieldLabelInput, ${JSON.stringify(customFieldLabel)});
-    fieldLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
 
     return {
       ok: true,
@@ -2285,23 +2343,120 @@ const createDraftCollectionWithCustomFieldThroughUi = async (client, suffix) => 
       slug: slugInput.value,
       status: statusSelect.value,
       fieldKey: fieldKeyInput.value,
-      fieldLabel: fieldLabelInput.value,
       saveDisabled: saveButton.disabled,
     };
   })()`);
   assert(filled.ok, `Unable to fill custom draft collection fields: ${JSON.stringify(filled)}`);
 
+  let labelState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    labelState = await evaluate(client, `(() => {
+      const setNativeValue = (element, value) => {
+        const prototype = Object.getPrototypeOf(element);
+        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+        descriptor?.set?.call(element, value);
+      };
+      const fieldKeyInput = document.querySelector('[data-testid="collections-field-key-1"]');
+      const fieldLabelInput = document.querySelector('[data-testid="collections-field-label-1"]');
+      if (!(fieldKeyInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-key-input-missing' };
+      if (!(fieldLabelInput instanceof HTMLInputElement)) return { ok: false, reason: 'field-label-input-missing' };
+      if (fieldKeyInput.value !== ${JSON.stringify(customFieldKey)}) {
+        setNativeValue(fieldKeyInput, ${JSON.stringify(customFieldKey)});
+        fieldKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (fieldLabelInput.value !== ${JSON.stringify(customFieldLabel)}) {
+        setNativeValue(fieldLabelInput, ${JSON.stringify(customFieldLabel)});
+        fieldLabelInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      return {
+        ok: fieldKeyInput.value === ${JSON.stringify(customFieldKey)} &&
+          fieldLabelInput.value === ${JSON.stringify(customFieldLabel)},
+        fieldKey: fieldKeyInput.value,
+        fieldLabel: fieldLabelInput.value,
+      };
+    })()`);
+    if (labelState.ok) break;
+    await sleep(150);
+  }
+  assert(labelState?.ok, `Custom draft collection field label did not settle before save: ${JSON.stringify(labelState)}`);
+
   const slugPolicyControls = await configureDraftCollectionSlugPolicyThroughUi(client, expectedSlugPolicy);
   const copiedSlugPolicyPlan = await copyDraftCollectionSlugPolicyPlanThroughUi(client, expectedSlugPolicy);
+  await evaluate(client, `(() => {
+    window.__backyCollectionsDraftSaveRequests = [];
+    if (!window.__backyCollectionsDraftSaveFetch) {
+      window.__backyCollectionsDraftSaveFetch = window.fetch.bind(window);
+      window.fetch = async (input, init = {}) => {
+        const url = typeof input === 'string' ? input : input?.url || '';
+        const method = String(init?.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
+        const shouldRecord = method === 'POST' && String(url).includes('/api/admin/sites/') && String(url).includes('/collections');
+        let requestBody = '';
+        if (shouldRecord) {
+          requestBody = typeof init?.body === 'string' ? init.body : '';
+        }
+        const response = await window.__backyCollectionsDraftSaveFetch(input, init);
+        if (shouldRecord) {
+          let responseBody = '';
+          try {
+            responseBody = JSON.stringify(await response.clone().json());
+          } catch {
+            responseBody = '';
+          }
+          window.__backyCollectionsDraftSaveRequests.push({
+            url: String(url),
+            method,
+            status: response.status,
+            ok: response.ok,
+            requestBody,
+            responseBody,
+          });
+        }
+        return response;
+      };
+    }
+  })()`);
   const savedClick = await evaluate(client, `(() => {
-    const button = document.querySelector('#collections-schema button[type="submit"]');
+    const form = document.querySelector('#collections-schema');
+    const button = form?.querySelector('button[type="submit"]');
+    const invalidControls = Array.from(form?.querySelectorAll('input, select, textarea') || [])
+      .filter((control) => typeof control.checkValidity === 'function' && !control.checkValidity())
+      .map((control) => ({
+        tag: control.tagName,
+        id: control.id || '',
+        testId: control.getAttribute('data-testid') || '',
+        name: control.getAttribute('name') || '',
+        value: 'value' in control ? control.value : '',
+        message: control.validationMessage || '',
+      }));
+    if (!(form instanceof HTMLFormElement)) return { ok: false, reason: 'form-missing' };
     if (!(button instanceof HTMLButtonElement)) return { ok: false, reason: 'save-button-missing' };
     if (button.disabled) return { ok: false, reason: 'save-button-disabled', text: button.textContent || '' };
+    if (!form.checkValidity()) {
+      return { ok: false, reason: 'form-invalid', invalidControls };
+    }
     button.scrollIntoView({ block: 'center' });
-    button.click();
-    return { ok: true, text: button.textContent || '' };
+    form.requestSubmit(button);
+    return { ok: true, text: button.textContent || '', invalidControls };
   })()`);
   assert(savedClick.ok, `Unable to save custom draft collection after slug policy setup: ${JSON.stringify(savedClick)}`);
+
+  let saveRequestState = null;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    saveRequestState = await evaluate(client, `(() => ({
+      requests: window.__backyCollectionsDraftSaveRequests || [],
+      notice: document.querySelector('[data-testid="collections-success-notice"]')?.textContent || '',
+      error: document.querySelector('[data-testid="collections-error"]')?.textContent || '',
+      validation: Array.from(document.querySelectorAll('[data-testid="collections-validation-detail"]')).map((node) => node.textContent || ''),
+      search: window.location.search,
+    }))()`);
+    if (saveRequestState.requests?.length > 0 || saveRequestState.error || saveRequestState.validation?.length > 0) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(saveRequestState?.requests?.length > 0, `Draft collection save did not call collections API: ${JSON.stringify(saveRequestState).slice(0, 2000)}`);
+  const saveRequest = saveRequestState.requests[saveRequestState.requests.length - 1];
+  assert(saveRequest.ok, `Draft collection save API failed: ${JSON.stringify(saveRequest).slice(0, 2000)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const collections = await fetchCollections();
@@ -3203,6 +3358,7 @@ const main = async () => {
   let authoredItemPageId;
   let emptyCollectionsSiteId;
   let originalFrontendDesign;
+  let collectionsSmokeFixtureQuotaSettings = null;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
   const collectionSlug = `smoke-directory-${suffix}`;
@@ -3221,7 +3377,9 @@ const main = async () => {
     }
 
     await loginAdminApi();
+    collectionsSmokeFixtureQuotaSettings = await temporarilyAllowCollectionsSmokeFixtureQuotas();
     await assertCollectionBillingLimitEnforced(suffix);
+    await temporarilyAllowCollectionsSmokeFixtureQuotas();
     const emptyCollectionsSite = await createSite({
       name: `Smoke empty collections ${suffix}`,
       slug: `smoke-empty-collections-${suffix}`,
@@ -3381,15 +3539,21 @@ const main = async () => {
       screenshot: SCREENSHOT_PATH,
     }, null, 2));
   } finally {
-    await cleanup({
-      client,
-      childProcess,
-      userDataDir,
-      collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId, draftCollectionId],
-      pageIds: [authoredListPageId, authoredItemPageId],
-      siteIds: [emptyCollectionsSiteId],
-      originalFrontendDesign,
-    });
+    try {
+      await cleanup({
+        client,
+        childProcess,
+        userDataDir,
+        collectionIds: [incomingCollectionId, collectionId, targetCollectionId, frontendTemplateCollectionId, draftCollectionId],
+        pageIds: [authoredListPageId, authoredItemPageId],
+        siteIds: [emptyCollectionsSiteId],
+        originalFrontendDesign,
+      });
+    } finally {
+      await restoreCollectionsSmokeFixtureQuotas(collectionsSmokeFixtureQuotaSettings).catch((error) => {
+        console.warn('Unable to restore collections smoke fixture quota:', error instanceof Error ? error.message : error);
+      });
+    }
   }
 };
 

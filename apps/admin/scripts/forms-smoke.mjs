@@ -1127,7 +1127,7 @@ const listCollections = async () => {
   return collections;
 };
 
-const temporarilyAllowFormsSmokeFixtureQuotas = async (extraForms = 5, extraCollections = 1) => {
+const temporarilyAllowFormsSmokeFixtureQuotas = async (extraForms = 10, extraCollections = 2) => {
   const site = await getSite();
   const existingForms = await listForms();
   const existingCollections = await listCollections();
@@ -1143,7 +1143,7 @@ const temporarilyAllowFormsSmokeFixtureQuotas = async (extraForms = 5, extraColl
     return null;
   }
 
-  await updateSite({
+  const updated = await updateSite({
     settings: {
       ...originalSiteSettings,
       billingQuota: {
@@ -1156,6 +1156,12 @@ const temporarilyAllowFormsSmokeFixtureQuotas = async (extraForms = 5, extraColl
       },
     },
   });
+  const updatedLimits = updated?.settings?.billingQuota?.limits || {};
+  assert(
+    Number(updatedLimits.forms || 0) >= nextFormLimit &&
+      Number(updatedLimits.collections || 0) >= nextCollectionLimit,
+    `Forms smoke quota patch did not persist: ${JSON.stringify(updatedLimits)}`,
+  );
 
   return originalSiteSettings;
 };
@@ -2991,17 +2997,42 @@ const retryWebhookDeliveryInUi = async (client, formId, submission) => {
 };
 
 const refreshForms = async (client) => {
-  const result = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Refresh forms'
-    ));
-    if (!(button instanceof HTMLButtonElement) || button.disabled) {
-      return { ok: false, button: button?.textContent || null };
-    }
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(result.ok, `Unable to refresh forms UI: ${JSON.stringify(result)}`);
+  let result = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    result = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="forms-command-refresh"]')
+        || document.querySelector('[data-testid="forms-header-refresh"]')
+        || Array.from(document.querySelectorAll('button')).find((candidate) => (
+          (candidate.textContent || '').replace(/\\s+/g, ' ').trim() === 'Refresh forms'
+        ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return {
+          ok: false,
+          reason: 'refresh-button-missing',
+          buttons: Array.from(document.querySelectorAll('button')).map((candidate) => ({
+            testId: candidate.getAttribute('data-testid') || '',
+            text: (candidate.textContent || '').replace(/\\s+/g, ' ').trim(),
+            disabled: candidate.disabled,
+          })).slice(0, 20),
+        };
+      }
+      if (button.disabled) {
+        return {
+          ok: false,
+          reason: 'refresh-button-disabled',
+          button: button.textContent || '',
+          testId: button.getAttribute('data-testid') || '',
+          actionState: button.getAttribute('data-action-state') || '',
+          actionStatus: button.getAttribute('data-action-status') || '',
+        };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    if (result.ok) break;
+    await sleep(250);
+  }
+  assert(result?.ok, `Unable to refresh forms UI: ${JSON.stringify(result)}`);
   await sleep(1000);
 };
 

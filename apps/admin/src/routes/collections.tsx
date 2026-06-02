@@ -7044,6 +7044,9 @@ function CollectionsPage() {
                             onChange={(event) => updateField(index, { key: event.target.value })}
                             className="w-full rounded-lg border bg-background px-2 py-1"
                             required
+                            data-testid={`collections-field-key-${index}`}
+                            data-field-id={field.id}
+                            data-field-key={field.key}
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -7052,6 +7055,9 @@ function CollectionsPage() {
                             onChange={(event) => updateField(index, { label: event.target.value })}
                             className="w-full rounded-lg border bg-background px-2 py-1"
                             required
+                            data-testid={`collections-field-label-${index}`}
+                            data-field-id={field.id}
+                            data-field-key={field.key}
                           />
                         </td>
                         <td className="px-4 py-2">

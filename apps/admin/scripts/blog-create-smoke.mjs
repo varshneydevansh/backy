@@ -403,6 +403,7 @@ const smokeFrontendDesignContract = () => ({
       description: 'Frontend contract blog template used by the blog create smoke.',
       canvasSize: { width: 1260, height: 940 },
       content: {
+        customCSS: ':root { --backy-smoke-blog-primary: #0f766e; }',
         customJS: 'window.__backySmokeBlogTemplate = true;',
         themeTokenRefs: {
           primary: 'tokens.colors.primary',

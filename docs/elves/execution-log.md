@@ -3448,3 +3448,36 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - Fresh `backy-admin` and `backy-public` production deployments are Ready.
 - Hosted verification after push is green: production readiness passes 47 checks, hosted admin login shell has no demo credentials/dev MFA, strict deployed custom frontend connection passes 69 checks, and fresh Vercel error logs are empty.
 - Remaining non-code launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public DNS cutover only when ready.
+
+## Checkpoint: 2026-06-02 16:35 IST - Creator Contract And Dynamic Content Gates
+
+**Scope:** Batch 5 custom-frontend/content-creation hardening, focused on proving that new pages, blog posts, forms, products, and collections can stay aligned with the synced custom frontend contract without silently losing design/template metadata.
+
+**Changed:**
+- Fixed full `backy.frontend-design.v1` replacement semantics so a complete synced custom frontend contract replaces stale fallback source/tokens/chrome/templates/editable-map data, while partial patches still merge.
+- Added a template-registry regression proving complete frontend-design replacement drops stale fallback templates and editable maps.
+- Hardened page-create, forms, and collections smoke quota fixtures so local billing limits are raised/restored deterministically against the full current collection count.
+- Fixed the Collections smoke draft-schema path to target stable field inputs, wait for custom key/label persistence before save, assert the actual `POST /collections` request, and verify billing quota changes through a fresh site read.
+- Made the Forms smoke refresh helper wait for the refresh action to leave its transient disabled/loading state instead of failing on the first disabled frame.
+- Added a products source/catalog contract alias that does not masquerade as the full signed-webhook commerce provider gate.
+- Stored a custom CSS marker in the blog-create frontend template smoke so blog post template persistence covers CSS, JS, responsive overrides, editable maps, and frontend-design metadata together.
+
+**Validation:**
+- PASS: `npm run test:collections --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:forms --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:products --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:template-registry --workspace @backy/public --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- Full `npm run test:commerce --workspace @backy-cms/admin` still requires the running public app to be started with the matching commerce webhook secret and live/mock provider env. That remains separate from the local product/catalog source gate and does not close the external commerce provider certification partial.
+- Audio media support is already present in the media/upload boundary; automatic transcription generation remains a future provider-backed feature, while transcript text can be stored as normal blog/page content or metadata.
+
+**Next:**
+- Commit and push this creator/dynamic-content contract slice.
+- Continue highest-friction editor work next: direct canvas asset insertion/drop behavior, long-page auto-height/flow editing, and Canva-like media insertion ergonomics.

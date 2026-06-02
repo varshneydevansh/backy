@@ -2311,23 +2311,50 @@ const listSmokeSitePages = async () => {
   return pages;
 };
 
-const temporarilyAllowPageCreateSmokeQuota = async (extraPages = 80) => {
+const listSmokeSiteCollections = async () => {
+  const collections = [];
+  const limit = 100;
+  let offset = 0;
+
+  for (;;) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/collections?includeUnpublished=true&limit=${limit}&offset=${offset}`);
+    const chunk = payload.data?.collections || payload.collections || [];
+    collections.push(...chunk);
+    const pagination = payload.data?.pagination || payload.pagination || {};
+
+    if (!pagination.hasMore || chunk.length === 0) {
+      break;
+    }
+
+    offset += limit;
+  }
+
+  return collections;
+};
+
+const temporarilyAllowPageCreateSmokeQuota = async (extraPages = 80, extraCollections = 4) => {
   const site = await getSmokeSite();
   const originalSettings = site.settings || {};
   const originalBillingQuota = originalSettings.billingQuota || {};
   const originalLimits = originalBillingQuota.limits || {};
   const existingPages = await listSmokeSitePages();
+  const existingCollections = await listSmokeSiteCollections();
   const currentPageLimit = Number(originalLimits.pages || 0);
+  const currentCollectionLimit = Number(originalLimits.collections || 0);
   const nextPageLimit = Math.max(
     Number.isFinite(currentPageLimit) ? currentPageLimit : 0,
     existingPages.length + extraPages,
   );
+  const nextCollectionLimit = Math.max(
+    Number.isFinite(currentCollectionLimit) ? currentCollectionLimit : 0,
+    existingCollections.length + extraCollections,
+  );
 
-  if (nextPageLimit === currentPageLimit) {
+  if (nextPageLimit === currentPageLimit && nextCollectionLimit === currentCollectionLimit) {
     return null;
   }
 
-  await updateSmokeSite({
+  const updated = await updateSmokeSite({
     settings: {
       ...originalSettings,
       billingQuota: {
@@ -2335,10 +2362,17 @@ const temporarilyAllowPageCreateSmokeQuota = async (extraPages = 80) => {
         limits: {
           ...originalLimits,
           pages: nextPageLimit,
+          collections: nextCollectionLimit,
         },
       },
     },
   });
+  const updatedLimits = updated.settings?.billingQuota?.limits || {};
+  assert(
+    Number(updatedLimits.pages || 0) >= nextPageLimit &&
+      Number(updatedLimits.collections || 0) >= nextCollectionLimit,
+    `Page-create smoke quota patch did not persist: ${JSON.stringify(updatedLimits)}`,
+  );
 
   return originalSettings;
 };
