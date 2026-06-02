@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Run the deployed DOM/probe custom-frontend connection gate against the separate website Vercel deployment, connect that frontend project to its own Git repository for future previews, and attach the public website domain there only when ready to move DNS.
+- **Next required action:** Connect the separate website frontend project to its own Git repository for future previews, attach the public website domain there only when ready to move DNS, then continue the highest-friction Backy UX/editor polish.
 
 ## Effort Standard
 
@@ -225,9 +225,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest separate frontend deploy:** The separate custom website frontend has been deployed as its own Vercel project with only safe Backy public/read env values. Production and development env targets contain the six safe Backy frontend env names; Preview branch env is pending because the separate frontend project does not yet have a connected Git repository. No live website domain has been moved.
 
+**Newest deployed frontend verification:** The separate website frontend deployment passes the strict 61-check custom frontend connection gate with production Backy live checks, deployed DOM `data-backy-*` attributes, and `/api/backy-connection` probe required. Backy production readiness passes 47 checks, and the hosted admin login shell still exposes no demo credentials or dev MFA phrase.
+
 **Newest deploy verification:** `7e651962` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, the real-site live custom frontend connection gate passes 50 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes with no demo credentials/dev MFA, and recent Vercel logs for both latest production deployments are empty.
 
-**Single next action:** Use Site Detail -> Separate custom frontend project -> Verify deployed frontend and rerun `npm run test:custom-frontend-connection` with `BACKY_CUSTOM_FRONTEND_URL=<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`; then connect the separate frontend project to its own Git repo and attach the public website domain there when ready to move DNS from the current host.
+**Single next action:** Connect the separate frontend project to its own Git repo, add Preview env once Git is connected, attach the public website domain there only when ready to move DNS from the current host, then continue the highest-friction Backy UX/editor polish.
 
 ## Active Compute
 
