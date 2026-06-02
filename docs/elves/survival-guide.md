@@ -353,6 +353,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Starter smoke, strict starter typecheck smoke, source custom-frontend connection smoke, public typecheck, and diff check are green for the custom frontend starter blog-template probe slice.
 
+**Newest deploy verification:** `2b4d0401` is pushed. Fresh `backy-public` and `backy-admin` production deployments are Ready on the stable aliases, production readiness passes 47 checks, real-site custom frontend connection passes 94 checks, and hosted admin login shell remains clean of demo/dev credentials. Deployed separate frontend DOM proof is still pending until `BACKY_CUSTOM_FRONTEND_URL` points at the materialized custom website frontend.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

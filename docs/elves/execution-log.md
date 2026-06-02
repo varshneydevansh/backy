@@ -3659,6 +3659,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 01:38 IST - Starter Blog Probe Deploy Verification
+
+**Scope:** Batch 5 custom-frontend release proof, focused on proving the pushed starter `/api/backy-connection` blog child-template probe pointers are live on the protected/public Vercel topology.
+
+**Verified:**
+- The fresh `backy-admin` production deployment is Ready and aliased to `https://backy-admin.vercel.app`.
+- The fresh `backy-public` production deployment is Ready and aliased to `https://backy-public.vercel.app`.
+- The stable public API still resolves the real `devanshvarshney` site and exposes the 33 blog child-template starter handoff to custom frontend agents.
+- The hosted admin login shell still hides demo credentials and the dev MFA phrase.
+
+**Validation:**
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent` (47 checks; live admin auth skipped because credentials were not supplied).
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent` (94 checks; deployed separate frontend DOM proof skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied).
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`.
+
+**Notes:**
+- This closes the deploy-proof gap for `2b4d0401 feat(starter): expose blog template probe pointers`.
+- The remaining custom-frontend proof gap is the separate website frontend itself: materialize/deploy it, set `BACKY_CUSTOM_FRONTEND_URL`, then rerun the connection gate with DOM and `/api/backy-connection` probe requirements enabled.
+
 ## Checkpoint: 2026-06-03 01:31 IST - Custom Frontend Starter Blog Template Probe
 
 **Scope:** Batch 5 custom-frontend launch polish, focused on making the separate Next.js custom frontend starter discover Backy's blog child-template catalog without monorepo context.
