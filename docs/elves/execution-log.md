@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 08:49 IST
+- **Last updated:** 2026-06-02 09:11 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,36 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 09:11 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Real production site now records the deployed frontend as its synced design source
+
+**What changed:**
+- Extended `npm run custom-frontend:ensure-site` with `--frontend-url`, `--frontend-repository`, and `--frontend-branch` so server-side operator runs can persist a connected `backy.frontend-design.v1` contract for an already-public site.
+- The ensure-site update now preserves existing same-domain verification fields instead of blindly resetting domain readiness to pending.
+- Added source-smoke coverage so future edits must keep the deployed-frontend design sync path, custom-frontend source type, synced status, and domain-state preservation.
+- Ran the operator path against the real production `devanshvarshney` site with ignored server-side production env. The live manifest now exposes `frontendDesign.status = "synced"`, source type `custom-frontend`, source URL `https://devanshvarshney-frontend.vercel.app`, branch `main`, and 4 editable site-level bindings.
+- Verified the separate frontend project remains connected to Backy through the strict deployed connection gate.
+- Confirmed Vercel CLI is logged in, but `vercel git connect https://github.com/varshneydevansh/devanshvarshney-frontend.git` still fails because Vercel has not been granted access to the private repo. Preview env writes also fail until the project has a connected Git repository.
+
+**Commands run:**
+- `npx --yes vercel@latest whoami` -> PASS, logged in as `varshneydevansh`.
+- `npx --yes vercel@latest git connect https://github.com/<github-user>/devanshvarshney-frontend.git --scope <vercel-team-id>` -> FAIL, private repo access not granted to Vercel.
+- `npx --yes vercel@latest env add NEXT_PUBLIC_BACKY_API_BASE_URL preview ...` -> FAIL, Vercel requires a connected Git repository before Preview env can be set.
+- `node --check scripts/ensure-custom-frontend-site.mjs && node --check scripts/custom-frontend-connection-smoke.mjs` -> PASS.
+- `npm run custom-frontend:ensure-site -- --site-id devanshvarshney --name "Devansh Varshney" --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --frontend-url https://devanshvarshney-frontend.vercel.app --frontend-repository https://github.com/varshneydevansh/devanshvarshney-frontend.git --frontend-branch main --owner-email <owner-email> --skip-home-seed` with ignored production env -> PASS, `siteAction=supabase-rest-updated-frontend-design`.
+- Public manifest check -> PASS, `frontendDesign.status=synced`, source type `custom-frontend`, 4 editable bindings.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 22 source checks.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 93 checks.
+- Strict deployed custom frontend connection gate against `https://devanshvarshney-frontend.vercel.app` -> PASS, 65 checks.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; optional admin-auth proof skipped by unset credentials.
+
+**Next:**
+1. Grant the Vercel GitHub App access to the private `devanshvarshney-frontend` repo or connect it from Vercel Dashboard; this is the only current blocker for automatic branch previews.
+2. After Git is connected, add Preview env or rerun the safe env add commands for the six public/read Backy frontend values.
+3. Attach `devanshvarshney.com` to the separate frontend Vercel project only when DNS is ready to move from the current host.
 
 ## 2026-06-02 08:49 IST
 

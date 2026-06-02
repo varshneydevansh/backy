@@ -19,7 +19,7 @@ const usage = () => {
   console.error(
     [
       'Usage:',
-      '  npm run custom-frontend:ensure-site -- --site-id <site-slug-or-id> --name <site-name> --public-host <domain> --api-base <https://backy-public-domain/api> [--team-id <team-id>] [--description <text>] [--verify-only] [--skip-home-seed] [--publish-existing-home]',
+      '  npm run custom-frontend:ensure-site -- --site-id <site-slug-or-id> --name <site-name> --public-host <domain> --api-base <https://backy-public-domain/api> [--frontend-url <https://custom-frontend>] [--frontend-repository <git-url>] [--frontend-branch <branch>] [--team-id <team-id>] [--description <text>] [--verify-only] [--skip-home-seed] [--publish-existing-home]',
       '',
       'Authentication:',
       '  Set a server-side admin key in BACKY_CUSTOM_FRONTEND_ADMIN_KEY, BACKY_ADMIN_API_KEY, or BACKY_ADMIN_SECRET_KEY.',
@@ -31,8 +31,9 @@ const usage = () => {
       '  1. Verifies whether the public site is already discoverable and renderable.',
       '  2. If needed, creates or updates the site through /api/admin/sites using the existing admin-key boundary.',
       '  3. Falls back to Supabase REST with a service-role key only for server-side operator shells.',
-      '  4. Optionally seeds a minimal published homepage when the site has no homepage.',
-      '  5. Rechecks public discovery, manifest, and home render, then prints safe frontend env and scaffold command.',
+      '  4. Optionally records the deployed custom frontend as the connected frontend design source.',
+      '  5. Optionally seeds a minimal published homepage when the site has no homepage.',
+      '  6. Rechecks public discovery, manifest, and home render, then prints safe frontend env and scaffold command.',
     ].join('\n'),
   );
 };
@@ -107,10 +108,48 @@ const normalizeHost = (value) =>
     .replace(/\/.*$/u, '')
     .replace(/\/+$/u, '');
 
+const isRecord = (value) =>
+  value && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeOptionalUrl = (value, label) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    fail(`Invalid ${label} URL: ${raw}`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+    fail(`${label} must be https for remote runtimes.`);
+  }
+  parsed.hash = '';
+  return parsed.toString().replace(/\/$/u, '');
+};
+
 const siteIdInput = option('--site-id') || option('--slug') || process.env.BACKY_SITE_ID || '';
 const siteId = normalizeSlug(siteIdInput);
 const siteName = String(option('--name') || process.env.BACKY_SITE_NAME || siteIdInput || '').trim();
 const publicHost = normalizeHost(option('--public-host') || process.env.BACKY_SITE_PUBLIC_HOST || '');
+const frontendUrl = normalizeOptionalUrl(
+  option('--frontend-url') ||
+    process.env.BACKY_CUSTOM_FRONTEND_URL ||
+    process.env.BACKY_FRONTEND_URL ||
+    '',
+  '--frontend-url',
+);
+const frontendRepository = String(
+  option('--frontend-repository') ||
+    process.env.BACKY_CUSTOM_FRONTEND_REPOSITORY ||
+    process.env.BACKY_FRONTEND_REPOSITORY ||
+    '',
+).trim();
+const frontendBranch = String(
+  option('--frontend-branch') ||
+    process.env.BACKY_CUSTOM_FRONTEND_BRANCH ||
+    process.env.BACKY_FRONTEND_BRANCH ||
+    'main',
+).trim() || 'main';
 const apiBaseUrl = normalizeApiBaseUrl(
   option('--api-base') ||
     process.env.BACKY_CUSTOM_FRONTEND_API_BASE_URL ||
@@ -269,6 +308,7 @@ const mapSupabaseSite = (row) =>
         slug: row.slug,
         description: row.description || '',
         customDomain: row.custom_domain || '',
+        theme: row.theme && typeof row.theme === 'object' ? row.theme : {},
         settings: row.settings && typeof row.settings === 'object' ? row.settings : {},
         isPublished: Boolean(row.is_published),
       }
@@ -393,7 +433,7 @@ const ensureSupabaseOwnerAccess = async (team) => {
 };
 
 const findSupabaseSite = async () => {
-  const select = 'select=id,team_id,name,slug,description,custom_domain,settings,is_published';
+  const select = 'select=id,team_id,name,slug,description,custom_domain,theme,settings,is_published';
   if (isUuidIdentifier(siteId)) {
     const byId = await supabaseRestRequest(`sites?${select}&id=${restEq(siteId)}&limit=1`, {
       label: 'Supabase site id lookup',
@@ -420,7 +460,7 @@ const supabaseSitePayload = (site, resolvedTeam) => {
     custom_domain: publicHost,
     settings: {
       ...(site?.settings || {}),
-      ...siteSettingsPatch(),
+      ...siteSettingsPatch(site?.settings, site, now),
     },
     is_published: true,
     published_at: now,
@@ -506,25 +546,108 @@ const findAdminSite = async () => {
   }) || null;
 };
 
-const siteSettingsPatch = () => {
-  const now = new Date().toISOString();
+const buildDomainVerificationPatch = (existingSettings, now) => {
+  const existing = isRecord(existingSettings?.domainVerification)
+    ? existingSettings.domainVerification
+    : {};
+  const existingDomain = normalizeHost(existing.domain || '');
+  const sameDomain = existingDomain === publicHost;
+
+  return {
+    domain: publicHost,
+    status: sameDomain && typeof existing.status === 'string' ? existing.status : 'pending',
+    requestedAt: sameDomain && typeof existing.requestedAt === 'string' ? existing.requestedAt : now,
+    checkedAt: sameDomain && typeof existing.checkedAt === 'string' ? existing.checkedAt : null,
+    verifiedAt: sameDomain && typeof existing.verifiedAt === 'string' ? existing.verifiedAt : null,
+    lastError: sameDomain && typeof existing.lastError === 'string' ? existing.lastError : null,
+  };
+};
+
+const buildConnectedFrontendDesignContract = (site, existingSettings, now) => {
+  if (!frontendUrl) return undefined;
+
+  const existing = isRecord(existingSettings?.frontendDesign)
+    ? existingSettings.frontendDesign
+    : {};
+  const existingTokens = isRecord(existing.tokens) ? existing.tokens : {};
+  const theme = isRecord(site?.theme) ? site.theme : {};
+  const colors = isRecord(theme.colors) ? theme.colors : existingTokens.colors;
+  const fonts = isRecord(theme.fonts) ? theme.fonts : existingTokens.fonts;
+  const spacing = isRecord(theme.spacing) ? theme.spacing : existingTokens.spacing;
+  const customCss = typeof theme.customCSS === 'string'
+    ? theme.customCSS
+    : typeof theme.customCss === 'string'
+      ? theme.customCss
+      : existingTokens.customCss;
+  const existingChrome = isRecord(existing.chrome) ? existing.chrome : {};
+  const existingTemplates = Array.isArray(existing.templates) ? existing.templates : [];
+  const existingEditableMap = Array.isArray(existing.editableMap) ? existing.editableMap : [];
+  const label = `${siteName || site?.name || siteId} custom frontend`;
+
+  return {
+    schemaVersion: 'backy.frontend-design.v1',
+    status: 'synced',
+    source: {
+      type: 'custom-frontend',
+      label,
+      url: frontendUrl,
+      ...(frontendRepository ? { repository: frontendRepository } : {}),
+      branch: frontendBranch,
+      capturedAt: now,
+    },
+    tokens: {
+      ...(isRecord(existingTokens) ? existingTokens : {}),
+      ...(isRecord(colors) ? { colors } : {}),
+      ...(isRecord(fonts) ? { fonts } : {}),
+      ...(isRecord(spacing) ? { spacing } : {}),
+      ...(typeof customCss === 'string' ? { customCss } : {}),
+    },
+    chrome: {
+      ...existingChrome,
+      navigation: isRecord(existingChrome.navigation)
+        ? existingChrome.navigation
+        : {
+            source: 'backy-render-navigation',
+            publicHost,
+          },
+    },
+    templates: existingTemplates,
+    editableMap: existingEditableMap.length > 0
+      ? existingEditableMap
+      : [
+          { role: 'site.header', binding: 'site.navigation.primary', fields: ['label', 'href', 'children'] },
+          { role: 'site.footer', binding: 'site.navigation.footer', fields: ['label', 'href', 'children'] },
+          { role: 'site.tokens', binding: 'site.theme', fields: ['colors', 'fonts', 'spacing', 'customCss'] },
+          { role: 'site.domain', binding: 'site.delivery', fields: ['customDomain', 'domainAliases'] },
+        ],
+    notes: 'Connected by custom-frontend:ensure-site after deployed frontend verification. Keep Backy as the source for content, routes, tokens, editable maps, and API handoff while the separate frontend owns presentation code.',
+    updatedAt: now,
+  };
+};
+
+const siteSettingsPatch = (existingSettings = {}, site = {}, now = new Date().toISOString()) => {
+  const connectedFrontendDesign = buildConnectedFrontendDesignContract(site, existingSettings, now);
+
   return {
     siteStatus: 'published',
-    domainVerification: {
-      domain: publicHost,
-      status: 'pending',
-      requestedAt: now,
-      checkedAt: null,
-      verifiedAt: null,
-      lastError: null,
-    },
+    domainVerification: buildDomainVerificationPatch(existingSettings, now),
     launchSetup: {
+      ...(isRecord(existingSettings?.launchSetup) ? existingSettings.launchSetup : {}),
       source: 'custom-frontend-ensure-site-cli',
       publicHost,
       backyPublicApiBaseUrl: apiBaseUrl,
       customFrontendProject: 'separate-vercel-project',
+      ...(frontendUrl
+        ? {
+            customFrontendUrl: frontendUrl,
+            customFrontendRepository: frontendRepository || null,
+            customFrontendBranch: frontendBranch,
+            frontendDesignStatus: 'synced',
+          }
+        : {}),
       updatedAt: now,
     },
+    ...(connectedFrontendDesign ? { frontendDesign: connectedFrontendDesign } : {}),
   };
 };
 
@@ -536,7 +659,7 @@ const createSite = async () => {
     customDomain: publicHost,
     status: 'published',
     ...(teamId ? { teamId } : {}),
-    settings: siteSettingsPatch(),
+    settings: siteSettingsPatch({}, {}, new Date().toISOString()),
   };
   const { json } = await jsonRequest(adminUrl('/sites'), {
     method: 'POST',
@@ -556,7 +679,7 @@ const updateSite = async (site) => {
     customDomain: publicHost,
     status: 'published',
     isPublished: true,
-    settings: siteSettingsPatch(),
+    settings: siteSettingsPatch(site.settings, site, new Date().toISOString()),
   };
   const { json } = await jsonRequest(adminUrl(`/sites/${encodeURIComponent(site.id || site.slug || siteId)}`), {
     method: 'PATCH',
@@ -852,6 +975,7 @@ const run = async () => {
   let site = null;
   let siteAction = 'none';
   let homepageAction = { status: 'not-needed' };
+  const shouldSyncFrontendDesign = Boolean(frontendUrl) && !verifyOnly;
 
   try {
     initialVerification = await verifyPublicSite(siteId);
@@ -921,6 +1045,38 @@ const run = async () => {
         ].join('\n'),
       );
     }
+  } else if (shouldSyncFrontendDesign) {
+    if (adminKey) {
+      site = await findAdminSite();
+      if (!site?.id) {
+        throw new Error('Public site is ready, but the admin API could not resolve a matching site for frontend design sync.');
+      }
+      site = await updateSite(site);
+      siteAction = 'updated-frontend-design';
+    } else if (hasSupabaseOperatorFallback) {
+      const { team, source: teamSource } = await resolveSupabaseTeam();
+      const ownerAccess = await ensureSupabaseOwnerAccess(team);
+      site = await findSupabaseSite();
+      if (!site?.id) {
+        throw new Error('Public site is ready, but Supabase REST could not resolve a matching site for frontend design sync.');
+      }
+      site = await updateSupabaseSite(site, team);
+      siteAction = 'supabase-rest-updated-frontend-design';
+      homepageAction = {
+        status: 'not-needed',
+        teamId: team.id,
+        teamSource,
+        ownerAccess,
+      };
+    } else {
+      throw new Error(
+        [
+          'Public site is ready, but syncing a deployed custom frontend design source needs a server-side operator credential.',
+          'Set BACKY_CUSTOM_FRONTEND_ADMIN_KEY, BACKY_ADMIN_API_KEY, or BACKY_ADMIN_SECRET_KEY for the admin API path.',
+          'Or set SUPABASE_URL plus SUPABASE_SERVICE_ROLE_KEY for the server-side Supabase REST fallback.',
+        ].join('\n'),
+      );
+    }
   }
 
   const publicSiteVerification = await verifyPublicSite(siteId);
@@ -932,6 +1088,13 @@ const run = async () => {
     apiBaseUrl,
     siteAction,
     homepageAction,
+    frontendDesign: {
+      connected: Boolean(frontendUrl),
+      status: frontendUrl ? 'synced' : 'unchanged',
+      sourceUrl: frontendUrl || null,
+      repository: frontendRepository || null,
+      branch: frontendUrl ? frontendBranch : null,
+    },
     publicSiteVerification,
     safeFrontendEnv: {
       NEXT_PUBLIC_BACKY_API_BASE_URL: apiBaseUrl,

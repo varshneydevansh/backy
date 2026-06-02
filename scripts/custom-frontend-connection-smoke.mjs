@@ -139,10 +139,16 @@ includesAll(
     '/pages?includeUnpublished=true',
     '/render?path=/',
     'publicSiteVerification',
+    '--frontend-url',
+    'buildConnectedFrontendDesignContract',
+    "status: 'synced'",
+    "type: 'custom-frontend'",
+    'frontendDesignStatus',
+    'buildDomainVerificationPatch',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'custom-frontend:scaffold',
   ],
-  'Custom frontend site ensure CLI uses the protected admin boundary, seeds homepage readiness, and prints safe frontend handoff',
+  'Custom frontend site ensure CLI uses the protected admin boundary, preserves domain state, syncs deployed frontend design, and prints safe frontend handoff',
 );
 includesAll(
   starterConnectionProbe,
