@@ -26,6 +26,11 @@ const CONTROL_READ_ORDER = [
   "probe",
 ] as const;
 
+const CONTROL_PLANE_TEMPLATE_READ_ORDER = [
+  "templates",
+  "admin-endpoints",
+] as const;
+
 const configuredForbiddenEnv = () =>
   BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV.filter((name) => Boolean(process.env[name]));
 
@@ -37,6 +42,9 @@ const renderEndpoint = (path: string) => {
   if (backyConfig.sitePublicHost) search.set("domain", backyConfig.sitePublicHost);
   return `${siteEndpoint("/render")}?${search.toString()}`;
 };
+
+const adminSiteEndpoint = (path: string) =>
+  `${backyConfig.apiBaseUrl}/${["admin", "sites", encodeURIComponent(backyConfig.siteId)].join("/")}${path}`;
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -86,7 +94,7 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
   controlPlane: {
     schemaVersion: "backy.custom-frontend-control-plane.v1",
     sourceOfTruth: "backy-public",
-    readOrder: [...CONTROL_READ_ORDER],
+    readOrder: [...CONTROL_READ_ORDER, ...CONTROL_PLANE_TEMPLATE_READ_ORDER],
     endpoints: {
       agentHandoff: siteEndpoint("/agent-handoff"),
       manifest: siteEndpoint("/manifest"),
@@ -94,6 +102,8 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
       resolve: siteEndpoint("/resolve"),
       renderHome: renderEndpoint("/"),
       connectionProbe: "/api/backy-connection",
+      templateRegistry: adminSiteEndpoint("/templates"),
+      frontendDesignManagement: adminSiteEndpoint("/frontend-design"),
     },
     pointers: {
       componentTypeContracts: "agent-handoff.componentApiContract.componentTypeContracts",
@@ -103,6 +113,17 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
       responsiveStyles: "render.generatedResponsiveCss",
       frontendDesign: "manifest.data.site.frontendDesign",
       deploymentTopology: "agent-handoff.deploymentTopology",
+      templateRegistry: "agent-handoff.endpoints.templates",
+      templateCloneFields: "agent-handoff.contentCreation.templateCloneFields",
+      templateAliasField: "agent-handoff.contentCreation.customFrontendTemplateField",
+      templateAliasFields: "agent-handoff.contentCreation.customFrontendRouteFieldAliases",
+      adminEntryPoints: "agent-handoff.contentCreation.adminEntryPoints",
+    },
+    templateReuse: {
+      endpoint: "agent-handoff.endpoints.templates",
+      cloneField: "agent-handoff.contentCreation.customFrontendTemplateField",
+      cloneFieldAliases: "agent-handoff.contentCreation.templateCloneFields",
+      createRoutes: "agent-handoff.contentCreation.adminEntryPoints",
     },
     preserve: {
       domAttributes: [...REQUIRED_DOM_ATTRIBUTES],

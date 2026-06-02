@@ -3691,3 +3691,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Notes:**
 - Spark explorer findings queued the next two focused patches: persisted canvas-height auto-grow on geometry edits, and stricter custom-frontend template-reuse actionability checks in the connection gate.
 - This slice does not invent new render element types; it composes existing APIable elements so public render/custom frontend contracts continue to expose each block through normal `content.elements[]` metadata.
+
+## Checkpoint: 2026-06-02 21:33 IST - Canvas Auto-Grow And Template Actionability Gate
+
+**Scope:** Batch 5 editor/custom-frontend release polish, focused on long-page authoring after geometry edits and making synced custom frontend template reuse provable for pages, blog posts, reusable sections, forms, products, and collections.
+
+**Changed:**
+- Canvas element geometry commits now grow persisted `canvasSize` from final content bounds instead of only rendering an expanded in-memory frame.
+- The grow path reuses existing content-bounds/clamp helpers, keeps transient drag previews out of persisted size mutation, and uses displayed breakpoint geometry for tablet/mobile override edits.
+- Root canvas insertions now share the same grow helper instead of carrying a separate sizing branch.
+- Resize smoke now resizes the bottom flow section past the initial page height, saves, and asserts persisted `content.canvasSize.height` grows to the new authored bottom plus editor padding.
+- The custom frontend connection gate now requires template-reuse actionability in handoff/manifest/probe payloads: template registry endpoint, clone fields, frontend template aliases, and admin creation entry points.
+- The checked Next.js starter `/api/backy-connection` probe now exposes secret-free template reuse read order, endpoints, pointers, and a compact `templateReuse` discovery block.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-connection`
+- PASS: `npm run test:custom-frontend-starter`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_EDITOR_RESIZE_SMOKE=1 npm run test:editor-resize --workspace @backy-cms/admin`
+- PASS: `git diff --check`
+
+**Notes:**
+- Spark worker `019e8907-9551-7a20-99c1-b6a405861c54` implemented the independent custom-frontend template actionability gate; the parent reviewed and fixed the starter admin endpoint builder so it appends `admin/sites/...` under the already-normalized `/api` base.
+- The resize smoke result proved `smoke-flow-after` persisted at `y=1080`, `height=1020`, and `canvasSize.height=2148`, so long pages can continue below the initial viewport after real edits.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.

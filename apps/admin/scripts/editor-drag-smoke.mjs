@@ -12360,6 +12360,24 @@ const waitForPersistedCanvasState = async (pageId, expectedState) => {
   throw new Error(`Saved canvas state did not match editor state. Expected ${JSON.stringify(expectedState)}, got ${JSON.stringify(lastState)}`);
 };
 
+const waitForPersistedCanvasSize = async (pageId, predicate, label = 'persisted canvas size') => {
+  let lastSize = null;
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const payload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+    const page = payload.data?.page || payload.page || null;
+    lastSize = page?.content?.canvasSize || null;
+
+    if (lastSize && predicate(lastSize)) {
+      return lastSize;
+    }
+
+    await sleep(250);
+  }
+
+  throw new Error(`${label} did not match expectation: ${JSON.stringify(lastSize)}`);
+};
+
 const testSaveEditingControls = async (client, pageId, editorPath) => {
   const elementId = 'smoke-top-edge';
 
@@ -28050,7 +28068,40 @@ const resizeElement = async (client, elementId, deltaX, deltaY, options = {}) =>
   };
 };
 
-const testResizeControls = async (client) => {
+const testResizeCanvasAutoGrow = async (client, pageId) => {
+  const beforePayload = await requestApi(`/api/admin/sites/${SITE_ID}/pages/${pageId}`);
+  const beforeSize = beforePayload.data?.page?.content?.canvasSize || beforePayload.page?.content?.canvasSize || null;
+  assert(beforeSize?.height, `Resize auto-grow smoke could not read initial canvas size: ${JSON.stringify(beforePayload).slice(0, 500)}`);
+
+  const resize = await resizeElement(client, 'smoke-flow-after', 0, 260, {
+    handle: 's',
+    assert: ({ before, after }) => {
+      assert(after.height > before.height + 120, `Bottom section resize did not expand enough to require canvas growth: before ${before.height}, after ${after.height}`);
+      assert(Math.abs(after.width - before.width) < 20, `Bottom section south resize should not materially change width: before ${before.width}, after ${after.width}`);
+    },
+  });
+  const afterState = (await readEditorElementState(client, ['smoke-flow-after']))['smoke-flow-after'];
+  const expectedMinimumHeight = Math.ceil(afterState.y + afterState.height + 48);
+
+  await clickSave(client);
+  const savedStatus = await waitForEditorMutationReady(client, 'after resize canvas auto-grow save');
+  const persistedSize = await waitForPersistedCanvasSize(
+    pageId,
+    (size) => size.height > beforeSize.height && size.height >= expectedMinimumHeight,
+    'resize canvas auto-grow persisted height',
+  );
+
+  return {
+    beforeSize,
+    resize,
+    afterState,
+    expectedMinimumHeight,
+    persistedSize,
+    savedStatus,
+  };
+};
+
+const testResizeControls = async (client, pageId = null) => {
   await selectElement(client, 'smoke-image');
   const edgeHandleInventory = await evaluate(client, `(() => {
     const node = document.querySelector('[data-element-id="smoke-image"]');
@@ -28109,12 +28160,17 @@ const testResizeControls = async (client) => {
     },
   });
 
+  const canvasAutoGrow = pageId
+    ? await testResizeCanvasAutoGrow(client, pageId)
+    : { skipped: true, reason: 'No smoke page id supplied for persisted canvas size check.' };
+
   return {
     edgeHandleInventory,
     eastResize,
     southResize,
     shiftAspectResize,
     altCenterResize,
+    canvasAutoGrow,
   };
 };
 
@@ -28606,7 +28662,7 @@ const main = async () => {
 
     if (RESIZE_SMOKE) {
       assert(!EDITOR_PATH, 'Resize smoke currently requires an internally created smoke page');
-      const resizeControls = await testResizeControls(client);
+      const resizeControls = await testResizeControls(client, tempPageId);
 
       console.log(JSON.stringify({
         ok: true,

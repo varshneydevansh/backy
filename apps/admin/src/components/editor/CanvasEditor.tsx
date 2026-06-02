@@ -2444,6 +2444,7 @@ export function CanvasEditor({
   const changeSequenceRef = useRef(0);
   const pendingTransformRef = useRef<{
     elements: CanvasElement[];
+    boundsElements: CanvasElement[];
     previousElements: CanvasElement[];
     selectedId: string | null;
     selectedIds: string[];
@@ -3192,6 +3193,21 @@ export function CanvasEditor({
       onChange(elements, pageSettings, normalizedSize);
     }
   }, [breakpoint, editDisabledReason, elements, isCanvasMutationDisabled, markChanges, onChange, pageSettings]);
+
+  const growCanvasSizeForElements = useCallback((nextElements: CanvasElement[]) => {
+    setSize((currentSize) => {
+      const expandedSize = expandCanvasSizeToContent(currentSize, collectCanvasContentBounds(nextElements));
+      const nextSize: CanvasSize = {
+        ...currentSize,
+        width: clampCanvasDimension(expandedSize.width, 'width'),
+        height: clampCanvasDimension(expandedSize.height, 'height'),
+      };
+
+      return nextSize.width !== currentSize.width || nextSize.height !== currentSize.height
+        ? nextSize
+        : currentSize;
+    });
+  }, []);
 
   const activeCanvasPresetId = useMemo(() => (
     CANVAS_SIZE_PRESETS.find((preset) => preset.width === size.width && preset.height === size.height)?.id || 'custom'
@@ -4049,24 +4065,14 @@ export function CanvasEditor({
 
     const currentElements = elementsRef.current;
     const nextElements = applyRootSectionInsertionFlow(currentElements, newElements);
-    const expandedSize = expandCanvasSizeToContent(size, collectCanvasContentBounds(nextElements));
-    const nextSize: CanvasSize = {
-      ...size,
-      width: clampCanvasDimension(expandedSize.width, 'width'),
-      height: clampCanvasDimension(expandedSize.height, 'height'),
-    };
-    const shouldGrowCanvas = nextSize.width !== size.width || nextSize.height !== size.height;
     const nextSelectedIds = newElements.map((element) => element.id);
 
-    if (shouldGrowCanvas) {
-      setSize(nextSize);
-    }
-
+    growCanvasSizeForElements(nextElements);
     updateElementsWithHistory(nextElements, newElements[0]?.id || null, nextSelectedIds);
     setSelectedId(newElements[0]?.id || null);
     setSelectedIds(nextSelectedIds);
     setRightPanel('properties');
-  }, [isCanvasMutationDisabled, size, updateElementsWithHistory]);
+  }, [growCanvasSizeForElements, isCanvasMutationDisabled, updateElementsWithHistory]);
 
   const insertNestedCanvasElements = useCallback((
     parentId: string,
@@ -6557,6 +6563,7 @@ export function CanvasEditor({
     if (options?.transient) {
       pendingTransformRef.current = {
         elements: nextBaseElements,
+        boundsElements: flowedElements,
         previousElements: pendingTransformRef.current?.previousElements || elementsRef.current,
         selectedId: options.selectedId ?? selectedId,
         selectedIds,
@@ -6576,6 +6583,7 @@ export function CanvasEditor({
 
       const selectedSnapshot = pendingTransform.selectedId;
       const selectedIdsSnapshot = pendingTransform.selectedIds;
+      growCanvasSizeForElements(pendingTransform.boundsElements);
       elementsRef.current = pendingTransform.elements;
       setElements(pendingTransform.elements);
       addToHistory(pendingTransform.elements, selectedSnapshot, selectedIdsSnapshot, pendingTransform.previousElements);
@@ -6584,8 +6592,9 @@ export function CanvasEditor({
     }
 
     pendingTransformRef.current = null;
+    growCanvasSizeForElements(flowedElements);
     updateElementsWithHistory(nextBaseElements);
-  }, [addToHistory, breakpoint, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
+  }, [addToHistory, breakpoint, growCanvasSizeForElements, isCanvasMutationDisabled, markChanges, selectedId, selectedIds, updateElementsWithHistory]);
 
   /**
    * Handle element update from property panel

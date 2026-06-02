@@ -243,7 +243,11 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Blog-create source smoke and admin typecheck are green for the starter-specific blog canvas slice. Current Vercel `backy-public` and `backy-admin` aliases are Ready for the prior pushed commit `8ac05dc`.
 
-**Queued Spark findings:** Next high-value editor patch is persisted canvas-height auto-grow on geometry edits (`CanvasEditor.handleElementsChange` / resize smoke). Next high-value custom-frontend control-plane patch is stricter `test:custom-frontend-connection` proof that synced custom frontend templates cover page, blog post, section, form, product, and collection reuse plus agent-readable template actionability.
+**Newest canvas persistence polish:** Canvas geometry commits now persist long-page `canvasSize` growth through the same content-bounds/clamp path used by insertions. Transient drag previews stay transient, committed desktop/tablet/mobile geometry can grow the saved page frame, and resize smoke proves a bottom section edit saves `content.canvasSize.height=2148` after crossing the initial 2100px page height.
+
+**Newest custom frontend template gate:** The custom frontend connection contract now proves template-reuse actionability, not only template presence. Handoff, manifest mirror, and `/api/backy-connection` probe checks require page, blog post, section, form, product, and collection template coverage plus template registry, clone fields, aliases, and admin creation entry points.
+
+**Newest verification:** Custom frontend connection smoke, custom frontend starter smoke, admin typecheck, rendered editor resize smoke, and diff check are green for the canvas auto-grow/template actionability slice.
 
 **Newest Vercel linkage check:** Vercel CLI auth is active as `varshneydevansh`, but `vercel git connect` still fails for the private separate frontend repository because the Vercel GitHub App has not been granted access. Preview env writes also fail until that Git repository is connected. This is an external Vercel/GitHub App access blocker, not a Backy code blocker.
 

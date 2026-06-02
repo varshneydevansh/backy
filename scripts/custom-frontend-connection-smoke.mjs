@@ -52,6 +52,7 @@ const sitePublicHost =
   process.env.NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST ||
   process.env.BACKY_SITE_PUBLIC_HOST ||
   '';
+const siteIdPath = encodeURIComponent(siteId);
 const frontendUrlInput =
   process.env.BACKY_CUSTOM_FRONTEND_URL ||
   process.env.NEXT_PUBLIC_BACKY_CUSTOM_FRONTEND_URL ||
@@ -186,6 +187,12 @@ includesAll(
     'data-backy-editable-map-pointer',
     'data-backy-responsive-css',
     'data-backy-responsive-style-pointer',
+    'templateReuse:',
+    'templateRegistry:',
+    'templateCloneFields:',
+    'templateAliasField:',
+    'templateAliasFields:',
+    'adminEntryPoints:',
   ],
   'Starter exposes a public custom frontend connection probe without secret values',
 );
@@ -456,6 +463,85 @@ const findOpenApiOperation = (openapi, suffix) => (
   null
 );
 
+const assertTemplateActionability = (handoffData, label) => {
+  const contentCreation = handoffData?.contentCreation || {};
+  const endpoints = handoffData?.endpoints || {};
+  const templateCloneFields = Array.isArray(contentCreation.templateCloneFields)
+    ? contentCreation.templateCloneFields
+    : [];
+  const templateRouteAliases = Array.isArray(contentCreation.customFrontendRouteFieldAliases)
+    ? contentCreation.customFrontendRouteFieldAliases
+    : [];
+  const adminEntryPoints = contentCreation.adminEntryPoints || {};
+
+  assert(
+    Array.isArray(templateCloneFields),
+    `${label} exposes template clone fields for actionability`,
+  );
+  assert(
+    templateCloneFields.includes('frontendDesignTemplateId'),
+    `${label} uses frontendDesignTemplateId in template clone fields`,
+  );
+  assert(
+    templateCloneFields.includes('designTemplateId'),
+    `${label} keeps designTemplateId alias in template clone fields`,
+  );
+  assert(
+    contentCreation.customFrontendTemplateField === 'frontendDesignTemplateId',
+    `${label} exposes frontendDesignTemplateId as the custom frontend template field`,
+  );
+  assert(
+    templateRouteAliases.includes('frontendDesignTemplateId'),
+    `${label} exposes frontendDesignTemplateId route alias`,
+  );
+  assert(
+    templateRouteAliases.includes('frontendTemplate'),
+    `${label} exposes frontendTemplate route alias`,
+  );
+  assert(
+    typeof endpoints.templates === 'string' &&
+      endpoints.templates.includes(`/api/admin/sites/${siteIdPath}/templates`),
+    `${label} exposes the template registry endpoint`,
+  );
+  assert(
+    typeof contentCreation.adminEntryPoints === 'object' && contentCreation.adminEntryPoints !== null,
+    `${label} exposes admin entry points for safe creation surfaces`,
+  );
+
+  const safeReuseRoutes = [
+    { key: 'pageCustomFrontend', label: 'page' },
+    { key: 'blogCustomFrontend', label: 'blog post' },
+    { key: 'formCustomFrontend', label: 'form' },
+    { key: 'productCustomFrontend', label: 'product' },
+    { key: 'collectionCustomFrontend', label: 'collection' },
+    { key: 'reusableSectionCustomFrontend', label: 'section' },
+  ];
+  for (const { key, label: routeLabel } of safeReuseRoutes) {
+    const route = adminEntryPoints[key];
+    assert(
+      typeof route === 'string' &&
+        /(templateSource=custom-frontend)|(frontendTemplate=:templateId)|(frontendDesignTemplateId=:templateId)/u.test(route),
+      `${label} exposes an admin route to create a reusable ${routeLabel}`,
+    );
+  }
+};
+
+const assertTemplateClassCoverage = (frontendDesign, label) => {
+  const templates = Array.isArray(frontendDesign?.templates) ? frontendDesign.templates : [];
+  const requiredTemplateTypes = ['page', 'blogPost', 'section', 'form', 'product', 'collection'];
+  const templateTypeSet = new Set(
+    templates
+      .map((template) => template?.type)
+      .filter((type) => typeof type === 'string'),
+  );
+  for (const templateType of requiredTemplateTypes) {
+    assert(
+      templateTypeSet.has(templateType),
+      `${label} exposes reusable ${templateType} templates for actionability`,
+    );
+  }
+};
+
 const checkPublicApi = async (apiBaseUrl) => {
   const encodedSiteId = encodeURIComponent(siteId);
   const renderQuery = { path: '/', ...(sitePublicHost ? { domain: sitePublicHost } : {}) };
@@ -502,6 +588,7 @@ const checkPublicApi = async (apiBaseUrl) => {
       topology.verification?.customFrontendConnectionSmoke === 'npm run test:custom-frontend-connection',
       'Agent handoff exposes the custom frontend connection smoke',
     );
+    assertTemplateActionability(data, 'Agent handoff');
   }
 
   const manifest = await requestJson(
@@ -511,17 +598,21 @@ const checkPublicApi = async (apiBaseUrl) => {
   if (manifest) {
     assert(manifest.success === true, 'Manifest returns success=true');
     assert(manifest.data?.schemaVersion === 'backy.frontend-manifest.v1', 'Manifest exposes frontend manifest schema');
+    const handoffData = manifest.data?.contract?.customFrontendAgentHandoff;
     assert(
-      Boolean(manifest.data?.contract?.customFrontendAgentHandoff),
+      Boolean(handoffData),
       'Manifest mirrors the custom frontend agent handoff',
     );
+    if (handoffData) {
+      assertTemplateActionability(handoffData, 'Manifest handoff mirror');
+    }
     const frontendDesign = manifest.data?.site?.frontendDesign;
-    if (frontendUrlInput && frontendDesign?.status === 'synced') {
-      const templates = Array.isArray(frontendDesign.templates) ? frontendDesign.templates : [];
-      assert(frontendDesign.source?.type === 'custom-frontend', 'Synced manifest frontend design is sourced from the custom frontend');
-      assert(templates.some((template) => template.id === 'custom-frontend-page' && template.type === 'page'), 'Synced manifest exposes a custom frontend page template');
-      assert(templates.some((template) => template.id === 'custom-frontend-blog-post' && template.type === 'blogPost'), 'Synced manifest exposes a custom frontend blog post template');
-      assert(templates.some((template) => template.id === 'custom-frontend-section' && template.type === 'section'), 'Synced manifest exposes a custom frontend reusable section template');
+    if (frontendDesign?.status === 'synced' || frontendDesign?.source?.type === 'custom-frontend') {
+      assert(
+        frontendDesign.source?.type === 'custom-frontend',
+        'Synced manifest frontend design is sourced from the custom frontend',
+      );
+      assertTemplateClassCoverage(frontendDesign, 'Manifest frontendDesign');
     }
   }
 
@@ -660,13 +751,22 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
     );
     includesAll(
       (probe.controlPlane.readOrder || []).join('\n'),
-      ['agent-handoff', 'manifest', 'openapi', 'resolve', 'render', 'component-dom', 'probe'],
+      ['agent-handoff', 'manifest', 'templates', 'admin-endpoints', 'openapi', 'resolve', 'render', 'component-dom', 'probe'],
       'Custom frontend probe exposes the Backy control-plane read order',
     );
     const endpointText = JSON.stringify(probe.controlPlane.endpoints || {});
     includesAll(
       endpointText,
-      ['/agent-handoff', '/manifest', '/openapi', '/resolve', '/render', '/api/backy-connection'],
+      [
+        '/agent-handoff',
+        '/manifest',
+        `/api/admin/sites/${siteIdPath}/templates`,
+        `/api/admin/sites/${siteIdPath}/frontend-design`,
+        '/openapi',
+        '/resolve',
+        '/render',
+        '/api/backy-connection',
+      ],
       'Custom frontend probe exposes the Backy control-plane endpoints',
     );
     const pointerText = JSON.stringify(probe.controlPlane.pointers || {});
@@ -680,8 +780,27 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
         'render.generatedResponsiveCss',
         'manifest.data.site.frontendDesign',
         'agent-handoff.deploymentTopology',
+        'agent-handoff.endpoints.templates',
+        'agent-handoff.contentCreation.templateCloneFields',
+        'agent-handoff.contentCreation.customFrontendTemplateField',
+        'agent-handoff.contentCreation.customFrontendRouteFieldAliases',
+        'agent-handoff.contentCreation.adminEntryPoints',
       ],
       'Custom frontend probe exposes the Backy control-plane pointers',
+    );
+    assert(
+      typeof probe.controlPlane.templateReuse === 'object' && probe.controlPlane.templateReuse !== null,
+      'Custom frontend probe exposes template reuse metadata in the control-plane',
+    );
+    includesAll(
+      JSON.stringify(probe.controlPlane.templateReuse || {}),
+      [
+        'agent-handoff.endpoints.templates',
+        'agent-handoff.contentCreation.customFrontendTemplateField',
+        'agent-handoff.contentCreation.templateCloneFields',
+        'agent-handoff.contentCreation.adminEntryPoints',
+      ],
+      'Custom frontend probe exposes template reuse control-plane pointers',
     );
   } else {
     warn('Custom frontend probe does not expose the optional controlPlane block; regenerate from the latest starter before redesigning.');
