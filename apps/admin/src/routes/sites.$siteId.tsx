@@ -5770,6 +5770,32 @@ function EditSitePage() {
       ].join("\n"),
     [customFrontendPrimaryHost, publicApiBase, siteHandoffId],
   );
+  const customFrontendRecommendedRepoName = useMemo(
+    () =>
+      `${customFrontendPrimaryHost || siteHandoffId}-frontend`
+        .toLowerCase()
+        .replace(/^www\./, "")
+        .replace(/[^a-z0-9-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .replace(/-{2,}/g, "-") || "backy-custom-frontend",
+    [customFrontendPrimaryHost, siteHandoffId],
+  );
+  const customFrontendScaffoldCommand = useMemo(
+    () =>
+      [
+        "npm run custom-frontend:scaffold --",
+        `--site-id ${siteHandoffId}`,
+        `--public-host ${customFrontendPrimaryHost}`,
+        `--api-base ${publicApiBase}`,
+        `--out ../${customFrontendRecommendedRepoName}`,
+      ].join(" "),
+    [
+      customFrontendPrimaryHost,
+      customFrontendRecommendedRepoName,
+      publicApiBase,
+      siteHandoffId,
+    ],
+  );
   const customFrontendProjectLaunchPlan = useMemo(
     () => ({
       schemaVersion: "backy.custom-frontend-project-launch.v1",
@@ -5817,8 +5843,16 @@ function EditSitePage() {
         renderWithHost:
           siteCustomFrontendAgentHandoff.routing.publicResolution.renderWithHost,
       },
+      starter: {
+        adminDownload:
+          "Site Detail -> Separate custom frontend project -> Download starter project",
+        localScaffoldCommand: customFrontendScaffoldCommand,
+        materializeDownloadedManifest:
+          "npm run custom-frontend:materialize -- --manifest <downloaded-starter-json> --out ../<website-frontend-repo>",
+      },
       workflow: [
         "Create the Backy site and save the custom domain/aliases.",
+        "Start from Download starter project or the local custom-frontend:scaffold command before rewriting the design system.",
         "Build the website in a separate frontend repo or Vercel project.",
         "Give the frontend agent this launch plan plus the agent handoff before it writes routes or components.",
         "Attach the production domain to the website frontend project, not to backy-admin or backy-public.",
@@ -5828,6 +5862,7 @@ function EditSitePage() {
     }),
     [
       customFrontendPrimaryHost,
+      customFrontendScaffoldCommand,
       customFrontendSameSiteHosts,
       publicApiBase,
       siteCustomFrontendAgentHandoff.endpoints.agentHandoff,
@@ -7050,6 +7085,22 @@ function EditSitePage() {
                         ? "Preparing starter"
                         : "Download starter project"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copySiteHandoffText(
+                          customFrontendScaffoldCommand,
+                          "Custom frontend scaffold command",
+                        )
+                      }
+                      disabled={isSiteSettingsBusy}
+                      data-testid="site-copy-custom-frontend-scaffold-command"
+                      data-scaffold-command="npm run custom-frontend:scaffold"
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Code className="h-3.5 w-3.5" />
+                      Copy scaffold command
+                    </button>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -7073,7 +7124,17 @@ function EditSitePage() {
                     label="Starter bundle"
                     value="File-list + materializer"
                   />
+                  <SiteHandoffEndpoint
+                    label="Local scaffold"
+                    value="custom-frontend:scaffold"
+                  />
                 </div>
+                <pre
+                  className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-background p-3 font-mono text-[11px] leading-5 text-teal-950"
+                  data-testid="site-custom-frontend-scaffold-command"
+                >
+                  {customFrontendScaffoldCommand}
+                </pre>
                 <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap rounded-lg border border-teal-100 bg-teal-50/50 p-3 font-mono text-[11px] leading-5 text-teal-950">
                   {customFrontendProjectEnvText}
                 </pre>

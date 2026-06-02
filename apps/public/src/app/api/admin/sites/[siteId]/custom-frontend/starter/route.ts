@@ -189,11 +189,13 @@ const starterReadme = ({
   siteId,
   publicHost,
   adminVerifierEndpoint,
+  scaffoldCommand,
 }: {
   apiBaseUrl: string;
   siteId: string;
   publicHost: string;
   adminVerifierEndpoint: string;
+  scaffoldCommand: string;
 }) =>
   [
     "# Backy Custom Frontend Starter Manifest",
@@ -208,6 +210,12 @@ const starterReadme = ({
     "",
     "   ```bash",
     `   ${MATERIALIZER_COMMAND}`,
+    "   ```",
+    "",
+    "   If you are running from the Backy repo and do not need to download this JSON first, scaffold the same project with:",
+    "",
+    "   ```bash",
+    `   ${scaffoldCommand}`,
     "   ```",
     "",
     "3. Add the `.env.example` values from this manifest to the frontend project.",
@@ -252,6 +260,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const publicHosts = publicHostsForSite(site);
     const publicHost = publicHosts[0] || `${site.slug}.backy.app`;
     const adminVerifierEndpoint = `/api/admin/sites/${encodeURIComponent(site.id)}/custom-frontend/connection`;
+    const scaffoldCommand = [
+      "npm run custom-frontend:scaffold --",
+      `--site-id ${site.id}`,
+      `--public-host ${publicHost}`,
+      `--api-base ${apiBaseUrl}`,
+      `--out ../${safeProjectName(site)}`,
+    ].join(" ");
     const cliCommand = [
       `BACKY_CUSTOM_FRONTEND_API_BASE_URL=${apiBaseUrl}`,
       `BACKY_CUSTOM_FRONTEND_SITE_ID=${site.id}`,
@@ -274,6 +289,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           siteId: site.id,
           publicHost,
           adminVerifierEndpoint,
+          scaffoldCommand,
         }),
       },
     ];
@@ -318,6 +334,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           generatedFiles: siteSpecificFiles.map((file) => file.path),
           copiedFiles: CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES.map((file) => file.path),
           materializerCommand: MATERIALIZER_COMMAND,
+          scaffoldCommand,
           installCommand: "npm install",
           buildCommand: "npm run build",
           devCommand: "npm run dev",
@@ -341,6 +358,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         fileCount: starterProjectFiles.length,
         materializer: {
           command: MATERIALIZER_COMMAND,
+          scaffoldCommand,
           targetDirectoryPolicy: "empty-directory-required-unless-force",
           pathSafety: "rejects-absolute-parent-and-drive-paths",
         },

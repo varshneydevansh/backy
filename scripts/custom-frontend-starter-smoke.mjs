@@ -49,6 +49,7 @@ const files = {
   client: read('src/lib/backy-client.ts'),
   generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
   materializer: readRepo('scripts/materialize-custom-frontend-starter.mjs'),
+  scaffold: readRepo('scripts/scaffold-custom-frontend-starter.mjs'),
   generatedTemplate: readRepo('apps/public/src/lib/customFrontendStarterProjectTemplate.ts'),
 };
 
@@ -133,6 +134,11 @@ assertIncludes(files.materializer, 'backy.custom-frontend-starter-project.v1', '
 assertIncludes(files.materializer, 'Target directory is not empty', 'Starter materializer refuses non-empty targets by default');
 assertIncludes(files.materializer, "startsWith('../')", 'Starter materializer rejects parent-path traversal');
 assertIncludes(files.materializer, 'pathSafety', 'Starter materializer reports path-safety metadata');
+assertIncludes(files.scaffold, 'backy.custom-frontend-starter-export.v1', 'Starter scaffold emits the protected starter export schema');
+assertIncludes(files.scaffold, 'custom-frontend:materialize', 'Starter scaffold delegates to the materializer command');
+assertIncludes(files.scaffold, 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST', 'Starter scaffold writes browser-safe public host env');
+assertIncludes(files.scaffold, 'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1', 'Starter scaffold writes strict deployed-frontend verification command');
+assertIncludes(files.scaffold, 'forbiddenPrivateEnv', 'Starter scaffold carries forbidden private env boundaries');
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
@@ -193,6 +199,39 @@ if (
   pass('Starter materializer writes a valid file-list export into a target frontend directory');
 } else {
   fail(`Starter materializer failed:\n${materializerRun.stdout}\n${materializerRun.stderr}`);
+}
+
+const scaffoldTempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'backy-starter-scaffold-'));
+const scaffoldManifestPath = path.join(scaffoldTempRoot, 'starter.json');
+const scaffoldOutputPath = path.join(scaffoldTempRoot, 'frontend');
+const scaffoldRun = spawnSync(
+  'node',
+  [
+    'scripts/scaffold-custom-frontend-starter.mjs',
+    '--site-id',
+    'site-smoke',
+    '--public-host',
+    'smoke.example.com',
+    '--api-base',
+    'https://backy-public.example.com/api',
+    '--manifest',
+    scaffoldManifestPath,
+    '--out',
+    scaffoldOutputPath,
+  ],
+  { cwd: repoRoot, encoding: 'utf8', timeout: 30000 },
+);
+if (
+  scaffoldRun.status === 0 &&
+  fs.existsSync(scaffoldManifestPath) &&
+  fs.existsSync(path.join(scaffoldOutputPath, 'BACKY_FRONTEND_STARTER.md')) &&
+  fs.existsSync(path.join(scaffoldOutputPath, 'src/app/api/backy-connection/route.ts')) &&
+  fs.readFileSync(path.join(scaffoldOutputPath, '.env.example'), 'utf8').includes('NEXT_PUBLIC_BACKY_SITE_ID=site-smoke') &&
+  scaffoldRun.stdout.includes('"schemaVersion": "backy.custom-frontend-scaffold.v1"')
+) {
+  pass('Starter scaffold creates a manifest and materialized separate frontend project from safe public inputs');
+} else {
+  fail(`Starter scaffold failed:\n${scaffoldRun.stdout}\n${scaffoldRun.stderr}`);
 }
 
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {

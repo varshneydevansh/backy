@@ -25,6 +25,7 @@ const agents = read('AGENTS.md');
 const helpRoute = read('apps/admin/src/routes/help.tsx');
 const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
+const starterScaffold = read('scripts/scaffold-custom-frontend-starter.mjs');
 const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
 const starterTemplateModule = read('apps/public/src/lib/customFrontendStarterProjectTemplate.ts');
 const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
@@ -79,6 +80,11 @@ assert(
   'Root package exposes custom-frontend:materialize',
 );
 assert(
+  rootPackage.scripts?.['custom-frontend:scaffold'] ===
+    'node scripts/scaffold-custom-frontend-starter.mjs',
+  'Root package exposes custom-frontend:scaffold',
+);
+assert(
   (rootPackage.scripts?.['test:partial-gate-preflights'] || '').includes(
     'npm run test:custom-frontend-connection',
   ),
@@ -96,6 +102,19 @@ includesAll(
     'submitForm',
   ],
   'Starter smoke preserves API-addressable DOM, newsletter, and form boundaries',
+);
+includesAll(
+  starterScaffold,
+  [
+    'backy.custom-frontend-starter-export.v1',
+    'backy.custom-frontend-starter-project.v1',
+    'backy.custom-frontend-scaffold.v1',
+    'custom-frontend:materialize',
+    'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
+    'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1',
+    'forbiddenPrivateEnv',
+  ],
+  'Starter scaffold CLI emits the same safe file-list export and verification boundaries',
 );
 includesAll(
   starterConnectionProbe,
@@ -147,7 +166,9 @@ includesAll(
     'fileCount',
     'copiedFiles',
     'materializerCommand',
+    'scaffoldCommand',
     'custom-frontend:materialize',
+    'custom-frontend:scaffold',
     'targetDirectoryPolicy',
     'pathSafety',
     'installCommand',
@@ -195,6 +216,9 @@ includesAll(
     'backy.custom-frontend-starter-project.v1',
     'data-starter-project-format="file-list"',
     'Download starter project',
+    'site-copy-custom-frontend-scaffold-command',
+    'site-custom-frontend-scaffold-command',
+    'custom-frontend:scaffold',
     'File-list + materializer',
     '/api/backy-connection',
   ],
@@ -260,6 +284,7 @@ includesAll(
     'files[]=complete project file list',
     'Write every files[].path',
     'materializer.command=npm run custom-frontend:materialize',
+    'scaffold.command=npm run custom-frontend:scaffold',
     'BACKY_FRONTEND_STARTER.md',
     'preserveFiles',
     'verification.cliCommand',

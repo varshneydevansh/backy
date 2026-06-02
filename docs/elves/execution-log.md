@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 05:24 IST
+- **Last updated:** 2026-06-02 05:48 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 05:48 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Separate frontend repos can now be scaffolded without a browser download
+
+**What changed:**
+- Added `npm run custom-frontend:scaffold` backed by `scripts/scaffold-custom-frontend-starter.mjs`.
+- The scaffold command accepts safe public inputs (`--site-id`, `--public-host`, `--api-base`) and emits the same `backy.custom-frontend-starter-export.v1` / `backy.custom-frontend-starter-project.v1` file-list starter schema used by the protected admin download.
+- The command can write a starter JSON with `--manifest`, materialize a separate frontend repo with `--out`, or do both; materialization still goes through the existing path-safe materializer and refuses non-empty targets unless `--force`.
+- Site Detail now exposes a copyable scaffold command beside Download starter project, and the protected starter export/generated runbook include the matching local scaffold command.
+- Help now documents the CLI scaffold path beside the admin starter export and materializer commands.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS, 64 checks.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 20 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent` -> PASS, 65 checks.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 48 checks; deployed custom frontend DOM proof skipped because the separate website frontend URL does not exist yet.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Run repo-public hygiene.
+2. Commit/push this scaffold slice.
+3. After deploy, verify production readiness/logs again, then materialize the real `devanshvarshney.com` separate frontend project or continue only with launch-blocking UI/editor polish.
 
 ## 2026-06-02 05:24 IST
 

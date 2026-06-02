@@ -464,6 +464,7 @@ const CUSTOM_FRONTEND_ENV_CARDS = [
       'files[]=complete project file list: package.json, next.config.mjs, app routes, Backy client, renderer, probes',
       'Write every files[].path into the separate frontend repo before deploying.',
       'materializer.command=npm run custom-frontend:materialize -- --manifest <downloaded-starter-json> --out ../<website-frontend-repo>',
+      `scaffold.command=npm run custom-frontend:scaffold -- --site-id ${siteId} --public-host <your-domain.com> --api-base https://<backy-public-domain>/api --out ../<website-frontend-repo>`,
       'files also include generated .env.example + BACKY_FRONTEND_STARTER.md',
       'preserveFiles=Backy client, renderer, route, /api/backy-connection, newsletter, and form endpoints',
       'verification.cliCommand=npm run test:custom-frontend-connection',
