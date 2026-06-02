@@ -3697,6 +3697,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Notes:**
 - This is source-verified locally and production API-verified against the current stable public alias. The stricter protected verifier itself will become live after the next `backy-public` deployment finishes.
+- Follow-up deploy proof: fresh `backy-public` and `backy-admin` production deployments are Ready on the stable aliases after `1199c7cc`. Production readiness passes 47 checks, real-site custom frontend connection passes 94 checks, and hosted admin login shell remains clean of demo/dev credentials. Deployed separate frontend DOM proof remains pending until `BACKY_CUSTOM_FRONTEND_URL` is supplied.
 
 ## Checkpoint: 2026-06-03 01:31 IST - Custom Frontend Starter Blog Template Probe
 
