@@ -335,7 +335,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Blog child-template polish:** Blog creation now follows the requested parent/child model: New Page remains the parent starter surface, while `/blog/new` has a route-addressable 33-template blog child library aligned to the page catalog. Each child starter maps to a concrete APIable article, investigation, audio transcript, newsletter, or case-study canvas flow, and Custom frontend mode auto-matches the selected child starter against captured blog-post templates while preserving explicit captured-template selection, chrome, tokens, editable maps, and serialized metadata.
 
-**Newest verification:** Admin typecheck, Blog create source guard, Page create source guard, rendered Blog create smoke, rendered Page create smoke, and diff check are green for the Blog child-template slice. Repo-public hygiene and commit/push are still pending for this newest local slice.
+**Newest verification:** Admin typecheck, Blog create source guard, Page create source guard, rendered Blog create smoke, rendered Page create smoke, diff check, and repo-public hygiene are green for the Blog child-template slice. The slice is committed and pushed as `c4e21631`.
+
+**Newest deploy verification:** `c4e21631` is pushed. Fresh `backy-admin` and `backy-public` production deployments are Ready and aliased to `https://backy-admin.vercel.app` and `https://backy-public.vercel.app`. Production readiness passes 47 checks, hosted admin login shell is clean of demo/dev credentials, and the real-site custom frontend API contract passes 86 checks. Deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
 
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 

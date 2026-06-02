@@ -3659,6 +3659,23 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 00:08 IST - Blog Child Templates Deployed
+
+**Scope:** Post-push deployment verification for the Blog child starter template slice.
+
+**Verified:**
+- Commit `c4e21631` was pushed to `main`.
+- Fresh `backy-admin` production deployment reached Ready and is aliased to the public admin project domain.
+- Fresh `backy-public` production deployment reached Ready and is aliased to the public API/render project domain.
+
+**Validation:**
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent`
+
+**Notes:**
+- Production readiness passed 47 checks; hosted login-shell smoke proved no demo access, seeded admin/editor credentials, or dev MFA phrase; custom frontend API contract passed 86 checks. Deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
+
 ## Checkpoint: 2026-06-02 23:58 IST - Blog Child Starter Template Library
 
 **Scope:** Batch 5 blog/page creation polish, focused on the user's requested inheritance model: New Page stays the parent creation surface, while Blog creation is the child surface with its own blog-specific templates that can still preserve Backy canvas and custom frontend design contracts.
