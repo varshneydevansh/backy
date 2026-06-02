@@ -26,6 +26,7 @@ const helpRoute = read('apps/admin/src/routes/help.tsx');
 const handoffSpec = read('specs/custom-frontend-agent-handoff.md');
 const starterSmoke = read('scripts/custom-frontend-starter-smoke.mjs');
 const starterScaffold = read('scripts/scaffold-custom-frontend-starter.mjs');
+const ensureSite = read('scripts/ensure-custom-frontend-site.mjs');
 const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/backy-connection/route.ts');
 const starterTemplateModule = read('apps/public/src/lib/customFrontendStarterProjectTemplate.ts');
 const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
@@ -85,6 +86,11 @@ assert(
   'Root package exposes custom-frontend:scaffold',
 );
 assert(
+  rootPackage.scripts?.['custom-frontend:ensure-site'] ===
+    'node scripts/ensure-custom-frontend-site.mjs',
+  'Root package exposes custom-frontend:ensure-site',
+);
+assert(
   (rootPackage.scripts?.['test:partial-gate-preflights'] || '').includes(
     'npm run test:custom-frontend-connection',
   ),
@@ -119,6 +125,24 @@ includesAll(
     'publicSiteVerification',
   ],
   'Starter scaffold CLI emits the same safe file-list export and verification boundaries',
+);
+includesAll(
+  ensureSite,
+  [
+    'backy.custom-frontend-site-readiness.v1',
+    'BACKY_CUSTOM_FRONTEND_ADMIN_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'Refusing --admin-key',
+    'Refusing --service-role-key',
+    '/api/admin/sites',
+    '/rest/v1/',
+    '/pages?includeUnpublished=true',
+    '/render?path=/',
+    'publicSiteVerification',
+    'NEXT_PUBLIC_BACKY_API_BASE_URL',
+    'custom-frontend:scaffold',
+  ],
+  'Custom frontend site ensure CLI uses the protected admin boundary, seeds homepage readiness, and prints safe frontend handoff',
 );
 includesAll(
   starterConnectionProbe,
@@ -288,8 +312,12 @@ includesAll(
     'files[]=complete project file list',
     'Write every files[].path',
     'materializer.command=npm run custom-frontend:materialize',
+    'ensureSite.command=npm run custom-frontend:ensure-site',
+    'ensureSite requires a server-side operator credential',
+    'ensureSite refuses --admin-key and --service-role-key command-line secrets',
     'scaffold.command=npm run custom-frontend:scaffold',
     'scaffold verifies public site discovery, manifest, and render before writing files',
+    'SUPABASE_SERVICE_ROLE_KEY',
     'BACKY_FRONTEND_STARTER.md',
     'preserveFiles',
     'verification.cliCommand',

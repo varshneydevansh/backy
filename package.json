@@ -35,6 +35,7 @@
     "test:vercel-public-production-env-guard": "node scripts/vercel-public-production-env-guard-smoke.mjs",
     "test:vercel-production-readiness": "node scripts/vercel-production-readiness-smoke.mjs",
     "custom-frontend:materialize": "node scripts/materialize-custom-frontend-starter.mjs",
+    "custom-frontend:ensure-site": "node scripts/ensure-custom-frontend-site.mjs",
     "custom-frontend:scaffold": "node scripts/scaffold-custom-frontend-starter.mjs",
     "test:custom-frontend-starter": "node scripts/custom-frontend-starter-smoke.mjs",
     "test:custom-frontend-connection": "node scripts/custom-frontend-connection-smoke.mjs",

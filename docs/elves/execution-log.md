@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 05:48 IST
+- **Last updated:** 2026-06-02 06:59 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,40 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 06:59 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Real production site is now published and scaffold-ready
+
+**What changed:**
+- Added `npm run custom-frontend:ensure-site` backed by `scripts/ensure-custom-frontend-site.mjs`.
+- The command first verifies public site discovery, manifest, and home render. If the site is missing, it can create/update/publish through the protected admin API key boundary.
+- When the admin API key is intentionally empty, the command can use `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` as a server-side operator fallback. It rejects command-line admin/service-role keys so secrets are not saved in shell history.
+- The operator command can seed a minimal published homepage, publish an existing homepage when requested, and print only safe custom frontend env plus the next scaffold/verification commands.
+- Help now documents the admin-key path and the Supabase service-role fallback as server-side operator credentials, while preserving the custom frontend secret boundary.
+- Production `devanshvarshney`/`devanshvarshney.com` was created/published through the server-side operator path, a homepage was seeded, and the current signed-in Gmail profile was activated as owner on the resolved team.
+- The real production site now passes public discovery, manifest, home render, custom frontend connection checks, and no-browser starter scaffolding.
+
+**Commands run:**
+- `npm run test:custom-frontend-starter --silent` -> PASS, 77 checks.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 22 source checks; live API/frontend URL skipped by unset env.
+- `npm run test:help --workspace @backy-cms/admin --silent` -> PASS.
+- Production verify-only before creation -> expected failure, `SITE_NOT_FOUND`.
+- Production Supabase REST count check -> PASS, one team available for deterministic operator fallback.
+- Production ensure-site with server-side Supabase REST fallback -> PASS, site created/published and homepage created/published.
+- Production verify-only after creation -> PASS.
+- Production scaffold proof with `--site-id devanshvarshney --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out <tmp>` -> PASS, materialized the separate Next frontend starter.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=<canonical-site-id> BACKY_CUSTOM_FRONTEND_SITE_PUBLIC_HOST=devanshvarshney.com BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 npm run test:custom-frontend-connection --silent` -> PASS, 50 checks; deployed custom frontend DOM proof skipped because the separate website frontend URL does not exist yet.
+- `npm run test:help-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `node scripts/ensure-custom-frontend-site.mjs --help` -> PASS.
+- `git diff --check` -> PASS.
+
+**Next:**
+1. Run repo-public hygiene.
+2. Commit/push this ensure-site and production custom-frontend readiness slice.
+3. Use the scaffold command to create the separate `devanshvarshney.com` frontend repo/project, deploy it on Vercel, then run the deployed frontend DOM/probe verification gate.
 
 ## 2026-06-02 06:08 IST
 

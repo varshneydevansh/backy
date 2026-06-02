@@ -37,6 +37,7 @@ const assertIncludes = (text, needle, message) => {
 };
 
 const files = {
+  rootPackageJson: readRepo('package.json'),
   packageJson: read('package.json'),
   env: read('.env.example'),
   readme: read('README.md'),
@@ -50,8 +51,16 @@ const files = {
   generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
   materializer: readRepo('scripts/materialize-custom-frontend-starter.mjs'),
   scaffold: readRepo('scripts/scaffold-custom-frontend-starter.mjs'),
+  ensureSite: readRepo('scripts/ensure-custom-frontend-site.mjs'),
   generatedTemplate: readRepo('apps/public/src/lib/customFrontendStarterProjectTemplate.ts'),
 };
+
+const rootPackageJson = JSON.parse(files.rootPackageJson || '{}');
+if (rootPackageJson.scripts?.['custom-frontend:ensure-site'] === 'node scripts/ensure-custom-frontend-site.mjs') {
+  pass('Root package exposes custom-frontend:ensure-site');
+} else {
+  fail('Root package must expose custom-frontend:ensure-site');
+}
 
 const packageJson = JSON.parse(files.packageJson || '{}');
 if (!packageJson.dependencies?.['@backy/sdk-js']) {
@@ -143,6 +152,14 @@ assertIncludes(files.scaffold, '/sites?identifier=', 'Starter scaffold verifies 
 assertIncludes(files.scaffold, '/render?path=/', 'Starter scaffold verifies the home render payload before writing');
 assertIncludes(files.scaffold, '--skip-site-verify', 'Starter scaffold keeps an explicit offline escape hatch for fixture manifests');
 assertIncludes(files.scaffold, 'publicSiteVerification', 'Starter scaffold records public site verification metadata');
+assertIncludes(files.ensureSite, 'backy.custom-frontend-site-readiness.v1', 'Ensure-site command emits a custom frontend site readiness schema');
+assertIncludes(files.ensureSite, 'Refusing --admin-key', 'Ensure-site command refuses admin keys in command-line history');
+assertIncludes(files.ensureSite, 'Refusing --service-role-key', 'Ensure-site command refuses service-role keys in command-line history');
+assertIncludes(files.ensureSite, 'BACKY_CUSTOM_FRONTEND_ADMIN_KEY', 'Ensure-site command reads server-side admin keys from environment');
+assertIncludes(files.ensureSite, 'SUPABASE_SERVICE_ROLE_KEY', 'Ensure-site command can use server-side Supabase REST fallback');
+assertIncludes(files.ensureSite, '/rest/v1/', 'Ensure-site command keeps Supabase fallback behind server-side REST');
+assertIncludes(files.ensureSite, '/pages?includeUnpublished=true', 'Ensure-site command checks homepage readiness before handoff');
+assertIncludes(files.ensureSite, '/render?path=/', 'Ensure-site command verifies public home render before scaffold handoff');
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', 'Generated starter bundle includes the connection probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
@@ -157,7 +174,7 @@ if (!files.generatedTemplate.includes('"path": ".next')) {
 }
 
 const allStarterText = Object.entries(files)
-  .filter(([name]) => name !== 'readme')
+  .filter(([name]) => !['readme', 'rootPackageJson', 'ensureSite'].includes(name))
   .map(([, value]) => value)
   .join('\n');
 for (const forbidden of ['adminSites(', 'createAdmin', '/api/admin/', 'VITE_BACKY_ADMIN_API_KEY']) {
