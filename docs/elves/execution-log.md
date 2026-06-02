@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 10:00 IST
+- **Last updated:** 2026-06-02 10:23 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 10:23 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Site Detail can sync a verified custom frontend into the saved design-source contract
+
+**What changed:**
+- Added a guarded `Sync verified frontend` action to Site Detail's Separate custom frontend project verifier result.
+- The action only enables after a Ready `backy.admin-custom-frontend-connection-check.v1` result, then persists the verified frontend URL as a `backy.frontend-design.v1` source with `status=synced`, `source.type=custom-frontend`, `source.capturedAt`, and an audit-friendly note.
+- The sync path reuses the existing `/api/admin/sites/:siteId/frontend-design` save flow and preserves the current tokens, chrome, templates, and editable-map JSON so custom frontend style and Backy-created content stay connected.
+- Added a Backy-controlled `Verified design-source sync` row to `backy.custom-frontend-control-readiness.v1`, making it visible when the frontend has been verified but not yet persisted as the design source.
+- Strengthened Site Detail smoke source and rendered assertions so the sync button, schema, Ready-verifier gate, readiness row, and launch-panel copy cannot disappear silently.
+
+**Commands run:**
+- `BACKY_SITE_DETAIL_SOURCE_ONLY=1 npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS before doc updates.
+
+**Next:**
+1. Rerun repo-public hygiene after this doc update, then commit and push the Site Detail sync-control slice.
+2. Continue highest-friction Backy UX/editor polish; the remaining custom frontend external step is still Vercel GitHub App access for branch previews and DNS cutover only when the public domain is ready to move.
 
 ## 2026-06-02 10:00 IST
 

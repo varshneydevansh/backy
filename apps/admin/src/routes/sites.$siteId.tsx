@@ -917,6 +917,14 @@ const parseArrayJson = (
   return parsed as Array<Record<string, unknown>>;
 };
 
+const appendFrontendDesignNote = (
+  currentNote: string | undefined,
+  nextNote: string,
+): string => {
+  const current = currentNote?.trim();
+  return current ? `${current}\n\n${nextNote}` : nextNote;
+};
+
 const createFrontendDesignState = (
   frontendDesign: SiteFrontendDesignContract = EMPTY_FRONTEND_DESIGN,
   response?: Pick<AdminFrontendDesignResponse, "endpoints" | "templateRegistry">,
@@ -5917,6 +5925,10 @@ function EditSitePage() {
   const customFrontendControlReadiness = useMemo(() => {
     const frontendDesign = frontendDesignState.frontendDesign;
     const hasDesignContract = frontendDesign.status !== "unconfigured";
+    const hasCustomFrontendSource =
+      hasDesignContract &&
+      frontendDesign.source.type === "custom-frontend" &&
+      Boolean(frontendDesign.source.url);
     const templateTypes = new Set(
       frontendDesign.templates.map((template) => template.type),
     );
@@ -5954,6 +5966,15 @@ function EditSitePage() {
         detail: hasDesignContract
           ? `${sourceLabel} is stored with ${frontendDesign.editableMap.length} editable binding${frontendDesign.editableMap.length === 1 ? "" : "s"}.`
           : "Capture or sync a frontend design contract before using custom-designed content creation.",
+      },
+      {
+        id: "verified-design-source-sync",
+        label: "Verified design-source sync",
+        status: hasCustomFrontendSource ? "ready" : "review",
+        owner: "backy",
+        detail: hasCustomFrontendSource
+          ? `${frontendDesign.source.url} is persisted as the custom frontend source for future page, blog, form, product, collection, and section creation.`
+          : "After a Ready deployed frontend check, use Sync verified frontend to persist the source URL in the frontend-design contract.",
       },
       {
         id: "template-registry",
@@ -6412,6 +6433,104 @@ function EditSitePage() {
       );
     } finally {
       setCustomFrontendVerificationLoading(false);
+    }
+  };
+
+  const handleSyncVerifiedCustomFrontendDesignSource = async () => {
+    if (!siteApiId) return;
+    if (!canConfigureSite) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        errorMessage: siteConfigureDeniedMessage,
+        notice: null,
+      }));
+      return;
+    }
+    if (!customFrontendVerification || customFrontendVerification.status !== "ready") {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        errorMessage:
+          "Run a Ready custom frontend connection check before syncing it as the design source.",
+        notice: null,
+      }));
+      return;
+    }
+
+    const syncedAt = new Date().toISOString();
+    const frontendUrl =
+      customFrontendVerification.frontendUrl || customFrontendVerifyUrl.trim();
+    const frontendHost = (() => {
+      try {
+        return new URL(frontendUrl).hostname;
+      } catch {
+        return frontendUrl.replace(/^https?:\/\//, "").split("/")[0] || frontendUrl;
+      }
+    })();
+
+    frontendDesignLoadRequestRef.current += 1;
+    setFrontendDesignState((prev) => ({
+      ...prev,
+      saving: true,
+      errorMessage: null,
+      notice: null,
+    }));
+
+    try {
+      const currentContract = frontendDesignState.frontendDesign;
+      const nextContract: SiteFrontendDesignContract = {
+        ...currentContract,
+        status: "synced",
+        source: {
+          ...currentContract.source,
+          type: "custom-frontend",
+          label:
+            currentContract.source.label &&
+            currentContract.source.type === "custom-frontend"
+              ? currentContract.source.label
+              : `${frontendHost} custom frontend`,
+          url: frontendUrl,
+          repository: currentContract.source.repository || "",
+          branch: currentContract.source.branch || "main",
+          capturedAt: syncedAt,
+        },
+        tokens: parseObjectJson(
+          frontendDesignState.tokensJson,
+          "Tokens",
+        ) as SiteFrontendDesignContract["tokens"],
+        chrome: parseObjectJson(
+          frontendDesignState.chromeJson,
+          "Chrome",
+        ) as SiteFrontendDesignContract["chrome"],
+        templates: parseArrayJson(
+          frontendDesignState.templatesJson,
+          "Templates",
+        ) as SiteFrontendDesignContract["templates"],
+        editableMap: parseArrayJson(
+          frontendDesignState.editableMapJson,
+          "Editable map",
+        ) as SiteFrontendDesignContract["editableMap"],
+        notes: appendFrontendDesignNote(
+          currentContract.notes,
+          `Synced from verified custom frontend ${frontendUrl} at ${syncedAt}. Verification passed ${customFrontendVerification.summary.passed}/${customFrontendVerification.summary.total} checks through ${customFrontendVerification.probeUrl}.`,
+        ),
+        updatedAt: syncedAt,
+      };
+      const response = await updateSiteFrontendDesign(siteApiId, nextContract);
+      applyFrontendDesignResponse(
+        response,
+        "Verified custom frontend saved as the site design source.",
+      );
+      setSiteWorkspaceNotice("Verified custom frontend saved as the site design source.");
+      void loadSiteAuditEvents();
+    } catch (error) {
+      setFrontendDesignState((prev) => ({
+        ...prev,
+        saving: false,
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "Unable to sync the verified custom frontend as the design source.",
+      }));
     }
   };
 
@@ -7471,33 +7590,66 @@ function EditSitePage() {
                       data-connection-warnings={customFrontendVerification.summary.warnings}
                       data-connection-failed={customFrontendVerification.summary.failed}
                     >
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2 py-1 font-semibold",
-                            customFrontendVerification.status === "ready"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2 py-1 font-semibold",
+                              customFrontendVerification.status === "ready"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : customFrontendVerification.status === "warning"
+                                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                                  : "border-red-200 bg-red-50 text-red-700",
+                            )}
+                          >
+                            {customFrontendVerification.status === "ready" ? (
+                              <CheckCircle className="h-3.5 w-3.5" />
+                            ) : (
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            )}
+                            {customFrontendVerification.status === "ready"
+                              ? "Ready"
                               : customFrontendVerification.status === "warning"
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : "border-red-200 bg-red-50 text-red-700",
-                          )}
+                                ? "Warnings"
+                                : "Blocked"}
+                          </span>
+                          <span className="text-teal-900/80">
+                            {customFrontendVerification.summary.passed} passed ·{" "}
+                            {customFrontendVerification.summary.warnings} warnings ·{" "}
+                            {customFrontendVerification.summary.failed} failed
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleSyncVerifiedCustomFrontendDesignSource()}
+                          disabled={
+                            !canConfigureSite ||
+                            frontendDesignState.saving ||
+                            customFrontendVerification.status !== "ready"
+                          }
+                          title={
+                            !canConfigureSite
+                              ? configureSitePermissionTitle
+                              : customFrontendVerification.status !== "ready"
+                                ? "Run a Ready connection check before syncing this frontend as the design source."
+                                : "Persist this verified custom frontend URL as the site frontend-design source."
+                          }
+                          data-testid="site-custom-frontend-sync-design-source"
+                          data-sync-schema="backy.frontend-design.v1"
+                          data-sync-status={
+                            customFrontendVerification.status === "ready"
+                              ? "available"
+                              : "requires-ready-verification"
+                          }
+                          data-sync-target={`${adminSiteUrl}/frontend-design`}
+                          data-sync-source-url={customFrontendVerification.frontendUrl}
+                          className="inline-flex w-fit shrink-0 items-center justify-center gap-1.5 rounded-lg border border-teal-300 bg-background px-3 py-1.5 text-xs font-semibold text-teal-950 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {customFrontendVerification.status === "ready" ? (
-                            <CheckCircle className="h-3.5 w-3.5" />
-                          ) : (
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                          )}
-                          {customFrontendVerification.status === "ready"
-                            ? "Ready"
-                            : customFrontendVerification.status === "warning"
-                              ? "Warnings"
-                              : "Blocked"}
-                        </span>
-                        <span className="text-teal-900/80">
-                          {customFrontendVerification.summary.passed} passed ·{" "}
-                          {customFrontendVerification.summary.warnings} warnings ·{" "}
-                          {customFrontendVerification.summary.failed} failed
-                        </span>
+                          <Save className="h-3.5 w-3.5" />
+                          {frontendDesignState.saving
+                            ? "Saving source"
+                            : "Sync verified frontend"}
+                        </button>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         {customFrontendVerification.checks.map((check) => (

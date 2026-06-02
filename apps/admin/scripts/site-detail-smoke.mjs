@@ -53,6 +53,16 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-copy-custom-frontend-project-launch"') &&
       source.includes('data-testid="site-custom-frontend-download-starter"') &&
       source.includes('data-testid="site-custom-frontend-starter-error"') &&
+      source.includes('data-testid="site-custom-frontend-sync-design-source"') &&
+      source.includes('data-sync-schema="backy.frontend-design.v1"') &&
+      source.includes('handleSyncVerifiedCustomFrontendDesignSource') &&
+      source.includes('Run a Ready custom frontend connection check before syncing it as the design source.') &&
+      source.includes('Verified custom frontend saved as the site design source.') &&
+      source.includes('Synced from verified custom frontend') &&
+      source.includes('verified-design-source-sync') &&
+      source.includes('After a Ready deployed frontend check, use Sync verified frontend to persist the source URL') &&
+      source.includes('customFrontendVerification.status !== "ready"') &&
+      source.includes('appendFrontendDesignNote') &&
       source.includes('backy.custom-frontend-project-launch.v1') &&
       source.includes('backy.custom-frontend-starter-export.v1') &&
       source.includes('backy.custom-frontend-starter-project.v1') &&
@@ -1588,6 +1598,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.expectedProbe === '/api/backy-connection' &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.backyTotal >= 5 &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-public-api-contract') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-verified-design-source-sync') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-template-registry') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.checkIds.includes('site-custom-frontend-control-check-deployed-frontend-verifier') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.ownerStatuses.some((entry) => entry.status === 'manual' && entry.owner === 'operator') &&
@@ -1606,6 +1617,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Attach the custom domain to the website frontend project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Custom frontend Vercel project') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Download starter project') &&
+      layout.customFrontendAgentHandoff.projectLaunch.text.includes('Sync verified frontend') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('Starter bundle') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('File-list + materializer') &&
       layout.customFrontendAgentHandoff.projectLaunch.text.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&

@@ -247,6 +247,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Site Detail control polish:** Site Detail now exposes `backy.custom-frontend-control-readiness.v1` inside the Separate custom frontend project panel and site workspace handoff. The panel separates Backy-controlled readiness from operator/manual gates: public API contract, frontend design source, template registry, starter/export path, deployed frontend verifier, public-domain cutover, and Vercel Git branch previews. Focused Site Detail smoke, admin typecheck, live custom frontend connection gate, production readiness, hosted login-shell smoke, diff check, and repo-public hygiene are green for this slice.
 
+**Newest Site Detail sync polish:** Site Detail now has a gated `Sync verified frontend` action in the deployed custom frontend verifier result. It only enables after a Ready protected verifier check, then persists the verified frontend URL through the existing `backy.frontend-design.v1` save flow with `status=synced`, `source.type=custom-frontend`, `source.capturedAt`, preserved tokens/chrome/templates/editable-map JSON, and an audit note. The custom frontend control-readiness panel now includes a Backy-controlled `Verified design-source sync` row. Site Detail source guard, full rendered Site Detail smoke, admin typecheck, diff check, and repo-public hygiene are green.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
