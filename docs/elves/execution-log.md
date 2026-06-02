@@ -3291,3 +3291,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - Commit this focused contract slice.
 - Re-run a traced or bounded rendered responsive smoke in a later pass if the editor responsive UI changes beyond source/contract metadata.
 - Continue the release path from the survival guide: Vercel GitHub App access/Preview env for the separate frontend repo, public domain cutover only when ready, and remaining high-friction admin/editor polish.
+
+## Checkpoint: 2026-06-02 11:56 IST - Responsive Next Action Rendered Smoke
+
+**Scope:** Batch 5 UX/editor polish, focused on keeping custom frontend responsive control metadata browser-verifiable without rerunning the long full responsive matrix.
+
+**Changed:**
+- Added `test:editor-responsive-next-action` as a bounded editor smoke.
+- Wired it into `test:editor-workflows` and `editor-smoke-script-coverage.mjs`.
+- The rendered smoke now proves `backy.editor-responsive-next-action.v1` through real DOM controls across desktop, mobile empty Inspector, inherited selected layer, and local mobile override states.
+- The smoke uses an inherited `smoke-image` layer and the existing property-panel layout edit path to create a local mobile override deterministically.
+
+**Validation:**
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-responsive-next-action --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Next:**
+- Commit and push the bounded smoke slice.
+- Keep custom frontend connection work prioritized: the Backy production site and custom frontend contract are green, while Vercel GitHub App access for the private separate frontend repo and eventual DNS cutover remain operator/manual gates.

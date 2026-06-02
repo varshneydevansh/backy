@@ -22,6 +22,7 @@ const CONFLICT_SMOKE = process.env.BACKY_EDITOR_CONFLICT_SMOKE === '1';
 const PAGE_SETTINGS_SMOKE = process.env.BACKY_EDITOR_PAGE_SETTINGS_SMOKE === '1';
 const RICH_TEXT_SMOKE = process.env.BACKY_EDITOR_RICH_TEXT_SMOKE === '1';
 const RESPONSIVE_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_SMOKE === '1';
+const RESPONSIVE_NEXT_ACTION_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_NEXT_ACTION_SMOKE === '1';
 const DELETE_SMOKE = process.env.BACKY_EDITOR_DELETE_SMOKE === '1';
 const LAYERS_SMOKE = process.env.BACKY_EDITOR_LAYERS_SMOKE === '1';
 const SHORTCUTS_SMOKE = process.env.BACKY_EDITOR_SHORTCUTS_SMOKE === '1';
@@ -11414,6 +11415,182 @@ const assertEditorViewportControls = async (client, options = {}) => {
 
   assert(state.ok, `Editor viewport controls action status contract failed: ${JSON.stringify(state)}`);
   return state;
+};
+
+const assertEditorResponsiveNextActionContract = async (client, options = {}) => {
+  const expectedBreakpoint = options.expectedBreakpoint || '';
+  const expectedId = options.expectedId || '';
+  const expectedIds = Array.isArray(options.expectedIds)
+    ? options.expectedIds.filter((id) => typeof id === 'string' && id.length > 0)
+    : expectedId
+      ? [expectedId]
+      : [];
+  const expectInspector = options.expectInspector === true;
+  const expectEmptyInspector = options.expectEmptyInspector === true;
+  const state = await evaluate(client, `(() => {
+    const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim();
+    const expectedBreakpoint = ${JSON.stringify(expectedBreakpoint)};
+    const expectedIds = ${JSON.stringify(expectedIds)};
+    const expectInspector = ${JSON.stringify(expectInspector)};
+    const expectEmptyInspector = ${JSON.stringify(expectEmptyInspector)};
+    const schema = 'backy.editor-responsive-next-action.v1';
+    const controls = document.querySelector('[data-testid="editor-viewport-controls"]');
+    const toolbar = document.querySelector('[data-testid="editor-responsive-next-action"]');
+    const copyButton = document.querySelector('[data-testid="editor-copy-responsive-next-action"]');
+    const inspector = document.querySelector('[data-testid="editor-inspector-responsive-next-action"]');
+    const emptyInspector = document.querySelector('[data-testid="editor-empty-responsive-next-action"]');
+    const activeBreakpoint = controls?.getAttribute('data-active-breakpoint') || '';
+    const readNode = (node) => ({
+      exists: node instanceof HTMLElement,
+      schema: node?.getAttribute('data-responsive-next-action-schema') || '',
+      id: node?.getAttribute('data-responsive-next-action-id') || '',
+      breakpoint: node?.getAttribute('data-responsive-next-action-breakpoint') || activeBreakpoint,
+      state: node?.getAttribute('data-responsive-next-action-state') || '',
+      target: node?.getAttribute('data-responsive-next-action-target') || '',
+      surface: node?.getAttribute('data-responsive-next-action-surface') || '',
+      selectedLayerId: node?.getAttribute('data-responsive-next-action-selected-layer-id') || '',
+      overrideGroups: node?.getAttribute('data-responsive-next-action-override-groups') || '',
+      text: normalize(node?.textContent),
+    });
+    const controlsState = {
+      schema: controls?.getAttribute('data-responsive-next-action-schema') || '',
+      id: controls?.getAttribute('data-responsive-next-action-id') || '',
+      state: controls?.getAttribute('data-responsive-next-action-state') || '',
+      target: controls?.getAttribute('data-responsive-next-action-target') || '',
+      surface: controls?.getAttribute('data-responsive-next-action-surface') || '',
+    };
+    const toolbarState = readNode(toolbar);
+    const inspectorState = readNode(inspector);
+    const emptyInspectorState = readNode(emptyInspector);
+    const validActionState = ['ready', 'blocked', 'selected'].includes(controlsState.state);
+    const validTarget = ['desktop-source', 'breakpoint-viewport', 'layer-selection', 'selected-layer'].includes(controlsState.target);
+    const validSurface = ['viewport-toolbar', 'layers-panel', 'inspector-breakpoint-override'].includes(controlsState.surface);
+    const controlsToolbarMatch =
+      toolbarState.exists &&
+      controlsState.schema === schema &&
+      toolbarState.schema === schema &&
+      toolbarState.id === controlsState.id &&
+      toolbarState.breakpoint === activeBreakpoint &&
+      toolbarState.state === controlsState.state &&
+      toolbarState.target === controlsState.target &&
+      toolbarState.surface === controlsState.surface &&
+      copyButton instanceof HTMLButtonElement &&
+      copyButton.getAttribute('data-copy-schema') === schema &&
+      copyButton.getAttribute('aria-label') === 'Copy responsive next action';
+    const expectedMatches =
+      (!expectedBreakpoint || activeBreakpoint === expectedBreakpoint) &&
+      (!expectedIds.length || expectedIds.includes(controlsState.id));
+    const inspectorMatches = !expectInspector || (
+      inspectorState.exists &&
+      inspectorState.schema === schema &&
+      inspectorState.id === controlsState.id &&
+      inspectorState.breakpoint === activeBreakpoint &&
+      inspectorState.target === controlsState.target &&
+      inspectorState.surface === controlsState.surface &&
+      inspectorState.selectedLayerId.length > 0 &&
+      /Next:/.test(inspectorState.text)
+    );
+    const emptyInspectorMatches = !expectEmptyInspector || (
+      emptyInspectorState.exists &&
+      emptyInspectorState.schema === schema &&
+      emptyInspectorState.id === controlsState.id &&
+      emptyInspectorState.breakpoint === activeBreakpoint &&
+      emptyInspectorState.target === 'layer-selection' &&
+      /Next:/.test(emptyInspectorState.text)
+    );
+
+    return {
+      ok: Boolean(controls) &&
+        activeBreakpoint.length > 0 &&
+        controlsToolbarMatch &&
+        expectedMatches &&
+        validActionState &&
+        validTarget &&
+        validSurface &&
+        inspectorMatches &&
+        emptyInspectorMatches,
+      activeBreakpoint,
+      controlsState,
+      toolbarState,
+      inspectorState,
+      emptyInspectorState,
+      expected: {
+        expectedBreakpoint,
+        expectedIds,
+        expectInspector,
+        expectEmptyInspector,
+      },
+      validActionState,
+      validTarget,
+      validSurface,
+      controlsToolbarMatch,
+      expectedMatches,
+      inspectorMatches,
+      emptyInspectorMatches,
+    };
+  })()`);
+
+  assert(state.ok, `Editor responsive next action contract failed: ${JSON.stringify(state)}`);
+  return state;
+};
+
+const testEditorResponsiveNextActionContract = async (client) => {
+  const desktop = await assertEditorResponsiveNextActionContract(client, {
+    expectedBreakpoint: 'desktop',
+    expectedIds: ['switch-to-tablet-or-mobile', 'review-existing-breakpoint-overrides'],
+  });
+
+  await clickButtonByAriaLabel(client, 'Mobile canvas');
+  await waitForEditorBreakpoint(client, 'mobile');
+  const mobileEmpty = await assertEditorResponsiveNextActionContract(client, {
+    expectedBreakpoint: 'mobile',
+    expectedId: 'select-layer-for-responsive-override',
+    expectEmptyInspector: true,
+  });
+
+  const inheritedMobileElementId = 'smoke-image';
+  await selectElement(client, inheritedMobileElementId);
+  const mobileSelectedInherited = await assertEditorResponsiveNextActionContract(client, {
+    expectedBreakpoint: 'mobile',
+    expectedId: 'edit-selected-layer-for-local-override',
+    expectInspector: true,
+  });
+
+  const inheritedBefore = (await readEditorElementState(client, [inheritedMobileElementId]))[inheritedMobileElementId];
+  assert(inheritedBefore, `Unable to read inherited mobile element before responsive next-action edit: ${inheritedMobileElementId}`);
+  const nextInheritedX = Math.round(inheritedBefore.x) + 8;
+  await switchToPropertiesPanel(client);
+  await setLayoutNumberInput(client, 'X', nextInheritedX);
+  await waitForElementState(
+    client,
+    inheritedMobileElementId,
+    (state) => state.x === nextInheritedX,
+    'Responsive next-action layout edit did not create a local mobile override',
+  );
+  let mobileSelectedOverride = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    mobileSelectedOverride = await assertEditorResponsiveNextActionContract(client, {
+      expectedBreakpoint: 'mobile',
+      expectedId: 'continue-or-reset-local-overrides',
+      expectInspector: true,
+    }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+    if (!mobileSelectedOverride?.error) {
+      break;
+    }
+    await sleep(150);
+  }
+  assert(
+    mobileSelectedOverride && !mobileSelectedOverride.error,
+    `Responsive next action did not switch to local override after mobile nudge: ${JSON.stringify(mobileSelectedOverride)}`,
+  );
+
+  return {
+    desktop,
+    mobileEmpty,
+    inheritedMobileElementId,
+    mobileSelectedInherited,
+    mobileSelectedOverride,
+  };
 };
 
 const assertCompactCanvasSizeControls = async (client) => {
@@ -27608,7 +27785,7 @@ const main = async () => {
     return;
   }
 
-  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || PREVIEW_SCROLL_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
+  const skipsAuxiliaryFixtures = EDITOR_PATH || INSPECTOR_SMOKE || INSPECTOR_ACTION_SMOKE || LIBRARY_SMOKE || CLIPBOARD_SMOKE || Z_ORDER_SMOKE || SAVE_SMOKE || CONFLICT_SMOKE || PAGE_SETTINGS_SMOKE || RICH_TEXT_SMOKE || RESPONSIVE_SMOKE || RESPONSIVE_NEXT_ACTION_SMOKE || STRESS_SMOKE || DELETE_SMOKE || LAYERS_SMOKE || SHORTCUTS_SMOKE || KEYBOARD_NUDGE_SMOKE || VIEW_ONLY_SMOKE || MULTI_SELECT_SMOKE || MARQUEE_ORIGIN_SMOKE || NESTED_GROUP_SMOKE || ANIMATION_SMOKE || ZOOM_SMOKE || PREVIEW_SCROLL_SMOKE || GRID_SNAP_SMOKE || ALIGNMENT_GUIDES_SMOKE || MEDIA_UPLOAD_SMOKE || RESIZE_SMOKE || SECTION_FLOW_SMOKE || PRIMARY_ACTION_STATUS_SMOKE || PREVIEW_LINK_SMOKE || REVISION_NAVIGATION_SMOKE || COMMAND_PALETTE_SMOKE;
   const needsReusableSectionFixture = !EDITOR_PATH && (!skipsAuxiliaryFixtures || REUSABLE_SECTION_SMOKE || LIBRARY_SMOKE);
   let client;
   let childProcess = null;
@@ -27670,10 +27847,10 @@ const main = async () => {
     const viewportControls = await assertEditorViewportControls(client);
     const primaryActionStatus = await assertEditorPrimaryActionStatus(client);
 
-	    if (PRIMARY_ACTION_STATUS_SMOKE) {
-	      const compactCanvasSizeControls = await assertCompactCanvasSizeControls(client);
-	      console.log(JSON.stringify({
-	        ok: true,
+    if (PRIMARY_ACTION_STATUS_SMOKE) {
+      const compactCanvasSizeControls = await assertCompactCanvasSizeControls(client);
+      console.log(JSON.stringify({
+        ok: true,
         mode: 'primary-action-status',
         url: `${ADMIN_BASE_URL}${editorPath}`,
         pageEditorRouteActions,
@@ -27681,22 +27858,38 @@ const main = async () => {
         compactCanvasSizeControls,
         primaryActionStatus,
       }, null, 2));
-	      return;
-	    }
+      return;
+    }
 
-	    if (PREVIEW_LINK_SMOKE) {
-	      const generatedPreviewLink = await testPageEditorGeneratedPreviewLink(client);
+    if (RESPONSIVE_NEXT_ACTION_SMOKE) {
+      assert(!EDITOR_PATH, 'Responsive next-action smoke currently requires an internally created smoke page');
+      const responsiveNextAction = await testEditorResponsiveNextActionContract(client);
 
-	      console.log(JSON.stringify({
-	        ok: true,
-	        mode: 'preview-link',
-	        url: `${ADMIN_BASE_URL}${editorPath}`,
-	        pageEditorRouteActions,
-	        primaryActionStatus,
-	        generatedPreviewLink,
-	      }, null, 2));
-	      return;
-	    }
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'responsive-next-action',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageEditorRouteActions,
+        viewportControls,
+        primaryActionStatus,
+        responsiveNextAction,
+      }, null, 2));
+      return;
+    }
+
+    if (PREVIEW_LINK_SMOKE) {
+      const generatedPreviewLink = await testPageEditorGeneratedPreviewLink(client);
+
+      console.log(JSON.stringify({
+        ok: true,
+        mode: 'preview-link',
+        url: `${ADMIN_BASE_URL}${editorPath}`,
+        pageEditorRouteActions,
+        primaryActionStatus,
+        generatedPreviewLink,
+      }, null, 2));
+      return;
+    }
 
     if (REVISION_NAVIGATION_SMOKE) {
       const revisionNavigation = await assertPageEditorRevisionNavigationAnchors(client);

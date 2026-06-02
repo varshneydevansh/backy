@@ -259,6 +259,19 @@ const missingResponsiveNextActionSourceSnippets = collectMissingSnippets(canvasE
   "renderPayload: 'render.data.content.elements[]'",
   "selectedComponentApi: 'backy.editor-selected-component-api-contract.v1'",
 ]);
+const missingResponsiveNextActionSmokeSnippets = collectMissingSnippets(smokeSource, [
+  "const RESPONSIVE_NEXT_ACTION_SMOKE = process.env.BACKY_EDITOR_RESPONSIVE_NEXT_ACTION_SMOKE === '1';",
+  'const assertEditorResponsiveNextActionContract = async (client, options = {}) => {',
+  "const schema = 'backy.editor-responsive-next-action.v1';",
+  'data-testid="editor-responsive-next-action"',
+  'data-testid="editor-copy-responsive-next-action"',
+  'data-testid="editor-inspector-responsive-next-action"',
+  'data-testid="editor-empty-responsive-next-action"',
+  "expectedId: 'select-layer-for-responsive-override'",
+  "expectedId: 'edit-selected-layer-for-local-override'",
+  "expectedId: 'continue-or-reset-local-overrides'",
+  "mode: 'responsive-next-action'",
+]);
 const missingSavedCanvasParentScopeSnippets = collectMissingSnippets(editorCatalogSource, [
   'function normalizeSavedCanvasElements(input: unknown, parentId?: string): CanvasElement[]',
   'typeof metadata.parentId === \'string\'',
@@ -509,6 +522,7 @@ if (
   missingResponsiveSmokeSnippets.length ||
   missingResponsiveGroupingSourceSnippets.length ||
   missingResponsiveNextActionSourceSnippets.length ||
+  missingResponsiveNextActionSmokeSnippets.length ||
   missingSavedCanvasParentScopeSnippets.length ||
   missingDistributionSourceSnippets.length ||
   missingEditorCommandRegistrySnippets.length ||
@@ -537,6 +551,7 @@ if (
     missingResponsiveSmokeSnippets,
     missingResponsiveGroupingSourceSnippets,
     missingResponsiveNextActionSourceSnippets,
+    missingResponsiveNextActionSmokeSnippets,
     missingSavedCanvasParentScopeSnippets,
     missingDistributionSourceSnippets,
     missingEditorCommandRegistrySnippets,
@@ -568,6 +583,7 @@ console.log(JSON.stringify({
   responsiveSmokeSnippets: 116,
   responsiveGroupingSourceSnippets: 5,
   responsiveNextActionSourceSnippets: 15,
+  responsiveNextActionSmokeSnippets: 11,
   savedCanvasParentScopeSnippets: 5,
   distributionSourceSnippets: 2,
   editorCommandRegistrySnippets: 16,

@@ -253,6 +253,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor responsive control polish:** Canvas Editor now derives a copyable `backy.editor-responsive-next-action.v1` payload from the active breakpoint, selected layer, hidden/locked state, local override groups, and responsive override counts. The contract is exposed on viewport metadata, the wide viewport toolbar, selected-layer Inspector breakpoint controls, and the empty Inspector state so users/frontend agents know whether to switch breakpoints, select a layer, create a local tablet/mobile override, continue/reset local overrides, or unblock a layer. Editor source guard, admin typecheck, diff check, and repo-public hygiene are green; the long rendered responsive smoke was stopped as inconclusive after several silent minutes and should be rerun later with trace/bounds if this visual surface changes again.
 
+**Newest editor responsive verification polish:** `test:editor-responsive-next-action` now provides the bounded rendered proof for `backy.editor-responsive-next-action.v1`. It verifies desktop next action, mobile empty Inspector guidance, inherited selected-layer guidance on `smoke-image`, and the transition to `continue-or-reset-local-overrides` after a real Inspector layout edit creates a local mobile override. Smoke coverage, rendered smoke, admin typecheck, diff check, and repo-public hygiene are green.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
