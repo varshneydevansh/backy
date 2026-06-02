@@ -295,6 +295,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Editor media-drop source smoke, admin typecheck, page-create source guard, focused custom-frontend page-create browser smoke, nested-group smoke, rendered canvas media-drop smoke, and diff check are green. The full unfiltered page-create smoke was stopped as inconclusive after several silent minutes; the focused custom-frontend mode covers the changed page-create behavior.
 
+**Newest production login guard:** The hosted admin login shell had regressed because a stale `VITE_BACKY_SHOW_DEMO_ACCESS=1` env could still expose the local/demo credentials block in a production build. Source now hard-disables demo access when `import.meta.env.MODE === 'production'`; admin typecheck, production admin build with stale demo env, built-bundle credential scan, login source-only smoke, diff check, and repo-public hygiene are green.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

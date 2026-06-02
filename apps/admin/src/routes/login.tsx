@@ -18,7 +18,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { AdminAuthApiError } from '@/lib/adminAuthApi';
 import { cn } from '@/lib/utils';
 
-const SHOW_DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1';
+const SHOW_DEMO_ACCESS = import.meta.env.DEV || (import.meta.env.MODE !== 'production' && import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1');
 const DEMO_ACCOUNTS = SHOW_DEMO_ACCESS ? [
   { email: 'admin@backy.io', password: 'admin123', label: 'Admin' },
   { email: 'jane@backy.io', password: 'editor123', label: 'Editor' },

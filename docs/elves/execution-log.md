@@ -3606,3 +3606,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
+## Checkpoint: 2026-06-02 20:24 IST - Production Login Demo Guard
+
+**Scope:** Batch 5 hosted admin security polish, focused on the live `backy-admin` regression where the production login shell still displayed the local/demo credential helper because a stale demo env flag was present.
+
+**Changed:**
+- Tightened the login demo-access guard so production Vite builds cannot render seeded demo credentials or the dev MFA phrase even when `VITE_BACKY_SHOW_DEMO_ACCESS=1` is configured.
+- Updated the login smoke source assertion to require the production-mode guard instead of the older env-only guard.
+
+**Validation:**
+- PASS: `VITE_BACKY_SHOW_DEMO_ACCESS=1 npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `VITE_BACKY_SHOW_DEMO_ACCESS=1 npm run build:vercel:admin --silent`
+- PASS: `rg -n "admin@backy\\.io / admin123|jane@backy\\.io / editor123|Seeded demo MFA: backy-dev-mfa|Demo access" apps/admin/dist || true` returned no matches
+- PASS: `BACKY_LOGIN_SOURCE_ONLY=1 npm run test:login --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- The pre-fix hosted login-shell smoke failed against `https://backy-admin.vercel.app/login` because the demo helper block was visible. This commit should be pushed and redeployed before rerunning `test:login-production-shell`.
+
+**Next:**
+- Commit and push the production login guard, wait for `backy-admin` to redeploy, then rerun hosted login shell plus live production/custom-frontend gates.

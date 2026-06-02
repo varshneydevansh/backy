@@ -352,13 +352,13 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
-    loginSource.includes("const SHOW_DEMO_ACCESS = import.meta.env.DEV || import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1';") &&
+    loginSource.includes("const SHOW_DEMO_ACCESS = import.meta.env.DEV || (import.meta.env.MODE !== 'production' && import.meta.env.VITE_BACKY_SHOW_DEMO_ACCESS === '1');") &&
       loginSource.includes('const DEMO_ACCOUNTS = SHOW_DEMO_ACCESS ? [') &&
       loginSource.includes('VITE_BACKY_SHOW_DEMO_ACCESS') &&
       loginSource.includes('{SHOW_DEMO_ACCESS && (') &&
       loginSource.includes('Use seeded accounts only in local/demo workspaces.') &&
       loginSource.includes("SHOW_DEMO_ACCESS\n                      ? `Seeded demo MFA: ${DEMO_MFA_CODE}`"),
-    'Hosted production login must not expose seeded demo account credentials or the dev MFA phrase unless demo access is explicitly enabled.',
+    'Hosted production login must not expose seeded demo account credentials or the dev MFA phrase even when a stale demo env variable is present.',
   );
 
   assert(
