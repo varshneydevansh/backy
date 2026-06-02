@@ -289,6 +289,12 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest custom frontend provenance polish:** Public custom frontend provenance now exposes `templateSource`, `templateSourceLabel`, and `backy.shared-chrome-bindings.v1` for shared header/navigation/footer chrome. OpenAPI, generated SDK types, SDK source types, the frontend manifest schema, frontend contract smoke, admin contract source guard, SDK smoke, and generated-types gate now treat audio as a first-class API-addressable component and shared chrome/template provenance as a public contract.
 
+**Newest custom frontend page-create polish:** New Page now keeps the full starter template library visible in Custom frontend mode, auto-matches starter intent to captured `frontendDesign.templates[]`, marks matched/missing/blank starter states in the UI, preserves `templateSource=custom-frontend`, and wraps non-blank custom frontend fallback seeds with shared chrome when a captured element tree is not available.
+
+**Newest nested canvas drop verification:** Canvas media URL/file drops now infer eligible nested targets from the actual drop event target, clamp inserted children to parent bounds, expose parent ids in the editor DOM, and the rendered media-drop smoke proves an external URL dropped on `smoke-box` persists as a child with exact `mediaExternalUrl`/`href` provenance.
+
+**Newest verification:** Editor media-drop source smoke, admin typecheck, page-create source guard, focused custom-frontend page-create browser smoke, nested-group smoke, rendered canvas media-drop smoke, and diff check are green. The full unfiltered page-create smoke was stopped as inconclusive after several silent minutes; the focused custom-frontend mode covers the changed page-create behavior.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

@@ -3579,3 +3579,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push this rendered verification slice.
 - Continue highest-friction editor work around custom-frontend template chrome, flow-aware section insertion/resizing, and Canva-like component/media insertion ergonomics.
+
+## Checkpoint: 2026-06-02 20:05 IST - Custom Frontend Starters And Nested Canvas Drops
+
+**Scope:** Batch 5 editor/page-creation polish, focused on the user's custom frontend template expectation: new pages should keep the Backy starter intent surface while matching captured custom frontend design contracts, and canvas media drops should behave like a real nested editor surface.
+
+**Changed:**
+- Page creation now keeps the 33 starter templates visible in both Backy canvas and Custom frontend modes. In custom frontend mode, each starter exposes whether it is matched to a captured frontend template, missing a captured template, or intentionally blank/from-scratch.
+- Custom frontend page creation auto-matches the selected starter intent to captured `frontendDesign.templates[]` using deterministic route/name/alias scoring, preserves `templateSource=custom-frontend`, stores frontend template metadata, and keeps Blank as an explicit from-scratch custom page.
+- Frontend template fallback seeding now wraps non-blank custom frontend pages with shared header/navigation/footer chrome when the captured template has no concrete element tree yet, so users do not start from a naked section.
+- Canvas nested file/URL drops now infer the eligible parent layer from the actual drop event target even when the root canvas receives the event, clamp inserted child coordinates to the parent bounds, and expose `data-parent-id` for rendered verification.
+- The rendered media-drop smoke now drops an external URL onto `smoke-box`, verifies the inserted link is a child of `smoke-box`, saves, and asserts persisted tree integrity plus exact external URL/href provenance.
+
+**Validation:**
+- PASS: `npm run test:editor-canvas-media-drop --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_PAGE_CREATE_FRONTEND_TEMPLATE_ONLY=1 BACKY_PAGE_CREATE_CONTROL_WAIT_ATTEMPTS=80 npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-nested-group --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-canvas-media-drop-rendered --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+
+**Notes:**
+- The full unfiltered `npm run test:page-create --workspace @backy-cms/admin --silent` was stopped as inconclusive after several silent minutes; the source guard and focused custom-frontend browser path passed and cover the changed page-create behavior.
+- Spark subagents reviewed both the custom-frontend starter matching and the nested media-drop proof. Their findings were incorporated: starter library visibility in custom mode, source-aware starter matching, nested target scoping, parent-bound clamping, and persisted child-tree validation.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.

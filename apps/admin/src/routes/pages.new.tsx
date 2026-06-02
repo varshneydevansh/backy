@@ -1145,6 +1145,93 @@ const isPageTemplate = (value: unknown): value is PageTemplate => (
     typeof value === 'string' && TEMPLATE_OPTIONS.some((template) => template.id === value)
 );
 
+const normalizeFrontendTemplateMatchText = (value: unknown) => (
+    typeof value === 'string'
+        ? value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+        : ''
+);
+
+const PAGE_TEMPLATE_FRONTEND_ALIASES: Record<PageTemplate, string[]> = {
+    blank: ['blank', 'scratch', 'empty'],
+    landing: ['landing', 'home', 'hero'],
+    storefront: ['storefront', 'shop', 'store', 'catalog'],
+    'product-detail': ['product detail', 'product', 'pdp'],
+    pricing: ['pricing', 'plans', 'subscription'],
+    services: ['services', 'service'],
+    booking: ['booking', 'appointment', 'calendar'],
+    portfolio: ['portfolio', 'work', 'case study'],
+    gallery: ['gallery', 'media', 'photos'],
+    events: ['events', 'event', 'webinar', 'meetup'],
+    privacy: ['privacy', 'data policy'],
+    terms: ['terms', 'terms conditions'],
+    'cookie-policy': ['cookie', 'cookies', 'consent'],
+    'accessibility-statement': ['accessibility', 'access statement', 'wcag'],
+    'refund-policy': ['refund', 'returns'],
+    'shipping-policy': ['shipping', 'delivery'],
+    cart: ['cart', 'basket'],
+    checkout: ['checkout', 'payment'],
+    'order-confirmation': ['order confirmation', 'receipt', 'success'],
+    'help-center': ['help center', 'support center', 'knowledge base'],
+    faq: ['faq', 'questions'],
+    testimonials: ['testimonials', 'reviews', 'proof'],
+    'blog-index': ['blog index', 'blog', 'articles', 'posts', 'publication'],
+    'blog-post': ['blog post', 'article', 'post detail'],
+    team: ['team', 'people', 'staff'],
+    careers: ['careers', 'jobs', 'hiring'],
+    about: ['about', 'story'],
+    contact: ['contact', 'inquiry'],
+    newsletter: ['newsletter', 'subscribe'],
+    survey: ['survey', 'feedback'],
+    registration: ['registration', 'signup', 'register'],
+    'member-login': ['member login', 'login', 'access'],
+    'member-account': ['member account', 'account', 'profile'],
+};
+
+const frontendTemplateScoreForPageTemplate = (
+    template: SiteFrontendDesignTemplate,
+    pageTemplate: PageTemplate,
+) => {
+    if (pageTemplate === 'blank') return 0;
+
+    const defaults = TEMPLATE_DEFAULTS[pageTemplate];
+    const routeSlug = routeSlugFromPattern(template.routePattern);
+    const aliases = Array.from(new Set([
+        pageTemplate,
+        defaults.slug,
+        defaults.title,
+        ...PAGE_TEMPLATE_FRONTEND_ALIASES[pageTemplate],
+    ].map(normalizeFrontendTemplateMatchText).filter(Boolean)));
+    const id = normalizeFrontendTemplateMatchText(template.id);
+    const name = normalizeFrontendTemplateMatchText(template.name);
+    const route = normalizeFrontendTemplateMatchText(routeSlug || template.routePattern || '');
+    const description = normalizeFrontendTemplateMatchText(template.description);
+    const haystack = [id, name, route, description].filter(Boolean).join(' ');
+
+    return aliases.reduce((score, alias) => {
+        if (!alias) return score;
+        if (id === alias || name === alias || route === alias) return score + 100;
+        if (id.includes(alias) || name.includes(alias) || route.includes(alias)) return score + 45;
+        if (haystack.includes(alias)) return score + 18;
+        return score;
+    }, 0);
+};
+
+const findFrontendPageTemplateForStarter = (
+    templates: SiteFrontendDesignTemplate[],
+    pageTemplate: PageTemplate,
+) => {
+    if (pageTemplate === 'blank') return null;
+
+    return templates
+        .map((template, index) => ({
+            template,
+            index,
+            score: frontendTemplateScoreForPageTemplate(template, pageTemplate),
+        }))
+        .filter((entry) => entry.score > 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)[0]?.template || null;
+};
+
 const isPageCreationStatus = (value: unknown): value is PageCreationStatus => (
     value === 'draft' || value === 'published' || value === 'scheduled'
 );
@@ -1765,11 +1852,34 @@ function NewPageRoute() {
         [frontendDesign?.templates],
     );
     const isCustomFrontendTemplateSource = formData.templateSourceMode === 'custom-frontend';
-    const selectedFrontendTemplate = useMemo(
+    const explicitSelectedFrontendTemplate = useMemo(
+        () => frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null,
+        [formData.designTemplateId, frontendPageTemplates],
+    );
+    const matchedFrontendTemplate = useMemo(
         () => isCustomFrontendTemplateSource
-            ? frontendPageTemplates.find((template) => template.id === formData.designTemplateId) || null
+            ? findFrontendPageTemplateForStarter(frontendPageTemplates, formData.template)
             : null,
-        [formData.designTemplateId, frontendPageTemplates, isCustomFrontendTemplateSource],
+        [formData.template, frontendPageTemplates, isCustomFrontendTemplateSource],
+    );
+    const selectedFrontendTemplate = isCustomFrontendTemplateSource
+        ? explicitSelectedFrontendTemplate || matchedFrontendTemplate
+        : null;
+    const selectedFrontendTemplateMatchMode = selectedFrontendTemplate
+        ? explicitSelectedFrontendTemplate
+            ? 'selected'
+            : 'starter-matched'
+        : formData.template === 'blank'
+            ? 'blank'
+        : 'none';
+    const frontendTemplateByStarterId = useMemo(
+        () => new Map<PageTemplate, SiteFrontendDesignTemplate | null>(
+            TEMPLATE_OPTIONS.map((template) => [
+                template.id,
+                findFrontendPageTemplateForStarter(frontendPageTemplates, template.id),
+            ]),
+        ),
+        [frontendPageTemplates],
     );
     const selectedDatasetCollection = useMemo(
         () => collections.find((collection) => (
@@ -1795,14 +1905,18 @@ function NewPageRoute() {
             ? `${selectedDatasetCollection.name} dataset ${selectedDatasetMode || 'list'} page`
         : selectedTemplate.name;
     const effectiveCanvasSize = selectedFrontendTemplate?.canvasSize || DEFAULT_CANVAS_SIZE;
-    const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(selectedFrontendTemplate);
+    const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(selectedFrontendTemplate) || formData.template === 'blank';
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? selectedFrontendTemplate
-            ? `Custom frontend template selected: ${selectedFrontendTemplate.name}.`
+            ? selectedFrontendTemplateMatchMode === 'starter-matched'
+                ? `Custom frontend starter matched: ${selectedTemplate.name} uses ${selectedFrontendTemplate.name}.`
+                : `Custom frontend template selected: ${selectedFrontendTemplate.name}.`
+            : formData.template === 'blank'
+                ? 'Custom frontend blank page selected: design contract metadata stays attached, and no starter chrome is forced.'
             : frontendDesignLoading
                 ? 'Loading custom frontend templates.'
                 : frontendPageTemplates.length > 0
-                    ? 'Choose a custom frontend template before creating this page.'
+                    ? `No captured custom frontend template matches ${selectedTemplate.name}. Choose another starter, select a frontend template, or use Blank page.`
                     : 'No custom frontend page templates are captured for this site yet.'
         : `Backy canvas template selected: ${selectedTemplate.name}.`;
     const pageTemplateSelectionActionStatusId = 'page-template-selection-action-status';
@@ -1897,7 +2011,10 @@ function NewPageRoute() {
             return;
         }
 
-        const nextTemplate = selectedFrontendTemplate || frontendPageTemplates[0] || null;
+        const nextTemplate = findFrontendPageTemplateForStarter(frontendPageTemplates, formData.template)
+            || selectedFrontendTemplate
+            || frontendPageTemplates[0]
+            || null;
         if (!nextTemplate) {
             updatePageDraft({
                 templateSourceMode: 'custom-frontend',
@@ -1940,8 +2057,10 @@ function NewPageRoute() {
                 navigationPlacement: DEFAULT_NAVIGATION_PLACEMENT_BY_TEMPLATE[nextTemplate],
                 navigationLabel: shouldApplyTitle ? nextDefaults.title : formData.navigationLabel || formData.title,
                 seoTitle: shouldApplyTitle ? nextDefaults.title : formData.seoTitle || formData.title,
-                templateSourceMode: 'backy-canvas',
-                designTemplateId: '',
+                templateSourceMode: formData.templateSourceMode,
+                designTemplateId: isCustomFrontendTemplateSource
+                    ? findFrontendPageTemplateForStarter(frontendPageTemplates, nextTemplate)?.id || ''
+                    : '',
             },
         );
     };
@@ -3126,7 +3245,7 @@ function NewPageRoute() {
                 noFollow: formData.noFollow,
                 template: formData.template,
                 templateSource: formData.templateSourceMode,
-                templateSourceLabel: selectedFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
+                templateSourceLabel: formData.templateSourceMode === 'custom-frontend' ? 'Custom frontend' : 'Backy canvas',
                 backyCanvasTemplateId: selectedFrontendTemplate ? undefined : formData.template,
                 frontendDesignTemplateId: selectedFrontendTemplate?.id,
                 frontendDesignTemplateName: selectedFrontendTemplate?.name,
@@ -4469,13 +4588,20 @@ function NewPageRoute() {
                                     No custom frontend page templates are captured for this site. Use Backy canvas or import a frontend design contract from Settings.
                                 </div>
                             )}
-                            {!isCustomFrontendTemplateSource && (
-                            <div className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-background p-3" data-testid="page-template-library-shell">
+                            <div
+                                className="md:col-span-2 2xl:col-span-3 rounded-lg border border-border bg-background p-3"
+                                data-testid="page-template-library-shell"
+                                data-template-source={formData.templateSourceMode}
+                                data-custom-frontend-match-mode={isCustomFrontendTemplateSource ? selectedFrontendTemplateMatchMode : undefined}
+                                data-custom-frontend-template-id={isCustomFrontendTemplateSource ? selectedFrontendTemplate?.id || '' : undefined}
+                            >
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <h3 className="text-sm font-semibold text-foreground">Starter templates</h3>
                                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                            Pick a focused starting point, then create the page into the visual editor.
+                                            {isCustomFrontendTemplateSource
+                                                ? 'Pick the page purpose; Backy matches it to captured custom frontend structure when available.'
+                                                : 'Pick a focused starting point, then create the page into the visual editor.'}
                                         </p>
                                     </div>
                                     <span className="w-fit rounded-md bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground">
@@ -4526,11 +4652,24 @@ function NewPageRoute() {
                                 <div className="mt-3 max-h-[34rem] overflow-y-auto pr-1 [scrollbar-gutter:stable]" data-testid="page-template-library-scroll">
                                     {visibleTemplateOptions.length > 0 ? (
                                         <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                                            {visibleTemplateOptions.map((tmpl) => (
+                                            {visibleTemplateOptions.map((tmpl) => {
+                                                const frontendMatch = frontendTemplateByStarterId.get(tmpl.id) || null;
+                                                const frontendMatchState = !isCustomFrontendTemplateSource
+                                                    ? ''
+                                                    : tmpl.id === 'blank'
+                                                        ? 'blank'
+                                                        : frontendMatch
+                                                            ? 'matched'
+                                                            : 'missing';
+
+                                                return (
                                                 <label
                                                     key={tmpl.id}
                                                     data-testid={`page-template-option-${tmpl.id}`}
                                                     data-active={formData.template === tmpl.id}
+                                                    data-template-source={formData.templateSourceMode}
+                                                    data-frontend-template-id={isCustomFrontendTemplateSource ? frontendMatch?.id || '' : undefined}
+                                                    data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}
                                                     data-action-state={getPageTemplateSelectionActionState(formData.template === tmpl.id)}
                                                     data-action-status={getStarterTemplateActionStatus(tmpl)}
                                                     data-disabled-reason={pageTemplateSelectionDisabledReason || undefined}
@@ -4568,9 +4707,28 @@ function NewPageRoute() {
                                                                 {section}
                                                             </span>
                                                         ))}
+                                                        {isCustomFrontendTemplateSource && (
+                                                            <span
+                                                                className={cn(
+                                                                    'rounded-md px-2 py-1 text-[11px] font-semibold',
+                                                                    frontendMatchState === 'matched'
+                                                                        ? 'bg-teal-100 text-teal-800'
+                                                                        : frontendMatchState === 'blank'
+                                                                            ? 'bg-slate-100 text-slate-700'
+                                                                        : 'bg-amber-100 text-amber-800',
+                                                                )}
+                                                            >
+                                                                {frontendMatch
+                                                                    ? `Uses ${frontendMatch.name}`
+                                                                    : tmpl.id === 'blank'
+                                                                        ? 'From scratch'
+                                                                    : 'Needs captured template'}
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 </label>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     ) : (
                                         <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground" data-testid="page-template-library-empty">
@@ -4579,7 +4737,6 @@ function NewPageRoute() {
                                     )}
                                 </div>
                             </div>
-                            )}
                         </div>
 
                         <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(240px,0.9fr)]">
@@ -5197,7 +5354,7 @@ function createInitialPageContent(input: {
     const templateMetadata: BackyContentDocument['metadata'] = {
         ...(templateDesignState?.options.metadata || {}),
         templateSource: input.frontendTemplate ? 'custom-frontend' : input.templateSourceMode,
-        templateSourceLabel: input.frontendTemplate ? 'Custom frontend' : 'Backy canvas',
+        templateSourceLabel: input.templateSourceMode === 'custom-frontend' ? 'Custom frontend' : 'Backy canvas',
         ...(!input.frontendTemplate ? { backyCanvasTemplateId: input.template } : {}),
         ...(input.frontendTemplate?.id ? { frontendDesignTemplateId: input.frontendTemplate.id } : {}),
         ...(input.frontendTemplate?.name ? { frontendDesignTemplateName: input.frontendTemplate.name } : {}),
@@ -5458,7 +5615,7 @@ function buildCollectionDatasetPageElements(
 
 function buildFrontendTemplateElements(
     template: SiteFrontendDesignTemplate,
-    input: { title: string; slug: string; description: string },
+    input: { template: PageTemplate; title: string; slug: string; description: string },
 ): CanvasElement[] {
     const content = isRecord(template.content) ? template.content : {};
     const contentDocument = isRecord(content.contentDocument) ? content.contentDocument : {};
@@ -5474,75 +5631,91 @@ function buildFrontendTemplateElements(
     const canvasWidth = template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width;
     const canvasHeight = template.canvasSize?.height || 900;
 
-    return [
-        createCanvasElement('section', 0, 0, {
-            id: `frontend-template-${template.id}`,
-            width: canvasWidth,
-            height: Math.max(620, canvasHeight - 160),
-            props: {
-                backgroundColor: '#ffffff',
-                borderRadius: 0,
-                padding: 0,
-                frontendTemplateId: template.id,
-                frontendTemplateName: template.name,
-                routePattern: template.routePattern,
-            },
-            children: [
-                createCanvasElement('heading', 72, 72, {
-                    id: `frontend-template-${template.id}-heading`,
-                    width: Math.min(720, canvasWidth - 144),
-                    height: 96,
-                    props: {
-                        content: input.title || template.name,
-                        level: 'h1',
-                        fontSize: 48,
-                        fontWeight: '800',
-                        lineHeight: 1.1,
-                        color: '#111827',
-                        binding: 'page.title',
-                    },
-                }),
-                createCanvasElement('paragraph', 76, 190, {
-                    id: `frontend-template-${template.id}-description`,
-                    width: Math.min(680, canvasWidth - 152),
-                    height: 96,
-                    props: {
-                        content: input.description || template.description || 'This page was seeded from the connected frontend design contract.',
-                        fontSize: 18,
-                        lineHeight: 1.6,
-                        color: '#4b5563',
-                        binding: 'page.description',
-                    },
-                }),
-                createCanvasElement('box', 76, 340, {
-                    id: `frontend-template-${template.id}-editable-region`,
-                    width: Math.min(860, canvasWidth - 152),
-                    height: 180,
-                    props: {
-                        backgroundColor: '#f8fafc',
-                        borderColor: '#cbd5e1',
-                        borderWidth: 1,
-                        borderStyle: 'solid',
-                        borderRadius: 8,
-                        bindingHints: template.bindingHints || [],
-                    },
-                    children: [
-                        createCanvasElement('paragraph', 28, 30, {
-                            id: `frontend-template-${template.id}-editable-region-copy`,
-                            width: Math.min(760, canvasWidth - 220),
-                            height: 80,
-                            props: {
-                                content: 'Replace this placeholder with captured component content, mapped fields, or reusable sections.',
-                                fontSize: 16,
-                                lineHeight: 1.5,
-                                color: '#334155',
-                            },
-                        }),
-                    ],
-                }),
-            ],
-        }),
-    ];
+    const section = createCanvasElement('section', 0, 0, {
+        id: `frontend-template-${template.id}`,
+        width: canvasWidth,
+        height: Math.max(620, canvasHeight - 160),
+        props: {
+            backgroundColor: '#ffffff',
+            borderRadius: 0,
+            padding: 0,
+            frontendTemplateId: template.id,
+            frontendTemplateName: template.name,
+            routePattern: template.routePattern,
+        },
+        children: [
+            createCanvasElement('heading', 72, 72, {
+                id: `frontend-template-${template.id}-heading`,
+                width: Math.min(720, canvasWidth - 144),
+                height: 96,
+                props: {
+                    content: input.title || template.name,
+                    level: 'h1',
+                    fontSize: 48,
+                    fontWeight: '800',
+                    lineHeight: 1.1,
+                    color: '#111827',
+                    binding: 'page.title',
+                },
+            }),
+            createCanvasElement('paragraph', 76, 190, {
+                id: `frontend-template-${template.id}-description`,
+                width: Math.min(680, canvasWidth - 152),
+                height: 96,
+                props: {
+                    content: input.description || template.description || 'This page was seeded from the connected frontend design contract.',
+                    fontSize: 18,
+                    lineHeight: 1.6,
+                    color: '#4b5563',
+                    binding: 'page.description',
+                },
+            }),
+            createCanvasElement('box', 76, 340, {
+                id: `frontend-template-${template.id}-editable-region`,
+                width: Math.min(860, canvasWidth - 152),
+                height: 180,
+                props: {
+                    backgroundColor: '#f8fafc',
+                    borderColor: '#cbd5e1',
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                    borderRadius: 8,
+                    bindingHints: template.bindingHints || [],
+                },
+                children: [
+                    createCanvasElement('paragraph', 28, 30, {
+                        id: `frontend-template-${template.id}-editable-region-copy`,
+                        width: Math.min(760, canvasWidth - 220),
+                        height: 80,
+                        props: {
+                            content: 'Replace this placeholder with captured component content, mapped fields, or reusable sections.',
+                            fontSize: 16,
+                            lineHeight: 1.5,
+                            color: '#334155',
+                        },
+                    }),
+                ],
+            }),
+        ],
+    });
+
+    if (input.template === 'blank') {
+        return [section];
+    }
+
+    return withPageChrome([section], {
+        title: input.title || template.name,
+        variant: `frontend-${template.id}`,
+        navItems: templateNavigationItems[input.template],
+        headerActionLabel: input.template === 'blog-post'
+            ? 'Subscribe'
+            : input.template === 'storefront' || input.template === 'product-detail'
+                ? 'Shop'
+            : input.template === 'booking'
+                ? 'Book now'
+            : 'Contact',
+        footerCopy: 'Shared chrome seeded from the connected frontend design contract. Replace this with captured frontend chrome when available.',
+    });
 }
 
 function buildTemplateElements(input: {

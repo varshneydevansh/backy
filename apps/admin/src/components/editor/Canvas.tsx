@@ -2846,6 +2846,16 @@ export function Canvas({
     [disabled, elements, handleCanvasAssetDrop, isPreview, onElementsChange, onSelect, safeGridSize, snapEnabled, toCanvasDelta]
   );
 
+  const getEventNestedDropParentId = useCallback((event: React.DragEvent) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const nestedTarget = target?.closest('[data-nested-drop-target="true"][data-element-id]');
+    if (!(nestedTarget instanceof HTMLElement) || !canvasRef.current?.contains(nestedTarget)) {
+      return null;
+    }
+
+    return nestedTarget.getAttribute('data-element-id');
+  }, []);
+
   const handleElementPropsUpdate = useCallback(
     (elementId: string, updates: { [key: string]: unknown }) => {
       if (disabled || isPreview) {
@@ -3092,10 +3102,11 @@ export function Canvas({
       onDrop={(event) => {
         setIsDropActive(false);
         setDropKind(null);
-        if (handleCanvasAssetDrop(event)) {
+        const nestedDropParentId = getEventNestedDropParentId(event);
+        if (handleCanvasAssetDrop(event, nestedDropParentId || undefined)) {
           return;
         }
-        handleCanvasElementDrop(event);
+        handleCanvasElementDrop(event, nestedDropParentId || undefined);
       }}
       data-testid="editor-canvas"
     >
@@ -3187,6 +3198,7 @@ export function Canvas({
           <CanvasElementComponent
             key={element.id}
             element={element}
+            parentId={null}
             isSelected={element.id === selectedId || selectedIds.includes(element.id)}
             selectedId={selectedId}
             selectedIds={selectedIds}
@@ -3414,6 +3426,7 @@ function AdminInteractiveSandboxPreview({
 
 interface CanvasElementComponentProps {
   element: CanvasElement;
+  parentId: string | null;
   isSelected: boolean;
   selectedId: string | null;
   selectedIds: string[];
@@ -3435,6 +3448,7 @@ interface CanvasElementComponentProps {
 
 function CanvasElementComponent({
   element,
+  parentId,
   isSelected,
   selectedId,
   selectedIds,
@@ -3473,6 +3487,7 @@ function CanvasElementComponent({
         <CanvasElementComponent
           key={child.id}
           element={child}
+          parentId={element.id}
           isSelected={child.id === resolvedSelectedId || selectedIds.includes(child.id)}
           selectedId={resolvedSelectedId}
           selectedIds={selectedIds}
@@ -5704,6 +5719,7 @@ function CanvasElementComponent({
         (isLocked || disabled) && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
+      data-parent-id={parentId ?? undefined}
       data-nested-drop-target={canReceiveNestedDrop ? 'true' : undefined}
       data-nested-drop-active={isNestedDropActive ? 'true' : 'false'}
       data-selected-ids={isSelected ? selectedIds.join(',') : undefined}

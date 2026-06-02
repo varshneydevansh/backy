@@ -23680,14 +23680,33 @@ const waitForPersistedHeadingFontFamily = async (pageId, selectedMedia, expected
 const CANVAS_DROP_SMOKE_IMAGE_URL = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22320%22%20height%3D%22180%22%3E%3Crect%20width%3D%22320%22%20height%3D%22180%22%20fill%3D%22%23ecfeff%22%2F%3E%3Ccircle%20cx%3D%22242%22%20cy%3D%2254%22%20r%3D%2236%22%20fill%3D%22%2314b8a6%22%2F%3E%3Cpath%20d%3D%22M28%20148l72-64%2056%2056%2036-34%2090%2056z%22%20fill%3D%22%230f766e%22%2F%3E%3C%2Fsvg%3E';
 const CANVAS_DROP_SMOKE_VIDEO_URL = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb20=';
 const CANVAS_DROP_SMOKE_AUDIO_URL = 'data:audio/mpeg;base64,SUQzAwAAAAAAD1RJVDAAAAAFU21va2U=';
+const CANVAS_DROP_SMOKE_NESTED_URL = 'https://example.test/canvas-nested-resource';
 const CANVAS_DROP_SMOKE_TRANSCRIPT = 'Rendered smoke transcript saved from a dropped audio element.';
 const CANVAS_DROP_SMOKE_CAPTION = 'Canvas drop interview excerpt';
 
-const dispatchCanvasUrlDrop = async (client, url, point, label) => {
+const dispatchCanvasUrlDrop = async (client, url, point, label, options = {}) => {
+  const targetSelector = options.targetElementId
+    ? `[data-testid="editor-canvas"] [data-element-id="${options.targetElementId}"]`
+    : '[data-testid="editor-canvas"]';
   const dropped = await evaluate(client, `(() => {
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     if (!(canvas instanceof HTMLElement)) {
       return { ok: false, reason: 'missing-canvas' };
+    }
+    const target = canvas.matches(${JSON.stringify(targetSelector)})
+      ? canvas
+      : canvas.querySelector(${JSON.stringify(options.targetElementId ? `[data-element-id="${options.targetElementId}"]` : '[data-testid="editor-canvas"]')});
+    if (!(target instanceof HTMLElement)) {
+      return { ok: false, reason: 'missing-target', targetSelector: ${JSON.stringify(targetSelector)} };
+    }
+    if (${JSON.stringify(Boolean(options.targetElementId))} && target.getAttribute('data-nested-drop-target') !== 'true') {
+      return {
+        ok: false,
+        reason: 'target-not-nested-drop-capable',
+        targetSelector: ${JSON.stringify(targetSelector)},
+        targetElementId: target.getAttribute('data-element-id') || '',
+        nestedDropTarget: target.getAttribute('data-nested-drop-target') || '',
+      };
     }
 
     const rect = canvas.getBoundingClientRect();
@@ -23706,14 +23725,17 @@ const dispatchCanvasUrlDrop = async (client, url, point, label) => {
       clientY,
       dataTransfer,
     };
-    canvas.dispatchEvent(new DragEvent('dragenter', init));
-    canvas.dispatchEvent(new DragEvent('dragover', init));
-    const accepted = canvas.dispatchEvent(new DragEvent('drop', init));
+    target.dispatchEvent(new DragEvent('dragenter', init));
+    target.dispatchEvent(new DragEvent('dragover', init));
+    const accepted = target.dispatchEvent(new DragEvent('drop', init));
 
     return {
       ok: true,
       accepted,
       label: ${JSON.stringify(label)},
+      targetSelector: ${JSON.stringify(targetSelector)},
+      targetElementId: target.getAttribute('data-element-id') || '',
+      nestedDropTarget: target.getAttribute('data-nested-drop-target') || '',
       clientX: Math.round(clientX),
       clientY: Math.round(clientY),
       files: dataTransfer.files.length,
@@ -23778,6 +23800,7 @@ const readDroppedCanvasElements = async (client) => (
   evaluate(client, `(() => {
     const elements = Array.from(document.querySelectorAll('[data-element-id]')).map((node) => {
       const root = node instanceof HTMLElement ? node : null;
+      const parentId = root?.getAttribute('data-parent-id') || root?.parentElement?.closest?.('[data-element-id]')?.getAttribute('data-element-id') || '';
       const image = root?.querySelector('img');
       const video = root?.querySelector('video');
       const audioWrapper = root?.querySelector('[data-backy-audio-player]');
@@ -23787,6 +23810,7 @@ const readDroppedCanvasElements = async (client) => (
       const src = audio?.getAttribute('src') || video?.getAttribute('src') || image?.getAttribute('src') || link?.getAttribute('href') || '';
       return {
         id: root?.getAttribute('data-element-id') || '',
+        parentId,
         type,
         src,
         x: Number(root?.getAttribute('data-canvas-x') || 0),
@@ -23837,12 +23861,17 @@ const waitForPersistedCanvasMediaDrop = async (pageId, expected) => {
     const video = byId.get(expected.ids[1]);
     const externalAudio = byId.get(expected.ids[2]);
     const uploadedAudio = byId.get(expected.ids[3]);
+    const nestedLink = byId.get(expected.ids[4]);
+    const nestedParent = findCanvasElement(elements, 'smoke-box');
+    const nestedLinkInParentTree = findCanvasElement(nestedParent?.children || [], expected.ids[4]);
     lastState = {
       canvasSize: page?.content?.canvasSize || null,
       image,
       video,
       externalAudio,
       uploadedAudio,
+      nestedLink,
+      nestedLinkInParentTree,
     };
 
     if (
@@ -23864,6 +23893,16 @@ const waitForPersistedCanvasMediaDrop = async (pageId, expected) => {
       uploadedAudio.assetIds.includes(uploadedAudio.props.mediaId) &&
       uploadedAudio.props?.caption === CANVAS_DROP_SMOKE_CAPTION &&
       uploadedAudio.props?.transcript === CANVAS_DROP_SMOKE_TRANSCRIPT &&
+      nestedLink?.type === 'link' &&
+      nestedLinkInParentTree?.id === nestedLink.id &&
+      nestedLink.parentId === 'smoke-box' &&
+      nestedLink.props?.mediaInsertedVia === 'canvas-url-drop' &&
+      nestedLink.props?.mediaExternalUrl === CANVAS_DROP_SMOKE_NESTED_URL &&
+      nestedLink.props?.href === CANVAS_DROP_SMOKE_NESTED_URL &&
+      nestedLink.x >= 0 &&
+      nestedLink.y >= 0 &&
+      nestedLink.x <= 330 &&
+      nestedLink.y <= 220 &&
       page?.content?.canvasSize?.height > 2100 &&
       page?.content?.canvasSize?.height <= 24000
     ) {
@@ -23896,6 +23935,24 @@ const testRenderedCanvasMediaDrop = async (client, pageId) => {
       client,
       (element) => element.type === 'video' && element.src === CANVAS_DROP_SMOKE_VIDEO_URL,
       'external video URL',
+    );
+
+    const nestedLinkPoint = { x: 610, y: 330 };
+    const nestedLinkDrop = await dispatchCanvasUrlDrop(
+      client,
+      CANVAS_DROP_SMOKE_NESTED_URL,
+      nestedLinkPoint,
+      'nested-link',
+      { targetElementId: 'smoke-box' },
+    );
+    const droppedNestedLink = await waitForDroppedCanvasElement(
+      client,
+      (element) => (
+        element.type === 'link' &&
+        element.parentId === 'smoke-box' &&
+        element.text.includes('canvas-nested-resource')
+      ),
+      'nested external link URL',
     );
 
     const externalAudioDrop = await dispatchCanvasUrlDrop(client, CANVAS_DROP_SMOKE_AUDIO_URL, externalAudioPoint, 'audio');
@@ -23955,16 +24012,19 @@ const testRenderedCanvasMediaDrop = async (client, pageId) => {
         droppedVideo.element.id,
         droppedExternalAudio.element.id,
         droppedUploadedAudio.element.id,
+        droppedNestedLink.element.id,
       ],
     });
 
     return {
       imageDrop,
       videoDrop,
+      nestedLinkDrop,
       externalAudioDrop,
       fileAudioDrop,
       droppedImage: droppedImage.element,
       droppedVideo: droppedVideo.element,
+      droppedNestedLink: droppedNestedLink.element,
       droppedExternalAudio: droppedExternalAudio.element,
       droppedUploadedAudio: droppedUploadedAudio.element,
       inspectorAudio,
@@ -23976,6 +24036,15 @@ const testRenderedCanvasMediaDrop = async (client, pageId) => {
         mediaType: persisted.uploadedAudio.props.mediaType,
         mediaInsertedVia: persisted.uploadedAudio.props.mediaInsertedVia,
         transcript: persisted.uploadedAudio.props.transcript,
+      },
+      persistedNestedLink: {
+        id: persisted.nestedLink.id,
+        parentId: persisted.nestedLink.parentId,
+        mediaInsertedVia: persisted.nestedLink.props.mediaInsertedVia,
+        mediaExternalUrl: persisted.nestedLink.props.mediaExternalUrl,
+        href: persisted.nestedLink.props.href,
+        x: persisted.nestedLink.x,
+        y: persisted.nestedLink.y,
       },
     };
   } finally {

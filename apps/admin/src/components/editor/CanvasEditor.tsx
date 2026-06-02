@@ -4083,7 +4083,9 @@ export function CanvasEditor({
 
     let nextElements = elementsRef.current;
     let inserted = false;
-    for (const element of newElements) {
+    const boundedNewElements = newElements.map((element) => clampElementWithinParent(element, parentElement));
+
+    for (const element of boundedNewElements) {
       const insertResult = insertElementAsChild(nextElements, parentId, element);
       if (insertResult.updated) {
         nextElements = insertResult.elements;
@@ -4095,9 +4097,9 @@ export function CanvasEditor({
       return false;
     }
 
-    const nextSelectedIds = newElements.map((element) => element.id);
-    updateElementsWithHistory(nextElements, newElements[0]?.id || null, nextSelectedIds);
-    setSelectedId(newElements[0]?.id || null);
+    const nextSelectedIds = boundedNewElements.map((element) => element.id);
+    updateElementsWithHistory(nextElements, boundedNewElements[0]?.id || null, nextSelectedIds);
+    setSelectedId(boundedNewElements[0]?.id || null);
     setSelectedIds(nextSelectedIds);
     setRightPanel('properties');
     return true;

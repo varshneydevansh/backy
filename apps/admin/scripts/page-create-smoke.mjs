@@ -1508,16 +1508,20 @@ const assertPageCreateSourceContracts = () => {
       source.includes("data-testid=\"page-template-source-custom-frontend\"") &&
       source.includes("data-testid=\"page-template-source-status\"") &&
       source.includes("const handleTemplateSourceChange = (nextSourceMode: PageTemplateSourceMode) =>") &&
+      source.includes('findFrontendPageTemplateForStarter(frontendPageTemplates, formData.template)') &&
+      source.includes('data-custom-frontend-match-mode={isCustomFrontendTemplateSource ? selectedFrontendTemplateMatchMode : undefined}') &&
+      source.includes('data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}') &&
       source.includes('designTemplate: normalizedFrontendDesignTemplateSearch(search)'),
     'Page create route must accept designTemplate, frontendDesignTemplateId, frontendTemplate, and templateSource aliases for custom frontend template handoffs',
   );
   assert(
-    source.includes('extractFrontendTemplateDesignSerialization') &&
+      source.includes('extractFrontendTemplateDesignSerialization') &&
       source.includes('const frontendTemplateDesignState = selectedFrontendTemplate') &&
       source.includes('templateSource: formData.templateSourceMode') &&
-      source.includes("templateSourceLabel: selectedFrontendTemplate ? 'Custom frontend' : 'Backy canvas'") &&
+      source.includes("templateSourceLabel: formData.templateSourceMode === 'custom-frontend' ? 'Custom frontend' : 'Backy canvas'") &&
       source.includes('backyCanvasTemplateId: selectedFrontendTemplate ? undefined : formData.template') &&
       source.includes("templateSource: input.frontendTemplate ? 'custom-frontend' : input.templateSourceMode") &&
+      source.includes("templateSourceLabel: input.templateSourceMode === 'custom-frontend' ? 'Custom frontend' : 'Backy canvas'") &&
       source.includes('...(templateDesignState?.options || {})') &&
       source.includes('metadata: templateMetadata') &&
       source.includes('frontendDesignCustomJs: frontendTemplateDesignState?.provenance.customJS') &&
@@ -3864,6 +3868,8 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       const canvasSource = document.querySelector('[data-testid="page-template-source-backy-canvas"]');
       const customSource = document.querySelector('[data-testid="page-template-source-custom-frontend"]');
       const frontendTemplate = document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]');
+      const starterLibrary = document.querySelector('[data-testid="page-template-library-shell"]');
+      const activeStarter = document.querySelector('[data-testid="page-template-option-blank"]');
       const submitStatusText = submitStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const templateSelectionStatusText = templateSelectionStatus?.textContent?.replace(/\\s+/g, ' ').trim() || '';
       const blocker = document.querySelector('[data-testid="page-create-submit-blocker"]');
@@ -3887,7 +3893,13 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
         customSourceDescribedBy: customSource?.getAttribute('aria-describedby') || '',
         customSourceDisabledReason: customSource?.getAttribute('data-disabled-reason') || '',
         customSourceTemplateCount: document.querySelector('[data-testid="page-template-source-custom-frontend"]')?.getAttribute('data-template-count') || '',
-        canvasLibraryHidden: !document.querySelector('[data-testid="page-template-library-shell"]'),
+        starterLibraryVisible: Boolean(starterLibrary),
+        starterLibrarySource: starterLibrary?.getAttribute('data-template-source') || '',
+        starterLibraryMatchMode: starterLibrary?.getAttribute('data-custom-frontend-match-mode') || '',
+        starterLibraryTemplateId: starterLibrary?.getAttribute('data-custom-frontend-template-id') || '',
+        activeStarterVisible: Boolean(activeStarter),
+        activeStarterSource: activeStarter?.getAttribute('data-template-source') || '',
+        activeStarterMatch: activeStarter?.getAttribute('data-frontend-template-match') || '',
         frontendPanel: Boolean(document.querySelector('[data-testid="page-frontend-template-options"]')),
         frontendButtonActive: document.querySelector('[data-testid="page-frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}"]')?.getAttribute('data-active') || '',
         frontendButtonActionState: frontendTemplate?.getAttribute('data-action-state') || '',
@@ -3939,7 +3951,13 @@ const waitForFrontendDesignTemplateCreateControls = async (client, slug, title, 
       && state.customSourceDescribedBy === 'page-template-selection-action-status'
       && state.customSourceDisabledReason === ''
       && state.customSourceTemplateCount !== '0'
-      && state.canvasLibraryHidden
+      && state.starterLibraryVisible
+      && state.starterLibrarySource === 'custom-frontend'
+      && state.starterLibraryMatchMode === 'selected'
+      && state.starterLibraryTemplateId === FRONTEND_DESIGN_TEMPLATE_ID
+      && state.activeStarterVisible
+      && state.activeStarterSource === 'custom-frontend'
+      && state.activeStarterMatch === 'blank'
       && state.frontendPanel
       && state.frontendButtonActive === 'true'
       && state.frontendButtonActionState === 'selected'
