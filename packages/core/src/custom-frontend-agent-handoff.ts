@@ -848,6 +848,7 @@ export const buildCustomFrontendAgentHandoff = (
     templateCloneFields: ['frontendDesignTemplateId', 'designTemplateId'],
     backyCanvasTemplateField: 'templateId',
     customFrontendTemplateField: 'frontendDesignTemplateId',
+    customFrontendRouteFieldAliases: ['frontendDesignTemplateId', 'frontendTemplate'],
     adminEntryPoints: buildCustomFrontendAgentAdminEntryPoints(siteId),
     newsletter: {
       workspace: `/newsletter?siteId=${siteId}`,

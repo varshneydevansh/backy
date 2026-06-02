@@ -3630,6 +3630,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-02 21:48 IST - Custom Frontend Route Alias Contract Fix
+
+**Scope:** Batch 5 live deployment verification follow-up after pushing `e34f543`, focused on the stricter custom-frontend template actionability gate.
+
+**Changed:**
+- Promoted `customFrontendRouteFieldAliases` to the top-level `contentCreation` handoff contract while preserving the existing `contentCreation.canvasFirst` explanatory copy.
+- This keeps `/agent-handoff`, manifest mirrors, SDK/OpenAPI generated contracts, and frontend-agent probes aligned around both supported custom-frontend template query aliases: `frontendDesignTemplateId` and `frontendTemplate`.
+
+**Validation:**
+- PASS: `vercel inspect <fresh backy-public deployment> --logs` reports Ready for commit `e34f543`.
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `npm run test:custom-frontend-starter --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/core --silent`
+- PASS: `npm run typecheck --workspace @backy/sdk-js --silent`
+
+**Notes:**
+- The live production custom-frontend connection gate passed 80 checks but failed the new route-alias assertions because the canonical alias list was nested only under `contentCreation.canvasFirst`; this patch exposes it at `contentCreation.customFrontendRouteFieldAliases` for machine clients.
+- Spark explorer `019e891c-1089-7410-8570-e3adfde06c16` identified the next high-impact editor gap: Inspector/property-panel geometry edits should share the same persisted canvas auto-grow path as drag/resize commits.
+
+**Next:**
+- Run diff check and repo public hygiene, commit/push this contract fix, re-read the survival guide, then implement the property-panel canvas auto-grow gap.
+
 ## Checkpoint: 2026-06-02 20:24 IST - Production Login Demo Guard
 
 **Scope:** Batch 5 hosted admin security polish, focused on the live `backy-admin` regression where the production login shell still displayed the local/demo credential helper because a stale demo env flag was present.
