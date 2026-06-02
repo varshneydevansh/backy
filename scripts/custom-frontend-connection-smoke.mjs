@@ -141,14 +141,20 @@ includesAll(
     'publicSiteVerification',
     '--frontend-url',
     'buildConnectedFrontendDesignContract',
+    'buildDefaultCustomFrontendTemplates',
+    'mergeDefaultCustomFrontendTemplates',
     "status: 'synced'",
     "type: 'custom-frontend'",
+    'custom-frontend-page',
+    'custom-frontend-blog-post',
+    'custom-frontend-section',
     'frontendDesignStatus',
+    'defaultTemplateIds',
     'buildDomainVerificationPatch',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'custom-frontend:scaffold',
   ],
-  'Custom frontend site ensure CLI uses the protected admin boundary, preserves domain state, syncs deployed frontend design, and prints safe frontend handoff',
+  'Custom frontend site ensure CLI uses the protected admin boundary, preserves domain state, syncs deployed frontend design, seeds reusable templates, and prints safe frontend handoff',
 );
 includesAll(
   starterConnectionProbe,
@@ -493,6 +499,14 @@ const checkPublicApi = async (apiBaseUrl) => {
       Boolean(manifest.data?.contract?.customFrontendAgentHandoff),
       'Manifest mirrors the custom frontend agent handoff',
     );
+    const frontendDesign = manifest.data?.site?.frontendDesign;
+    if (frontendUrlInput && frontendDesign?.status === 'synced') {
+      const templates = Array.isArray(frontendDesign.templates) ? frontendDesign.templates : [];
+      assert(frontendDesign.source?.type === 'custom-frontend', 'Synced manifest frontend design is sourced from the custom frontend');
+      assert(templates.some((template) => template.id === 'custom-frontend-page' && template.type === 'page'), 'Synced manifest exposes a custom frontend page template');
+      assert(templates.some((template) => template.id === 'custom-frontend-blog-post' && template.type === 'blogPost'), 'Synced manifest exposes a custom frontend blog post template');
+      assert(templates.some((template) => template.id === 'custom-frontend-section' && template.type === 'section'), 'Synced manifest exposes a custom frontend reusable section template');
+    }
   }
 
   const openapi = await requestJson(

@@ -563,6 +563,304 @@ const buildDomainVerificationPatch = (existingSettings, now) => {
   };
 };
 
+const customFrontendTemplateSource = (now) => ({
+  type: 'custom-frontend',
+  url: frontendUrl,
+  ...(frontendRepository ? { repository: frontendRepository } : {}),
+  branch: frontendBranch,
+  publicHost,
+  backyPublicApiBaseUrl: apiBaseUrl,
+  capturedAt: now,
+});
+
+const baseCustomFrontendTemplateContent = (templateId, templateName, routePattern, now, bindings) => ({
+  canvasSize: { width: 1200, height: 900 },
+  dataBindings: {
+    source: 'backy-render',
+    mode: 'current-route',
+    bindings,
+  },
+  editableMap: bindings.reduce((entries, binding) => ({
+    ...entries,
+    [`${templateId}.${binding.field}`]: {
+      role: binding.role,
+      binding: binding.binding,
+      field: binding.field,
+      targetPath: binding.targetPath,
+      fields: binding.fields,
+      editable: true,
+      valueType: binding.valueType || 'string',
+      scope: binding.scope || 'template',
+      label: binding.label,
+    },
+  }), {}),
+  metadata: {
+    templateSource: 'custom-frontend',
+    frontendDesignTemplateId: templateId,
+    frontendDesignTemplateName: templateName,
+    frontendDesignRoutePattern: routePattern,
+    frontendDesignSource: customFrontendTemplateSource(now),
+    frontendDesignCapturedAt: now,
+    createThroughBackyCanvas: true,
+  },
+});
+
+const buildDefaultCustomFrontendTemplates = (site, now) => {
+  if (!frontendUrl) return [];
+  const source = customFrontendTemplateSource(now);
+  const siteLabel = siteName || site?.name || siteId;
+  const pageBindings = [
+    {
+      role: 'page.title',
+      binding: 'page.title',
+      field: 'title',
+      targetPath: 'props.content',
+      fields: ['title'],
+      label: 'Page title',
+    },
+    {
+      role: 'page.description',
+      binding: 'page.description',
+      field: 'description',
+      targetPath: 'props.content',
+      fields: ['description'],
+      label: 'Page summary',
+    },
+    {
+      role: 'page.body',
+      binding: 'page.content',
+      field: 'content',
+      targetPath: 'children',
+      fields: ['content', 'elements', 'sections'],
+      valueType: 'json',
+      label: 'Page content sections',
+    },
+  ];
+  const blogBindings = [
+    {
+      role: 'post.title',
+      binding: 'post.title',
+      field: 'title',
+      targetPath: 'props.content',
+      fields: ['title'],
+      label: 'Post title',
+    },
+    {
+      role: 'post.excerpt',
+      binding: 'post.excerpt',
+      field: 'excerpt',
+      targetPath: 'props.content',
+      fields: ['excerpt'],
+      label: 'Post excerpt',
+    },
+    {
+      role: 'post.body',
+      binding: 'post.content',
+      field: 'content',
+      targetPath: 'children',
+      fields: ['content', 'blocks', 'elements'],
+      valueType: 'json',
+      label: 'Post body',
+    },
+    {
+      role: 'post.coverImage',
+      binding: 'post.coverImage',
+      field: 'coverImage',
+      targetPath: 'props.mediaId',
+      fields: ['featuredImageId', 'coverImage'],
+      valueType: 'image',
+      label: 'Post cover image',
+    },
+  ];
+  const sectionBindings = [
+    {
+      role: 'section.heading',
+      binding: 'section.heading',
+      field: 'heading',
+      targetPath: 'props.content',
+      fields: ['heading', 'title'],
+      label: 'Section heading',
+    },
+    {
+      role: 'section.body',
+      binding: 'section.content',
+      field: 'content',
+      targetPath: 'children',
+      fields: ['content', 'elements'],
+      valueType: 'json',
+      label: 'Section body',
+    },
+  ];
+  const formBindings = [
+    {
+      role: 'form.title',
+      binding: 'form.title',
+      field: 'title',
+      targetPath: 'props.formTitle',
+      fields: ['title', 'name'],
+      label: 'Form title',
+    },
+    {
+      role: 'form.fields',
+      binding: 'form.fields',
+      field: 'fields',
+      targetPath: 'props.fields',
+      fields: ['fields'],
+      valueType: 'json',
+      label: 'Form fields',
+    },
+  ];
+  const productBindings = [
+    {
+      role: 'product.title',
+      binding: 'product.title',
+      field: 'title',
+      targetPath: 'props.content',
+      fields: ['title', 'name'],
+      label: 'Product title',
+    },
+    {
+      role: 'product.price',
+      binding: 'product.price',
+      field: 'price',
+      targetPath: 'props.content',
+      fields: ['price', 'currency'],
+      label: 'Product price',
+    },
+    {
+      role: 'product.media',
+      binding: 'product.media',
+      field: 'media',
+      targetPath: 'props.mediaIds',
+      fields: ['media', 'image', 'gallery'],
+      valueType: 'image',
+      label: 'Product media',
+    },
+  ];
+  const collectionBindings = [
+    {
+      role: 'collection.title',
+      binding: 'collection.name',
+      field: 'name',
+      targetPath: 'props.content',
+      fields: ['name', 'title'],
+      label: 'Collection name',
+    },
+    {
+      role: 'collection.records',
+      binding: 'collection.records',
+      field: 'records',
+      targetPath: 'children',
+      fields: ['records', 'items'],
+      valueType: 'json',
+      label: 'Collection records',
+    },
+  ];
+
+  const makeTemplate = ({ id, type, name, routePattern, description, bindings, content = {} }) => ({
+    id,
+    type,
+    name,
+    status: 'active',
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+    routePattern,
+    description,
+    canvasSize: { width: 1200, height: 900 },
+    content: {
+      ...baseCustomFrontendTemplateContent(id, name, routePattern, now, bindings),
+      ...content,
+    },
+    bindingHints: bindings,
+    source,
+  });
+
+  return [
+    makeTemplate({
+      id: 'custom-frontend-page',
+      type: 'page',
+      name: `${siteLabel} page`,
+      routePattern: '/:pageSlug',
+      description: 'Default custom frontend page shell. New pages inherit the connected frontend tokens, chrome, editable-map bindings, and route content slots.',
+      bindings: pageBindings,
+    }),
+    makeTemplate({
+      id: 'custom-frontend-blog-post',
+      type: 'blogPost',
+      name: `${siteLabel} blog post`,
+      routePattern: '/blog/:postSlug',
+      description: 'Default custom frontend article shell for reports, blog posts, newsletters, and long-form publishing.',
+      bindings: blogBindings,
+    }),
+    makeTemplate({
+      id: 'custom-frontend-section',
+      type: 'section',
+      name: `${siteLabel} reusable section`,
+      routePattern: 'section:*',
+      description: 'Reusable custom frontend section shell for shared page blocks and site chrome-safe content.',
+      bindings: sectionBindings,
+      content: {
+        section: baseCustomFrontendTemplateContent('custom-frontend-section', `${siteLabel} reusable section`, 'section:*', now, sectionBindings),
+      },
+    }),
+    makeTemplate({
+      id: 'custom-frontend-form',
+      type: 'form',
+      name: `${siteLabel} form`,
+      routePattern: '/forms/:formSlug',
+      description: 'Custom frontend form shell preserving Backy field, consent, submission, and canvas-edit bindings.',
+      bindings: formBindings,
+      content: {
+        fields: [
+          { name: 'email', key: 'email', label: 'Email', type: 'email', required: true },
+          { name: 'message', key: 'message', label: 'Message', type: 'textarea', required: false },
+        ],
+      },
+    }),
+    makeTemplate({
+      id: 'custom-frontend-product',
+      type: 'product',
+      name: `${siteLabel} product`,
+      routePattern: '/products/:productSlug',
+      description: 'Custom frontend product shell for commerce records while keeping provider credentials and orders server-side.',
+      bindings: productBindings,
+      content: {
+        values: {
+          design: baseCustomFrontendTemplateContent('custom-frontend-product', `${siteLabel} product`, '/products/:productSlug', now, productBindings),
+        },
+      },
+    }),
+    makeTemplate({
+      id: 'custom-frontend-collection',
+      type: 'collection',
+      name: `${siteLabel} collection`,
+      routePattern: '/collections/:collectionSlug',
+      description: 'Custom frontend collection shell for structured CMS records, repeaters, listings, and dynamic routes.',
+      bindings: collectionBindings,
+    }),
+  ];
+};
+
+const mergeDefaultCustomFrontendTemplates = (existingTemplates, site, now) => {
+  const defaults = buildDefaultCustomFrontendTemplates(site, now);
+  const defaultIds = new Set(defaults.map((template) => template.id));
+  const isGeneratedDefault = (template) => {
+    if (!defaultIds.has(String(template.id || ''))) return false;
+    const content = isRecord(template.content) ? template.content : {};
+    const metadata = isRecord(content.metadata) ? content.metadata : {};
+    return metadata.templateSource === 'custom-frontend' && metadata.createThroughBackyCanvas === true;
+  };
+  const preserved = Array.isArray(existingTemplates)
+    ? existingTemplates.filter(isRecord)
+        .filter((template) => !isGeneratedDefault(template))
+    : [];
+  const existingIds = new Set(preserved.map((template) => String(template.id || '')).filter(Boolean));
+  const missingDefaults = defaults.filter((template) => !existingIds.has(template.id));
+
+  return [...preserved, ...missingDefaults];
+};
+
 const buildConnectedFrontendDesignContract = (site, existingSettings, now) => {
   if (!frontendUrl) return undefined;
 
@@ -581,6 +879,7 @@ const buildConnectedFrontendDesignContract = (site, existingSettings, now) => {
       : existingTokens.customCss;
   const existingChrome = isRecord(existing.chrome) ? existing.chrome : {};
   const existingTemplates = Array.isArray(existing.templates) ? existing.templates : [];
+  const templates = mergeDefaultCustomFrontendTemplates(existingTemplates, site, now);
   const existingEditableMap = Array.isArray(existing.editableMap) ? existing.editableMap : [];
   const label = `${siteName || site?.name || siteId} custom frontend`;
 
@@ -611,7 +910,7 @@ const buildConnectedFrontendDesignContract = (site, existingSettings, now) => {
             publicHost,
           },
     },
-    templates: existingTemplates,
+    templates,
     editableMap: existingEditableMap.length > 0
       ? existingEditableMap
       : [
@@ -620,7 +919,7 @@ const buildConnectedFrontendDesignContract = (site, existingSettings, now) => {
           { role: 'site.tokens', binding: 'site.theme', fields: ['colors', 'fonts', 'spacing', 'customCss'] },
           { role: 'site.domain', binding: 'site.delivery', fields: ['customDomain', 'domainAliases'] },
         ],
-    notes: 'Connected by custom-frontend:ensure-site after deployed frontend verification. Keep Backy as the source for content, routes, tokens, editable maps, and API handoff while the separate frontend owns presentation code.',
+    notes: 'Connected by custom-frontend:ensure-site after deployed frontend verification. Keep Backy as the source for content, routes, tokens, editable maps, reusable templates, and API handoff while the separate frontend owns presentation code.',
     updatedAt: now,
   };
 };
@@ -1094,6 +1393,10 @@ const run = async () => {
       sourceUrl: frontendUrl || null,
       repository: frontendRepository || null,
       branch: frontendUrl ? frontendBranch : null,
+      defaultTemplateIds: frontendUrl
+        ? buildDefaultCustomFrontendTemplates({ name: publicSiteVerification.siteName }, new Date().toISOString())
+            .map((template) => template.id)
+        : [],
     },
     publicSiteVerification,
     safeFrontendEnv: {

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 09:11 IST
+- **Last updated:** 2026-06-02 09:34 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 09:34 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Synced frontend design now seeds reusable templates for new Backy content
+
+**What changed:**
+- Extended `npm run custom-frontend:ensure-site` so a synced deployed custom frontend also seeds versioned `frontendDesign.templates[]` entries through the existing Backy template contract.
+- Added generated defaults for page, blog post, reusable section, form, product, and collection creation: `custom-frontend-page`, `custom-frontend-blog-post`, `custom-frontend-section`, `custom-frontend-form`, `custom-frontend-product`, and `custom-frontend-collection`.
+- The generated templates include binding hints, editable-map entries, route patterns, source metadata, and `createThroughBackyCanvas=true` so new content still opens through the Backy canvas/editor APIs instead of becoming frontend-local JSON.
+- Generated default templates now refresh when the deployed frontend source is resynced, while preserving non-generated captured templates with different ids.
+- Resynced the real production site with the deployed frontend URL and branch only; the public manifest now reports six templates and no GitHub repository URL in the frontend-design contract.
+- Strengthened `npm run test:custom-frontend-connection` so a live synced frontend design must expose page, blog-post, and reusable-section template entries in the public manifest.
+
+**Commands run:**
+- `node --check scripts/ensure-custom-frontend-site.mjs` -> PASS.
+- `node --check scripts/custom-frontend-connection-smoke.mjs` -> PASS.
+- `npm run test:custom-frontend-connection --silent` -> PASS, 22 source checks.
+- `npm run custom-frontend:ensure-site -- --site-id devanshvarshney --name "Devansh Varshney" --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --frontend-url https://devanshvarshney-frontend.vercel.app --frontend-branch main --owner-email <owner-email> --skip-home-seed` with ignored production env and repository env overrides empty -> PASS, `siteAction=supabase-rest-updated-frontend-design`.
+- Public manifest check -> PASS, `frontendDesign.status=synced`, source type `custom-frontend`, `templateCount=6`, repository URL absent, GitHub URL absent.
+- Strict deployed custom frontend connection gate against the real site and deployed frontend -> PASS, 69 checks.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 93 checks.
+- `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 npm run test:vercel-production-readiness --silent` -> PASS, 47 checks; optional admin-auth proof skipped by unset credentials.
+
+**Next:**
+1. Use the template ids from the public manifest/admin template registry when creating new pages, posts, forms, products, collections, or reusable sections from the custom frontend style.
+2. Grant Vercel GitHub App access to the private separate frontend repo when branch previews are needed; that remains the external linkage blocker.
+3. Continue highest-friction Backy UI/editor polish after this custom-frontend creation path is committed and pushed.
 
 ## 2026-06-02 09:11 IST
 
