@@ -215,6 +215,13 @@ includesAll(
     'data-backy-responsive-style-pointer',
     'forbiddenEnvPresent',
     'includesSecretValues',
+    'backy.custom-frontend-control-plane.v1',
+    'blog-child-templates',
+    'blog-template-inheritance',
+    'agent-handoff.contentCreation.blogChildStarterTemplates',
+    'agent-handoff.contentCreation.blogTemplateInheritance',
+    'hasBlogChildStarterTemplates',
+    'blogChildStarterTemplateCount',
   ],
   'Admin custom frontend verifier is protected, SSRF-aware, and checks probe plus DOM control attributes',
 );

@@ -3678,6 +3678,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - This closes the deploy-proof gap for `2b4d0401 feat(starter): expose blog template probe pointers`.
 - The remaining custom-frontend proof gap is the separate website frontend itself: materialize/deploy it, set `BACKY_CUSTOM_FRONTEND_URL`, then rerun the connection gate with DOM and `/api/backy-connection` probe requirements enabled.
 
+## Checkpoint: 2026-06-03 01:43 IST - Admin Verifier Blog Template Probe Parity
+
+**Scope:** Batch 5 custom-frontend verifier polish, focused on keeping the protected Site Detail verifier as strict as the CLI connection gate after the starter learned blog child-template inheritance.
+
+**Changed:**
+- `POST /api/admin/sites/:siteId/custom-frontend/connection` now validates the deployed frontend probe exposes `backy.custom-frontend-control-plane.v1`.
+- The protected verifier now fails if `/api/backy-connection` omits `blog-child-templates`, `blog-template-inheritance`, `agent-handoff.contentCreation.blogChildStarterTemplates`, or `agent-handoff.contentCreation.blogTemplateInheritance`.
+- The protected verifier now requires the probe to report `hasBlogChildStarterTemplates=true` with at least 33 starter templates, so a frontend cannot pass Backy UI verification while missing the blog child-template catalog.
+- The admin API response type now carries the sanitized blog child-template probe count and control-plane read order.
+- `test:custom-frontend-connection` source guards now require the protected verifier to keep the same blog child-template probe fields.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-connection --silent`.
+- PASS: `npm run typecheck --workspace @backy/public --silent`.
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`.
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent` (94 checks; deployed separate frontend DOM proof skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied).
+
+**Notes:**
+- This is source-verified locally and production API-verified against the current stable public alias. The stricter protected verifier itself will become live after the next `backy-public` deployment finishes.
+
 ## Checkpoint: 2026-06-03 01:31 IST - Custom Frontend Starter Blog Template Probe
 
 **Scope:** Batch 5 custom-frontend launch polish, focused on making the separate Next.js custom frontend starter discover Backy's blog child-template catalog without monorepo context.

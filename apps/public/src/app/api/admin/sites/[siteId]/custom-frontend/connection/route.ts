@@ -350,7 +350,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const backy = nestedRecord(probe, "backy");
     const boundaries = nestedRecord(probe, "boundaries");
     const domContract = nestedRecord(probe, "domContract");
+    const controlPlane = nestedRecord(probe, "controlPlane");
+    const controlPlanePointers = nestedRecord(controlPlane, "pointers");
+    const controlPlaneTemplateReuse = nestedRecord(controlPlane, "templateReuse");
     const requiredAttributes = nestedStringArray(domContract, "requiredAttributes");
+    const controlPlaneReadOrder = nestedStringArray(controlPlane, "readOrder");
     const forbiddenEnvPresent = nestedStringArray(boundaries, "forbiddenEnvPresent");
 
     if (probe) {
@@ -449,6 +453,64 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ? "Probe documents all required DOM control attributes."
           : `Probe is missing ${missingProbeAttributes.join(", ")}.`,
       );
+      addCheck(
+        checks,
+        controlPlane.schemaVersion === "backy.custom-frontend-control-plane.v1"
+          ? "pass"
+          : "fail",
+        "probe.controlPlane",
+        "Probe exposes custom frontend control plane",
+        controlPlane.schemaVersion === "backy.custom-frontend-control-plane.v1"
+          ? "The probe exposes Backy's source-of-truth read order and pointers."
+          : "The probe is missing the current custom frontend control-plane block.",
+      );
+      const missingTemplateReadOrder = [
+        "blog-child-templates",
+        "blog-template-inheritance",
+      ].filter((entry) => !controlPlaneReadOrder.includes(entry));
+      addCheck(
+        checks,
+        missingTemplateReadOrder.length === 0 ? "pass" : "fail",
+        "probe.blogTemplateReadOrder",
+        "Probe read order includes blog template inheritance",
+        missingTemplateReadOrder.length === 0
+          ? "The probe tells frontend agents to read blog child templates and inheritance metadata."
+          : `Probe read order is missing ${missingTemplateReadOrder.join(", ")}.`,
+      );
+      const controlPlanePointerText = JSON.stringify(controlPlanePointers);
+      const templateReuseText = JSON.stringify(controlPlaneTemplateReuse);
+      const missingBlogPointers = [
+        "agent-handoff.contentCreation.blogChildStarterTemplates",
+        "agent-handoff.contentCreation.blogTemplateInheritance",
+      ].filter(
+        (pointer) =>
+          !controlPlanePointerText.includes(pointer) &&
+          !templateReuseText.includes(pointer),
+      );
+      addCheck(
+        checks,
+        missingBlogPointers.length === 0 ? "pass" : "fail",
+        "probe.blogTemplatePointers",
+        "Probe exposes blog template API pointers",
+        missingBlogPointers.length === 0
+          ? "The probe exposes blog child-template and inheritance pointers for frontend agents."
+          : `Probe is missing ${missingBlogPointers.join(", ")}.`,
+      );
+      const blogChildTemplateCount =
+        typeof backy.blogChildStarterTemplateCount === "number"
+          ? backy.blogChildStarterTemplateCount
+          : Number(backy.blogChildStarterTemplateCount || 0);
+      addCheck(
+        checks,
+        backy.hasBlogChildStarterTemplates === true && blogChildTemplateCount >= 33
+          ? "pass"
+          : "fail",
+        "probe.blogChildTemplates",
+        "Probe can see the blog child-template catalog",
+        backy.hasBlogChildStarterTemplates === true && blogChildTemplateCount >= 33
+          ? `Probe reports ${blogChildTemplateCount} blog child starter templates.`
+          : `Probe reports ${blogChildTemplateCount || 0} blog child starter templates.`,
+      );
     }
 
     const pageFetch = await fetchText(frontendUrl, "text/html");
@@ -524,6 +586,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 manifestSchema: text(backy.manifestSchema) || null,
                 hasCustomFrontendHandoff: backy.hasCustomFrontendHandoff === true,
                 hasComponentApiContract: backy.hasComponentApiContract === true,
+                hasBlogChildStarterTemplates: backy.hasBlogChildStarterTemplates === true,
+                blogChildStarterTemplateCount:
+                  typeof backy.blogChildStarterTemplateCount === "number"
+                    ? backy.blogChildStarterTemplateCount
+                    : Number(backy.blogChildStarterTemplateCount || 0),
               },
               boundaries: {
                 includesSecretValues: boundaries.includesSecretValues === false
@@ -533,6 +600,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               },
               domContract: {
                 requiredAttributes,
+              },
+              controlPlane: {
+                schemaVersion: text(controlPlane.schemaVersion) || null,
+                readOrder: controlPlaneReadOrder,
               },
             }
           : null,

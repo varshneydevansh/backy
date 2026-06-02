@@ -282,6 +282,8 @@ export interface AdminCustomFrontendConnectionVerification {
       manifestSchema: string | null;
       hasCustomFrontendHandoff: boolean;
       hasComponentApiContract: boolean;
+      hasBlogChildStarterTemplates?: boolean;
+      blogChildStarterTemplateCount?: number;
     };
     boundaries: {
       includesSecretValues: false | null;
@@ -289,6 +291,10 @@ export interface AdminCustomFrontendConnectionVerification {
     };
     domContract: {
       requiredAttributes: string[];
+    };
+    controlPlane?: {
+      schemaVersion: string | null;
+      readOrder: string[];
     };
   } | null;
   smokeCommand: string;
