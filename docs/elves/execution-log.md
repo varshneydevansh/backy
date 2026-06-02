@@ -3511,5 +3511,9 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - Direct file drops use the existing upload/media API path, so storage/provider behavior remains consistent with the media library.
 
 **Next:**
-- Commit and push this editor media slice.
+- Pushed as `3c9edc18`.
+- Fresh `backy-admin` and `backy-public` production deployments are Ready.
+- Hosted verification after push is green: production readiness passes 47 checks, hosted admin login shell exposes no demo credentials/dev MFA, and the strict deployed real-site custom frontend connection passes 69 checks when run with the canonical production site id resolved by public discovery.
+- The first strict custom frontend gate run with the slug `devanshvarshney` passed 68 checks and failed only the probe site-id equality check because the deployed frontend is configured with the canonical database site id. Public discovery resolves the slug to that canonical id.
+- Recent Vercel error-log filtering was not recorded because this local Vercel CLI rejected the documented log filter flags (`--project`, `--environment`, `--level`) despite showing them in help.
 - Continue the remaining editor polish around custom-frontend template creation ergonomics, flow-aware section insertion/resizing, and rendered browser verification for the new drop/long-page behaviors when a live dev session is available.

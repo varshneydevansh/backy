@@ -281,6 +281,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** `test:editor-canvas-media-drop`, editor smoke coverage, admin/public/SDK typechecks, SDK generated-types smoke, custom frontend starter smoke, source custom-frontend connection smoke, diff check, and repo-public hygiene are green for the audio/direct-drop/long-page-height slice. Automatic transcription remains future provider-backed work, not a completed local feature.
 
+**Newest deploy verification:** `3c9edc18` is pushed. Fresh `backy-admin` and `backy-public` production deployments are Ready, production readiness passes 47 checks, hosted admin login shell exposes no demo credentials/dev MFA, and strict deployed real-site custom frontend connection passes 69 checks with the canonical production site id resolved by public discovery. A slug-based custom frontend gate run passed 68 checks and failed only the probe site-id equality check because the deployed frontend is configured with the canonical site id; public discovery resolves the slug to that id.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
