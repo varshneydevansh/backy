@@ -233,6 +233,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest starter typecheck polish:** The checked Next.js custom frontend starter now runs `next typegen && tsc --noEmit`, and the generated protected starter bundle plus starter smoke guard that route-type generation happens before TypeScript. This prevents fresh separate frontend repos from failing `npm run typecheck` because ignored `.next` route types have not been generated yet.
 
+**Newest deployed frontend control-plane verification:** The separate private `devanshvarshney-frontend` repo is pushed at `fa88c09` and the linked Vercel production project has been redeployed. `https://devanshvarshney-frontend.vercel.app/api/backy-connection` now exposes `backy.custom-frontend-control-plane.v1`, render reachability, editable-map presence, and no forbidden private env names; the deployed custom frontend connection gate passes 65 checks.
+
 **Newest deploy verification:** `7e651962` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, the real-site live custom frontend connection gate passes 50 checks against `https://backy-public.vercel.app/api`, production readiness passes, hosted login-shell smoke passes with no demo credentials/dev MFA, and recent Vercel logs for both latest production deployments are empty.
 
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.

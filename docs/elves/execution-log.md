@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 08:38 IST
+- **Last updated:** 2026-06-02 08:49 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 08:49 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Deployed separate frontend now exposes the Backy control-plane probe
+
+**What changed:**
+- Committed and pushed the separate private `devanshvarshney-frontend` repo update as `fa88c09 Expose Backy control-plane probe`.
+- Redeployed the linked `devanshvarshney-frontend` Vercel production project.
+- The deployed alias `https://devanshvarshney-frontend.vercel.app` now exposes `backy.custom-frontend-control-plane.v1` from `/api/backy-connection`.
+- The live probe proves source of truth `backy-public`, safe read order, render reachability, editable-map presence, and no forbidden private env names.
+
+**Commands run:**
+- Separate frontend `git diff --check` -> PASS.
+- Separate frontend `npm audit --audit-level=moderate` -> PASS, 0 vulnerabilities.
+- Separate frontend `npm run typecheck` with safe Backy env -> PASS.
+- Separate frontend `npm run build` with safe Backy env -> PASS.
+- Local separate frontend `/api/backy-connection` probe on port 3037 -> PASS.
+- Local separate frontend connection gate with production Backy + probe required -> PASS, 65 checks.
+- Separate frontend `git push` -> PASS.
+- `npx --yes vercel@latest deploy . --prod -y` from the separate frontend repo -> PASS, production deployment Ready and aliased.
+- Deployed separate frontend `/api/backy-connection` probe -> PASS, control-plane schema present, render reachable, editable map present, no forbidden env, no secret values.
+- Deployed separate frontend connection gate with production Backy + probe required -> PASS, 65 checks.
+- Backy production readiness -> PASS, 47 checks; optional admin-auth proof skipped by unset credentials.
+
+**Next:**
+1. Vercel GitHub App access is still pending for the private separate frontend repo, so branch previews and Preview env remain blocked on that external linkage.
+2. Attach `devanshvarshney.com` to the separate frontend Vercel project only when ready to move DNS away from the current host.
+3. Continue highest-friction Backy UX/editor polish.
 
 ## 2026-06-02 08:38 IST
 
