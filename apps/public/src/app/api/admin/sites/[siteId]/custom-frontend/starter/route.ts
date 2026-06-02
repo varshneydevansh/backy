@@ -240,6 +240,8 @@ const starterReadme = ({
     ...REQUIRED_DOM_ATTRIBUTES.map((attribute) => `- \`${attribute}\``),
     "",
     "Keep Backy as the source of truth for content, design metadata, media, forms, newsletter subscribers, and commerce records.",
+    "",
+    "For blog creation, read `agent-handoff.contentCreation.blogChildStarterTemplates` and `agent-handoff.contentCreation.blogTemplateInheritance` before creating article, investigation, media/audio transcript, newsletter issue, or case-study posts. Preserve the advertised `starterTemplate`, `templateSource`, and optional `frontendDesignTemplateId` route fields so Backy can reopen the result in the canvas with the same custom frontend design.",
   ].join("\n");
 
 export async function GET(request: NextRequest, { params }: RouteParams) {

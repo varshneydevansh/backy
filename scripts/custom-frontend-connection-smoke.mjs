@@ -796,7 +796,7 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
     );
     includesAll(
       (probe.controlPlane.readOrder || []).join('\n'),
-      ['agent-handoff', 'manifest', 'templates', 'admin-endpoints', 'openapi', 'resolve', 'render', 'component-dom', 'probe'],
+      ['agent-handoff', 'manifest', 'templates', 'admin-endpoints', 'blog-child-templates', 'blog-template-inheritance', 'openapi', 'resolve', 'render', 'component-dom', 'probe'],
       'Custom frontend probe exposes the Backy control-plane read order',
     );
     const endpointText = JSON.stringify(probe.controlPlane.endpoints || {});
@@ -830,6 +830,8 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
         'agent-handoff.contentCreation.customFrontendTemplateField',
         'agent-handoff.contentCreation.customFrontendRouteFieldAliases',
         'agent-handoff.contentCreation.adminEntryPoints',
+        'agent-handoff.contentCreation.blogChildStarterTemplates',
+        'agent-handoff.contentCreation.blogTemplateInheritance',
       ],
       'Custom frontend probe exposes the Backy control-plane pointers',
     );
@@ -844,8 +846,15 @@ const checkFrontendProbe = async (frontendUrl, expectedApiBaseUrl) => {
         'agent-handoff.contentCreation.customFrontendTemplateField',
         'agent-handoff.contentCreation.templateCloneFields',
         'agent-handoff.contentCreation.adminEntryPoints',
+        'agent-handoff.contentCreation.blogChildStarterTemplates',
+        'agent-handoff.contentCreation.blogTemplateInheritance',
       ],
       'Custom frontend probe exposes template reuse control-plane pointers',
+    );
+    assert(
+      probe.backy?.hasBlogChildStarterTemplates === true &&
+        Number(probe.backy?.blogChildStarterTemplateCount || 0) >= 33,
+      'Custom frontend probe confirms Backy blog child starter templates are reachable',
     );
   } else {
     warn('Custom frontend probe does not expose the optional controlPlane block; regenerate from the latest starter before redesigning.');

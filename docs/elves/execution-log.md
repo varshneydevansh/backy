@@ -3659,6 +3659,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 01:31 IST - Custom Frontend Starter Blog Template Probe
+
+**Scope:** Batch 5 custom-frontend launch polish, focused on making the separate Next.js custom frontend starter discover Backy's blog child-template catalog without monorepo context.
+
+**Changed:**
+- The checked `examples/custom-frontend-next` connection probe now exposes `blog-child-templates` and `blog-template-inheritance` in its control-plane read order.
+- `/api/backy-connection` now publishes pointers for `agent-handoff.contentCreation.blogChildStarterTemplates` and `agent-handoff.contentCreation.blogTemplateInheritance`.
+- The probe reports whether blog child starters are reachable and the count returned by the Backy manifest handoff, without exposing any private values.
+- The starter README and protected site-specific starter export runbook now tell frontend agents to preserve `starterTemplate`, `templateSource`, and optional `frontendDesignTemplateId` for article, investigation, media/audio transcript, newsletter issue, and case-study post creation.
+- Regenerated the protected starter file-list template from the checked starter project.
+- Starter and custom-frontend connection smokes now fail if the probe drops the blog child-template pointers.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-starter --silent`
+- PASS: `BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK=1 npm run test:custom-frontend-starter --silent`
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `git diff --check`
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-03 01:01 IST - Blog Child Template Agent Handoff
 
 **Scope:** Batch 5 custom-frontend/editor contract polish, focused on making the blog child-template model machine-readable for AI/frontend agents and separate custom frontend projects.

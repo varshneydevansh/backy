@@ -29,6 +29,8 @@ const CONTROL_READ_ORDER = [
 const CONTROL_PLANE_TEMPLATE_READ_ORDER = [
   "templates",
   "admin-endpoints",
+  "blog-child-templates",
+  "blog-template-inheritance",
 ] as const;
 
 const configuredForbiddenEnv = () =>
@@ -67,6 +69,12 @@ const hasEditableMap = (payload: unknown) => {
   const editableMap = data.editableMap ?? content.editableMap;
   if (Array.isArray(editableMap)) return editableMap.length > 0;
   return Boolean(editableMap && typeof editableMap === "object" && Object.keys(editableMap).length > 0);
+};
+
+const blogChildTemplateCount = (handoff: Record<string, unknown> | undefined) => {
+  const contentCreation = asRecord(handoff?.contentCreation);
+  const templates = contentCreation.blogChildStarterTemplates;
+  return Array.isArray(templates) ? templates.length : 0;
 };
 
 const connectionBody = (overrides: Record<string, unknown> = {}) => ({
@@ -118,12 +126,16 @@ const connectionBody = (overrides: Record<string, unknown> = {}) => ({
       templateAliasField: "agent-handoff.contentCreation.customFrontendTemplateField",
       templateAliasFields: "agent-handoff.contentCreation.customFrontendRouteFieldAliases",
       adminEntryPoints: "agent-handoff.contentCreation.adminEntryPoints",
+      blogChildStarterTemplates: "agent-handoff.contentCreation.blogChildStarterTemplates",
+      blogTemplateInheritance: "agent-handoff.contentCreation.blogTemplateInheritance",
     },
     templateReuse: {
       endpoint: "agent-handoff.endpoints.templates",
       cloneField: "agent-handoff.contentCreation.customFrontendTemplateField",
       cloneFieldAliases: "agent-handoff.contentCreation.templateCloneFields",
       createRoutes: "agent-handoff.contentCreation.adminEntryPoints",
+      blogChildTemplates: "agent-handoff.contentCreation.blogChildStarterTemplates",
+      blogTemplateInheritance: "agent-handoff.contentCreation.blogTemplateInheritance",
     },
     preserve: {
       domAttributes: [...REQUIRED_DOM_ATTRIBUTES],
@@ -168,6 +180,8 @@ export async function GET() {
           hasComponentApiContract: Boolean(
             handoff && typeof handoff === "object" && "componentApiContract" in handoff,
           ),
+          hasBlogChildStarterTemplates: blogChildTemplateCount(handoff) > 0,
+          blogChildStarterTemplateCount: blogChildTemplateCount(handoff),
           renderReachable: true,
           renderElementCount: renderElementCount(render.data),
           hasEditableMap: hasEditableMap(render.data),

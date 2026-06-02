@@ -132,6 +132,10 @@ assertIncludes(files.connection, 'propertyMap: "agent-handoff.componentApiContra
 assertIncludes(files.connection, 'renderElements: "render.data.content.elements[]"', 'Connection probe exposes the render element pointer');
 assertIncludes(files.connection, 'editableMap: "render.data.editableMap"', 'Connection probe exposes the editable-map pointer');
 assertIncludes(files.connection, 'frontendDesign: "manifest.data.site.frontendDesign"', 'Connection probe exposes the frontend design pointer');
+assertIncludes(files.connection, 'blogChildStarterTemplates: "agent-handoff.contentCreation.blogChildStarterTemplates"', 'Connection probe exposes the blog child starter template pointer');
+assertIncludes(files.connection, 'blogTemplateInheritance: "agent-handoff.contentCreation.blogTemplateInheritance"', 'Connection probe exposes the blog template inheritance pointer');
+assertIncludes(files.connection, 'hasBlogChildStarterTemplates: blogChildTemplateCount(handoff) > 0', 'Connection probe reports blog child starter reachability');
+assertIncludes(files.connection, 'blogChildStarterTemplateCount: blogChildTemplateCount(handoff)', 'Connection probe reports the blog child starter count');
 assertIncludes(files.connection, 'renderReachable: true', 'Connection probe verifies Backy render reachability');
 assertIncludes(files.connection, 'hasEditableMap: hasEditableMap(render.data)', 'Connection probe reports editable-map reachability without exposing values');
 assertIncludes(files.connection, 'data-backy-component-contract-pointer', 'Connection probe documents component contract DOM attributes');
@@ -169,6 +173,8 @@ assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter RE
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
 assertIncludes(files.readme, 'backy.custom-frontend-control-plane.v1', 'Starter README documents the deployed frontend control-plane probe');
+assertIncludes(files.readme, 'agent-handoff.contentCreation.blogChildStarterTemplates', 'Starter README documents blog child template discovery');
+assertIncludes(files.readme, 'starterTemplate', 'Starter README documents blog child template route preservation');
 assertIncludes(files.readme, 'generates tablet/mobile media-query CSS from Backy responsive layout/style overrides', 'Starter README documents responsive override rendering');
 assertIncludes(files.generator, 'CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES', 'Starter bundle generator writes the public template file list');
 assertIncludes(files.generator, 'examples/custom-frontend-next', 'Starter bundle generator reads the checked starter project');
@@ -185,6 +191,8 @@ assertIncludes(files.scaffold, '/sites?identifier=', 'Starter scaffold verifies 
 assertIncludes(files.scaffold, '/render?path=/', 'Starter scaffold verifies the home render payload before writing');
 assertIncludes(files.scaffold, '--skip-site-verify', 'Starter scaffold keeps an explicit offline escape hatch for fixture manifests');
 assertIncludes(files.scaffold, 'publicSiteVerification', 'Starter scaffold records public site verification metadata');
+assertIncludes(files.generatedTemplate, 'agent-handoff.contentCreation.blogChildStarterTemplates', 'Generated starter template carries blog child template discovery');
+assertIncludes(files.generatedTemplate, 'blogChildStarterTemplateCount', 'Generated starter template carries blog child starter count reporting');
 assertIncludes(files.ensureSite, 'backy.custom-frontend-site-readiness.v1', 'Ensure-site command emits a custom frontend site readiness schema');
 assertIncludes(files.ensureSite, 'Refusing --admin-key', 'Ensure-site command refuses admin keys in command-line history');
 assertIncludes(files.ensureSite, 'Refusing --service-role-key', 'Ensure-site command refuses service-role keys in command-line history');

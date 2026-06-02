@@ -45,7 +45,9 @@ The starter exposes `GET /api/backy-connection` with schema `backy.custom-fronte
 
 It returns only public configuration and booleans: the Backy public API base, site id, public host, Backy manifest reachability, required DOM control attributes, and whether forbidden private env names are present in the frontend deployment. It never returns secret values.
 
-It also exposes a `backy.custom-frontend-control-plane.v1` block with the agent read order, site-scoped Backy endpoints, and the exact component contract, property map, render elements, editable map, frontend design, and deployment topology pointers a frontend agent must preserve while redesigning the site.
+It also exposes a `backy.custom-frontend-control-plane.v1` block with the agent read order, site-scoped Backy endpoints, and the exact component contract, property map, render elements, editable map, frontend design, deployment topology, template reuse, and blog child-template pointers a frontend agent must preserve while redesigning the site.
+
+For blog creation, read `agent-handoff.contentCreation.blogChildStarterTemplates` and `agent-handoff.contentCreation.blogTemplateInheritance` before creating article, investigation, media/audio transcript, newsletter issue, or case-study posts. Preserve the advertised `starterTemplate`, `templateSource`, and optional `frontendDesignTemplateId` route fields so Backy can reopen the result in the canvas with the same custom frontend design.
 
 After deploying a separate website frontend, run the Backy repo smoke with the probe required:
 
