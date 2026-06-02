@@ -347,6 +347,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Core typecheck, frontend contract type generation, source custom-frontend connection smoke, SDK generated-types smoke, SDK typecheck, public typecheck, direct local public API manifest/agent-handoff assertion, and diff check are green for the blog child-template handoff slice. Full SDK smoke reaches protected admin login and stops on expected local MFA, after the public handoff assertions pass.
 
+**Newest deploy verification:** `880314e3` is pushed. Fresh `backy-public` and `backy-admin` production deployments are Ready on the stable aliases, production readiness passes 47 checks, real-site custom frontend connection passes 94 checks, and hosted admin login shell remains clean of demo/dev credentials. Deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

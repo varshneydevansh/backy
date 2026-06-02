@@ -3683,6 +3683,8 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Notes:**
 - Full SDK smoke now reaches the protected admin login bootstrap and stops on the expected local `MFA_REQUIRED` response; the public handoff/runtime assertions pass before that protected write section.
 - The local `backy-public` dev server was restarted on port `3001` so it served the rebuilt `@backy-cms/core` handoff payload.
+- `880314e3` is pushed. Fresh `backy-public` and `backy-admin` production deployments are Ready and aliased to the stable URLs.
+- Production readiness passes 47 checks against `https://backy-public.vercel.app`, real-site custom frontend connection passes 94 checks against `devanshvarshney` / `devanshvarshney.com`, and hosted admin login-shell smoke passes against `https://backy-admin.vercel.app/login`.
 
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
