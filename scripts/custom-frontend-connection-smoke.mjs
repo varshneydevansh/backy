@@ -76,6 +76,11 @@ assert(
   'Root package exposes test:custom-frontend-connection',
 );
 assert(
+  rootPackage.scripts?.['test:custom-frontend-control-plane'] ===
+    'npm run test:custom-frontend-starter && npm run test:custom-frontend-connection && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene',
+  'Root package exposes the custom frontend control-plane launch gate',
+);
+assert(
   rootPackage.scripts?.['custom-frontend:materialize'] ===
     'node scripts/materialize-custom-frontend-starter.mjs',
   'Root package exposes custom-frontend:materialize',

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 10:48 IST
+- **Last updated:** 2026-06-02 14:45 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 14:45 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Compact control-plane halt gate available
+
+**What changed:**
+- Added root `npm run test:custom-frontend-control-plane`.
+- The aggregate gate chains the checked custom frontend starter, `test:custom-frontend-connection`, `test:vercel-production-readiness`, and `test:repo-public-hygiene`.
+- Extended `scripts/custom-frontend-connection-smoke.mjs` so the new gate is guarded by the existing custom frontend contract smoke.
+- Updated `README.md`, `AGENTS.md`, and `specs/custom-frontend-agent-handoff.md` with the compact launch-critical gate and the explicit operator-owned gates that remain outside Backy code: private website repo Vercel Git access, branch/Preview env after Git connection, final DNS cutover, and live provider certification artifacts.
+
+**Commands run:**
+- `npm run test:custom-frontend-control-plane --silent` -> PASS.
+- `node --check scripts/custom-frontend-connection-smoke.mjs` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit and push this handoff gate slice.
+2. After push, re-read the survival guide and check whether Vercel redeployed the docs/script-only change.
+3. The Backy-owned custom frontend control path remains green in source/no-secret mode; live deployed proof still uses the existing `BACKY_CUSTOM_FRONTEND_*` and `BACKY_VERCEL_*` env-backed gates.
 
 ## 2026-06-02 10:48 IST
 

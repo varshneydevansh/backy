@@ -100,6 +100,8 @@ AI agents and external frontend teams should start with `GET /api/sites/:siteId/
 
 Use `npm run test:custom-frontend-connection` when connecting a separate website frontend. With `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api` and `BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug>`, it proves the public site discovery, agent-handoff, manifest, OpenAPI, resolve, and render contracts. Add `BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` after deploying the website to prove the rendered DOM still exposes Backy element ids, element types, component-contract pointers, editable-map pointers, and the deployed frontend's public `/api/backy-connection` self-check reports no forbidden private env names.
 
+If you need the shortest release-critical custom frontend check, run `npm run test:custom-frontend-control-plane`. It chains the checked starter, custom frontend connection contract, Vercel production-readiness contract, and public-repo hygiene. The command is safe without private values; pass the live `BACKY_CUSTOM_FRONTEND_*` and `BACKY_VERCEL_*` environment variables to the underlying gates when certifying a real deployment.
+
 ## Vercel release runbook
 
 Create two Vercel projects from this repo so admin/editor traffic and public/custom frontend traffic stay operationally separate.
@@ -131,6 +133,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Subdomains such as `studio.example.com`, `blog.example.com`, or `docs.example.com` are modeled as site custom domains. Use one Backy site per independent subdomain when content, navigation, SEO, or design tokens differ.
 - Frontend builders and AI agents should start with `GET /api/sites/:siteId/agent-handoff`, then read manifest, OpenAPI, render, and frontend-design before creating UI or templates. Do not copy Backy content into a frontend-local JSON source of truth.
 - Before handing a separate website frontend to users, run `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> npm run test:custom-frontend-connection`. After the custom frontend is deployed, also set `BACKY_CUSTOM_FRONTEND_URL=https://<frontend-domain>`, `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1`, and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1` so the gate verifies the public page DOM keeps Backy control attributes and the frontend exposes a secret-free connection probe.
+- Keep `npm run test:custom-frontend-control-plane` green before pausing or handing work to another agent. The only launch gates it intentionally does not complete are operator-owned: granting Vercel access to a private website repository, adding branch/Preview env after Git connection, moving DNS for the final public host, and supplying real live provider certification artifacts.
 - Optional Vercel Agent: after the two projects are linked, enable Vercel Agent Code Review from each project's Project Settings -> AI page. It is a Vercel platform setting; Backy does not need a runtime package or client-visible secret for it.
 
 | Vercel project | Public status | Domains | Required env | Forbidden env |

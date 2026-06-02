@@ -39,6 +39,7 @@
     "custom-frontend:scaffold": "node scripts/scaffold-custom-frontend-starter.mjs",
     "test:custom-frontend-starter": "node scripts/custom-frontend-starter-smoke.mjs",
     "test:custom-frontend-connection": "node scripts/custom-frontend-connection-smoke.mjs",
+    "test:custom-frontend-control-plane": "npm run test:custom-frontend-starter && npm run test:custom-frontend-connection && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene",
     "test:repo-public-hygiene": "node scripts/repo-public-hygiene-smoke.mjs",
     "build:vercel:public": "node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public",
     "build:vercel:admin": "npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy-cms/admin",

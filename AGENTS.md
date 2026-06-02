@@ -127,6 +127,9 @@ BACKY_EDITOR_ZOOM_SMOKE=1 npm run test:editor-zoom --workspace @backy-cms/admin
 npm run doctor:release-certification
 npm run test:custom-frontend-starter
 BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://<backy-public-domain>/api BACKY_CUSTOM_FRONTEND_SITE_ID=<site-id-or-slug> npm run test:custom-frontend-connection
+npm run test:custom-frontend-control-plane
 ```
+
+When time or agent context is limited, run `npm run test:custom-frontend-control-plane` first. It is the compact launch gate for the custom frontend control path: checked starter, Backy public API connection contract, Vercel production readiness contract, and public-repo hygiene. Add live env variables to the underlying `test:custom-frontend-connection` and `test:vercel-production-readiness` commands when certifying a deployed site/frontend.
 
 Before claiming a custom frontend or editor path is complete, verify both the API contract and the rendered/admin UI path that exposes it.
