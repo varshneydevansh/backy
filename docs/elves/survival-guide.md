@@ -339,6 +339,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `c4e21631` is pushed. Fresh `backy-admin` and `backy-public` production deployments are Ready and aliased to `https://backy-admin.vercel.app` and `https://backy-public.vercel.app`. Production readiness passes 47 checks, hosted admin login shell is clean of demo/dev credentials, and the real-site custom frontend API contract passes 86 checks. Deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
 
+**Newest editor command polish:** The page editor command registry now has an explicit executor invariant. The command palette trigger/dialog and Inspector command-registry panel expose `unwiredCommandCount`/ids, future commands without an executor are disabled instead of advertised as ready, and the rendered command-palette smoke proves the current editor has zero registered-but-unwired commands while `zoom-fit` and blocked `undo` behavior still work.
+
+**Newest verification:** Admin typecheck, editor smoke coverage source guard, rendered command-palette smoke, and diff check are green for the editor command executor-guard slice. Repo-public hygiene, commit, push, and deploy verification are still pending for this newest local slice.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

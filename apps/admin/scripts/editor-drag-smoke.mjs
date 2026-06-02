@@ -11936,6 +11936,7 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     triggerOpenState: trigger?.getAttribute('data-command-palette-open') || '',
     triggerCommandCount: Number(trigger?.getAttribute('data-command-count') || 0),
     triggerReadyCount: Number(trigger?.getAttribute('data-command-ready-count') || 0),
+    triggerUnwiredCount: Number(trigger?.getAttribute('data-unwired-command-count') || 0),
     statusText: normalize(status?.textContent),
     inputValue: input instanceof HTMLInputElement ? input.value : '',
     focusedTestId: document.activeElement?.getAttribute?.('data-testid') || '',
@@ -11943,6 +11944,8 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     commandCount: Number(palette?.getAttribute('data-command-count') || 0),
     filteredCommandCount: Number(palette?.getAttribute('data-filtered-command-count') || 0),
     readyCount: Number(palette?.getAttribute('data-command-ready-count') || 0),
+    unwiredCount: Number(palette?.getAttribute('data-unwired-command-count') || 0),
+    unwiredCommandIds: palette?.getAttribute('data-unwired-command-ids') || '',
     resultIds: results.map((result) => result.commandId),
     results,
     autoFit: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-auto-fit') || '',
@@ -11972,6 +11975,12 @@ const testEditorCommandPalette = async (client) => {
   );
   assert(openedFromShortcut.role === 'dialog' && openedFromShortcut.modal === 'true', `Command palette dialog semantics mismatch: ${JSON.stringify(openedFromShortcut)}`);
   assert(openedFromShortcut.triggerShortcut === 'Control+K Meta+K', `Command palette trigger shortcut metadata mismatch: ${JSON.stringify(openedFromShortcut)}`);
+  assert(
+    openedFromShortcut.triggerUnwiredCount === 0 &&
+      openedFromShortcut.unwiredCount === 0 &&
+      openedFromShortcut.unwiredCommandIds === '',
+    `Command palette must not expose registered but unwired commands: ${JSON.stringify(openedFromShortcut)}`,
+  );
   assert(
     openedFromShortcut.triggerDescribedBy === 'editor-command-palette-status' &&
       openedFromShortcut.triggerExpanded === 'true' &&

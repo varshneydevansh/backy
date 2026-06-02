@@ -3659,6 +3659,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 00:28 IST - Editor Command Registry Executor Guard
+
+**Scope:** Batch 5 editor interaction completeness, focused on preventing command palette/toolbar actions from advertising registered commands that do not have an executor path.
+
+**Changed:**
+- Added an explicit `EXECUTABLE_EDITOR_COMMAND_IDS` contract for the page editor command registry.
+- The registry now normalizes any future command id without an executor into a disabled command, exposes `executableCommandCount`, `unwiredCommandCount`, and `unwiredCommandIds`, and keeps hidden commands hidden.
+- `executeEditorCommand` now blocks missing-executor commands before the switch and reports a clear unavailable state instead of closing the palette into a dead action.
+- The command palette trigger, command palette dialog, and Inspector command-registry panel now expose machine-readable unwired command counts/ids.
+- The command palette smoke now asserts there are zero registered-but-unwired editor commands.
+
+**Validation:**
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+
+**Notes:**
+- The rendered smoke proved the live editor command palette reports `triggerUnwiredCount=0`, `unwiredCount=0`, and empty `unwiredCommandIds` while still executing `zoom-fit` and exposing blocked undo status.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-03 00:08 IST - Blog Child Templates Deployed
 
 **Scope:** Post-push deployment verification for the Blog child starter template slice.

@@ -187,6 +187,51 @@ type EditorCommandRegistryItem = {
   state: EditorCommandState;
   reason: string;
 };
+const EXECUTABLE_EDITOR_COMMAND_IDS = new Set<string>([
+  'undo',
+  'redo',
+  'copy-selection',
+  'cut-selection',
+  'paste-selection',
+  'duplicate-selection',
+  'select-sibling-layers',
+  'select-child-layers',
+  'select-parent-layer',
+  'select-child-layer',
+  'group-selection',
+  'ungroup-selection',
+  'toggle-selection-visibility',
+  'toggle-selection-lock',
+  'edit-text',
+  'send-to-back',
+  'send-backward',
+  'bring-forward',
+  'bring-to-front',
+  'align-left',
+  'align-center',
+  'align-right',
+  'align-top',
+  'align-middle',
+  'align-bottom',
+  'distribute-horizontal',
+  'distribute-vertical',
+  'delete-selection',
+  'toggle-component-panel',
+  'toggle-layers-panel',
+  'toggle-inspector-panel',
+  'toggle-focus-mode',
+  'toggle-preview',
+  'toggle-grid',
+  'toggle-snap',
+  'toggle-pan',
+  'zoom-out',
+  'zoom-in',
+  'zoom-fit',
+  'open-page-settings',
+  'reload-page',
+  'publish-page',
+  'save-page',
+]);
 type CanvasWheelZoomEvent = WheelEvent & {
   detail?: number;
   wheelDelta?: number;
@@ -229,6 +274,9 @@ type EditorCommandRegistry = {
     readyCommandCount: number;
     disabledCommandCount: number;
     hiddenCommandCount: number;
+    executableCommandCount: number;
+    unwiredCommandCount: number;
+    unwiredCommandIds: string[];
     selectedLayerCount: number;
     categories: Array<{
       category: EditorCommandCategory;
@@ -6005,8 +6053,24 @@ export function CanvasEditor({
       }),
     ];
 
+    const normalizedCommands = commands.map((registryCommand) => {
+      if (EXECUTABLE_EDITOR_COMMAND_IDS.has(registryCommand.id)) {
+        return registryCommand;
+      }
+
+      return {
+        ...registryCommand,
+        enabled: false,
+        state: registryCommand.state === 'hidden' ? 'hidden' : 'disabled',
+        reason: `Command ${registryCommand.id} is registered but has no editor executor.`,
+      } satisfies EditorCommandRegistryItem;
+    });
+    const unwiredCommandIds = normalizedCommands
+      .filter((registryCommand) => !EXECUTABLE_EDITOR_COMMAND_IDS.has(registryCommand.id))
+      .map((registryCommand) => registryCommand.id);
+
     const categories: EditorCommandRegistry['summary']['categories'] = [];
-    commands.forEach((registryCommand) => {
+    normalizedCommands.forEach((registryCommand) => {
       let category = categories.find((item) => item.category === registryCommand.category);
       if (!category) {
         category = {
@@ -6027,14 +6091,17 @@ export function CanvasEditor({
       schemaVersion: 'backy.editor-command-registry.v1',
       generatedFrom: 'page-editor',
       summary: {
-        totalCommandCount: commands.length,
-        readyCommandCount: commands.filter((item) => item.state === 'ready').length,
-        disabledCommandCount: commands.filter((item) => item.state === 'disabled').length,
-        hiddenCommandCount: commands.filter((item) => item.state === 'hidden').length,
+        totalCommandCount: normalizedCommands.length,
+        readyCommandCount: normalizedCommands.filter((item) => item.state === 'ready').length,
+        disabledCommandCount: normalizedCommands.filter((item) => item.state === 'disabled').length,
+        hiddenCommandCount: normalizedCommands.filter((item) => item.state === 'hidden').length,
+        executableCommandCount: normalizedCommands.length - unwiredCommandIds.length,
+        unwiredCommandCount: unwiredCommandIds.length,
+        unwiredCommandIds,
         selectedLayerCount: selectedIds.length,
         categories,
       },
-      commands,
+      commands: normalizedCommands,
     };
   }, [
     canAlignSelected,
@@ -8347,6 +8414,11 @@ export function CanvasEditor({
       return;
     }
 
+    if (!EXECUTABLE_EDITOR_COMMAND_IDS.has(command.id)) {
+      setEditorNotice(`Command unavailable: ${command.label} has no editor executor.`);
+      return;
+    }
+
     setCommandPaletteOpen(false);
     setCommandPaletteQuery('');
 
@@ -8481,7 +8553,7 @@ export function CanvasEditor({
         void handleSaveWrapper();
         return;
       default:
-        setEditorNotice(`${command.label} is registered but not wired to the editor surface yet.`);
+        setEditorNotice(`Command unavailable: ${command.label} executor is missing.`);
     }
   }, [
     alignSelectedElement,
@@ -9115,6 +9187,7 @@ export function CanvasEditor({
               data-command-schema={editorCommandRegistry.schemaVersion}
               data-command-count={visibleEditorCommands.length}
               data-command-ready-count={editorCommandRegistry.summary.readyCommandCount}
+              data-unwired-command-count={editorCommandRegistry.summary.unwiredCommandCount}
             >
               <Search className="h-4 w-4" />
               <span>Commands</span>
@@ -9589,6 +9662,8 @@ export function CanvasEditor({
               data-command-count={visibleEditorCommands.length}
               data-filtered-command-count={filteredEditorCommands.length}
               data-command-ready-count={editorCommandRegistry.summary.readyCommandCount}
+              data-unwired-command-count={editorCommandRegistry.summary.unwiredCommandCount}
+              data-unwired-command-ids={editorCommandRegistry.summary.unwiredCommandIds.join(' ')}
               data-active-command-id={activeCommandPaletteCommand?.id || ''}
             >
               <div className="border-b border-slate-200 bg-slate-50 p-3">
@@ -10847,6 +10922,9 @@ export function CanvasEditor({
 	                    data-ready-count={editorCompositionReadiness.commandRegistry.summary.readyCommandCount}
 	                    data-disabled-count={editorCompositionReadiness.commandRegistry.summary.disabledCommandCount}
 	                    data-hidden-count={editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount}
+	                    data-executable-count={editorCompositionReadiness.commandRegistry.summary.executableCommandCount}
+	                    data-unwired-count={editorCompositionReadiness.commandRegistry.summary.unwiredCommandCount}
+	                    data-unwired-command-ids={editorCompositionReadiness.commandRegistry.summary.unwiredCommandIds.join(' ')}
 	                    data-command-ids={editorCompositionReadiness.commandRegistry.commands.map((command) => command.id).join(' ')}
 	                  >
 	                    <div className="flex items-start justify-between gap-2">
@@ -10855,7 +10933,9 @@ export function CanvasEditor({
 	                        <div className="mt-0.5 text-[11px] leading-4 text-slate-500">
 	                          {editorCompositionReadiness.commandRegistry.summary.readyCommandCount}/{editorCompositionReadiness.commandRegistry.summary.totalCommandCount} ready,
 	                          {' '}
-	                          {editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount} hidden
+	                          {editorCompositionReadiness.commandRegistry.summary.hiddenCommandCount} hidden,
+	                          {' '}
+	                          {editorCompositionReadiness.commandRegistry.summary.unwiredCommandCount} unwired
 	                        </div>
 	                      </div>
 	                      <button

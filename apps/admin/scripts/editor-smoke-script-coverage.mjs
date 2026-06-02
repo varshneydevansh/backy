@@ -290,7 +290,11 @@ const missingDistributionSourceSnippets = collectMissingSnippets(canvasEditorSou
 const missingEditorCommandRegistrySnippets = collectMissingSnippets(canvasEditorSource, [
   "type EditorCommandRegistryItem",
   "type EditorCommandRegistry =",
+  "const EXECUTABLE_EDITOR_COMMAND_IDS = new Set<string>",
   "schemaVersion: 'backy.editor-command-registry.v1'",
+  "unwiredCommandCount: number;",
+  "unwiredCommandIds: string[];",
+  'const unwiredCommandIds = normalizedCommands',
   'const editorCommandRegistry = useMemo<EditorCommandRegistry>',
   "id: 'group-selection'",
   "id: 'ungroup-selection'",
@@ -302,6 +306,8 @@ const missingEditorCommandRegistrySnippets = collectMissingSnippets(canvasEditor
   "commandRegistry: editorCommandRegistry",
   "copyEditorCommandRegistry",
   'data-testid="editor-command-registry"',
+  'data-unwired-command-count={editorCommandRegistry.summary.unwiredCommandCount}',
+  'data-unwired-count={editorCompositionReadiness.commandRegistry.summary.unwiredCommandCount}',
   'data-testid="editor-copy-command-registry"',
   'data-command-ids={editorCompositionReadiness.commandRegistry.commands.map((command) => command.id).join(\' \')}',
 ]);
