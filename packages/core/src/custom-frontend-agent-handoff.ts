@@ -27,6 +27,42 @@ export const CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS = [
   'meta.frontendDesign*',
 ] as const;
 
+export const CUSTOM_FRONTEND_BLOG_CHILD_STARTER_TEMPLATES = [
+  { id: 'blank', name: 'Blank post', intent: 'article', sections: ['Article hero', 'Body'] },
+  { id: 'landing', name: 'Announcement post', intent: 'article', sections: ['Hero', 'Highlights', 'CTA'] },
+  { id: 'storefront', name: 'Store update', intent: 'case-study', sections: ['Product story', 'Catalog links', 'CTA'] },
+  { id: 'product-detail', name: 'Product story', intent: 'case-study', sections: ['Product media', 'Details', 'Related'] },
+  { id: 'pricing', name: 'Pricing explainer', intent: 'article', sections: ['Context', 'Plan table', 'FAQ'] },
+  { id: 'services', name: 'Service guide', intent: 'case-study', sections: ['Overview', 'Process', 'Booking'] },
+  { id: 'booking', name: 'Booking article', intent: 'article', sections: ['Intro', 'Availability', 'Schedule'] },
+  { id: 'portfolio', name: 'Portfolio story', intent: 'case-study', sections: ['Work hero', 'Project media', 'Inquiry'] },
+  { id: 'gallery', name: 'Media essay', intent: 'article', sections: ['Media hero', 'Gallery', 'Files'] },
+  { id: 'events', name: 'Event recap', intent: 'article', sections: ['Event hero', 'Agenda', 'Follow-up'] },
+  { id: 'privacy', name: 'Privacy update', intent: 'article', sections: ['Summary', 'Data use', 'Contact'] },
+  { id: 'terms', name: 'Terms update', intent: 'article', sections: ['Summary', 'Rules', 'Support'] },
+  { id: 'cookie-policy', name: 'Cookie update', intent: 'article', sections: ['Categories', 'Consent', 'Preferences'] },
+  { id: 'accessibility-statement', name: 'Accessibility note', intent: 'article', sections: ['Commitment', 'Standards', 'Feedback'] },
+  { id: 'refund-policy', name: 'Refund update', intent: 'article', sections: ['Rules', 'Exceptions', 'Support'] },
+  { id: 'shipping-policy', name: 'Shipping update', intent: 'article', sections: ['Timeline', 'Methods', 'Tracking'] },
+  { id: 'cart', name: 'Cart guide', intent: 'article', sections: ['Cart items', 'Totals', 'FAQ'] },
+  { id: 'checkout', name: 'Checkout guide', intent: 'article', sections: ['Steps', 'Payment', 'Help'] },
+  { id: 'order-confirmation', name: 'Order update', intent: 'article', sections: ['Status', 'Receipt', 'Next steps'] },
+  { id: 'help-center', name: 'Help article', intent: 'article', sections: ['Problem', 'Steps', 'FAQ'] },
+  { id: 'faq', name: 'FAQ post', intent: 'article', sections: ['Questions', 'Answers', 'Support'] },
+  { id: 'testimonials', name: 'Proof story', intent: 'case-study', sections: ['Proof hero', 'Quotes', 'Inquiry'] },
+  { id: 'blog-index', name: 'Editorial index note', intent: 'article', sections: ['Editorial intro', 'Featured story', 'Article list'] },
+  { id: 'blog-post', name: 'Blog post', intent: 'article', sections: ['Article hero', 'Post body', 'Related posts'] },
+  { id: 'team', name: 'Profile story', intent: 'case-study', sections: ['Profile', 'Role', 'CTA'] },
+  { id: 'careers', name: 'Careers post', intent: 'article', sections: ['Role', 'Benefits', 'Apply'] },
+  { id: 'about', name: 'About story', intent: 'case-study', sections: ['Story', 'Values', 'People'] },
+  { id: 'contact', name: 'Contact update', intent: 'article', sections: ['Intro', 'Form CTA', 'Response'] },
+  { id: 'newsletter', name: 'Newsletter issue', intent: 'newsletter', sections: ['Issue hero', 'Curated links', 'Subscribe'] },
+  { id: 'survey', name: 'Survey results', intent: 'investigation', sections: ['Question', 'Findings', 'CTA'] },
+  { id: 'registration', name: 'Registration post', intent: 'article', sections: ['Signup intro', 'Fields', 'Consent'] },
+  { id: 'member-login', name: 'Member access note', intent: 'article', sections: ['Access', 'Account', 'Register'] },
+  { id: 'member-account', name: 'Member account guide', intent: 'article', sections: ['Profile', 'Preferences', 'Resources'] },
+] as const;
+
 export const CUSTOM_FRONTEND_COMPONENT_API_FIELD_PATHS = [
   'element.id',
   'element.type',
@@ -433,6 +469,19 @@ export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   reusableSectionCustomFrontend: `/reusable-sections?siteId=${siteId}&frontendTemplate=:templateId`,
 });
 
+export const buildCustomFrontendBlogChildStarterTemplates = (siteId: string) => (
+  CUSTOM_FRONTEND_BLOG_CHILD_STARTER_TEMPLATES.map((template) => ({
+    ...template,
+    inheritsFrom: 'page-template-catalog',
+    resourceType: 'blogPost',
+    templateSourceField: 'templateSource',
+    starterTemplateField: 'starterTemplate',
+    customFrontendTemplateField: 'frontendDesignTemplateId',
+    backyCanvasRoute: `/blog/new?siteId=${siteId}&starterTemplate=${template.id}&templateSource=backy-canvas&focus=canvas`,
+    customFrontendRoute: `/blog/new?siteId=${siteId}&starterTemplate=${template.id}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`,
+  }))
+);
+
 export const buildCustomFrontendRoutingHandoff = (
   siteId: string,
   site: CustomFrontendAgentSiteContext = {},
@@ -691,6 +740,7 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
     'Use componentApiContract.layoutBehavior for section resize flow and shared header/footer/nav binding rules: root sections reflow by bottom-edge delta, while shared chrome should use site navigation/chrome bindings instead of copied static menus.',
     'Keep Backy as the source of truth. Preserve content.contentDocument, content.elements, content.canvas, custom CSS/JS, assets, animations, interactions, data bindings, editable maps, SEO, metadata, and meta.frontendDesign* when creating or editing.',
     'Use manifest.data.site.frontendDesign and the authenticated /api/admin/sites/:siteId/frontend-design contract for fonts, colors, spacing, motion, chrome, templates, and editable maps so future pages keep the same site design.',
+    'For blog posts, use contentCreation.blogChildStarterTemplates to choose a page-catalog child starter such as article, investigation report, audio transcript, newsletter issue, or case study; preserve starterTemplate plus frontendDesignTemplateId when using a custom frontend template.',
     'Deploy Backy as protected backy-admin plus public backy-public. Custom websites should be separate frontend projects that only receive browser-safe NEXT_PUBLIC_BACKY_API_BASE_URL, NEXT_PUBLIC_BACKY_SITE_ID, NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST or server-side BACKY_PUBLIC_API_BASE_URL, BACKY_SITE_ID, and BACKY_SITE_PUBLIC_HOST.',
     'For writes use authenticated /api/admin/sites/:siteId/* endpoints or the advertised contentCreation.adminEntryPoints. Public endpoints are for discovery, render, and visitor interactions only.',
     'For newsletters use Backy newsletter/form subscriber APIs and keep mail-provider secrets, SMTP/API keys, unsubscribe signing, bounces, complaints, and webhooks server/provider-side.',
@@ -707,6 +757,7 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
     endpointFamily: `/api/admin/sites/${siteId}/*`,
     frontendDesign: `/api/admin/sites/${siteId}/frontend-design`,
     contentEntryPoints: buildCustomFrontendAgentAdminEntryPoints(siteId),
+    blogChildStarterTemplates: buildCustomFrontendBlogChildStarterTemplates(siteId),
   },
   componentGuarantee: {
     everyComponentApiAddressable: true,
@@ -726,6 +777,13 @@ export const buildCustomFrontendAgentBrief = (siteId: string) => ({
       'frontendDesign.templates',
       'frontendDesign.editableMap',
     ],
+  },
+  blogTemplateInheritance: {
+    schemaVersion: 'backy.blog-child-template-inheritance.v1',
+    parentSurface: '/pages/new',
+    childSurface: '/blog/new',
+    childTemplates: buildCustomFrontendBlogChildStarterTemplates(siteId),
+    rule: 'New Page remains the parent template vocabulary; blog posts use the child starterTemplate route parameter for article, investigation, audio transcript, newsletter, and case-study authoring flows.',
   },
   verification: {
     resolve: `/api/sites/${siteId}/resolve?path=/`,
@@ -850,6 +908,14 @@ export const buildCustomFrontendAgentHandoff = (
     customFrontendTemplateField: 'frontendDesignTemplateId',
     customFrontendRouteFieldAliases: ['frontendDesignTemplateId', 'frontendTemplate'],
     adminEntryPoints: buildCustomFrontendAgentAdminEntryPoints(siteId),
+    blogChildStarterTemplates: buildCustomFrontendBlogChildStarterTemplates(siteId),
+    blogTemplateInheritance: {
+      schemaVersion: 'backy.blog-child-template-inheritance.v1',
+      parentSurface: '/pages/new',
+      childSurface: '/blog/new',
+      starterTemplateField: 'starterTemplate',
+      routeGuarantee: 'Each child template route preserves siteId, starterTemplate, templateSource, optional frontendDesignTemplateId, and focus=canvas.',
+    },
     newsletter: {
       workspace: `/newsletter?siteId=${siteId}`,
       signupPageCanvas: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
@@ -911,6 +977,7 @@ export const buildCustomFrontendAgentHandoff = (
       noFrontendLocalJsonForks: true,
     },
     creationRoutes: buildCustomFrontendAgentAdminEntryPoints(siteId),
+    blogChildStarterTemplates: buildCustomFrontendBlogChildStarterTemplates(siteId),
     preserveFields: CUSTOM_FRONTEND_AGENT_ROUND_TRIP_FIELDS,
     verification: {
       renderEndpoint: `/api/sites/${siteId}/render?path=/...`,

@@ -745,6 +745,13 @@ assert(
     customFrontendAgentHandoffLib.includes('adminEntryPoints') &&
     customFrontendAgentHandoffLib.includes('blogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`') &&
     customFrontendAgentHandoffLib.includes('blogCustomFrontend: `/blog/new?siteId=${siteId}&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`') &&
+    customFrontendAgentHandoffLib.includes('CUSTOM_FRONTEND_BLOG_CHILD_STARTER_TEMPLATES') &&
+    customFrontendAgentHandoffLib.includes('buildCustomFrontendBlogChildStarterTemplates') &&
+    customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.blog-child-template-inheritance.v1'") &&
+    customFrontendAgentHandoffLib.includes('blogChildStarterTemplates: buildCustomFrontendBlogChildStarterTemplates(siteId)') &&
+    customFrontendAgentHandoffLib.includes('starterTemplate=${template.id}') &&
+    customFrontendAgentHandoffLib.includes("intent: 'investigation'") &&
+    customFrontendAgentHandoffLib.includes("intent: 'newsletter'") &&
     customFrontendAgentHandoffLib.includes('apiAlignment') &&
     customFrontendAgentHandoffLib.includes("schemaVersion: 'backy.custom-frontend-api-alignment.v1'") &&
     customFrontendAgentHandoffLib.includes("CUSTOM_FRONTEND_ROUTING_HANDOFF_SCHEMA = 'backy.custom-frontend-routing-handoff.v1'") &&
@@ -803,6 +810,8 @@ assert(
     frontendManifestSchema.includes('"agentHandoff"') &&
     frontendManifestSchema.includes('"frontendDesignManagement"') &&
     frontendManifestSchema.includes('"adminEntryPoints"') &&
+    frontendManifestSchema.includes('"blogChildStarterTemplates"') &&
+    frontendManifestSchema.includes('"blogTemplateInheritance"') &&
     frontendManifestSchema.includes('"apiAlignment"') &&
     frontendManifestSchema.includes('"backy.custom-frontend-api-alignment.v1"') &&
     frontendManifestSchema.includes('"routing"') &&

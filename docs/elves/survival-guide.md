@@ -343,6 +343,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Admin typecheck, editor smoke coverage source guard, rendered command-palette smoke, diff check, and repo-public hygiene are green for the editor command executor-guard slice. `41817be0` is pushed. Fresh `backy-admin` and `backy-public` production deployments are Ready on the stable aliases, production readiness passes 47 checks, hosted admin login shell is clean of demo/dev credentials, and the real-site custom frontend API contract passes 86 checks. Deployed custom frontend DOM proof was skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
 
+**Newest blog child-template handoff polish:** The public custom frontend agent handoff now exposes the full 33-item blog child starter catalog under `contentCreation.blogChildStarterTemplates` and `apiAlignment.blogChildStarterTemplates`, with `backy.blog-child-template-inheritance.v1` documenting `/pages/new` as the parent vocabulary and `/blog/new` as the child authoring surface. Each starter advertises route-safe `starterTemplate`, `templateSource`, optional `frontendDesignTemplateId`, Backy-canvas route, custom-frontend route, intent, and section hints for article, investigation, media/audio-transcript, newsletter issue, and case-study flows.
+
+**Newest verification:** Core typecheck, frontend contract type generation, source custom-frontend connection smoke, SDK generated-types smoke, SDK typecheck, public typecheck, direct local public API manifest/agent-handoff assertion, and diff check are green for the blog child-template handoff slice. Full SDK smoke reaches protected admin login and stops on expected local MFA, after the public handoff assertions pass.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute

@@ -477,6 +477,10 @@ const assertTemplateActionability = (handoffData, label, acceptedSiteIdPaths = [
     ? contentCreation.customFrontendRouteFieldAliases
     : [];
   const adminEntryPoints = contentCreation.adminEntryPoints || {};
+  const blogChildStarterTemplates = [
+    ...(Array.isArray(contentCreation.blogChildStarterTemplates) ? contentCreation.blogChildStarterTemplates : []),
+    ...(Array.isArray(handoffData?.apiAlignment?.blogChildStarterTemplates) ? handoffData.apiAlignment.blogChildStarterTemplates : []),
+  ];
 
   assert(
     Array.isArray(templateCloneFields),
@@ -528,6 +532,34 @@ const assertTemplateActionability = (handoffData, label, acceptedSiteIdPaths = [
       `${label} exposes an admin route to create a reusable ${routeLabel}`,
     );
   }
+  assert(
+    blogChildStarterTemplates.length >= 33,
+    `${label} exposes the full blog child starter template catalog`,
+  );
+  assert(
+    blogChildStarterTemplates.some((template) => (
+      template?.id === 'survey' &&
+      template.intent === 'investigation' &&
+      template.resourceType === 'blogPost' &&
+      template.inheritsFrom === 'page-template-catalog' &&
+      String(template.backyCanvasRoute || '').includes('starterTemplate=survey') &&
+      String(template.customFrontendRoute || '').includes('frontendDesignTemplateId=:templateId')
+    )),
+    `${label} exposes an investigation/survey blog child starter with custom frontend routing`,
+  );
+  assert(
+    blogChildStarterTemplates.some((template) => (
+      template?.id === 'gallery' &&
+      Array.isArray(template.sections) &&
+      template.sections.includes('Files') &&
+      String(template.customFrontendRoute || '').includes('templateSource=custom-frontend')
+    )),
+    `${label} exposes media/file blog child starters for audio/transcript-style posts`,
+  );
+  assert(
+    blogChildStarterTemplates.some((template) => template?.id === 'newsletter' && template.intent === 'newsletter'),
+    `${label} exposes newsletter issue blog child starters`,
+  );
 };
 
 const assertTemplateClassCoverage = (frontendDesign, label) => {

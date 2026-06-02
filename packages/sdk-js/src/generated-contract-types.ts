@@ -5763,6 +5763,7 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       endpointFamily: string;
       frontendDesign: string;
       contentEntryPoints: Record<string, string>;
+      blogChildStarterTemplates?: Array<GeneratedBackyFrontendManifestBlogChildStarterTemplate>;
       [key: string]: unknown;
     };
     componentGuarantee: {
@@ -5778,6 +5779,14 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       sourcePointer: "designState";
       preserveFields: Array<string>;
       styleSources: Array<string>;
+      [key: string]: unknown;
+    };
+    blogTemplateInheritance?: {
+      schemaVersion: "backy.blog-child-template-inheritance.v1";
+      parentSurface: "/pages/new";
+      childSurface: "/blog/new";
+      childTemplates: Array<GeneratedBackyFrontendManifestBlogChildStarterTemplate>;
+      rule: string;
       [key: string]: unknown;
     };
     verification: {
@@ -5826,6 +5835,7 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     helpers: Array<string>;
     [key: string]: unknown;
   };
+  blogChildStarterTemplate?: GeneratedBackyFrontendManifestBlogChildStarterTemplate;
   contentCreation: {
     templateCloneFields: Array<"frontendDesignTemplateId" | "designTemplateId">;
     backyCanvasTemplateField: "templateId";
@@ -5856,6 +5866,15 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       customFrontendRouteFieldAliases: Array<string>;
       routeRevealGuarantee: string;
       editorOutcome: string;
+      [key: string]: unknown;
+    };
+    blogChildStarterTemplates?: Array<GeneratedBackyFrontendManifestBlogChildStarterTemplate>;
+    blogTemplateInheritance?: {
+      schemaVersion: "backy.blog-child-template-inheritance.v1";
+      parentSurface: "/pages/new";
+      childSurface: "/blog/new";
+      starterTemplateField: "starterTemplate";
+      routeGuarantee: string;
       [key: string]: unknown;
     };
     rule: string;
@@ -5910,6 +5929,7 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
       reusableSectionCustomFrontend: string;
       [key: string]: unknown;
     };
+    blogChildStarterTemplates?: Array<GeneratedBackyFrontendManifestBlogChildStarterTemplate>;
     preserveFields: Array<string>;
     verification: {
       renderEndpoint: string;
@@ -6147,6 +6167,21 @@ export type GeneratedBackyFrontendManifestCustomFrontendAgentHandoff = {
     secretHandling: string;
     [key: string]: unknown;
   };
+  [key: string]: unknown;
+};
+
+export type GeneratedBackyFrontendManifestBlogChildStarterTemplate = {
+  id: string;
+  name: string;
+  intent: string;
+  sections: Array<string>;
+  inheritsFrom: "page-template-catalog";
+  resourceType: "blogPost";
+  templateSourceField: "templateSource";
+  starterTemplateField: "starterTemplate";
+  customFrontendTemplateField: "frontendDesignTemplateId";
+  backyCanvasRoute: string;
+  customFrontendRoute: string;
   [key: string]: unknown;
 };
 

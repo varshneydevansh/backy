@@ -3659,6 +3659,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 01:01 IST - Blog Child Template Agent Handoff
+
+**Scope:** Batch 5 custom-frontend/editor contract polish, focused on making the blog child-template model machine-readable for AI/frontend agents and separate custom frontend projects.
+
+**Changed:**
+- Public custom frontend agent handoff now exposes `contentCreation.blogChildStarterTemplates` and `apiAlignment.blogChildStarterTemplates`.
+- Added the `backy.blog-child-template-inheritance.v1` contract so agents can see `/pages/new` as the parent starter vocabulary and `/blog/new` as the child authoring surface.
+- The handoff catalog lists all 33 page-catalog-derived blog child starters with `starterTemplate`, `templateSource`, `frontendDesignTemplateId`, Backy-canvas route, custom-frontend route, intent, and section hints.
+- The catalog explicitly covers article, investigation/survey, media/file/audio-transcript-style, newsletter issue, and case-study flows without requiring frontend-local JSON forks.
+- The frontend manifest schema, generated SDK contract types, SDK smoke assertions, source connection gate, AGENTS guidance, and custom frontend handoff spec now guard the new contract.
+
+**Validation:**
+- PASS: `npm run typecheck --workspace @backy-cms/core --silent`
+- PASS: `npm run test:frontend-contract-types --silent`
+- PASS: `npm run test:custom-frontend-connection --silent`
+- PASS: `npm run test:generated-types --workspace @backy/sdk-js --silent`
+- PASS: `npm run typecheck --workspace @backy/sdk-js --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: direct local public API assertion against `http://localhost:3001/api/sites/site-demo/{manifest,agent-handoff}` proving 33 blog child starters in both payloads.
+- PASS: `git diff --check`
+
+**Notes:**
+- Full SDK smoke now reaches the protected admin login bootstrap and stops on the expected local `MFA_REQUIRED` response; the public handoff/runtime assertions pass before that protected write section.
+- The local `backy-public` dev server was restarted on port `3001` so it served the rebuilt `@backy-cms/core` handoff payload.
+
+**Next:**
+- Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-03 00:44 IST - Editor Command Executor Guard Deployment
 
 **Scope:** Batch 5 editor reliability/deploy verification, focused on proving the command registry no longer advertises executable editor commands that do not have an implementation.

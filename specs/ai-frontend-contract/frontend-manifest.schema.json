@@ -33,6 +33,11 @@
                 "contentEntryPoints": {
                   "type": "object",
                   "additionalProperties": { "type": "string" }
+                },
+                "blogChildStarterTemplates": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/blogChildStarterTemplate" },
+                  "minItems": 1
                 }
               },
               "required": ["requiresAuth", "endpointFamily", "frontendDesign", "contentEntryPoints"]
@@ -75,6 +80,22 @@
                 }
               },
               "required": ["sourcePointer", "preserveFields", "styleSources"]
+            },
+            "blogTemplateInheritance": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.blog-child-template-inheritance.v1" },
+                "parentSurface": { "const": "/pages/new" },
+                "childSurface": { "const": "/blog/new" },
+                "childTemplates": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/blogChildStarterTemplate" },
+                  "minItems": 1
+                },
+                "rule": { "type": "string", "minLength": 1 }
+              },
+              "required": ["schemaVersion", "parentSurface", "childSurface", "childTemplates", "rule"]
             },
             "verification": {
               "type": "object",
@@ -160,6 +181,9 @@
           },
           "required": ["package", "generatedTypes", "helpers"]
         },
+        "blogChildStarterTemplate": {
+          "$ref": "#/$defs/blogChildStarterTemplate"
+        },
         "contentCreation": {
           "type": "object",
           "additionalProperties": true,
@@ -226,6 +250,23 @@
                 "editorOutcome": { "type": "string", "minLength": 1 }
               },
               "required": ["editor", "pageAndBlogModeField", "backyCanvasValue", "customFrontendValue", "customFrontendRouteFieldAliases", "routeRevealGuarantee", "editorOutcome"]
+            },
+            "blogChildStarterTemplates": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/blogChildStarterTemplate" },
+              "minItems": 1
+            },
+            "blogTemplateInheritance": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "schemaVersion": { "const": "backy.blog-child-template-inheritance.v1" },
+                "parentSurface": { "const": "/pages/new" },
+                "childSurface": { "const": "/blog/new" },
+                "starterTemplateField": { "const": "starterTemplate" },
+                "routeGuarantee": { "type": "string", "minLength": 1 }
+              },
+              "required": ["schemaVersion", "parentSurface", "childSurface", "starterTemplateField", "routeGuarantee"]
             },
             "rule": { "type": "string", "minLength": 1 }
           },
@@ -322,6 +363,11 @@
                 "reusableSectionBackyCanvas",
                 "reusableSectionCustomFrontend"
               ]
+            },
+            "blogChildStarterTemplates": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/blogChildStarterTemplate" },
+              "minItems": 1
             },
             "preserveFields": {
               "type": "array",
@@ -957,6 +1003,28 @@
         }
       },
       "required": ["schemaVersion", "source", "agentBrief", "docs", "endpoints", "readOrder", "sdk", "contentCreation", "apiAlignment", "componentApiContract", "routing", "deploymentTopology", "designState", "rules", "privacy"]
+    },
+    "blogChildStarterTemplate": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "intent": { "type": "string", "minLength": 1 },
+        "sections": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "inheritsFrom": { "const": "page-template-catalog" },
+        "resourceType": { "const": "blogPost" },
+        "templateSourceField": { "const": "templateSource" },
+        "starterTemplateField": { "const": "starterTemplate" },
+        "customFrontendTemplateField": { "const": "frontendDesignTemplateId" },
+        "backyCanvasRoute": { "type": "string", "minLength": 1 },
+        "customFrontendRoute": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "name", "intent", "sections", "inheritsFrom", "resourceType", "templateSourceField", "starterTemplateField", "customFrontendTemplateField", "backyCanvasRoute", "customFrontendRoute"]
     },
     "databaseCertification": {
       "type": "object",
