@@ -46,8 +46,13 @@ const assertSiteDetailSourceContract = () => {
       source.includes('data-testid="site-agent-routing-handoff"') &&
       source.includes('data-testid="site-custom-frontend-project-launch"') &&
       source.includes('data-testid="site-custom-frontend-control-readiness"') &&
+      source.includes('data-testid="site-custom-frontend-next-action"') &&
+      source.includes('data-testid="site-copy-custom-frontend-next-action"') &&
       source.includes('backy.custom-frontend-control-readiness.v1') &&
+      source.includes('backy.custom-frontend-next-action.v1') &&
       source.includes('customFrontendControlReadiness') &&
+      source.includes('customFrontendNextActionText') &&
+      source.includes('Next control action') &&
       source.includes('Vercel GitHub App access') &&
       source.includes('data-testid="site-copy-custom-frontend-project-env"') &&
       source.includes('data-testid="site-copy-custom-frontend-project-launch"') &&
@@ -62,6 +67,8 @@ const assertSiteDetailSourceContract = () => {
       source.includes('verified-design-source-sync') &&
       source.includes('After a Ready deployed frontend check, use Sync verified frontend to persist the source URL') &&
       source.includes('customFrontendVerification.status !== "ready"') &&
+      source.includes('verify-deployed-frontend-before-sync') &&
+      source.includes('custom-frontend-control-ready') &&
       source.includes('appendFrontendDesignNote') &&
       source.includes('backy.custom-frontend-project-launch.v1') &&
       source.includes('backy.custom-frontend-starter-export.v1') &&
@@ -1370,6 +1377,7 @@ const assertSiteDetailLayout = async (client, siteName) => {
     const routingPanel = document.querySelector('[data-testid="site-agent-routing-handoff"]');
     const launchPanel = document.querySelector('[data-testid="site-custom-frontend-project-launch"]');
     const controlReadinessPanel = document.querySelector('[data-testid="site-custom-frontend-control-readiness"]');
+    const nextActionPanel = document.querySelector('[data-testid="site-custom-frontend-next-action"]');
     const frontendDesign = {
       hasPanel: Boolean(frontendPanel),
       hydrated: frontendPanel?.getAttribute('data-hydrated') === 'true',
@@ -1487,6 +1495,18 @@ const assertSiteDetailLayout = async (client, siteName) => {
               owner: node.getAttribute('data-check-owner') || '',
             })),
             text: controlReadinessPanel?.textContent || '',
+            nextAction: {
+              visible: Boolean(nextActionPanel),
+              schema: nextActionPanel?.getAttribute('data-next-action-schema') || '',
+              id: nextActionPanel?.getAttribute('data-next-action-id') || '',
+              owner: nextActionPanel?.getAttribute('data-next-action-owner') || '',
+              readiness: nextActionPanel?.getAttribute('data-next-action-readiness') || '',
+              target: nextActionPanel?.getAttribute('data-next-action-target') || '',
+              surface: nextActionPanel?.getAttribute('data-next-action-surface') || '',
+              copyAction: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-next-action"]')),
+              copySchema: document.querySelector('[data-testid="site-copy-custom-frontend-next-action"]')?.getAttribute('data-copy-schema') || '',
+              text: nextActionPanel?.textContent || '',
+            },
           },
           copyEnv: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-env"]')),
           copyLaunch: Boolean(document.querySelector('[data-testid="site-copy-custom-frontend-project-launch"]')),
@@ -1604,6 +1624,17 @@ const assertSiteDetailLayout = async (client, siteName) => {
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.ownerStatuses.some((entry) => entry.status === 'manual' && entry.owner === 'operator') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Custom frontend control readiness') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Backy-controlled checks') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.visible &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.schema === 'backy.custom-frontend-next-action.v1' &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.id.length > 0 &&
+      ['backy', 'operator'].includes(layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.owner) &&
+      ['ready', 'review', 'manual', 'complete'].includes(layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.readiness) &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.target.length > 0 &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.surface.length > 0 &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.copyAction &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.copySchema === 'backy.custom-frontend-next-action.v1' &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.text.includes('Next control action') &&
+      layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.nextAction.text.includes('Copy next action') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('Vercel Git branch previews') &&
       layout.customFrontendAgentHandoff.projectLaunch.controlReadiness.text.includes('/api/backy-connection') &&
       layout.customFrontendAgentHandoff.projectLaunch.copyEnv &&

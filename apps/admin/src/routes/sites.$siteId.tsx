@@ -166,6 +166,16 @@ type CustomFrontendControlCheck = {
   status: CustomFrontendControlStatus;
   owner: CustomFrontendControlOwner;
 };
+type CustomFrontendNextAction = {
+  schemaVersion: "backy.custom-frontend-next-action.v1";
+  id: string;
+  label: string;
+  detail: string;
+  owner: CustomFrontendControlOwner;
+  readinessStatus: CustomFrontendControlStatus | "complete";
+  target: string;
+  actionSurface: string;
+};
 type SiteThemeDraft = {
   colors: {
     primary: string;
@@ -6031,6 +6041,120 @@ function EditSitePage() {
       (check) => check.owner === "backy" && check.status === "ready",
     ).length;
     const backyTotal = checks.filter((check) => check.owner === "backy").length;
+    const firstBackyReview = checks.find(
+      (check) => check.owner === "backy" && check.status === "review",
+    );
+    const firstManualGate = checks.find(
+      (check) => check.owner === "operator" && check.status === "manual",
+    );
+    const nextAction: CustomFrontendNextAction = (() => {
+      if (firstBackyReview?.id === "frontend-design-contract") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: "capture-or-sync-frontend-design",
+          label: "Capture or sync frontend design",
+          detail:
+            "Open Frontend design, capture the Backy canvas defaults or sync a verified deployed custom frontend before generating new styled content.",
+          owner: "backy",
+          readinessStatus: "review",
+          target: "#site-frontend-design",
+          actionSurface: "site-frontend-design-panel",
+        };
+      }
+      if (firstBackyReview?.id === "verified-design-source-sync") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: deployedVerificationReady
+            ? "sync-verified-frontend-source"
+            : "verify-deployed-frontend-before-sync",
+          label: deployedVerificationReady
+            ? "Sync verified frontend source"
+            : "Verify deployed frontend",
+          detail: deployedVerificationReady
+            ? "Use Sync verified frontend to persist the Ready deployed frontend URL as the site frontend-design source."
+            : `Run Verify connection against ${customFrontendDefaultVerifyUrl}, then sync the Ready result as the design source.`,
+          owner: "backy",
+          readinessStatus: "review",
+          target: "#site-custom-frontend-verifier",
+          actionSurface: "site-custom-frontend-connection-verifier",
+        };
+      }
+      if (firstBackyReview?.id === "template-registry") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: "complete-custom-frontend-template-registry",
+          label: "Complete template registry",
+          detail:
+            "Add or prepare versioned page, blog, section, form, product, and collection templates so new content inherits the custom frontend design.",
+          owner: "backy",
+          readinessStatus: "review",
+          target: "#site-frontend-design",
+          actionSurface: "site-template-registry-summary",
+        };
+      }
+      if (firstBackyReview?.id === "deployed-frontend-verifier") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: "run-deployed-frontend-verifier",
+          label: "Run deployed frontend verifier",
+          detail: `Verify ${customFrontendDefaultVerifyUrl} or the current Vercel frontend URL before moving the public domain.`,
+          owner: "backy",
+          readinessStatus: "review",
+          target: "#site-custom-frontend-verifier",
+          actionSurface: "site-custom-frontend-connection-verifier",
+        };
+      }
+      if (firstBackyReview) {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: `review-${firstBackyReview.id}`,
+          label: firstBackyReview.label,
+          detail: firstBackyReview.detail,
+          owner: firstBackyReview.owner,
+          readinessStatus: firstBackyReview.status,
+          target: "#site-handoff",
+          actionSurface: `site-custom-frontend-control-check-${firstBackyReview.id}`,
+        };
+      }
+      if (firstManualGate?.id === "domain-cutover") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: "operator-domain-cutover",
+          label: "Move DNS only when ready",
+          detail:
+            "Backy control is ready for this gate; attach the public domain to the separate custom frontend Vercel project when you are ready to leave the current host.",
+          owner: "operator",
+          readinessStatus: "manual",
+          target: "#site-domain",
+          actionSurface: "site-domain-verification-panel",
+        };
+      }
+      if (firstManualGate?.id === "vercel-git-previews") {
+        return {
+          schemaVersion: "backy.custom-frontend-next-action.v1",
+          id: "operator-vercel-git-previews",
+          label: "Connect Vercel Git previews",
+          detail:
+            "Backy production can run without this; grant Vercel GitHub App access to the private frontend repo when branch preview automation is needed.",
+          owner: "operator",
+          readinessStatus: "manual",
+          target: "Vercel project Git settings",
+          actionSurface: "external-vercel-github-app",
+        };
+      }
+
+      return {
+        schemaVersion: "backy.custom-frontend-next-action.v1",
+        id: "custom-frontend-control-ready",
+        label: "Backy custom frontend control is ready",
+        detail:
+          "Backy-owned API, design-source, template, starter, and deployed frontend checks are ready. Continue content/editor polish or operator-owned release gates.",
+        owner: "backy",
+        readinessStatus: "complete",
+        target: "#site-handoff",
+        actionSurface: "site-custom-frontend-control-readiness",
+      };
+    })();
 
     return {
       schemaVersion: "backy.custom-frontend-control-readiness.v1",
@@ -6048,6 +6172,7 @@ function EditSitePage() {
       total: checks.length,
       backyReadyCount,
       backyTotal,
+      nextAction,
       checks,
     };
   }, [
@@ -6063,6 +6188,10 @@ function EditSitePage() {
     templateVersionReadiness.readyCount,
     templateVersionReadiness.templateCount,
   ]);
+  const customFrontendNextActionText = useMemo(
+    () => JSON.stringify(customFrontendControlReadiness.nextAction, null, 2),
+    [customFrontendControlReadiness.nextAction],
+  );
 
   useEffect(() => {
     setCustomFrontendVerifyUrlTouched(false);
@@ -7423,6 +7552,65 @@ function EditSitePage() {
                       <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-700">
                         {customFrontendControlReadiness.manualCount} manual
                       </span>
+                    </div>
+                  </div>
+                  <div
+                    className="border-b border-teal-100 bg-teal-50/70 px-3 py-3"
+                    data-testid="site-custom-frontend-next-action"
+                    data-next-action-schema={customFrontendControlReadiness.nextAction.schemaVersion}
+                    data-next-action-id={customFrontendControlReadiness.nextAction.id}
+                    data-next-action-owner={customFrontendControlReadiness.nextAction.owner}
+                    data-next-action-readiness={customFrontendControlReadiness.nextAction.readinessStatus}
+                    data-next-action-target={customFrontendControlReadiness.nextAction.target}
+                    data-next-action-surface={customFrontendControlReadiness.nextAction.actionSurface}
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-teal-700">
+                            Next control action
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                              customFrontendControlReadiness.nextAction.readinessStatus === "complete"
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : CUSTOM_FRONTEND_CONTROL_STATUS_CLASSES[
+                                    customFrontendControlReadiness.nextAction.readinessStatus
+                                  ],
+                            )}
+                          >
+                            {customFrontendControlReadiness.nextAction.owner === "backy"
+                              ? "Backy-owned"
+                              : "Operator-owned"}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm font-semibold text-teal-950">
+                          {customFrontendControlReadiness.nextAction.label}
+                        </div>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-teal-900/80">
+                          {customFrontendControlReadiness.nextAction.detail}
+                        </p>
+                        <code className="mt-2 inline-flex max-w-full break-all rounded bg-background px-2 py-1 font-mono text-[11px] text-teal-950">
+                          {customFrontendControlReadiness.nextAction.target}
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copySiteHandoffText(
+                            customFrontendNextActionText,
+                            "Custom frontend next action",
+                          )
+                        }
+                        disabled={isSiteSettingsBusy}
+                        data-testid="site-copy-custom-frontend-next-action"
+                        data-copy-schema={customFrontendControlReadiness.nextAction.schemaVersion}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-teal-300 bg-background px-3 py-2 text-xs font-semibold text-teal-950 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copy next action
+                      </button>
                     </div>
                   </div>
                   <div className="divide-y divide-teal-100">

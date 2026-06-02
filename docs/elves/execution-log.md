@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 10:23 IST
+- **Last updated:** 2026-06-02 10:48 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 10:48 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Site Detail now exposes a copyable next control action
+
+**What changed:**
+- Added `backy.custom-frontend-next-action.v1` to the Site Detail Separate custom frontend project readiness payload.
+- The next action is derived from the existing Backy-controlled and operator/manual readiness rows, so it points owners to the first actionable gap instead of making them infer it from the full checklist.
+- Rendered a `Next control action` bar with owner status, target surface, action detail, and a copyable JSON payload.
+- Included the next-action payload in the existing site workspace handoff through `customFrontendControlReadiness.nextAction`.
+- Strengthened Site Detail source and rendered smoke assertions so the next-action schema, metadata attributes, and copy action stay present.
+
+**Commands run:**
+- `BACKY_SITE_DETAIL_SOURCE_ONLY=1 npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:site-detail --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Next:**
+1. Commit and push the Site Detail next-action slice.
+2. Continue Backy-owned UX/editor polish while external/manual gates remain Vercel GitHub App access and DNS cutover timing.
 
 ## 2026-06-02 10:23 IST
 
