@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 20:49 IST
+- **Last updated:** 2026-06-02 23:15 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,35 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 23:15 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Dashboard/custom frontend status:** Dashboard content creation fallbacks now open real authoring flows
+
+**What changed:**
+- Patched dashboard custom-frontend content creation fallback routes so non-page surfaces no longer land on passive list views when a synced custom frontend template is missing or intentionally bypassed.
+- Forms now fall back to `/forms?quickCreate=blank`, products to `/products?quickCreate=product`, collections to `/collections?draft=new`, and reusable sections to `/reusable-sections?draft=new`.
+- Added `draft=new` support to the reusable-sections route so direct links and agent handoff routes open a blank reusable-section editor draft and focus the authoring surface.
+- Dashboard smoke now asserts the fallback query params and verifies agent-brief create routes stay identical to the rendered dashboard content-creation routes.
+- Reusable-sections smoke source guard now covers the new direct draft route and accepts current canvas auto-growth height for manual starter content.
+
+**Commands run:**
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:custom-frontend-connection --silent` -> PASS with source-mode warnings for unset live/deployed URLs.
+- `BACKY_REUSABLE_SECTIONS_SOURCE_ONLY=1 npm run test:reusable-sections --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Notes:**
+- Spark sidecar `019e8962-f2dd-7430-a310-d2a4c0c372d7` found the non-page fallback/actionability mismatch.
+- A full reusable-sections rendered smoke first passed the updated canvas-height point and later hit a transient API `ECONNRESET`; the immediate rerun then failed cleanup with a stale local admin session `401`. The route/source contract and dashboard rendered flow are green; rerun the full reusable smoke after a clean local backend session if this surface changes again.
+- The strict deployed `devanshvarshney-frontend` DOM/probe gate currently reports the separate frontend is behind the latest probe contract; Backy's production API-only custom frontend gate remains green.
+
+**Next:**
+1. Run repo-public hygiene, commit, push, re-read the survival guide.
+2. Update/redeploy the separate `devanshvarshney-frontend` probe or add the bounded responsive-template smoke recommended by Spark, whichever is more release-critical at that point.
 
 ## 2026-06-02 20:49 IST
 

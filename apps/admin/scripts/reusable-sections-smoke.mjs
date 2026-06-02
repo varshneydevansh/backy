@@ -124,6 +124,9 @@ const assertReusableSectionsRouteSourceContract = () => {
   assert(source.includes('frontendDesignMetadata'), 'Reusable sections frontend metadata must retain template metadata provenance');
   assert(
     source.includes("const reusableSectionsFrontendTemplateActionStatusId = 'reusable-sections-frontend-template-action-status';") &&
+      source.includes("draft: search.draft === 'new' ? 'new' : undefined") &&
+      source.includes("updateRouteSearch({ sectionId: null, draft: 'new' })") &&
+      source.includes("if (routeSearch.draft !== 'new' || routeSearch.sectionId)") &&
       source.includes('data-testid="reusable-sections-frontend-template-action-status"') &&
       source.includes('aria-describedby={reusableSectionsFrontendTemplateActionStatusId}') &&
       source.includes('data-route-revealed-template={activeFrontendTemplateId || undefined}') &&
@@ -1106,7 +1109,7 @@ const createManualReusableSectionThroughUi = async (client) => {
       assert(created.category === 'manual-smoke', `Manual section category was not saved: ${created.category}`);
       assert(created.tags?.includes('starter'), `Manual section tags were not saved: ${JSON.stringify(created.tags)}`);
       assert(created.content?.elements?.length === 1, `Manual section starter element was not saved: ${JSON.stringify(created.content)}`);
-      assert(created.content?.canvasSize?.width === 1200 && created.content?.canvasSize?.height === 520, `Manual section canvas size was not normalized: ${JSON.stringify(created.content?.canvasSize)}`);
+      assert(created.content?.canvasSize?.width === 1200 && created.content?.canvasSize?.height >= 520, `Manual section canvas size was not normalized: ${JSON.stringify(created.content?.canvasSize)}`);
       assert(typeof created.content?.customCSS === 'string', `Manual section custom CSS was not persisted: ${JSON.stringify(created.content)}`);
       return created;
     }

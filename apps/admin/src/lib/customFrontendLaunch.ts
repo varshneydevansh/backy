@@ -174,6 +174,12 @@ const buildCreateRoute = ({
   } else if (route === '/pages/new' || route === '/blog/new') {
     params.set('templateSource', 'backy-canvas');
     params.set('focus', 'canvas');
+  } else if (route === '/forms') {
+    params.set('quickCreate', 'blank');
+  } else if (route === '/products') {
+    params.set('quickCreate', 'product');
+  } else if (route === '/collections' || route === '/reusable-sections') {
+    params.set('draft', 'new');
   }
 
   return `${route}?${params.toString()}`;
@@ -287,7 +293,7 @@ export const buildDashboardCustomFrontendContentCreation = ({
       fallbackRoute,
       setupRoute,
       detail: template
-        ? `${label} starts from the captured "${template.name}" custom frontend template and persists frontendDesignTemplateId.`
+        ? `${label} starts from the captured "${template.name}" custom frontend template and persists ${route === '/pages/new' || route === '/blog/new' ? 'frontendDesignTemplateId' : 'frontendTemplate'}.`
         : missingDetail,
     };
   };

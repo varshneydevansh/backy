@@ -74,6 +74,7 @@ interface ReusableSectionsSearch {
   siteId?: string;
   sectionId?: string;
   frontendTemplate?: string;
+  draft?: 'new';
   status?: SectionStatusFilter;
   q?: string;
 }
@@ -127,6 +128,7 @@ export const Route = createFileRoute('/reusable-sections')({
     siteId: normalizedSearchString(search.siteId),
     sectionId: normalizedSearchString(search.sectionId),
     frontendTemplate: normalizedSearchString(search.frontendTemplate),
+    draft: search.draft === 'new' ? 'new' : undefined,
     status: isSectionStatusFilter(search.status) ? search.status : undefined,
     q: normalizedSearchString(search.q),
   }),
@@ -510,6 +512,7 @@ function ReusableSectionsRoute() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDeleteSection, setPendingDeleteSection] = useState<ReusableSection | null>(null);
+  const handledDraftRouteRef = useRef('');
 
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
@@ -995,6 +998,7 @@ function ReusableSectionsRoute() {
       search: {
         siteId: next.siteId || activeSiteId,
         ...(nextSectionId ? { sectionId: nextSectionId } : {}),
+        ...(next.draft === 'new' && !nextSectionId ? { draft: 'new' as const } : {}),
         ...((next.status || statusFilter) !== 'all' ? { status: next.status || statusFilter } : {}),
         ...((next.q ?? searchQuery).trim() ? { q: (next.q ?? searchQuery).trim() } : {}),
       },
@@ -1069,9 +1073,31 @@ function ReusableSectionsRoute() {
     setError(null);
     setSelectedSectionId(null);
     setFormFromSection(null);
-    updateRouteSearch({ sectionId: null });
+    updateRouteSearch({ sectionId: null, draft: 'new' });
     focusReusableSectionEditor();
   };
+
+  useEffect(() => {
+    if (routeSearch.draft !== 'new' || routeSearch.sectionId) {
+      handledDraftRouteRef.current = '';
+      return;
+    }
+    if (isBusy || isPermissionMatrixPending) return;
+    const requestKey = `${activeSiteId}:new`;
+    if (handledDraftRouteRef.current === requestKey) return;
+    handledDraftRouteRef.current = requestKey;
+
+    if (!canEditSections) {
+      showPermissionDenied('pages.edit', 'create reusable sections');
+      return;
+    }
+
+    setError(null);
+    setSelectedSectionId(null);
+    setFormFromSection(null);
+    focusReusableSectionEditor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId, canEditSections, isBusy, isPermissionMatrixPending, routeSearch.draft, routeSearch.sectionId]);
 
   const normalizeContentJsonForEditing = () => {
     if (!canEditSections) {
@@ -1705,7 +1731,7 @@ function ReusableSectionsRoute() {
               }
               setSelectedSectionId(null);
               setFormFromSection(null);
-              updateRouteSearch({ sectionId: null });
+              updateRouteSearch({ sectionId: null, draft: 'new' });
             }}
             disabled={Boolean(reusableSectionsEditDisabledReason)}
             title={reusableSectionsEditDisabledReason || undefined}

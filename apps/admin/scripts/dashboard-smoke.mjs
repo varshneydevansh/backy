@@ -933,9 +933,13 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchState.contentCreation.blogFallbackRoute.includes('/blog/new') &&
       customLaunchState.contentCreation.blogFallbackRoute.includes('templateSource=backy-canvas') &&
       customLaunchState.contentCreation.formFallbackRoute.includes('/forms') &&
+      customLaunchState.contentCreation.formFallbackRoute.includes('quickCreate=blank') &&
       customLaunchState.contentCreation.productFallbackRoute.includes('/products') &&
+      customLaunchState.contentCreation.productFallbackRoute.includes('quickCreate=product') &&
       customLaunchState.contentCreation.collectionFallbackRoute.includes('/collections') &&
+      customLaunchState.contentCreation.collectionFallbackRoute.includes('draft=new') &&
       customLaunchState.contentCreation.sectionFallbackRoute.includes('/reusable-sections') &&
+      customLaunchState.contentCreation.sectionFallbackRoute.includes('draft=new') &&
       customLaunchState.contentCreation.itemCount >= 6 &&
       customLaunchState.contentCreation.pageAction.exists &&
       customLaunchState.contentCreation.pageAction.templateSource === 'custom-frontend' &&
@@ -974,6 +978,12 @@ const assertDashboardLayout = async (client, siteName) => {
         customLaunchState.contentCreation.sectionCreateRoute.includes('/reusable-sections') &&
         customLaunchState.contentCreation.sectionCreateRoute.includes('frontendTemplate=')
       )) &&
+      customLaunchState.agentBrief.pageCreateRoute === customLaunchState.contentCreation.pageCreateRoute &&
+      customLaunchState.agentBrief.blogCreateRoute === customLaunchState.contentCreation.blogCreateRoute &&
+      customLaunchState.agentBrief.formCreateRoute === customLaunchState.contentCreation.formCreateRoute &&
+      customLaunchState.agentBrief.productCreateRoute === customLaunchState.contentCreation.productCreateRoute &&
+      customLaunchState.agentBrief.collectionCreateRoute === customLaunchState.contentCreation.collectionCreateRoute &&
+      customLaunchState.agentBrief.sectionCreateRoute === customLaunchState.contentCreation.sectionCreateRoute &&
       customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
       document.body?.innerText?.includes('Persistence and Supabase readiness') &&
