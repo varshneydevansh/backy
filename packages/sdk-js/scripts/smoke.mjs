@@ -2127,6 +2127,7 @@ const requiredComponentApiTypes = [
   'link',
   'image',
   'video',
+  'audio',
   'icon',
   'map',
   'container',

@@ -1260,6 +1260,59 @@ const fallbackTemplateId = (
   return segment ? `${prefix}-${segment}` : `${prefix}-direct-design`;
 };
 
+const sharedChromeBindingsFromChrome = (
+  chromeInput: unknown,
+): Record<string, unknown> | undefined => {
+  const chrome = cloneRecord(chromeInput);
+  if (!chrome || Object.keys(chrome).length === 0) {
+    return undefined;
+  }
+
+  const roleEntries = [
+    {
+      key: 'header',
+      role: 'site.header',
+      binding: 'site.chrome.header',
+      pointer: 'frontendDesign.chrome.header',
+      value: chrome.header,
+    },
+    {
+      key: 'navigation',
+      role: 'site.navigation.primary',
+      binding: 'site.navigation.primary',
+      pointer: 'frontendDesign.chrome.navigation',
+      value: chrome.navigation,
+    },
+    {
+      key: 'footer',
+      role: 'site.footer',
+      binding: 'site.chrome.footer',
+      pointer: 'frontendDesign.chrome.footer',
+      value: chrome.footer,
+    },
+  ].filter((entry) => entry.value !== undefined && entry.value !== null);
+
+  if (roleEntries.length === 0) {
+    return undefined;
+  }
+
+  return {
+    schemaVersion: 'backy.shared-chrome-bindings.v1',
+    source: 'frontendDesignChrome',
+    strategy: 'site-shared-chrome',
+    preserveAcross: ['page', 'blogPost', 'section'],
+    roles: Object.fromEntries(roleEntries.map((entry) => [
+      entry.key,
+      {
+        role: entry.role,
+        binding: entry.binding,
+        pointer: entry.pointer,
+        present: true,
+      },
+    ])),
+  };
+};
+
 const directDesignTemplateId = (
   body: Record<string, unknown>,
   envelope: Record<string, unknown>,
@@ -1888,10 +1941,13 @@ export const frontendDesignProvenanceFromMetadata = (metadataInput: unknown) => 
 
   return {
     templateId,
+    templateSource: stringValue(metadata.templateSource),
+    templateSourceLabel: stringValue(metadata.templateSourceLabel),
     templateName: stringValue(metadata.frontendDesignTemplateName),
     routePattern: stringValue(metadata.frontendDesignRoutePattern),
     source: cloneRecord(metadata.frontendDesignSource),
     chrome: cloneRecord(metadata.frontendDesignChrome),
+    sharedChromeBindings: sharedChromeBindingsFromChrome(metadata.frontendDesignChrome),
     tokens: cloneRecord(metadata.frontendDesignTokens),
     customCss: stringValue(metadata.frontendDesignCustomCss),
     customJs: stringValue(metadata.frontendDesignCustomJs),

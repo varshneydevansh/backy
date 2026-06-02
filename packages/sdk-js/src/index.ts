@@ -3796,10 +3796,13 @@ export function buildBackyCommerceOrderInput(
 
 export interface BackyFrontendDesignProvenance {
   templateId: string;
+  templateSource?: string;
+  templateSourceLabel?: string;
   templateName?: string;
   routePattern?: string;
   source?: Record<string, unknown>;
   chrome?: Record<string, unknown>;
+  sharedChromeBindings?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   customCss?: string;
   customJs?: string;

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 14:45 IST
+- **Last updated:** 2026-06-02 19:03 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,41 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-02 19:03 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Editor/custom frontend status:** Canvas media drops and template provenance hardened
+
+**What changed:**
+- Canvas file/URL drops now carry target-parent metadata, coordinate-space metadata, and root-canvas fallback coordinates.
+- Dropping media onto an eligible nested layer inserts the generated image/video/audio/link element as a child of that target layer instead of always adding it as a root layer.
+- Root canvas insertion still keeps long-page auto-growth and root-section flow behavior for page/blog documents with content below the first viewport.
+- Public custom frontend provenance now projects `templateSource`, `templateSourceLabel`, and a machine-readable `backy.shared-chrome-bindings.v1` map for shared header/navigation/footer chrome.
+- OpenAPI, generated SDK types, SDK source types, and contract smokes now expose that shared chrome provenance.
+- Audio is now included in the manifest schema and SDK component-type contract guard as a first-class API-addressable media component with transcript-related props.
+
+**Commands run:**
+- `npm run test:frontend-contract --workspace @backy/public --silent` -> PASS.
+- `npm run test:generated-types --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run test:admin-contract-source --workspace @backy/public --silent` -> PASS.
+- `npm run test:editor-canvas-media-drop --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-canvas-media-drop-rendered --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `BACKY_ADMIN_MFA_CODE=backy-dev-mfa npm run test:smoke --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run test:frontend-contract-types --silent` -> PASS.
+- `npm run test:custom-frontend-control-plane --silent` -> PASS with source-mode warnings for unset live/deployed URLs.
+- `git diff --check` -> PASS.
+
+**Notes:**
+- `BACKY_ADMIN_MFA_CODE=backy-dev-mfa npm run test:admin-contract --workspace @backy/public --silent` reached runtime after MFA, then failed on an existing broad fixture mismatch: it expects public discovery for an unverified `.example.test` custom domain, while Backy's verified-domain policy correctly returns 404. The source guard for the OpenAPI/admin contract addition is green.
+
+**Next:**
+1. Run repo-public hygiene after doc updates.
+2. Commit and push the nested canvas media/custom frontend provenance slice.
+3. Continue the editor UX pass toward more Canva/Wix-like asset insertion, long document editing, and custom frontend blog/page template creation.
 
 ## 2026-06-02 14:45 IST
 

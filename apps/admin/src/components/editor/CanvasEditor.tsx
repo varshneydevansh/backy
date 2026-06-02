@@ -1947,6 +1947,12 @@ const buildCanvasElementForExternalMediaUrl = (
   };
 };
 
+type CanvasMediaDropTargetMetadata = {
+  targetParentId?: string | null;
+  coordinateSpace?: 'canvas' | 'parent';
+  canvasPoint?: { x: number; y: number };
+};
+
 const clampElementWithinParent = (
   element: CanvasElement,
   parent: CanvasElement,
@@ -4042,7 +4048,7 @@ export function CanvasEditor({
     }
 
     const currentElements = elementsRef.current;
-    const nextElements = [...currentElements, ...newElements];
+    const nextElements = applyRootSectionInsertionFlow(currentElements, newElements);
     const expandedSize = expandCanvasSizeToContent(size, collectCanvasContentBounds(nextElements));
     const nextSize: CanvasSize = {
       ...size,
@@ -4062,9 +4068,45 @@ export function CanvasEditor({
     setRightPanel('properties');
   }, [isCanvasMutationDisabled, size, updateElementsWithHistory]);
 
+  const insertNestedCanvasElements = useCallback((
+    parentId: string,
+    newElements: CanvasElement[],
+  ): boolean => {
+    if (newElements.length === 0 || isCanvasMutationDisabled) {
+      return false;
+    }
+
+    const parentElement = findElementById(elementsRef.current, parentId);
+    if (!parentElement || isLayerLocked(parentElement) || !canAcceptNestedDrop(parentElement.type)) {
+      return false;
+    }
+
+    let nextElements = elementsRef.current;
+    let inserted = false;
+    for (const element of newElements) {
+      const insertResult = insertElementAsChild(nextElements, parentId, element);
+      if (insertResult.updated) {
+        nextElements = insertResult.elements;
+        inserted = true;
+      }
+    }
+
+    if (!inserted) {
+      return false;
+    }
+
+    const nextSelectedIds = newElements.map((element) => element.id);
+    updateElementsWithHistory(nextElements, newElements[0]?.id || null, nextSelectedIds);
+    setSelectedId(newElements[0]?.id || null);
+    setSelectedIds(nextSelectedIds);
+    setRightPanel('properties');
+    return true;
+  }, [findElementById, isCanvasMutationDisabled, updateElementsWithHistory]);
+
   const handleCanvasMediaFilesDrop = useCallback(async (
     files: File[],
     point: { x: number; y: number },
+    metadata: { source: 'canvas-file-drop' } & CanvasMediaDropTargetMetadata,
   ) => {
     if (isCanvasMutationDisabled) {
       setEditorNotice(editDisabledReason);
@@ -4102,6 +4144,9 @@ export function CanvasEditor({
             source: 'canvas-file-drop',
             editorMode: mode,
             canvasPoint: point,
+            canvasRootPoint: metadata.canvasPoint || point,
+            coordinateSpace: metadata.coordinateSpace || 'canvas',
+            targetParentId: metadata.targetParentId || null,
             originalFileName: file.name,
           },
         });
@@ -4129,8 +4174,26 @@ export function CanvasEditor({
         return element;
       });
 
-      insertRootCanvasElements(newElements);
-      setEditorNotice(`Placed ${uploadedAssets.length} uploaded media file${uploadedAssets.length === 1 ? '' : 's'} on the canvas.`);
+      const insertedIntoParent = metadata.targetParentId
+        ? insertNestedCanvasElements(metadata.targetParentId, newElements)
+        : false;
+
+      if (!insertedIntoParent) {
+        if (metadata.coordinateSpace === 'parent' && metadata.canvasPoint) {
+          const rootFallbackElements = newElements.map((element, index) => ({
+            ...element,
+            x: metadata.canvasPoint!.x,
+            y: metadata.canvasPoint!.y + index * (element.height + CANVAS_MEDIA_DROP_GAP),
+          }));
+          insertRootCanvasElements(rootFallbackElements);
+        } else {
+          insertRootCanvasElements(newElements);
+        }
+      }
+
+      setEditorNotice(insertedIntoParent
+        ? `Placed ${uploadedAssets.length} uploaded media file${uploadedAssets.length === 1 ? '' : 's'} inside the target layer.`
+        : `Placed ${uploadedAssets.length} uploaded media file${uploadedAssets.length === 1 ? '' : 's'} on the canvas.`);
     } catch (error) {
       setEditorNotice(error instanceof Error ? error.message : 'Unable to upload dropped media files.');
     }
@@ -4138,6 +4201,7 @@ export function CanvasEditor({
     activeSiteId,
     canCreateMedia,
     editDisabledReason,
+    insertNestedCanvasElements,
     insertRootCanvasElements,
     isCanvasMutationDisabled,
     media,
@@ -4150,7 +4214,7 @@ export function CanvasEditor({
   const handleCanvasExternalMediaUrlDrop = useCallback((
     url: string,
     point: { x: number; y: number },
-    metadata: { kind: 'image' | 'video' | 'audio' | 'url' },
+    metadata: { kind: 'image' | 'video' | 'audio' | 'url' } & CanvasMediaDropTargetMetadata,
   ) => {
     if (isCanvasMutationDisabled) {
       setEditorNotice(editDisabledReason);
@@ -4164,11 +4228,25 @@ export function CanvasEditor({
       Math.max(walkTreeMaxZ(elementsRef.current), 0) + 1,
     );
 
-    insertRootCanvasElements([element]);
+    const insertedIntoParent = metadata.targetParentId
+      ? insertNestedCanvasElements(metadata.targetParentId, [element])
+      : false;
+
+    if (!insertedIntoParent) {
+      const rootFallbackElement = metadata.coordinateSpace === 'parent' && metadata.canvasPoint
+        ? { ...element, x: metadata.canvasPoint.x, y: metadata.canvasPoint.y }
+        : element;
+      insertRootCanvasElements([rootFallbackElement]);
+    }
+
     setEditorNotice(metadata.kind === 'url'
-      ? 'Placed external link on the canvas.'
-      : `Placed external ${metadata.kind} media on the canvas.`);
-  }, [editDisabledReason, insertRootCanvasElements, isCanvasMutationDisabled]);
+      ? insertedIntoParent
+        ? 'Placed external link inside the target layer.'
+        : 'Placed external link on the canvas.'
+      : insertedIntoParent
+        ? `Placed external ${metadata.kind} media inside the target layer.`
+        : `Placed external ${metadata.kind} media on the canvas.`);
+  }, [editDisabledReason, insertNestedCanvasElements, insertRootCanvasElements, isCanvasMutationDisabled]);
 
   /**
    * Copy

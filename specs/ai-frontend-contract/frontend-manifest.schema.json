@@ -611,6 +611,7 @@
                 { "contains": { "properties": { "type": { "const": "link" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "image" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "video" } }, "required": ["type"] } },
+                { "contains": { "properties": { "type": { "const": "audio" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "icon" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "map" } }, "required": ["type"] } },
                 { "contains": { "properties": { "type": { "const": "container" } }, "required": ["type"] } },

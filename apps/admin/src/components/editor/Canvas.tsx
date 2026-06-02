@@ -1621,13 +1621,24 @@ interface CanvasProps {
   onMediaFilesDrop?: (
     files: File[],
     point: { x: number; y: number },
-    metadata: { source: 'canvas-file-drop' },
+    metadata: {
+      source: 'canvas-file-drop';
+      targetParentId?: string | null;
+      coordinateSpace?: 'canvas' | 'parent';
+      canvasPoint?: { x: number; y: number };
+    },
   ) => Promise<void> | void;
   /** Place a remote media URL dragged from another tab */
   onExternalMediaUrlDrop?: (
     url: string,
     point: { x: number; y: number },
-    metadata: { source: 'canvas-url-drop'; kind: 'image' | 'video' | 'audio' | 'url' },
+    metadata: {
+      source: 'canvas-url-drop';
+      kind: 'image' | 'video' | 'audio' | 'url';
+      targetParentId?: string | null;
+      coordinateSpace?: 'canvas' | 'parent';
+      canvasPoint?: { x: number; y: number };
+    },
   ) => void;
 }
 
@@ -2078,6 +2089,32 @@ export function Canvas({
       y: snapToGrid(Math.max(0, point.y), safeGridSize, snapEnabled),
     };
   }, [getCanvasPoint, safeGridSize, snapEnabled]);
+
+  const getNestedDropPoint = useCallback((
+    event: React.DragEvent,
+    parentId: string,
+  ): { x: number; y: number } | null => {
+    const parent = findElementById(elementsRef.current, parentId);
+    if (!parent || isCanvasElementLocked(parent) || !canAcceptNestedDrop(parent.type)) {
+      return null;
+    }
+
+    const dropHost = canvasRef.current?.querySelector<HTMLElement>(
+      `[data-element-id="${parentId}"]`,
+    );
+    if (!dropHost) {
+      return null;
+    }
+
+    const hostRect = dropHost.getBoundingClientRect();
+    const rawX = toCanvasDelta(event.clientX - hostRect.left);
+    const rawY = toCanvasDelta(event.clientY - hostRect.top, 'y');
+
+    return {
+      x: snapToGrid(Math.max(0, Math.min(parent.width, rawX)), safeGridSize, snapEnabled),
+      y: snapToGrid(Math.max(0, Math.min(parent.height, rawY)), safeGridSize, snapEnabled),
+    };
+  }, [safeGridSize, snapEnabled, toCanvasDelta]);
 
   const startMarqueeSelection = useCallback((
     event: React.PointerEvent<Element> | React.MouseEvent<Element>,
@@ -2658,6 +2695,46 @@ export function Canvas({
     pendingCanvasMoveInputRef.current = null;
   }, []);
 
+  const handleCanvasAssetDrop = useCallback((event: React.DragEvent, forcedParentId?: string): boolean => {
+    if (disabled || isPreview) {
+      return false;
+    }
+
+    const canvasPoint = getCanvasDropPoint(event);
+    const point = forcedParentId
+      ? getNestedDropPoint(event, forcedParentId)
+      : canvasPoint;
+    if (!point) {
+      return false;
+    }
+
+    const targetMetadata = forcedParentId
+      ? { targetParentId: forcedParentId, coordinateSpace: 'parent' as const, canvasPoint: canvasPoint || point }
+      : { targetParentId: null, coordinateSpace: 'canvas' as const, canvasPoint: point };
+
+    const files = Array.from(event.dataTransfer.files || []).filter((file) => file.size >= 0);
+    if (files.length > 0 && onMediaFilesDrop) {
+      event.preventDefault();
+      event.stopPropagation();
+      void onMediaFilesDrop(files, point, { source: 'canvas-file-drop', ...targetMetadata });
+      return true;
+    }
+
+    const url = getPrimaryDroppedUrl(event.dataTransfer);
+    if (url && onExternalMediaUrlDrop) {
+      event.preventDefault();
+      event.stopPropagation();
+      onExternalMediaUrlDrop(url, point, {
+        source: 'canvas-url-drop',
+        kind: inferDroppedUrlKind(url),
+        ...targetMetadata,
+      });
+      return true;
+    }
+
+    return false;
+  }, [disabled, getCanvasDropPoint, getNestedDropPoint, isPreview, onExternalMediaUrlDrop, onMediaFilesDrop]);
+
   const handleCanvasElementDrop = useCallback(
     (event: React.DragEvent, forcedParentId?: string) => {
       if (disabled || isPreview) {
@@ -2670,6 +2747,10 @@ export function Canvas({
       event.stopPropagation();
 
       try {
+        if (forcedParentId && handleCanvasAssetDrop(event, forcedParentId)) {
+          return;
+        }
+
         const rawData = event.dataTransfer.getData('application/json');
         const item = JSON.parse(rawData) as ComponentLibraryItem;
         const normalizedType = normalizeCanvasElementType(item.type);
@@ -2762,40 +2843,8 @@ export function Canvas({
         console.error('Failed to drop element:', error);
       }
     },
-    [disabled, elements, isPreview, onElementsChange, onSelect, safeGridSize, snapEnabled, toCanvasDelta]
+    [disabled, elements, handleCanvasAssetDrop, isPreview, onElementsChange, onSelect, safeGridSize, snapEnabled, toCanvasDelta]
   );
-
-  const handleCanvasAssetDrop = useCallback((event: React.DragEvent): boolean => {
-    if (disabled || isPreview) {
-      return false;
-    }
-
-    const point = getCanvasDropPoint(event);
-    if (!point) {
-      return false;
-    }
-
-    const files = Array.from(event.dataTransfer.files || []).filter((file) => file.size >= 0);
-    if (files.length > 0 && onMediaFilesDrop) {
-      event.preventDefault();
-      event.stopPropagation();
-      void onMediaFilesDrop(files, point, { source: 'canvas-file-drop' });
-      return true;
-    }
-
-    const url = getPrimaryDroppedUrl(event.dataTransfer);
-    if (url && onExternalMediaUrlDrop) {
-      event.preventDefault();
-      event.stopPropagation();
-      onExternalMediaUrlDrop(url, point, {
-        source: 'canvas-url-drop',
-        kind: inferDroppedUrlKind(url),
-      });
-      return true;
-    }
-
-    return false;
-  }, [disabled, getCanvasDropPoint, isPreview, onExternalMediaUrlDrop, onMediaFilesDrop]);
 
   const handleElementPropsUpdate = useCallback(
     (elementId: string, updates: { [key: string]: unknown }) => {

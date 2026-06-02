@@ -6953,6 +6953,9 @@ try {
       assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.metadata, `${publicOpenApi.url} missing reusable section metadata schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSection?.properties?.frontendDesign?.$ref === '#/components/schemas/ReusableSectionFrontendDesign', `${publicOpenApi.url} missing reusable section frontend design schema`);
       assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.bindingHints, `${publicOpenApi.url} missing reusable section binding hints schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.templateSource?.type === 'string', `${publicOpenApi.url} missing frontend design template source schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.templateSourceLabel?.type === 'string', `${publicOpenApi.url} missing frontend design template source label schema`);
+      assert(publicOpenApi.json?.components?.schemas?.ReusableSectionFrontendDesign?.properties?.sharedChromeBindings?.properties?.schemaVersion?.const === 'backy.shared-chrome-bindings.v1', `${publicOpenApi.url} missing shared chrome bindings schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommerceProduct?.properties?.design?.$ref === '#/components/schemas/CommerceProductDesign', `${publicOpenApi.url} missing commerce product design schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.templateId, `${publicOpenApi.url} missing commerce product template id schema`);
       assert(publicOpenApi.json?.components?.schemas?.CommerceProductDesign?.properties?.frontendDesignTemplateId, `${publicOpenApi.url} missing commerce product legacy template id schema`);

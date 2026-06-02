@@ -2445,10 +2445,20 @@ export type GeneratedBackyOpenApiBlogAuthorResource = {
 
 export type GeneratedBackyOpenApiReusableSectionFrontendDesign = {
   templateId?: string;
+  templateSource?: string;
+  templateSourceLabel?: string;
   templateName?: string;
   routePattern?: string;
   source?: Record<string, unknown>;
   chrome?: Record<string, unknown>;
+  sharedChromeBindings?: {
+    schemaVersion?: "backy.shared-chrome-bindings.v1";
+    source?: string;
+    strategy?: string;
+    preserveAcross?: Array<string>;
+    roles?: Record<string, Record<string, unknown>>;
+    [key: string]: unknown;
+  };
   tokens?: Record<string, unknown>;
   customCss?: string;
   customJs?: string;

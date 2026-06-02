@@ -11266,10 +11266,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               additionalProperties: true,
               properties: {
                 templateId: { type: "string" },
+                templateSource: { type: "string" },
+                templateSourceLabel: { type: "string" },
                 templateName: { type: "string" },
                 routePattern: { type: "string" },
                 source: { type: "object", additionalProperties: true },
                 chrome: { type: "object", additionalProperties: true },
+                sharedChromeBindings: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    schemaVersion: { const: "backy.shared-chrome-bindings.v1" },
+                    source: { type: "string" },
+                    strategy: { type: "string" },
+                    preserveAcross: {
+                      type: "array",
+                      items: { type: "string" },
+                    },
+                    roles: {
+                      type: "object",
+                      additionalProperties: {
+                        type: "object",
+                        additionalProperties: true,
+                      },
+                    },
+                  },
+                },
                 tokens: { type: "object", additionalProperties: true },
                 customCss: { type: "string" },
                 customJs: { type: "string" },

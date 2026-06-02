@@ -365,6 +365,7 @@ const requiredComponentApiTypes = [
   'link',
   'image',
   'video',
+  'audio',
   'icon',
   'map',
   'container',
@@ -1740,6 +1741,11 @@ assert(
     frontendDesignContractLib.includes('const designStateValue = (') &&
     frontendDesignContractLib.includes('const buildFrontendDesignProvenanceFields = (') &&
     frontendDesignContractLib.includes('meta: buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta)') &&
+    frontendDesignContractLib.includes('const sharedChromeBindingsFromChrome = (') &&
+    frontendDesignContractLib.includes("schemaVersion: 'backy.shared-chrome-bindings.v1'") &&
+    frontendDesignContractLib.includes('templateSource: stringValue(metadata.templateSource)') &&
+    frontendDesignContractLib.includes('templateSourceLabel: stringValue(metadata.templateSourceLabel)') &&
+    frontendDesignContractLib.includes('sharedChromeBindings: sharedChromeBindingsFromChrome(metadata.frontendDesignChrome)') &&
     frontendDesignContractLib.includes('frontendDesignAnimations') &&
     frontendDesignContractLib.includes('customJs: stringValue(metadata.frontendDesignCustomJs)') &&
     frontendDesignContractLib.includes('contentDocument: cloneRecord(metadata.frontendDesignContentDocument)') &&
@@ -1861,16 +1867,16 @@ assert(
     adminFrontendDesignRoute.includes('mergeFallback: true') &&
     adminSiteSettingsRoute.includes('normalizeFrontendDesignContract(patch.frontendDesign') &&
     adminSiteSettingsRoute.includes('mergeFallback: true') &&
-	    openApiRoute.includes('customJS: { type: "string" }') &&
-	    openApiRoute.includes('customJs: { type: "string" }') &&
-	    openApiRoute.includes('FrontendDesignTemplateContent: {') &&
-	    openApiRoute.includes('FrontendEditableMapEntry: {') &&
-	    openApiRoute.includes('targetPath: { type: "string" }') &&
-	    openApiRoute.includes('valueType: {') &&
-	    openApiRoute.includes('$ref: "#/components/schemas/FrontendDesignTemplateContent"') &&
-	    (openApiRoute.match(/oneOf: \[\s+\{\s+type: "array",\s+items: \{ type: "object", additionalProperties: true \},\s+\},\s+\{ type: "object", additionalProperties: true \},\s+\],\s+\},\s+animations: \{/g) || []).length >= 2 &&
-	    openApiRoute.includes('contentDocument: {') &&
-	    openApiRoute.includes('editableMap: { type: "object", additionalProperties: true }') &&
+    openApiRoute.includes('customJS: { type: "string" }') &&
+    openApiRoute.includes('customJs: { type: "string" }') &&
+    openApiRoute.includes('FrontendDesignTemplateContent: {') &&
+    openApiRoute.includes('FrontendEditableMapEntry: {') &&
+    openApiRoute.includes('targetPath: { type: "string" }') &&
+    openApiRoute.includes('valueType: {') &&
+    openApiRoute.includes('$ref: "#/components/schemas/FrontendDesignTemplateContent"') &&
+    (openApiRoute.match(/oneOf: \[\s+\{\s+type: "array",\s+items: \{ type: "object", additionalProperties: true \},\s+\},\s+\{ type: "object", additionalProperties: true \},\s+\],\s+\},\s+animations: \{/g) || []).length >= 2 &&
+    openApiRoute.includes('contentDocument: {') &&
+    openApiRoute.includes('editableMap: { type: "object", additionalProperties: true }') &&
     openApiRoute.includes('themeTokenRefs: {') &&
     openApiRoute.includes('animations: {') &&
     openApiRoute.includes('dataBindings: { type: "object", additionalProperties: true }') &&
@@ -1879,43 +1885,52 @@ assert(
     openApiRoute.includes('$ref: "#/components/schemas/BackyEditableMapEntry"') &&
     openApiRoute.includes('$ref: "#/components/schemas/BackyContentDocument"') &&
     openApiRoute.includes('templateId: { type: "string" }') &&
+    openApiRoute.includes('templateSource: { type: "string" }') &&
+    openApiRoute.includes('templateSourceLabel: { type: "string" }') &&
+    openApiRoute.includes('sharedChromeBindings: {') &&
+    openApiRoute.includes('schemaVersion: { const: "backy.shared-chrome-bindings.v1" }') &&
     openApiRoute.includes('bindingHints: {') &&
     (openApiRoute.match(/design: \{ \$ref: "#\/components\/schemas\/FrontendDesignTemplateContent" \}/g) || []).length >= 2 &&
     (openApiRoute.match(/frontendDesign: \{ \$ref: "#\/components\/schemas\/FrontendDesignTemplateContent" \}/g) || []).length >= 2 &&
     generatedSdkTypes.includes('customJS?: string;') &&
-	    generatedSdkTypes.includes('themeTokenRefs?: Record<string, string>;') &&
-	    generatedSdkTypes.includes('export type GeneratedBackyOpenApiFrontendDesignTemplateContent = {') &&
+    generatedSdkTypes.includes('themeTokenRefs?: Record<string, string>;') &&
+    generatedSdkTypes.includes('export type GeneratedBackyOpenApiFrontendDesignTemplateContent = {') &&
     generatedSdkTypes.includes('content?: GeneratedBackyOpenApiFrontendDesignTemplateContent;') &&
-	    generatedSdkTypes.includes('export type GeneratedBackyOpenApiReusableSectionFrontendDesign = {') &&
+    generatedSdkTypes.includes('export type GeneratedBackyOpenApiReusableSectionFrontendDesign = {') &&
+    generatedSdkTypes.includes('templateSource?: string;') &&
+    generatedSdkTypes.includes('sharedChromeBindings?: {') &&
+    generatedSdkTypes.includes('schemaVersion?: "backy.shared-chrome-bindings.v1";') &&
     generatedSdkTypes.includes('export type GeneratedBackyOpenApiBackyReusableSectionContent = {') &&
     generatedSdkTypes.includes('animations?: Array<Record<string, unknown>> | Record<string, unknown>;') &&
     generatedSdkTypes.includes('customJs?: string;') &&
     generatedSdkTypes.includes('contentDocument?: Record<string, unknown>;') &&
     generatedSdkTypes.includes('editableMap?: Record<string, unknown>;') &&
-	    sdkSource.includes('contentDocument?: Record<string, unknown>;') &&
-	    sdkSource.includes('export interface BackyFrontendDesignTemplateContent') &&
-	    sdkSource.includes('content?: BackyFrontendDesignTemplateContent;') &&
-	    sdkSource.includes('customCSS?: string;') &&
-		    sdkSource.includes('export function buildBackyContentDesignPayload') &&
-		    sdkSource.includes('export function buildBackyAdminPageCreateInput') &&
-		    sdkSource.includes('export function buildBackyAdminPageUpdateInput') &&
-		    sdkSource.includes('export function buildBackyAdminBlogPostCreateInput') &&
-		    sdkSource.includes('export function buildBackyAdminBlogPostUpdateInput') &&
-		    sdkSource.includes('export function buildBackyAdminReusableSectionCreateInput') &&
-		    sdkSource.includes('export function buildBackyAdminReusableSectionUpdateInput') &&
-		    sdkSource.includes('export function buildBackyAdminCollectionRecordCreateInput') &&
-		    sdkSource.includes('export function buildBackyAdminCollectionRecordUpdateInput') &&
-		    sdkSource.includes('export function buildBackyAdminCommerceProductCreateInput') &&
-		    sdkSource.includes('export function buildBackyAdminCommerceProductUpdateInput') &&
-		    sdkSource.includes('frontendDesignContentDocument') &&
-	    sdkSource.includes('frontendDesignAnimations') &&
-	    frontendManifestSchema.includes('"customCSS": { "type": "string" }') &&
-	    frontendManifestSchema.includes('"targetPath": { "type": "string" }') &&
-	    frontendManifestSchema.includes('"valueType": {') &&
-	    sdkSource.includes('themeTokenRefs?: Record<string, unknown>;') &&
-	    sdkSource.includes('export interface BackyFrontendEditableMapEntry') &&
-	    sdkSource.includes('targetPath?: string;') &&
-	    sdkSource.includes('valueType?:') &&
+    sdkSource.includes('contentDocument?: Record<string, unknown>;') &&
+    sdkSource.includes('templateSource?: string;') &&
+    sdkSource.includes('sharedChromeBindings?: Record<string, unknown>;') &&
+    sdkSource.includes('export interface BackyFrontendDesignTemplateContent') &&
+    sdkSource.includes('content?: BackyFrontendDesignTemplateContent;') &&
+    sdkSource.includes('customCSS?: string;') &&
+    sdkSource.includes('export function buildBackyContentDesignPayload') &&
+    sdkSource.includes('export function buildBackyAdminPageCreateInput') &&
+    sdkSource.includes('export function buildBackyAdminPageUpdateInput') &&
+    sdkSource.includes('export function buildBackyAdminBlogPostCreateInput') &&
+    sdkSource.includes('export function buildBackyAdminBlogPostUpdateInput') &&
+    sdkSource.includes('export function buildBackyAdminReusableSectionCreateInput') &&
+    sdkSource.includes('export function buildBackyAdminReusableSectionUpdateInput') &&
+    sdkSource.includes('export function buildBackyAdminCollectionRecordCreateInput') &&
+    sdkSource.includes('export function buildBackyAdminCollectionRecordUpdateInput') &&
+    sdkSource.includes('export function buildBackyAdminCommerceProductCreateInput') &&
+    sdkSource.includes('export function buildBackyAdminCommerceProductUpdateInput') &&
+    sdkSource.includes('frontendDesignContentDocument') &&
+    sdkSource.includes('frontendDesignAnimations') &&
+    frontendManifestSchema.includes('"customCSS": { "type": "string" }') &&
+    frontendManifestSchema.includes('"targetPath": { "type": "string" }') &&
+    frontendManifestSchema.includes('"valueType": {') &&
+    sdkSource.includes('themeTokenRefs?: Record<string, unknown>;') &&
+    sdkSource.includes('export interface BackyFrontendEditableMapEntry') &&
+    sdkSource.includes('targetPath?: string;') &&
+    sdkSource.includes('valueType?:') &&
     sdkSource.includes('function inferBackyFrontendEditableMapFromElements(') &&
     sdkSource.includes('function buildBackyFrontendEditableMapRecord(') &&
     sdkSource.includes('function backyDesignTemplateId(') &&

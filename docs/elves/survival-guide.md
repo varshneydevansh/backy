@@ -285,6 +285,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest rendered canvas verification:** `test:editor-canvas-media-drop-rendered` now proves the direct-drop path in a real editor page: external image/video/audio data-URL drops create media elements at the pointer, a local audio-file drop uploads through the media API, the selected audio layer exposes Inspector caption/transcript/playback controls, save persists `canvas-file-drop` provenance, `assetIds`, `mediaType=audio`, transcript text, and the canvas height grows beyond the original viewport while staying below the 24000px page-height cap. The smoke is now part of `test:editor-workflows`, and PropertyPanel normalization now treats `audio` as a canonical editable element type.
 
+**Newest nested media drop polish:** Canvas file/URL drops now carry target-parent, coordinate-space, and root-canvas fallback metadata. Dropping images, videos, audio, files, or external URLs onto eligible section/container/chrome layers inserts the generated element as a child of that target layer instead of always creating a root layer, while root canvas drops still preserve long-page auto-growth and root-section flow behavior.
+
+**Newest custom frontend provenance polish:** Public custom frontend provenance now exposes `templateSource`, `templateSourceLabel`, and `backy.shared-chrome-bindings.v1` for shared header/navigation/footer chrome. OpenAPI, generated SDK types, SDK source types, the frontend manifest schema, frontend contract smoke, admin contract source guard, SDK smoke, and generated-types gate now treat audio as a first-class API-addressable component and shared chrome/template provenance as a public contract.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
