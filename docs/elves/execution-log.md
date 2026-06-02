@@ -3422,5 +3422,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - PASS: `npm run test:repo-public-hygiene --silent`
 
 **Next:**
-- Commit and push this focused dashboard content-control slice.
+- Pushed as `2f18beb9`.
+- Fresh `backy-admin` and `backy-public` production deployments are Ready.
+- Hosted verification after push is green: production readiness passes 47 checks, hosted admin login shell has no demo credentials/dev MFA, strict deployed custom frontend connection passes 69 checks, and fresh Vercel error logs are empty.
 - Remaining non-code launch gates are still Vercel GitHub App access for the private separate frontend repo, Preview env after Git connection, and public DNS cutover only when ready.
