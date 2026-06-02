@@ -83,6 +83,7 @@ interface BlogCreateAutosaveDraft {
     selectedAuthorId: string;
     canvasElements: CanvasElement[];
     canvasSize: CanvasSize;
+    selectedBlogStarterIntent?: BlogStarterIntent;
     templateSourceMode?: BlogTemplateSourceMode;
     designTemplateId?: string;
     frontendDesignSource?: SiteFrontendDesignContract['source'] | null;
@@ -318,6 +319,444 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
     headerActionLabel: 'Subscribe',
     footerCopy: 'Edit this article footer, save it as a reusable section, or bind it to publication navigation.',
 });
+
+const createInvestigationBlogElements = (): CanvasElement[] => withPageChrome([
+    createCanvasElement('section', 0, 0, {
+        id: 'blog-investigation-hero',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 430,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'author', 'publishedAt', 'coverImage'] }],
+        props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('text', 72, 62, {
+                id: 'blog-investigation-kicker',
+                width: 260,
+                height: 28,
+                props: { content: 'Investigation', fontSize: 13, fontWeight: '800', color: '#b45309', textTransform: 'uppercase' },
+            }),
+            createCanvasElement('heading', 72, 106, {
+                id: 'blog-investigation-heading',
+                width: 690,
+                height: 120,
+                props: { content: 'Report title', level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827', binding: 'post.title' },
+            }),
+            createCanvasElement('paragraph', 76, 248, {
+                id: 'blog-investigation-summary',
+                width: 610,
+                height: 92,
+                props: { content: 'Summarize the public-interest question, who is affected, and what readers will learn from the evidence.', fontSize: 18, lineHeight: 1.55, color: '#475569', binding: 'post.excerpt' },
+            }),
+            createCanvasElement('box', 800, 78, {
+                id: 'blog-investigation-evidence-card',
+                width: 300,
+                height: 250,
+                props: { backgroundColor: '#fff7ed', borderColor: '#fdba74', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 28, {
+                        id: 'blog-investigation-evidence-heading',
+                        width: 230,
+                        height: 42,
+                        props: { content: 'Evidence status', level: 'h2', fontSize: 24, fontWeight: '800', color: '#7c2d12' },
+                    }),
+                    createCanvasElement('paragraph', 28, 88, {
+                        id: 'blog-investigation-evidence-copy',
+                        width: 230,
+                        height: 118,
+                        props: { content: 'List records checked, source confidence, and what still needs verification before publishing.', fontSize: 15, lineHeight: 1.55, color: '#7c2d12' },
+                    }),
+                ],
+            }),
+        ],
+    }),
+    createCanvasElement('section', 0, 430, {
+        id: 'blog-investigation-body',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 780,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'taxonomy', 'relatedPosts'] }],
+        props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('heading', 120, 70, {
+                id: 'blog-investigation-findings-heading',
+                width: 440,
+                height: 56,
+                props: { content: 'Key findings', level: 'h2', fontSize: 38, fontWeight: '800', lineHeight: 1.15, color: '#0f172a', binding: 'post.content.section' },
+            }),
+            createCanvasElement('paragraph', 120, 146, {
+                id: 'blog-investigation-findings-copy',
+                width: 760,
+                height: 120,
+                props: { content: 'Write the verified findings in plain language. Use short paragraphs and cite the evidence cards below when readers need the source trail.', fontSize: 18, lineHeight: 1.7, color: '#334155', binding: 'post.content.body' },
+            }),
+            createCanvasElement('box', 120, 320, {
+                id: 'blog-investigation-timeline',
+                width: 450,
+                height: 290,
+                props: { backgroundColor: '#f8fafc', borderColor: '#dbe3ef', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 26, {
+                        id: 'blog-investigation-timeline-heading',
+                        width: 360,
+                        height: 40,
+                        props: { content: 'Timeline', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                    }),
+                    createCanvasElement('list', 28, 84, {
+                        id: 'blog-investigation-timeline-list',
+                        width: 380,
+                        height: 170,
+                        props: { items: ['Date - event and source', 'Date - official response', 'Date - reader impact'], fontSize: 16, lineHeight: 1.7, color: '#334155' },
+                    }),
+                ],
+            }),
+            createCanvasElement('box', 630, 320, {
+                id: 'blog-investigation-sources',
+                width: 450,
+                height: 290,
+                props: { backgroundColor: '#f8fafc', borderColor: '#dbe3ef', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 26, {
+                        id: 'blog-investigation-sources-heading',
+                        width: 360,
+                        height: 40,
+                        props: { content: 'Sources and documents', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 28, 84, {
+                        id: 'blog-investigation-sources-copy',
+                        width: 380,
+                        height: 150,
+                        props: { content: 'Attach public documents, media, quotes, and source notes here. Private source details should stay outside the public render payload.', fontSize: 16, lineHeight: 1.65, color: '#334155' },
+                    }),
+                ],
+            }),
+            createCanvasElement('quote', 220, 656, {
+                id: 'blog-investigation-editor-note',
+                width: 760,
+                height: 82,
+                props: { content: 'Editorial note: separate verified facts, allegations, and open questions before publishing.', fontSize: 22, fontWeight: '700', lineHeight: 1.45, color: '#0f172a' },
+            }),
+        ],
+    }),
+], {
+    title: 'Investigation report',
+    variant: 'blog-investigation',
+    navItems: ['Home', 'Blog', 'Reports', 'Contact'],
+    headerActionLabel: 'Subscribe',
+    footerCopy: 'Keep source notes, corrections, and public-interest context reusable across investigation posts.',
+});
+
+const createAudioTranscriptBlogElements = (): CanvasElement[] => withPageChrome([
+    createCanvasElement('section', 0, 0, {
+        id: 'blog-audio-hero',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 420,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'author', 'publishedAt', 'media'] }],
+        props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('text', 72, 62, {
+                id: 'blog-audio-kicker',
+                width: 250,
+                height: 28,
+                props: { content: 'Audio transcript', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+            }),
+            createCanvasElement('heading', 72, 104, {
+                id: 'blog-audio-heading',
+                width: 640,
+                height: 112,
+                props: { content: 'Interview or recording title', level: 'h1', fontSize: 50, fontWeight: '800', lineHeight: 1.1, color: '#111827', binding: 'post.title' },
+            }),
+            createCanvasElement('paragraph', 76, 238, {
+                id: 'blog-audio-excerpt',
+                width: 560,
+                height: 82,
+                props: { content: 'Introduce the recording, speaker, date, and why this transcript matters.', fontSize: 18, lineHeight: 1.6, color: '#475569', binding: 'post.excerpt' },
+            }),
+            createCanvasElement('audio', 760, 110, {
+                id: 'blog-audio-player',
+                width: 340,
+                height: 126,
+                props: {
+                    caption: 'Upload or select the audio recording',
+                    transcript: 'Transcript will be edited below.',
+                    controls: true,
+                    preload: 'metadata',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#cbd5e1',
+                    borderWidth: 1,
+                    borderStyle: 'solid',
+                    borderRadius: 12,
+                },
+            }),
+            createCanvasElement('button', 760, 258, {
+                id: 'blog-audio-download-action',
+                width: 210,
+                height: 48,
+                props: { label: 'Attach source file', backgroundColor: '#0f172a', color: '#ffffff', borderRadius: 8, fontWeight: '700', action: 'media.download' },
+            }),
+        ],
+    }),
+    createCanvasElement('section', 0, 420, {
+        id: 'blog-audio-body',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 820,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'attachments'] }],
+        props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('heading', 180, 74, {
+                id: 'blog-audio-transcript-heading',
+                width: 420,
+                height: 54,
+                props: { content: 'Transcript', level: 'h2', fontSize: 38, fontWeight: '800', color: '#0f172a', binding: 'post.content.section' },
+            }),
+            createCanvasElement('paragraph', 180, 150, {
+                id: 'blog-audio-transcript-copy',
+                width: 760,
+                height: 230,
+                props: {
+                    content: 'Paste the cleaned transcript here. Add speaker labels, timestamps, corrections, and links to referenced documents or pages.',
+                    fontSize: 18,
+                    lineHeight: 1.75,
+                    color: '#334155',
+                    binding: 'post.content.body',
+                },
+            }),
+            createCanvasElement('box', 180, 430, {
+                id: 'blog-audio-notes',
+                width: 760,
+                height: 170,
+                props: { backgroundColor: '#f8fafc', borderColor: '#dbe3ef', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 24, {
+                        id: 'blog-audio-notes-heading',
+                        width: 380,
+                        height: 36,
+                        props: { content: 'Notes and corrections', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 28, 78, {
+                        id: 'blog-audio-notes-copy',
+                        width: 680,
+                        height: 70,
+                        props: { content: 'Track edits, speaker clarifications, source links, and public correction history before publishing.', fontSize: 16, lineHeight: 1.55, color: '#334155' },
+                    }),
+                ],
+            }),
+            createCanvasElement('box', 180, 640, {
+                id: 'blog-audio-files',
+                width: 760,
+                height: 120,
+                props: { backgroundColor: '#ecfeff', borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('paragraph', 28, 28, {
+                        id: 'blog-audio-files-copy',
+                        width: 680,
+                        height: 58,
+                        props: { content: 'Attach audio, transcript PDF, source documents, or supporting files from Media. Public and protected file visibility stays controlled by media settings.', fontSize: 16, lineHeight: 1.55, color: '#0f766e' },
+                    }),
+                ],
+            }),
+        ],
+    }),
+], {
+    title: 'Audio transcript',
+    variant: 'blog-audio-transcript',
+    navItems: ['Home', 'Blog', 'Audio', 'Contact'],
+    headerActionLabel: 'Subscribe',
+    footerCopy: 'Audio, transcript, and source-file metadata remain editable through Backy media and post content APIs.',
+});
+
+const createNewsletterIssueBlogElements = (): CanvasElement[] => withPageChrome([
+    createCanvasElement('section', 0, 0, {
+        id: 'blog-newsletter-hero',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 390,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'publishedAt', 'newsletter'] }],
+        props: { backgroundColor: '#f0fdfa', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('text', 72, 62, {
+                id: 'blog-newsletter-kicker',
+                width: 230,
+                height: 28,
+                props: { content: 'Newsletter issue', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
+            }),
+            createCanvasElement('heading', 72, 104, {
+                id: 'blog-newsletter-heading',
+                width: 640,
+                height: 112,
+                props: { content: 'Issue headline', level: 'h1', fontSize: 50, fontWeight: '800', lineHeight: 1.1, color: '#0f172a', binding: 'post.title' },
+            }),
+            createCanvasElement('paragraph', 76, 238, {
+                id: 'blog-newsletter-intro',
+                width: 580,
+                height: 84,
+                props: { content: 'Write the short opening note subscribers see before curated links, updates, and the archive version.', fontSize: 18, lineHeight: 1.6, color: '#334155', binding: 'post.excerpt' },
+            }),
+            createCanvasElement('form', 790, 92, {
+                id: 'blog-newsletter-signup',
+                width: 310,
+                height: 220,
+                props: { formType: 'newsletter', title: 'Subscribe', submitLabel: 'Join newsletter', backgroundColor: '#ffffff', borderColor: '#99f6e4', borderWidth: 1, borderStyle: 'solid', borderRadius: 12 },
+                children: [
+                    createCanvasElement('input', 28, 70, {
+                        id: 'blog-newsletter-email',
+                        width: 250,
+                        height: 48,
+                        props: { label: 'Email', name: 'email', inputType: 'email', placeholder: 'you@example.com', required: true },
+                    }),
+                    createCanvasElement('button', 28, 140, {
+                        id: 'blog-newsletter-submit',
+                        width: 190,
+                        height: 46,
+                        props: { label: 'Join newsletter', type: 'submit', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 8, fontWeight: '700' },
+                    }),
+                ],
+            }),
+        ],
+    }),
+    createCanvasElement('section', 0, 390, {
+        id: 'blog-newsletter-body',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 700,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'newsletterIssue', 'relatedPosts'] }],
+        props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('heading', 180, 72, {
+                id: 'blog-newsletter-top-stories-heading',
+                width: 440,
+                height: 52,
+                props: { content: 'In this issue', level: 'h2', fontSize: 38, fontWeight: '800', color: '#0f172a' },
+            }),
+            createCanvasElement('list', 180, 150, {
+                id: 'blog-newsletter-link-list',
+                width: 760,
+                height: 210,
+                props: { items: ['Lead story or investigation', 'Curated link with one-line context', 'Update, note, or call to action'], fontSize: 18, lineHeight: 1.75, color: '#334155', binding: 'post.content.links' },
+            }),
+            createCanvasElement('box', 180, 420, {
+                id: 'blog-newsletter-archive-note',
+                width: 760,
+                height: 180,
+                props: { backgroundColor: '#f8fafc', borderColor: '#dbe3ef', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 26, {
+                        id: 'blog-newsletter-archive-heading',
+                        width: 420,
+                        height: 38,
+                        props: { content: 'Archive and delivery notes', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 28, 84, {
+                        id: 'blog-newsletter-archive-copy',
+                        width: 680,
+                        height: 74,
+                        props: { content: 'Backy stores the issue draft, subscriber-safe handoff, and public archive payload. External email delivery remains provider-backed.', fontSize: 16, lineHeight: 1.55, color: '#334155' },
+                    }),
+                ],
+            }),
+        ],
+    }),
+], {
+    title: 'Newsletter issue',
+    variant: 'blog-newsletter',
+    navItems: ['Home', 'Blog', 'Newsletter', 'Contact'],
+    headerActionLabel: 'Subscribe',
+    footerCopy: 'Newsletter archive content, signup forms, and subscriber-safe issue metadata stay API-addressable.',
+});
+
+const createCaseStudyBlogElements = (): CanvasElement[] => withPageChrome([
+    createCanvasElement('section', 0, 0, {
+        id: 'blog-case-study-hero',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 420,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'coverImage', 'content'] }],
+        props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
+        children: [
+            createCanvasElement('text', 72, 62, {
+                id: 'blog-case-study-kicker',
+                width: 220,
+                height: 28,
+                props: { content: 'Case study', fontSize: 13, fontWeight: '800', color: '#2563eb', textTransform: 'uppercase' },
+            }),
+            createCanvasElement('heading', 72, 104, {
+                id: 'blog-case-study-heading',
+                width: 620,
+                height: 112,
+                props: { content: 'Project outcome headline', level: 'h1', fontSize: 50, fontWeight: '800', lineHeight: 1.1, color: '#111827', binding: 'post.title' },
+            }),
+            createCanvasElement('paragraph', 76, 238, {
+                id: 'blog-case-study-excerpt',
+                width: 560,
+                height: 82,
+                props: { content: 'Summarize the problem, audience, and measurable outcome.', fontSize: 18, lineHeight: 1.6, color: '#475569', binding: 'post.excerpt' },
+            }),
+            createCanvasElement('box', 770, 80, {
+                id: 'blog-case-study-media',
+                width: 330,
+                height: 230,
+                props: { backgroundColor: '#dbeafe', borderColor: '#bfdbfe', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, binding: 'post.coverImage' },
+            }),
+        ],
+    }),
+    createCanvasElement('section', 0, 420, {
+        id: 'blog-case-study-body',
+        width: DEFAULT_CANVAS_SIZE.width,
+        height: 760,
+        dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'relatedPosts'] }],
+        props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
+        children: [
+            ...['Problem', 'Process', 'Outcome'].map((label, index) => createCanvasElement('box', 92 + index * 354, 76, {
+                id: `blog-case-study-${label.toLowerCase()}`,
+                width: 300,
+                height: 250,
+                props: { backgroundColor: '#f8fafc', borderColor: '#dbe3ef', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+                children: [
+                    createCanvasElement('heading', 28, 28, {
+                        id: `blog-case-study-${label.toLowerCase()}-heading`,
+                        width: 230,
+                        height: 38,
+                        props: { content: label, level: 'h2', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                    }),
+                    createCanvasElement('paragraph', 28, 86, {
+                        id: `blog-case-study-${label.toLowerCase()}-copy`,
+                        width: 230,
+                        height: 126,
+                        props: { content: `Describe the ${label.toLowerCase()} with concrete details, media, and data points.`, fontSize: 15, lineHeight: 1.55, color: '#334155' },
+                    }),
+                ],
+            })),
+            createCanvasElement('quote', 220, 390, {
+                id: 'blog-case-study-proof-quote',
+                width: 760,
+                height: 120,
+                props: { content: 'Add a measurable result, testimonial, or proof point that can be reused in portfolio and landing pages.', fontSize: 24, fontWeight: '700', lineHeight: 1.45, color: '#0f172a' },
+            }),
+            createCanvasElement('repeater', 220, 560, {
+                id: 'blog-case-study-related-work',
+                width: 760,
+                height: 150,
+                props: { collection: 'related-work', columns: 3, gap: 16, limit: 3, titleField: 'title', descriptionField: 'summary', emptyMessage: 'Add related work records from Collections.' },
+            }),
+        ],
+    }),
+], {
+    title: 'Case study',
+    variant: 'blog-case-study',
+    navItems: ['Home', 'Blog', 'Work', 'Contact'],
+    headerActionLabel: 'Start project',
+    footerCopy: 'Case-study sections can be reused in portfolio pages and custom frontend proof rails.',
+});
+
+function createBlogStarterElements(intent: BlogStarterIntent): CanvasElement[] {
+    switch (intent) {
+        case 'investigation':
+            return createInvestigationBlogElements();
+        case 'audio-transcript':
+            return createAudioTranscriptBlogElements();
+        case 'newsletter':
+            return createNewsletterIssueBlogElements();
+        case 'case-study':
+            return createCaseStudyBlogElements();
+        case 'article':
+        default:
+            return createInitialBlogElements();
+    }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -1085,6 +1524,14 @@ function NewBlogPostPage() {
         setOgImage('');
         setTemplateSourceMode('backy-canvas');
         setDesignTemplateId('');
+        setSelectedBlogStarterIntent('article');
+        const nextElements = createBlogStarterElements('article');
+        setCanvasElements(nextElements);
+        setCanvasSize({
+            ...DEFAULT_CANVAS_SIZE,
+            height: getCanvasHeightForElements(nextElements),
+        });
+        setCanvasSeedKey(`blog-starter-article-${Date.now()}`);
         clearCreationFeedback();
         navigate({
             to: '/blog/new',
@@ -1114,7 +1561,7 @@ function NewBlogPostPage() {
     };
 
     // Canvas State
-    const initialElements: CanvasElement[] = useMemo(() => createInitialBlogElements(), []);
+    const initialElements: CanvasElement[] = useMemo(() => createBlogStarterElements('article'), []);
     const initialCanvasSize = useMemo<CanvasSize>(() => ({
         ...DEFAULT_CANVAS_SIZE,
         height: getCanvasHeightForElements(initialElements),
@@ -1329,14 +1776,16 @@ function NewBlogPostPage() {
         clearCreationFeedback();
 
         if (nextSourceMode === 'backy-canvas') {
+            const nextElements = createBlogStarterElements(selectedBlogStarterIntent);
             setTemplateSourceMode('backy-canvas');
             setDesignTemplateId('');
             setRecoveredFrontendDesignSnapshot(null);
-            if (effectiveFrontendTemplate) {
-                setCanvasElements(initialElements);
-                setCanvasSize(initialCanvasSize);
-                setCanvasSeedKey(`default-blog-template-${Date.now()}`);
-            }
+            setCanvasElements(nextElements);
+            setCanvasSize({
+                ...DEFAULT_CANVAS_SIZE,
+                height: getCanvasHeightForElements(nextElements),
+            });
+            setCanvasSeedKey(`blog-starter-${selectedBlogStarterIntent}-${Date.now()}`);
             navigate({
                 to: '/blog/new',
                 search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
@@ -1370,6 +1819,13 @@ function NewBlogPostPage() {
         setSelectedBlogStarterIntent(nextIntent);
 
         if (!isCustomFrontendTemplateSource) {
+            const nextElements = createBlogStarterElements(nextIntent);
+            setCanvasElements(nextElements);
+            setCanvasSize({
+                ...DEFAULT_CANVAS_SIZE,
+                height: getCanvasHeightForElements(nextElements),
+            });
+            setCanvasSeedKey(`blog-starter-${nextIntent}-${Date.now()}`);
             setNotice(`${BLOG_STARTER_INTENTS.find((intent) => intent.id === nextIntent)?.name || 'Blog starter'} selected.`);
             return;
         }
@@ -1660,6 +2116,7 @@ function NewBlogPostPage() {
         routeConflict,
         scheduledAt,
         selectedAuthorId,
+        selectedBlogStarterIntent,
         selectedCategoryIds,
         selectedTagIds,
         slugValue,
@@ -1889,6 +2346,7 @@ function NewBlogPostPage() {
                     selectedAuthorId,
                     canvasElements,
                     canvasSize,
+                    selectedBlogStarterIntent,
                     templateSourceMode,
                     designTemplateId,
                     frontendDesignSource: effectiveFrontendTemplate ? effectiveFrontendDesignSource || null : null,
@@ -1964,6 +2422,7 @@ function NewBlogPostPage() {
         setSelectedCategoryIds(draftRecovery.selectedCategoryIds);
         setSelectedTagIds(draftRecovery.selectedTagIds);
         setSelectedAuthorId(draftRecovery.selectedAuthorId);
+        setSelectedBlogStarterIntent(draftRecovery.selectedBlogStarterIntent || 'article');
         const recoveredTemplateSourceMode = draftRecovery.templateSourceMode || (draftRecovery.designTemplateId ? 'custom-frontend' : 'backy-canvas');
         setTemplateSourceMode(recoveredTemplateSourceMode);
         setDesignTemplateId(draftRecovery.designTemplateId || '');
@@ -2104,7 +2563,10 @@ function NewBlogPostPage() {
             ...(frontendTemplateDesignState?.options?.metadata || {}),
             templateSource: effectiveFrontendTemplate ? 'custom-frontend' : templateSourceMode,
             templateSourceLabel: effectiveFrontendTemplate ? 'Custom frontend' : 'Backy canvas',
-            ...(!effectiveFrontendTemplate ? { backyCanvasTemplateId: 'blog-article' } : {}),
+            blogStarterIntent: selectedBlogStarterIntent,
+            ...(!effectiveFrontendTemplate ? {
+                backyCanvasTemplateId: selectedBlogStarterIntent === 'article' ? 'blog-article' : `blog-${selectedBlogStarterIntent}`,
+            } : {}),
             ...(effectiveFrontendTemplate?.id ? { frontendDesignTemplateId: effectiveFrontendTemplate.id } : {}),
             ...(effectiveFrontendTemplate?.name ? { frontendDesignTemplateName: effectiveFrontendTemplate.name } : {}),
             ...(effectiveFrontendTemplate?.routePattern ? { frontendDesignRoutePattern: effectiveFrontendTemplate.routePattern } : {}),
@@ -3897,6 +4359,10 @@ const isRecoverableBlogCreateDraft = (value: Partial<BlogCreateAutosaveDraft>): 
     && Array.isArray(value.canvasElements)
     && typeof value.canvasSize?.width === 'number'
     && typeof value.canvasSize?.height === 'number'
+    && (
+        value.selectedBlogStarterIntent === undefined
+        || BLOG_STARTER_INTENTS.some((intent) => intent.id === value.selectedBlogStarterIntent)
+    )
     && (
         value.templateSourceMode === undefined
         || isBlogTemplateSourceMode(value.templateSourceMode)

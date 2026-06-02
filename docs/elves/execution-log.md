@@ -3668,3 +3668,26 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 **Notes:**
 - The deployed admin bundle at `https://backy-admin.vercel.app/assets/index-CrEuwQli.js` no longer contains the visible `Demo access` helper. The earlier failed smoke was testing the local default URL because the script did not recognize the `BACKY_LOGIN_*` aliases.
+
+## Checkpoint: 2026-06-02 21:14 IST - Blog Starter Canvas Intent Blocks
+
+**Scope:** Batch 5 blog/editor authoring polish, focused on the user's request that new blog posts should not feel like a bland generic article canvas and should support audio/transcript, investigation, newsletter, and case-study flows without recreating structure by hand.
+
+**Changed:**
+- Backy-canvas blog starter intents now generate real starter-specific canvas trees instead of only changing the selected label.
+- Added investigation report blocks for hero, evidence status, findings, timeline, sources/documents, and editorial note.
+- Added audio transcript blocks with a first-class audio element, transcript body, notes/corrections, and source-file attachment guidance.
+- Added newsletter issue blocks with issue hero, subscriber form, curated link list, and archive/delivery notes.
+- Added case-study blocks for problem/process/outcome, proof quote, and related-work repeater.
+- Starter selection now rebuilds the Backy canvas immediately, grows canvas height from actual content bounds, resets correctly on site/source changes, and persists `selectedBlogStarterIntent` in autosave plus serialized post metadata.
+- Blog create source smoke now guards the starter-specific builders, audio player seed, newsletter form seed, investigation timeline, case-study repeater, starter-driven canvas mutation, autosave intent, and `blogStarterIntent` metadata.
+
+**Validation:**
+- PASS: `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `vercel inspect backy-admin.vercel.app --logs` reports Ready for the prior pushed commit `8ac05dc`.
+- PASS: `vercel inspect backy-public.vercel.app --logs` reports Ready for the prior pushed commit `8ac05dc`.
+
+**Notes:**
+- Spark explorer findings queued the next two focused patches: persisted canvas-height auto-grow on geometry edits, and stricter custom-frontend template-reuse actionability checks in the connection gate.
+- This slice does not invent new render element types; it composes existing APIable elements so public render/custom frontend contracts continue to expose each block through normal `content.elements[]` metadata.
