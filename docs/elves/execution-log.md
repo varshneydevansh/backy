@@ -3362,3 +3362,24 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Commit and push the Backy verifier/source slice.
 - After Backy Vercel redeploys, rerun production readiness, hosted admin login shell, and the strict deployed custom frontend gate so the production Backy verifier source and separate frontend deployment are proven together.
+
+## Checkpoint: 2026-06-02 13:12 IST - Dashboard Custom Frontend Control Readiness
+
+**Scope:** Batch 5 custom-frontend launch polish, focused on making the first admin screen show the same control state as the deeper Site Detail handoff.
+
+**Changed:**
+- Added `backy.dashboard-custom-frontend-control-readiness.v1` to the Dashboard custom frontend launch panel and downloadable dashboard handoff.
+- Derived Backy-owned checks for public API contract, frontend design source, template registry, and deployed frontend verifier from the active site state.
+- Kept operator-owned gates explicit for public-domain ownership and Vercel Git previews.
+- Added copyable `backy.dashboard-custom-frontend-next-action.v1` so owners/frontend agents can act from Dashboard without reading the whole Site Detail checklist.
+- Extended the dashboard source/render smoke to guard the readiness schema, check rows, operator/manual status, verifier link, and next-action copy affordance.
+
+**Validation:**
+- PASS: `npm run test:dashboard --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Next:**
+- Commit and push this focused dashboard control-readiness slice.
+- Continue the release path from the survival guide: Vercel GitHub App access remains external/manual for the private separate frontend repo, and public-domain DNS cutover should wait until the operator is ready.

@@ -90,6 +90,25 @@ type DashboardRouteTarget =
   | '/blog/new';
 type DashboardWorkflowSearch = { quickCreate: 'product' } | { quickCreate: 'blank' };
 type DashboardPageCreateTemplate = 'registration' | 'contact' | 'storefront' | 'blog-index';
+type DashboardCustomFrontendControlStatus = 'ready' | 'review' | 'manual';
+type DashboardCustomFrontendTemplateType = 'page' | 'blogPost' | 'section' | 'form' | 'product' | 'collection';
+
+interface DashboardCustomFrontendControlCheck {
+  id: string;
+  label: string;
+  status: DashboardCustomFrontendControlStatus;
+  owner: 'backy' | 'operator';
+  detail: string;
+}
+
+const DASHBOARD_CUSTOM_FRONTEND_TEMPLATE_TYPES: DashboardCustomFrontendTemplateType[] = [
+  'page',
+  'blogPost',
+  'section',
+  'form',
+  'product',
+  'collection',
+];
 
 interface DashboardData {
   sites: Site[];
@@ -1612,12 +1631,153 @@ function Index() {
     customFrontendPublicHost,
     publicBaseUrl,
   ]);
+  const customFrontendControlReadiness = useMemo(() => {
+    const frontendDesign = activeSite?.settings?.frontendDesign || null;
+    const hasDesignContract = Boolean(frontendDesign && frontendDesign.status !== 'unconfigured');
+    const hasCustomFrontendSource = Boolean(
+      frontendDesign?.source?.type === 'custom-frontend' &&
+      frontendDesign.source.url,
+    );
+    const templateTypes = new Set((frontendDesign?.templates || []).map((template) => template.type));
+    const missingTemplateTypes = DASHBOARD_CUSTOM_FRONTEND_TEMPLATE_TYPES.filter((type) => !templateTypes.has(type));
+    const versionedTemplates = (frontendDesign?.templates || []).filter((template) => (
+      template.status !== 'archived' &&
+      template.status !== 'deprecated' &&
+      template.version !== undefined &&
+      template.version !== null &&
+      Boolean(template.updatedAt)
+    ));
+    const templatesReady =
+      missingTemplateTypes.length === 0 &&
+      (frontendDesign?.templates.length || 0) > 0 &&
+      versionedTemplates.length === (frontendDesign?.templates || []).filter((template) => (
+        template.status !== 'archived' && template.status !== 'deprecated'
+      )).length;
+    const verifierRoute = `/sites/${encodeURIComponent(activeSiteId)}#site-custom-frontend-verifier`;
+    const checks: DashboardCustomFrontendControlCheck[] = [
+      {
+        id: 'public-api-contract',
+        label: 'Backy public API',
+        status: 'ready',
+        owner: 'backy',
+        detail: `Agent handoff, manifest, OpenAPI, and render endpoints start at ${customFrontendLaunch.publicApiBase}.`,
+      },
+      {
+        id: 'frontend-design-source',
+        label: 'Frontend design source',
+        status: hasCustomFrontendSource ? 'ready' : 'review',
+        owner: 'backy',
+        detail: hasCustomFrontendSource
+          ? `${frontendDesign?.source.url} is synced as this site's custom frontend design source.`
+          : hasDesignContract
+            ? 'A design contract exists, but it is not synced to a verified custom frontend source URL yet.'
+            : 'Open Site Detail to capture defaults or sync a verified custom frontend before generating custom-designed content.',
+      },
+      {
+        id: 'template-registry',
+        label: 'Template registry',
+        status: templatesReady ? 'ready' : 'review',
+        owner: 'backy',
+        detail: templatesReady
+          ? `${frontendDesign?.templates.length || 0} versioned templates cover page, blog, section, form, product, and collection creation.`
+          : missingTemplateTypes.length > 0
+            ? `Missing template types: ${missingTemplateTypes.join(', ')}.`
+            : 'Prepare template version metadata before frontend-template cloning is considered launch-ready.',
+      },
+      {
+        id: 'deployed-frontend-verifier',
+        label: 'Deployed frontend verifier',
+        status: 'review',
+        owner: 'backy',
+        detail:
+          'Run the Site Detail verifier against the deployed website so /api/backy-connection and data-backy-* DOM control attributes are proven before DNS moves.',
+      },
+      {
+        id: 'public-domain-owner',
+        label: 'Public domain owner',
+        status: 'manual',
+        owner: 'operator',
+        detail:
+          'Attach the production website domain to the separate custom frontend Vercel project, not to backy-admin or backy-public.',
+      },
+      {
+        id: 'vercel-git-previews',
+        label: 'Vercel Git previews',
+        status: 'manual',
+        owner: 'operator',
+        detail:
+          'Production can run from manual deploys; branch Preview env waits for Vercel GitHub App access to the private frontend repo.',
+      },
+    ];
+    const backyChecks = checks.filter((check) => check.owner === 'backy');
+    const readyCount = checks.filter((check) => check.status === 'ready').length;
+    const reviewCount = checks.filter((check) => check.status === 'review').length;
+    const manualCount = checks.filter((check) => check.status === 'manual').length;
+    const backyReadyCount = backyChecks.filter((check) => check.status === 'ready').length;
+    const firstReview = backyChecks.find((check) => check.status === 'review');
+    const firstManual = checks.find((check) => check.owner === 'operator' && check.status === 'manual');
+    const nextAction = firstReview
+      ? {
+        schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1',
+        id: `review-${firstReview.id}`,
+        label: firstReview.label,
+        detail: firstReview.detail,
+        owner: firstReview.owner,
+        readinessStatus: firstReview.status,
+        target: verifierRoute,
+      }
+      : firstManual
+        ? {
+          schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1',
+          id: `operator-${firstManual.id}`,
+          label: firstManual.label,
+          detail: firstManual.detail,
+          owner: firstManual.owner,
+          readinessStatus: firstManual.status,
+          target: firstManual.id === 'public-domain-owner'
+            ? 'custom-frontend-vercel-project-domains'
+            : 'custom-frontend-vercel-project-git-settings',
+        }
+        : {
+          schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1',
+          id: 'custom-frontend-dashboard-ready',
+          label: 'Custom frontend control ready',
+          detail: 'Backy dashboard-visible custom frontend checks are ready.',
+          owner: 'backy' as const,
+          readinessStatus: 'ready' as const,
+          target: verifierRoute,
+        };
+
+    return {
+      schemaVersion: 'backy.dashboard-custom-frontend-control-readiness.v1',
+      status:
+        reviewCount > 0
+          ? 'needs-review'
+          : manualCount > 0
+            ? 'backy-ready-manual-externals'
+            : 'ready',
+      expectedProbe: '/api/backy-connection',
+      readyCount,
+      reviewCount,
+      manualCount,
+      total: checks.length,
+      backyReadyCount,
+      backyTotal: backyChecks.length,
+      nextAction,
+      verifierRoute,
+      checks,
+    };
+  }, [activeSite?.settings?.frontendDesign, activeSiteId, customFrontendLaunch.publicApiBase]);
   const customFrontendBrowserEnvText = useMemo(() => Object.entries(customFrontendLaunch.browserSafeEnv)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n'), [customFrontendLaunch.browserSafeEnv]);
   const customFrontendServerEnvText = useMemo(() => Object.entries(customFrontendLaunch.serverSideEnv)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n'), [customFrontendLaunch.serverSideEnv]);
+  const customFrontendNextActionText = useMemo(
+    () => JSON.stringify(customFrontendControlReadiness.nextAction, null, 2),
+    [customFrontendControlReadiness.nextAction],
+  );
   const frontendHandoff = useMemo(() => ({
     schemaVersion: 'backy.dashboard-handoff.v1',
     generatedAt: new Date().toISOString(),
@@ -1651,6 +1811,7 @@ function Index() {
     publicEndpoints: frontendContractUrls,
     adminEndpoints: Object.fromEntries(adminContractUrlEntries),
     customFrontendLaunch,
+    customFrontendControlReadiness,
     apiConsumers: {
       publicEndpointCount: apiConsumerReadiness.publicEndpoints,
       adminEndpointCount: apiConsumerReadiness.adminEndpoints,
@@ -1777,6 +1938,7 @@ function Index() {
     apiConsumerReadiness,
     backendHealthy,
     buildDashboardPageCreateRoute,
+    customFrontendControlReadiness,
     customFrontendLaunch,
     dashboard.collections.length,
     dashboard.comments,
@@ -3662,6 +3824,9 @@ function Index() {
             data-domain-owner={customFrontendLaunch.domainOwner}
             data-browser-env-keys={Object.keys(customFrontendLaunch.browserSafeEnv).join(',')}
             data-server-env-keys={Object.keys(customFrontendLaunch.serverSideEnv).join(',')}
+            data-control-readiness-schema={customFrontendControlReadiness.schemaVersion}
+            data-control-readiness-status={customFrontendControlReadiness.status}
+            data-control-backy-ready={`${customFrontendControlReadiness.backyReadyCount}/${customFrontendControlReadiness.backyTotal}`}
           >
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
@@ -3676,6 +3841,110 @@ function Index() {
               <span className="w-fit rounded-full bg-background px-2.5 py-1 text-xs font-semibold text-primary">
                 Custom website Vercel project
               </span>
+            </div>
+
+            <div
+              className="mt-4 rounded-lg border border-border bg-background p-3"
+              data-testid="dashboard-custom-frontend-control-readiness"
+              data-schema={customFrontendControlReadiness.schemaVersion}
+              data-status={customFrontendControlReadiness.status}
+              data-ready-count={customFrontendControlReadiness.readyCount}
+              data-review-count={customFrontendControlReadiness.reviewCount}
+              data-manual-count={customFrontendControlReadiness.manualCount}
+              data-backy-ready-count={customFrontendControlReadiness.backyReadyCount}
+              data-backy-total={customFrontendControlReadiness.backyTotal}
+              data-expected-probe={customFrontendControlReadiness.expectedProbe}
+            >
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Control readiness
+                    </span>
+                    <span className={cn(
+                      'rounded-full px-2.5 py-1 text-xs font-semibold',
+                      customFrontendControlReadiness.status === 'ready'
+                        ? 'bg-success/10 text-success'
+                        : customFrontendControlReadiness.status === 'backy-ready-manual-externals'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-warning/10 text-warning',
+                    )}>
+                      {customFrontendControlReadiness.backyReadyCount}/{customFrontendControlReadiness.backyTotal} Backy ready
+                    </span>
+                    <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                      {customFrontendControlReadiness.manualCount} manual
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Dashboard-visible gate for the custom frontend control loop: design source, templates, deployed verifier, domain owner, and Git previews.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyDashboardText(customFrontendNextActionText, 'Custom frontend next action')}
+                    disabled={isDashboardBusy}
+                    data-testid="dashboard-copy-custom-frontend-next-action"
+                    data-copy-schema={customFrontendControlReadiness.nextAction.schemaVersion}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Copy className="size-3.5" />
+                    Copy next action
+                  </button>
+                  <Link
+                    to="/sites/$siteId"
+                    params={{ siteId: activeSiteId }}
+                    hash="site-custom-frontend-verifier"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                    data-testid="dashboard-open-custom-frontend-verifier"
+                  >
+                    Open verifier
+                    <ArrowRight className="size-3.5" />
+                  </Link>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {customFrontendControlReadiness.checks.map((check) => (
+                  <div
+                    key={check.id}
+                    className="rounded-md border border-border bg-muted/25 px-3 py-2 text-xs"
+                    data-testid={`dashboard-custom-frontend-control-check-${check.id}`}
+                    data-check-status={check.status}
+                    data-check-owner={check.owner}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">{check.label}</span>
+                      <span className={cn(
+                        'rounded-full px-2 py-0.5 font-semibold',
+                        check.status === 'ready'
+                          ? 'bg-success/10 text-success'
+                          : check.status === 'manual'
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-warning/10 text-warning',
+                      )}>
+                        {check.owner === 'operator' ? 'manual' : check.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 leading-5 text-muted-foreground">{check.detail}</p>
+                  </div>
+                ))}
+              </div>
+              <div
+                className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-5"
+                data-testid="dashboard-custom-frontend-next-action"
+                data-next-action-schema={customFrontendControlReadiness.nextAction.schemaVersion}
+                data-next-action-id={customFrontendControlReadiness.nextAction.id}
+                data-next-action-owner={customFrontendControlReadiness.nextAction.owner}
+                data-next-action-readiness={customFrontendControlReadiness.nextAction.readinessStatus}
+                data-next-action-target={customFrontendControlReadiness.nextAction.target}
+              >
+                <div className="font-semibold text-foreground">
+                  Next action: {customFrontendControlReadiness.nextAction.label}
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  {customFrontendControlReadiness.nextAction.detail}
+                </p>
+              </div>
             </div>
 
             <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(260px,0.7fr)]">

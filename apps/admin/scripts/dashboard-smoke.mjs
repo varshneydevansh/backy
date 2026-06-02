@@ -101,13 +101,22 @@ const assertDashboardSourceContracts = () => {
     "detail: 'API handoff'",
     'data-testid="dashboard-module-map-details"',
     "schemaVersion: 'backy.dashboard-custom-frontend-launch.v1'",
+    "schemaVersion: 'backy.dashboard-custom-frontend-control-readiness.v1'",
+    "schemaVersion: 'backy.dashboard-custom-frontend-next-action.v1'",
     "domainOwner: 'custom-frontend-vercel-project'",
     'customFrontendLaunch',
+    'customFrontendControlReadiness',
+    'DASHBOARD_CUSTOM_FRONTEND_TEMPLATE_TYPES',
     'NEXT_PUBLIC_BACKY_API_BASE_URL',
     'NEXT_PUBLIC_BACKY_SITE_ID',
     'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST',
     'BACKY_PUBLIC_API_BASE_URL',
     'data-testid="dashboard-custom-frontend-launch"',
+    'data-testid="dashboard-custom-frontend-control-readiness"',
+    'data-testid="dashboard-custom-frontend-next-action"',
+    'data-testid="dashboard-copy-custom-frontend-next-action"',
+    'data-testid="dashboard-open-custom-frontend-verifier"',
+    'data-testid={`dashboard-custom-frontend-control-check-${check.id}`}',
     'data-testid="dashboard-custom-frontend-browser-env"',
     'data-testid="dashboard-custom-frontend-server-env"',
     'Open Sites handoff',
@@ -668,6 +677,8 @@ const assertDashboardLayout = async (client, siteName) => {
   const layout = await evaluate(client, `(() => {
     const apiConsumers = document.querySelector('[data-testid="dashboard-api-consumers"]');
     const customLaunch = document.querySelector('[data-testid="dashboard-custom-frontend-launch"]');
+    const customReadiness = document.querySelector('[data-testid="dashboard-custom-frontend-control-readiness"]');
+    const customNextAction = document.querySelector('[data-testid="dashboard-custom-frontend-next-action"]');
     const customLaunchText = customLaunch?.textContent || '';
     const customLaunchState = {
       exists: Boolean(customLaunch),
@@ -675,6 +686,36 @@ const assertDashboardLayout = async (client, siteName) => {
       domainOwner: customLaunch?.getAttribute('data-domain-owner') || '',
       browserEnvKeys: customLaunch?.getAttribute('data-browser-env-keys') || '',
       serverEnvKeys: customLaunch?.getAttribute('data-server-env-keys') || '',
+      controlSchema: customLaunch?.getAttribute('data-control-readiness-schema') || '',
+      controlStatus: customLaunch?.getAttribute('data-control-readiness-status') || '',
+      backyReady: customLaunch?.getAttribute('data-control-backy-ready') || '',
+      controlReadiness: {
+        exists: Boolean(customReadiness),
+        schema: customReadiness?.getAttribute('data-schema') || '',
+        status: customReadiness?.getAttribute('data-status') || '',
+        readyCount: Number(customReadiness?.getAttribute('data-ready-count') || 0),
+        reviewCount: Number(customReadiness?.getAttribute('data-review-count') || 0),
+        manualCount: Number(customReadiness?.getAttribute('data-manual-count') || 0),
+        backyReadyCount: Number(customReadiness?.getAttribute('data-backy-ready-count') || 0),
+        backyTotal: Number(customReadiness?.getAttribute('data-backy-total') || 0),
+        expectedProbe: customReadiness?.getAttribute('data-expected-probe') || '',
+        checkIds: Array.from(customReadiness?.querySelectorAll('[data-testid^="dashboard-custom-frontend-control-check-"]') || []).map((node) => node.getAttribute('data-testid') || ''),
+        ownerStatuses: Array.from(customReadiness?.querySelectorAll('[data-testid^="dashboard-custom-frontend-control-check-"]') || []).map((node) => ({
+          owner: node.getAttribute('data-check-owner') || '',
+          status: node.getAttribute('data-check-status') || '',
+        })),
+      },
+      nextAction: {
+        exists: Boolean(customNextAction),
+        schema: customNextAction?.getAttribute('data-next-action-schema') || '',
+        id: customNextAction?.getAttribute('data-next-action-id') || '',
+        owner: customNextAction?.getAttribute('data-next-action-owner') || '',
+        readiness: customNextAction?.getAttribute('data-next-action-readiness') || '',
+        target: customNextAction?.getAttribute('data-next-action-target') || '',
+        copyAction: Boolean(document.querySelector('[data-testid="dashboard-copy-custom-frontend-next-action"]')),
+        copySchema: document.querySelector('[data-testid="dashboard-copy-custom-frontend-next-action"]')?.getAttribute('data-copy-schema') || '',
+        verifierLink: Boolean(document.querySelector('[data-testid="dashboard-open-custom-frontend-verifier"]')),
+      },
       text: customLaunchText.slice(0, 1000),
     };
 
@@ -751,9 +792,32 @@ const assertDashboardLayout = async (client, siteName) => {
       customLaunchText.includes('Custom frontend launch') &&
       customLaunchText.includes('Browser-safe env') &&
       customLaunchText.includes('Server loader env') &&
+      customLaunchText.includes('Control readiness') &&
+      customLaunchText.includes('Next action') &&
       customLaunchText.includes('NEXT_PUBLIC_BACKY_API_BASE_URL') &&
       customLaunchState.schema === 'backy.dashboard-custom-frontend-launch.v1' &&
       customLaunchState.domainOwner === 'custom-frontend-vercel-project' &&
+      customLaunchState.controlSchema === 'backy.dashboard-custom-frontend-control-readiness.v1' &&
+      ['needs-review', 'backy-ready-manual-externals', 'ready'].includes(customLaunchState.controlStatus) &&
+      customLaunchState.backyReady.includes('/') &&
+      customLaunchState.controlReadiness.exists &&
+      customLaunchState.controlReadiness.schema === 'backy.dashboard-custom-frontend-control-readiness.v1' &&
+      customLaunchState.controlReadiness.expectedProbe === '/api/backy-connection' &&
+      customLaunchState.controlReadiness.backyTotal >= 4 &&
+      customLaunchState.controlReadiness.checkIds.includes('dashboard-custom-frontend-control-check-public-api-contract') &&
+      customLaunchState.controlReadiness.checkIds.includes('dashboard-custom-frontend-control-check-frontend-design-source') &&
+      customLaunchState.controlReadiness.checkIds.includes('dashboard-custom-frontend-control-check-template-registry') &&
+      customLaunchState.controlReadiness.checkIds.includes('dashboard-custom-frontend-control-check-deployed-frontend-verifier') &&
+      customLaunchState.controlReadiness.ownerStatuses.some((entry) => entry.owner === 'operator' && entry.status === 'manual') &&
+      customLaunchState.nextAction.exists &&
+      customLaunchState.nextAction.schema === 'backy.dashboard-custom-frontend-next-action.v1' &&
+      customLaunchState.nextAction.id.length > 0 &&
+      ['backy', 'operator'].includes(customLaunchState.nextAction.owner) &&
+      ['ready', 'review', 'manual'].includes(customLaunchState.nextAction.readiness) &&
+      customLaunchState.nextAction.target.length > 0 &&
+      customLaunchState.nextAction.copyAction &&
+      customLaunchState.nextAction.copySchema === 'backy.dashboard-custom-frontend-next-action.v1' &&
+      customLaunchState.nextAction.verifierLink &&
       customLaunchState.browserEnvKeys.includes('NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST'),
     hasPersistenceReadiness: Boolean(document.querySelector('[data-testid="dashboard-persistence-readiness"]')) &&
       document.body?.innerText?.includes('Persistence and Supabase readiness') &&
