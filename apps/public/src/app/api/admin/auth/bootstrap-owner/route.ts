@@ -154,6 +154,38 @@ const getCreatedUserId = (payload: SupabaseJson) => {
   return '';
 };
 
+async function findSupabaseAuthUserByEmail(url: string, serviceKey: string, email: string) {
+  for (let page = 1; page <= 10; page += 1) {
+    const response = await fetchSupabaseJson(
+      url,
+      serviceKey,
+      `/auth/v1/admin/users?page=${page}&per_page=100`,
+      { method: 'GET' },
+    );
+    if (!response.ok) {
+      throw new Error(`Existing Supabase Auth user lookup failed with ${response.status}`);
+    }
+
+    const root = firstObject(response.json);
+    const users = Array.isArray(root?.users)
+      ? root.users
+      : Array.isArray(response.json)
+        ? response.json
+        : [];
+    const match = users.find((user) => {
+      if (!user || typeof user !== 'object' || Array.isArray(user)) return false;
+      const candidate = user as Record<string, unknown>;
+      return normalizeEmail(candidate.email) === email && typeof candidate.id === 'string' && candidate.id;
+    }) as Record<string, unknown> | undefined;
+    if (match && typeof match.id === 'string') return match.id;
+
+    const total = typeof root?.total === 'number' ? root.total : users.length;
+    if (page * 100 >= total || users.length === 0) break;
+  }
+
+  return '';
+}
+
 async function activeOwnerExists(url: string, serviceKey: string) {
   const response = await fetchSupabaseJson(
     url,
@@ -389,6 +421,11 @@ export async function POST(request: NextRequest) {
       if (existingProfile) {
         ownerUserId = existingProfile.id as string;
         authAction = 'adopted-existing-backy-profile';
+      } else {
+        ownerUserId = await findSupabaseAuthUserByEmail(supabase.url, supabase.serviceKey, email);
+        if (ownerUserId) {
+          authAction = 'adopted-existing-supabase-auth-user';
+        }
       }
     }
     if (!ownerUserId) {

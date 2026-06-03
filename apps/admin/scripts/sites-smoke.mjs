@@ -166,9 +166,11 @@ const assertSitesRouteSourceContract = () => {
     'Site create permission state must expose retryable permission recovery and user-access handoff',
   );
   assert(
-    createSource.includes('const canUseSiteCreateRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
+    createSource.includes('const canUseSiteCreateRoleDefaults = !permissionMatrix && Boolean(currentAdmin);') &&
       createSource.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteCreateRoleDefaults;') &&
       createSource.includes('const isSiteCreateRoutePermissionAllowed = (key: SiteCreatePermissionKey) => (') &&
+      createSource.includes('if (!permissionMatrix && currentAdmin) return SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);') &&
+      createSource.includes('Using ${currentAdmin.role} role defaults while detailed ${key} permissions sync.') &&
       createSource.includes("const canCreateSites = isSiteCreateRoutePermissionAllowed('sites.create');") &&
       createSource.includes("const canEditPages = isSiteCreateRoutePermissionAllowed('pages.edit');") &&
       createSource.includes("const canPublishPages = isSiteCreateRoutePermissionAllowed('pages.publish');") &&

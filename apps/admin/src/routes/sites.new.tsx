@@ -105,11 +105,12 @@ const siteCreatePermissionRule = (
 
 const isSiteCreatePermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
-  _currentAdmin: User | null,
+  currentAdmin: User | null,
   key: SiteCreatePermissionKey,
 ): boolean => {
   const matrixRule = siteCreatePermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.allowed;
+  if (!permissionMatrix && currentAdmin) return SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);
 
   return false;
 };
@@ -122,6 +123,9 @@ const siteCreatePermissionReason = (
   const matrixRule = siteCreatePermissionRule(permissionMatrix, key);
   if (matrixRule) return matrixRule.reason;
   if (!currentAdmin) return 'Sign in with an admin account to use this capability.';
+  if (!permissionMatrix && SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)) {
+    return `Using ${currentAdmin.role} role defaults while detailed ${key} permissions sync.`;
+  }
   if (!permissionMatrix) return 'Permission matrix unavailable. Reload permissions before using this capability.';
 
   return SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)
@@ -349,11 +353,10 @@ function NewSitePage() {
     templateImportUrl: '',
     marketplaceTemplateId: 'backy-starter-business',
   });
-  const canUseSiteCreateRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
+  const canUseSiteCreateRoleDefaults = !permissionMatrix && Boolean(currentAdmin);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseSiteCreateRoleDefaults;
   const isSiteCreateRoutePermissionAllowed = (key: SiteCreatePermissionKey) => (
     isSiteCreatePermissionAllowed(permissionMatrix, currentAdmin, key)
-    || (canUseSiteCreateRoleDefaults && Boolean(currentAdmin && SITE_CREATE_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
   );
   const canCreateSites = isSiteCreateRoutePermissionAllowed('sites.create');
   const canEditPages = isSiteCreateRoutePermissionAllowed('pages.edit');
