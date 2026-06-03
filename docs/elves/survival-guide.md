@@ -401,6 +401,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Blog-create source guard, admin typecheck, rendered Blog create smoke with local dev MFA, diff check, and repo-public hygiene are green for the custom-frontend blog starter route-sync slice.
 
+**Newest editor command polish:** The rendered command-palette smoke now executes real layer mutation commands through Cmd/Ctrl+K. It selects `smoke-quote`, runs `duplicate-selection`, proves a fresh `smoke-quote-copy` canvas layer is selected and counted, then runs `delete-selection` and proves only the duplicate is removed while the original layer remains. Blocked Undo is now asserted before mutation commands because Undo is correctly ready after history exists.
+
+**Newest verification:** Command-palette source guard, editor smoke coverage, rendered command-palette smoke with local dev MFA, admin typecheck, diff check, and repo-public hygiene are green for the command-palette layer mutation slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

@@ -640,8 +640,12 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('BACKY_EDITOR_COMMAND_PALETTE_SMOKE') &&
       smokeSource.includes('testEditorCommandPalette') &&
       smokeSource.includes("'open-page-settings'") &&
+      smokeSource.includes("'duplicate-selection'") &&
+      smokeSource.includes("'delete-selection'") &&
+      smokeSource.includes('duplicateCommand') &&
+      smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
-    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke',
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including safe mutation commands',
   );
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
@@ -11963,6 +11967,14 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     componentPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-component-panel-visible') || '',
     inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
     rightPanel: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-right-panel') || '',
+    selectedId: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-id') || '',
+    selectedIds: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-selected-ids') || '',
+    canvasIds: Array.from(document.querySelectorAll('[data-testid="editor-canvas"] [data-element-id]'))
+      .map((node) => node.getAttribute('data-element-id') || '')
+      .filter(Boolean),
+    canvasUniqueCount: new Set(Array.from(document.querySelectorAll('[data-testid="editor-canvas"] [data-element-id]'))
+      .map((node) => node.getAttribute('data-element-id') || '')
+      .filter(Boolean)).size,
     autoFit: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-auto-fit') || '',
     pageSettingsDialogOpen: Boolean(document.querySelector('[data-testid="page-settings-dialog"]')),
     pageSettingsTitle: document.querySelector('[data-testid="page-settings-title"]') instanceof HTMLInputElement
@@ -12152,7 +12164,7 @@ const testEditorCommandPalette = async (client) => {
     'undo filter',
   );
   const undoResult = undoFiltered.results.find((result) => result.commandId === 'undo');
-  assert(undoResult?.actionState === 'blocked' && undoResult.disabledReason, `Command palette must expose blocked undo status: ${JSON.stringify(undoFiltered)}`);
+  assert(undoResult?.actionState === 'blocked' && undoResult.disabledReason, `Command palette must expose blocked undo status before mutation commands run: ${JSON.stringify(undoFiltered)}`);
 
   const clickedBlocked = await evaluate(client, `(() => {
     const button = document.querySelector('[data-testid="editor-command-palette-result-undo"]');
@@ -12168,6 +12180,44 @@ const testEditorCommandPalette = async (client) => {
   );
   await clickEnabledControlByTestId(client, 'editor-command-palette-close', 'command palette close');
 
+  const mutationTargetId = 'smoke-quote';
+  await selectLayerIds(client, [mutationTargetId]);
+  const beforeDuplicate = await readEditorCommandPaletteState(client);
+  assert(
+    beforeDuplicate.canvasIds.includes(mutationTargetId) &&
+      beforeDuplicate.selectedIds.split(',').includes(mutationTargetId),
+    `Command palette mutation setup did not select ${mutationTargetId}: ${JSON.stringify(beforeDuplicate)}`,
+  );
+  const duplicateCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'duplicate',
+    'duplicate-selection',
+    'duplicate selection',
+    (state) => (
+      state.canvasUniqueCount === beforeDuplicate.canvasUniqueCount + 1 &&
+      state.canvasIds.includes(mutationTargetId) &&
+      state.selectedIds.split(',').some((id) => id && id !== mutationTargetId)
+    ),
+  );
+  const duplicateId = duplicateCommand.after.selectedIds
+    .split(',')
+    .find((id) => id && id !== mutationTargetId);
+  assert(
+    duplicateId && duplicateCommand.after.canvasIds.includes(duplicateId),
+    `Command palette duplicate did not select a fresh canvas element: ${JSON.stringify(duplicateCommand.after)}`,
+  );
+  const deleteDuplicateCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'delete',
+    'delete-selection',
+    'delete duplicated selection',
+    (state) => (
+      state.canvasUniqueCount === beforeDuplicate.canvasUniqueCount &&
+      state.canvasIds.includes(mutationTargetId) &&
+      !state.canvasIds.includes(duplicateId)
+    ),
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12180,6 +12230,13 @@ const testEditorCommandPalette = async (client) => {
     toggleInspector,
     toggleFocus,
     settingsCommand,
+    duplicateCommand: {
+      targetId: mutationTargetId,
+      duplicateId,
+      filtered: duplicateCommand.filtered,
+      after: duplicateCommand.after,
+    },
+    deleteDuplicateCommand,
     undoFiltered,
     afterBlockedClick,
   };

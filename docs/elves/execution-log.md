@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 12:15 IST
+- **Last updated:** 2026-06-03 12:29 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 12:29 IST
+
+**Batch:** 2 / 5: Canvas Editor Interaction Fidelity / Ongoing UX Scout And Polish
+**Editor status:** Command palette layer mutation workflow is rendered-smoke covered
+
+**What changed:**
+- Extended the rendered command-palette smoke to track selected layer ids and unique canvas element ids.
+- The command-palette smoke now selects `smoke-quote`, executes `duplicate-selection` through the actual palette, proves a fresh `smoke-quote-copy` canvas layer is selected, then executes `delete-selection` through the palette and proves only the duplicate is removed while the original remains.
+- Moved the blocked Undo palette proof before mutation commands, since Undo is correctly ready after duplicate/delete history exists.
+- Tightened the source guard so command-palette coverage now explicitly requires safe mutation command proof in addition to shell/view/Page settings commands.
+
+**Commands run:**
+- `node --check apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The rendered smoke proved the palette result state flips from blocked to ready after layer selection, duplicate selection creates one extra unique canvas id, and delete selection restores the original count.
+- This closes another part of the release-plan command executor invariant without changing product behavior.
+
+**Next:**
+1. Commit and push this command-palette layer mutation slice.
+2. Re-read the survival guide after push, then continue editor command coverage or real long-page/custom-frontend blog authoring polish.
 
 ## 2026-06-03 12:15 IST
 
