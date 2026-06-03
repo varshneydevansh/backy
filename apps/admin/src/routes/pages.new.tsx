@@ -2,7 +2,7 @@
  * BACKY CMS - NEW PAGE
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Home, Image as ImageIcon, Layout, Menu, RefreshCw, Save, Search, Sparkles } from 'lucide-react';
 import {
@@ -1443,6 +1443,7 @@ function NewPageRoute() {
     const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
     const [autosaveStatus, setAutosaveStatus] = useState('Autosave ready');
     const [hasUserEditedDraft, setHasUserEditedDraft] = useState(false);
+    const autosaveTimerRef = useRef<number | null>(null);
     const [frontendDesign, setFrontendDesign] = useState<SiteFrontendDesignContract | null>(null);
     const [frontendDesignLoading, setFrontendDesignLoading] = useState(false);
     const [frontendDesignError, setFrontendDesignError] = useState<string | null>(null);
@@ -3139,7 +3140,11 @@ function NewPageRoute() {
         }
 
         setAutosaveStatus('Saving draft...');
-        const autosaveTimer = window.setTimeout(() => {
+        if (autosaveTimerRef.current) {
+            window.clearTimeout(autosaveTimerRef.current);
+        }
+
+        autosaveTimerRef.current = window.setTimeout(() => {
             try {
                 const savedAt = new Date().toISOString();
                 const draft: PageCreateAutosaveDraft = {
@@ -3152,10 +3157,17 @@ function NewPageRoute() {
                 setAutosaveStatus(`Autosaved ${new Date(savedAt).toLocaleTimeString()}`);
             } catch {
                 setAutosaveStatus('Autosave failed');
+            } finally {
+                autosaveTimerRef.current = null;
             }
         }, 800);
 
-        return () => window.clearTimeout(autosaveTimer);
+        return () => {
+            if (autosaveTimerRef.current) {
+                window.clearTimeout(autosaveTimerRef.current);
+                autosaveTimerRef.current = null;
+            }
+        };
     }, [
         autosavePausedForRecovery,
         formData,
@@ -3166,6 +3178,10 @@ function NewPageRoute() {
     ]);
 
     const clearAutosavedDraft = () => {
+        if (autosaveTimerRef.current) {
+            window.clearTimeout(autosaveTimerRef.current);
+            autosaveTimerRef.current = null;
+        }
         window.localStorage.removeItem(PAGE_CREATE_AUTOSAVE_KEY);
         setDraftRecovery(null);
         setAutosavePausedForRecovery(false);
@@ -5719,11 +5735,11 @@ function buildFrontendTemplateElements(
     const contentDocument = isRecord(content.contentDocument) ? content.contentDocument : {};
 
     if (Array.isArray(content.elements)) {
-        return content.elements as CanvasElement[];
+        return applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content);
     }
 
     if (Array.isArray(contentDocument.elements)) {
-        return contentDocument.elements as CanvasElement[];
+        return applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument);
     }
 
     const canvasWidth = template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width;
@@ -5814,6 +5830,88 @@ function buildFrontendTemplateElements(
             : 'Contact',
         footerCopy: 'Shared chrome seeded from the connected frontend design contract. Replace this with captured frontend chrome when available.',
     });
+}
+
+function cloneFrontendTemplateElements(elements: CanvasElement[]): CanvasElement[] {
+    return elements.map((element) => ({
+        ...element,
+        props: { ...element.props },
+        styles: element.styles ? { ...element.styles } : undefined,
+        responsive: element.responsive ? JSON.parse(JSON.stringify(element.responsive)) : undefined,
+        tokenRefs: element.tokenRefs ? { ...element.tokenRefs } : undefined,
+        assetIds: element.assetIds ? [...element.assetIds] : undefined,
+        dataBindings: element.dataBindings ? element.dataBindings.map((binding) => ({ ...binding })) : undefined,
+        bindingSlots: element.bindingSlots ? element.bindingSlots.map((slot) => ({ ...slot })) : undefined,
+        children: element.children ? cloneFrontendTemplateElements(element.children) : undefined,
+    }));
+}
+
+function collectFrontendTemplateBindingElementIds(
+    template: SiteFrontendDesignTemplate,
+    content: Record<string, unknown>,
+    source: 'page.title' | 'page.description',
+) {
+    const ids = new Set<string>();
+    if (source === 'page.title') {
+        ids.add(`frontend-template-${template.id}-heading`);
+    } else {
+        ids.add(`frontend-template-${template.id}-description`);
+    }
+
+    const dataBindings = isRecord(content.dataBindings) ? content.dataBindings : {};
+    const bindings = Array.isArray(dataBindings.bindings) ? dataBindings.bindings : [];
+    bindings.forEach((binding) => {
+        if (!isRecord(binding)) return;
+        if (binding.source !== source || typeof binding.elementId !== 'string') return;
+        ids.add(binding.elementId);
+    });
+
+    return ids;
+}
+
+function elementHasPageBinding(element: CanvasElement, source: 'page.title' | 'page.description') {
+    if (element.props?.binding === source) return true;
+
+    if (!Array.isArray(element.dataBindings)) return false;
+    return element.dataBindings.some((binding) => {
+        if (!isRecord(binding)) return false;
+        if (binding.source === source || binding.field === source) return true;
+        const sourceRecord = isRecord(binding.source) ? binding.source : null;
+        return sourceRecord?.kind === 'page' && sourceRecord.field === source.replace('page.', '');
+    });
+}
+
+function applyFrontendTemplatePageText(
+    elements: CanvasElement[],
+    template: SiteFrontendDesignTemplate,
+    input: { title: string; description: string },
+    content: Record<string, unknown>,
+): CanvasElement[] {
+    const titleIds = collectFrontendTemplateBindingElementIds(template, content, 'page.title');
+    const descriptionIds = collectFrontendTemplateBindingElementIds(template, content, 'page.description');
+    const nextTitle = input.title.trim();
+    const nextDescription = input.description.trim();
+
+    const updateElement = (element: CanvasElement): CanvasElement => {
+        const children = element.children ? element.children.map(updateElement) : undefined;
+        let props = element.props;
+
+        if (nextTitle && (titleIds.has(element.id) || elementHasPageBinding(element, 'page.title')) && element.props.content !== nextTitle) {
+            props = { ...props, content: nextTitle };
+        }
+
+        if (nextDescription && (descriptionIds.has(element.id) || elementHasPageBinding(element, 'page.description')) && element.props.content !== nextDescription) {
+            props = { ...props, content: nextDescription };
+        }
+
+        return {
+            ...element,
+            props,
+            ...(children ? { children } : {}),
+        };
+    };
+
+    return cloneFrontendTemplateElements(elements).map(updateElement);
 }
 
 function buildTemplateElements(input: {

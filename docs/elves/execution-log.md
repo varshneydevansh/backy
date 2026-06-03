@@ -3785,6 +3785,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 10:50 IST - Captured Page Template Copy And Autosave Cleanup
+
+**Scope:** Batch 5 custom-frontend page authoring polish, focused on making captured frontend page templates safe to reuse from `/pages/new` without stale copied title/description text or lingering local drafts after successful canvas creation.
+
+**Changed:**
+- Captured custom frontend page templates now rewrite bound `page.title` and `page.description` elements from the new page form before persistence.
+- The rewrite path reads both canonical captured element ids and explicit `dataBindings.bindings[]` / element binding metadata, while cloning template elements so the stored frontend design contract is not mutated.
+- Page-create autosave now cancels any pending localStorage timer when a page is successfully created or a recovered draft is cleared, avoiding a race where an old draft could be written back during navigation to the editor.
+- Page-create smoke coverage now seeds a captured custom frontend template with stale title/description copy and asserts the created page stores the fresh title/description in canvas content.
+
+**Validation:**
+- PASS: `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_PAGE_CREATE_FRONTEND_TEMPLATE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- The rendered smoke created `page_mpxmb3is_iovrzo`, landed in `/pages/:id/edit?siteId=site-demo&focus=canvas`, verified `storedDraft: null`, and checked mobile/tablet public render with no horizontal overflow.
+- This slice closes another real custom-frontend control path: captured template reuse now carries the site design/chrome/editable-map machinery while replacing the authored page metadata in the actual APIable canvas elements.
+
+**Next:**
+- Commit, push, re-read the survival guide, then continue the next highest-friction rendered editor/page/blog gap.
+
 ## Checkpoint: 2026-06-03 10:32 IST - Blog Custom Template Draft Canvas Sync
 
 **Scope:** Batch 5 blog/custom-frontend authoring polish, focused on the real author path where a custom frontend blog template should visibly inherit the writer's title and excerpt while the post is being created, not only after the save pipeline rewrites the persisted payload.

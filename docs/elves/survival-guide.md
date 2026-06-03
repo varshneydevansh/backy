@@ -377,6 +377,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest blog authoring polish:** Blog creation now syncs custom frontend template title/excerpt edits into the visible canvas before save via an explicit `CanvasEditor.externalElementsRevision` refresh signal. The update path preserves element identity when no bound content changed, and the blog-create source guard, admin typecheck, diff check, and repo-public hygiene are green.
 
+**Newest page template authoring polish:** Page creation now rewrites captured custom frontend template `page.title` and `page.description` bindings into the actual canvas elements before save, and cancels pending autosave timers so successful page creation does not leave a stale `/pages/new` draft in localStorage. Source page-create guard, admin typecheck, rendered custom-frontend page-create smoke, diff check, and repo-public hygiene are green.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

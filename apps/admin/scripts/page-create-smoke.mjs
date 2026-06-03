@@ -1551,8 +1551,13 @@ const assertPageCreateSourceContracts = () => {
       frontendDesignContractSource.includes('const assets = cloneArrayOrRecord(current.frontendDesignAssets)') &&
       frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.assets)') &&
       frontendDesignContractSource.includes('const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)') &&
-      frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.interactions)'),
-    'Page create frontend template seeding must preserve source mode, custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
+      frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.interactions)') &&
+      source.includes('return applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content);') &&
+      source.includes('return applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument);') &&
+      source.includes('collectFrontendTemplateBindingElementIds') &&
+      source.includes('element.props?.binding === source') &&
+      source.includes("sourceRecord?.kind === 'page'"),
+    'Page create frontend template seeding must preserve source mode, custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance while rewriting captured page title/description bindings',
   );
   assert(
     source.includes("schemaVersion: 'backy.page-create-dataset-readiness.v1'") &&
@@ -2591,6 +2596,74 @@ const smokeFrontendDesignContract = () => ({
         seo: {
           titleTemplate: '{title} | Smoke Frontend',
         },
+        elements: [
+          {
+            id: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}`,
+            type: 'section',
+            name: 'Captured smoke page template',
+            x: 0,
+            y: 0,
+            width: 1280,
+            height: 820,
+            zIndex: 0,
+            props: {
+              backgroundColor: '#ffffff',
+              frontendTemplateId: FRONTEND_DESIGN_TEMPLATE_ID,
+              frontendTemplateName: FRONTEND_DESIGN_TEMPLATE_NAME,
+              routePattern: '/smoke-contract',
+            },
+            children: [
+              {
+                id: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`,
+                type: 'heading',
+                x: 72,
+                y: 72,
+                width: 720,
+                height: 96,
+                zIndex: 1,
+                props: {
+                  content: 'Stale captured page title',
+                  binding: 'page.title',
+                  level: 'h1',
+                  fontSize: 48,
+                  fontWeight: '800',
+                },
+              },
+              {
+                id: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-description`,
+                type: 'paragraph',
+                x: 76,
+                y: 190,
+                width: 680,
+                height: 96,
+                zIndex: 2,
+                props: {
+                  content: 'Stale captured page description',
+                  binding: 'page.description',
+                  fontSize: 18,
+                  lineHeight: 1.6,
+                },
+              },
+              {
+                id: `frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-editable-region`,
+                type: 'box',
+                x: 76,
+                y: 340,
+                width: 860,
+                height: 180,
+                zIndex: 3,
+                props: {
+                  backgroundColor: '#f8fafc',
+                  borderColor: '#cbd5e1',
+                  bindingHints: [
+                    { role: 'page.title', binding: 'page.title' },
+                    { role: 'page.description', binding: 'page.description' },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
         metadata: {
           animationTimeline: [{ id: 'hero-enter', duration: 420, easing: 'ease-out' }],
           editableSurface: 'page-create-smoke',
@@ -4457,11 +4530,13 @@ const assertFrontendDesignTemplatePageContent = async (pageId, slug, title) => {
   const canvasSize = content.canvasSize || contentDocument?.metadata?.canvasSize || {};
   const wrapper = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}`);
   const heading = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-heading`);
+  const description = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-description`);
   const editableRegion = byId.get(`frontend-template-${FRONTEND_DESIGN_TEMPLATE_ID}-editable-region`);
 
   assert(wrapper?.type === 'section', `Frontend template wrapper section missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
   assert(wrapper.props?.frontendTemplateId === FRONTEND_DESIGN_TEMPLATE_ID, `Frontend template wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
   assert(heading?.props?.content === title, `Frontend template heading does not use page title: ${JSON.stringify(heading?.props)}`);
+  assert(description?.props?.content === 'Smoke page seeded from a connected frontend design contract.', `Frontend template description does not use page description: ${JSON.stringify(description?.props)}`);
   assert(Array.isArray(editableRegion?.props?.bindingHints) && editableRegion.props.bindingHints.length === 2, `Frontend template editable region missing binding hints: ${JSON.stringify(editableRegion?.props)}`);
   assert(canvasSize.width === 1280 && canvasSize.height >= 960, `Frontend template canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(contentDocument?.kind === 'page', `Frontend template contentDocument kind mismatch: ${JSON.stringify(contentDocument)}`);
