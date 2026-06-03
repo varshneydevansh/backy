@@ -417,6 +417,11 @@ const updateSettings = async (input) => {
   return payload.data?.settings || payload.settings;
 };
 
+const listSites = async () => {
+  const payload = await requestApi('/api/admin/sites');
+  return payload.data?.sites || payload.sites || [];
+};
+
 const tryDeleteSite = async (siteId) => {
   if (!siteId) return;
   try {
@@ -891,6 +896,40 @@ const temporarilyAllowCollectionsSmokeFixtureQuotas = async (extraCollections = 
 const restoreCollectionsSmokeFixtureQuotas = async (settings) => {
   if (!settings) return;
   await updateSite(SITE_ID, { settings });
+};
+
+const temporarilyAllowCollectionsSmokeSiteQuota = async (extraSites = 1) => {
+  const settings = await getSettings();
+  const sites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
+  const requiredSiteLimit = Math.max(
+    Number.isFinite(currentSiteLimit) ? currentSiteLimit : 0,
+    sites.length + extraSites,
+  );
+
+  if (originalCommerce.overageMode !== 'block' || currentSiteLimit >= requiredSiteLimit) {
+    return null;
+  }
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        siteLimit: requiredSiteLimit,
+        overageMode: 'warn',
+      },
+    },
+  });
+
+  return originalIntegrations;
+};
+
+const restoreCollectionsSmokeSiteQuota = async (integrations) => {
+  if (!integrations) return;
+  await updateSettings({ integrations });
 };
 
 const waitForRecordStatus = async (collectionId, recordSlug, status) => {
@@ -3359,6 +3398,7 @@ const main = async () => {
   let emptyCollectionsSiteId;
   let originalFrontendDesign;
   let collectionsSmokeFixtureQuotaSettings = null;
+  let collectionsSmokeSiteQuotaIntegrations = null;
   const suffix = Date.now().toString(36);
   const collectionName = `Smoke Directory ${suffix}`;
   const collectionSlug = `smoke-directory-${suffix}`;
@@ -3377,6 +3417,7 @@ const main = async () => {
     }
 
     await loginAdminApi();
+    collectionsSmokeSiteQuotaIntegrations = await temporarilyAllowCollectionsSmokeSiteQuota();
     collectionsSmokeFixtureQuotaSettings = await temporarilyAllowCollectionsSmokeFixtureQuotas();
     await assertCollectionBillingLimitEnforced(suffix);
     await temporarilyAllowCollectionsSmokeFixtureQuotas();
@@ -3552,6 +3593,9 @@ const main = async () => {
     } finally {
       await restoreCollectionsSmokeFixtureQuotas(collectionsSmokeFixtureQuotaSettings).catch((error) => {
         console.warn('Unable to restore collections smoke fixture quota:', error instanceof Error ? error.message : error);
+      });
+      await restoreCollectionsSmokeSiteQuota(collectionsSmokeSiteQuotaIntegrations).catch((error) => {
+        console.warn('Unable to restore collections smoke site quota:', error instanceof Error ? error.message : error);
       });
     }
   }
