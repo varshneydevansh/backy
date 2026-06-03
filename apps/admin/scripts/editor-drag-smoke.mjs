@@ -640,12 +640,16 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('BACKY_EDITOR_COMMAND_PALETTE_SMOKE') &&
       smokeSource.includes('testEditorCommandPalette') &&
       smokeSource.includes("'open-page-settings'") &&
+      smokeSource.includes("'copy-selection'") &&
+      smokeSource.includes("'paste-selection'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
+      smokeSource.includes('copyCommand') &&
+      smokeSource.includes('pasteCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
-    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including safe mutation commands',
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard and safe mutation commands',
   );
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
@@ -11983,6 +11987,10 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     pageSettingsSaveDisabled: document.querySelector('[data-testid="page-settings-save"]') instanceof HTMLButtonElement
       ? document.querySelector('[data-testid="page-settings-save"]').disabled
       : null,
+    clipboardCount: Number(document.querySelector('[data-testid="editor-paste-selection"]')?.getAttribute('data-clipboard-count') || 0),
+    copyActionState: document.querySelector('[data-testid="editor-copy-selection"]')?.getAttribute('data-action-state') || '',
+    pasteActionState: document.querySelector('[data-testid="editor-paste-selection"]')?.getAttribute('data-action-state') || '',
+    pasteTarget: document.querySelector('[data-testid="editor-paste-selection"]')?.getAttribute('data-paste-target') || '',
     notice: normalize(document.querySelector('[data-testid="editor-notice"]')?.textContent || ''),
   };
 })()`);
@@ -12218,6 +12226,58 @@ const testEditorCommandPalette = async (client) => {
     ),
   );
 
+  await selectLayerIds(client, [mutationTargetId]);
+  const beforeCopy = await readEditorCommandPaletteState(client);
+  assert(
+    beforeCopy.canvasIds.includes(mutationTargetId) &&
+      beforeCopy.selectedIds.split(',').includes(mutationTargetId) &&
+      beforeCopy.copyActionState === 'ready',
+    `Command palette copy setup did not select a copyable layer: ${JSON.stringify(beforeCopy)}`,
+  );
+  const copyCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'copy-selection',
+    'copy-selection',
+    'copy selection',
+    (state) => (
+      state.canvasUniqueCount === beforeCopy.canvasUniqueCount &&
+      state.clipboardCount === 1 &&
+      state.pasteActionState === 'ready' &&
+      state.selectedIds.split(',').includes(mutationTargetId)
+    ),
+  );
+  const pasteCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'paste-selection',
+    'paste-selection',
+    'paste copied selection',
+    (state) => (
+      state.canvasUniqueCount === beforeCopy.canvasUniqueCount + 1 &&
+      state.clipboardCount === 1 &&
+      state.pasteActionState === 'ready' &&
+      state.canvasIds.includes(mutationTargetId) &&
+      state.selectedIds.split(',').some((id) => id && id !== mutationTargetId)
+    ),
+  );
+  const pastedId = pasteCommand.after.selectedIds
+    .split(',')
+    .find((id) => id && id !== mutationTargetId);
+  assert(
+    pastedId && pasteCommand.after.canvasIds.includes(pastedId),
+    `Command palette paste did not select a fresh copied element: ${JSON.stringify(pasteCommand.after)}`,
+  );
+  const deletePastedCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'delete',
+    'delete-selection',
+    'delete pasted selection',
+    (state) => (
+      state.canvasUniqueCount === beforeCopy.canvasUniqueCount &&
+      state.canvasIds.includes(mutationTargetId) &&
+      !state.canvasIds.includes(pastedId)
+    ),
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12237,6 +12297,14 @@ const testEditorCommandPalette = async (client) => {
       after: duplicateCommand.after,
     },
     deleteDuplicateCommand,
+    copyCommand,
+    pasteCommand: {
+      targetId: mutationTargetId,
+      pastedId,
+      filtered: pasteCommand.filtered,
+      after: pasteCommand.after,
+    },
+    deletePastedCommand,
     undoFiltered,
     afterBlockedClick,
   };

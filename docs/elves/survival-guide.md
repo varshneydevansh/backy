@@ -121,6 +121,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest blog authoring polish:** Blog create now has focused and normal controls for APIable image, audio/transcript, and source-file blocks. The rendered blog-create smoke installs/verifies captured custom frontend blog templates before navigation, clicks section/quote/image/audio/file insertions, proves autosave/recovery, and proves the final custom-frontend blog post persists all five long-form blocks plus mobile override/design metadata.
 
+**Newest editor command polish:** The rendered command-palette smoke now executes Copy selection and Paste selection against a real selected canvas layer, proves the clipboard count/paste readiness state, proves paste creates and selects a fresh copied element, then deletes that pasted layer to restore the original canvas count.
+
 **Newest Help polish:** Help now explains role-aware admin UI filtering: Backy combines signed-in profile role, profile status/invite state, and the backend permission matrix to decide visible/enabled navigation, quick-create actions, dashboard shortcuts, Settings, and Users controls.
 
 **Newest header role polish:** The account menu now shows the active Backy role and permission source, and its Settings shortcut is blocked with a clear reason when the signed-in role/permission matrix lacks `settings.view`.

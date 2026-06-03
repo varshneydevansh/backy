@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 12:58 IST
+- **Last updated:** 2026-06-03 13:07 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 13:07 IST
+
+**Batch:** 2 / 5: Canvas Editor Interaction Fidelity / Ongoing UX Scout And Polish
+**Editor status:** Command palette clipboard workflow is rendered-smoke covered
+
+**What changed:**
+- Extended the rendered command-palette smoke state reader with clipboard count, copy state, paste state, and paste target metadata from the real editor toolbar.
+- The command-palette smoke now selects `smoke-quote`, executes `copy-selection` through the actual palette, proves the clipboard contains one layer and paste becomes ready, then executes `paste-selection` and proves a fresh copied canvas element is selected.
+- The smoke deletes the pasted element afterward through the existing command path so the canvas returns to its original unique-element count.
+- Tightened the source guard so command-palette coverage now explicitly requires clipboard commands in addition to page settings and duplicate/delete mutation commands.
+
+**Commands run:**
+- `node --check apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This proves another user-visible builder interaction through the same command path used by the toolbar and command palette.
+- No product code changed in this slice; the improvement is stronger release protection around real clipboard behavior.
+
+**Next:**
+1. Commit and push this command-palette clipboard coverage slice.
+2. Re-read the survival guide after push, then continue long-page page/blog editor behavior or more editor command invariants.
 
 ## 2026-06-03 12:58 IST
 
