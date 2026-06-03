@@ -326,7 +326,8 @@ const HELP_TOPICS: HelpTopic[] = [
     details: [
       'Write each report in Blog so slug, SEO, authoring history, categories, comments, and canvas design stay attached to the site.',
       'Use Newsletter to create a signup form, place it on a Backy canvas page or custom frontend, and collect consent, topic, and source values into Contacts.',
-      'When a report is ready, copy the issue handoff. It includes recent published posts, public render/resolve URLs, send-ready subscriber counts, sync routes, and provider-safe draft metadata.',
+      'When a report is ready, open Blog -> Blog API contract -> Newsletter issue handoff or the Newsletter workspace issue handoff, then copy the provider-safe issue payload.',
+      'The issue handoff includes the selected/latest post, public render/resolve URLs, issue draft builder, audience=sendable subscriber sync route, public subscribe endpoint, and agent-handoff/manifest/OpenAPI pointers.',
       'Use an email provider only for outbound sending, unsubscribe enforcement in delivered messages, bounces, complaints, and SPF/DKIM/DMARC.',
     ],
     route: '/newsletter',

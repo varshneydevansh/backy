@@ -385,6 +385,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Blog list source smoke, admin typecheck, Newsletter source smoke, diff check, and repo-public hygiene are green for the Blog newsletter issue handoff slice.
 
+**Newest Help handoff clarity polish:** Help now names the exact Blog location for report-to-newsletter publishing: `Blog -> Blog API contract -> Newsletter issue handoff`, and describes the selected/latest post, render/resolve URLs, issue draft builder, `audience=sendable` subscriber sync route, public subscribe endpoint, and agent-handoff/manifest/OpenAPI pointers.
+
+**Newest verification:** Help source smoke, admin typecheck, diff check, and repo-public hygiene are green for the Help newsletter issue location slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

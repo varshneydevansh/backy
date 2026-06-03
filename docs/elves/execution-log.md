@@ -3806,6 +3806,21 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Notes:**
 - This does not add first-party mailbox hosting. Delivery remains behind the existing Newsletter provider boundary: Backy stores content, issue metadata, subscriber lifecycle, consent evidence, and sync routes; the external mail provider owns send execution and deliverability secrets.
 
+## Checkpoint: 2026-06-03 11:13 IST - Help Newsletter Issue Location Clarity
+
+**Scope:** Batch 5 Help/custom-frontend clarity polish, focused on making the newly exposed Blog newsletter issue handoff findable from the Help workspace.
+
+**Changed:**
+- Help now tells operators to use `Blog -> Blog API contract -> Newsletter issue handoff` or the Newsletter workspace issue handoff when preparing a published report for a newsletter.
+- Help now names the payload contents: selected/latest post, public render/resolve URLs, issue draft builder, `audience=sendable` subscriber sync route, public subscribe endpoint, and agent-handoff/manifest/OpenAPI pointers.
+- Help smoke now guards both source text and rendered Newsletter search results for the new handoff location and send-ready audience wording.
+
+**Validation:**
+- PASS: `BACKY_HELP_SOURCE_ONLY=1 npm run test:help --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
 ## Checkpoint: 2026-06-03 11:00 IST - Layers Panel Narrow-Row Readability
 
 **Scope:** Batch 5 editor UX polish, focused on the user's reported layer-map friction where the right-panel Layers list could become hard to read on narrow or mobile-sized editor layouts even though selection and nested-layer metadata existed.

@@ -485,6 +485,8 @@ const assertHelpSourceContracts = () => {
   assert(
     helpSource.includes('Actual mailbox hosting, bulk outbound sending, bounces, complaints, provider unsubscribe enforcement, SPF/DKIM/DMARC') &&
       helpSource.includes('subscriptionStatus for audience state and newsletterStatus for provider lifecycle states') &&
+      helpSource.includes('Blog -> Blog API contract -> Newsletter issue handoff') &&
+      helpSource.includes('issue draft builder, audience=sendable subscriber sync route, public subscribe endpoint, and agent-handoff/manifest/OpenAPI pointers') &&
       newsletterSmokeSource.includes('Help must explain the report-to-newsletter issue workflow and delivery-provider boundary.'),
     'Help route must document the newsletter management and mail-provider boundary.',
   );
@@ -749,11 +751,14 @@ const runRenderedHelpSmoke = async () => {
       const visibleTopics = Array.from(document.querySelectorAll('[data-testid^="help-topic-"]'))
         .filter((node) => node instanceof HTMLElement && node.matches('article'))
         .map((node) => node.getAttribute('data-testid') || '');
+      const text = document.body?.innerText || '';
       return {
         ready: visibleTopics.length > 0 &&
           visibleTopics.length < 11 &&
           visibleTopics.includes('help-topic-newsletter-subscribers') &&
-          document.body?.innerText?.includes('newsletterStatus'),
+          text.includes('newsletterStatus') &&
+          text.includes('Blog -> Blog API contract -> Newsletter issue handoff') &&
+          text.includes('audience=sendable subscriber sync route'),
         visibleTopics,
         countText: document.querySelector('[data-testid="help-command-center"]')?.textContent?.match(/\\d+ topics? found/)?.[0] || '',
       };
