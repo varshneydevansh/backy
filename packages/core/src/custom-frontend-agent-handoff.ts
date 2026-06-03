@@ -36,7 +36,7 @@ export const CUSTOM_FRONTEND_BLOG_CHILD_STARTER_TEMPLATES = [
   { id: 'services', name: 'Service guide', intent: 'case-study', sections: ['Overview', 'Process', 'Booking'] },
   { id: 'booking', name: 'Booking article', intent: 'article', sections: ['Intro', 'Availability', 'Schedule'] },
   { id: 'portfolio', name: 'Portfolio story', intent: 'case-study', sections: ['Work hero', 'Project media', 'Inquiry'] },
-  { id: 'gallery', name: 'Media essay', intent: 'article', sections: ['Media hero', 'Gallery', 'Files'] },
+  { id: 'gallery', name: 'Media essay', intent: 'audio-transcript', sections: ['Audio player', 'Transcript', 'Files'] },
   { id: 'events', name: 'Event recap', intent: 'article', sections: ['Event hero', 'Agenda', 'Follow-up'] },
   { id: 'privacy', name: 'Privacy update', intent: 'article', sections: ['Summary', 'Data use', 'Contact'] },
   { id: 'terms', name: 'Terms update', intent: 'article', sections: ['Summary', 'Rules', 'Support'] },

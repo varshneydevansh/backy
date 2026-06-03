@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 13:14 IST
+- **Last updated:** 2026-06-03 13:26 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,40 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 13:26 IST
+
+**Batch:** 3 / 5: Custom Frontend And Newsletter Handoff Readiness / Ongoing UX Scout And Polish
+**Contract status:** Blog child-template handoff matches the audio-transcript Blog starter
+
+**What changed:**
+- Aligned the public custom frontend blog child starter catalog with the admin Blog creator by marking the `gallery` Media essay starter as `audio-transcript`.
+- Updated the advertised `gallery` starter sections to `Audio player`, `Transcript`, and `Files`, matching the actual Backy-canvas starter that authors use for audio/transcript/source-file posts.
+- Tightened SDK and custom-frontend connection smokes so future handoff drift fails if the audio transcript starter loses its intent or section hints.
+
+**Commands run:**
+- `node --check scripts/custom-frontend-connection-smoke.mjs && node --check packages/sdk-js/scripts/smoke.mjs` -> PASS.
+- `npm run typecheck --workspace @backy-cms/core --silent` -> PASS.
+- `npm run test:custom-frontend-connection --silent` -> PASS, source mode, 23 checks.
+- `npm run test:custom-frontend-starter --silent` -> PASS, 118 checks.
+- `npm run test:frontend-contract --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run typecheck --workspace @backy/sdk-js --silent` -> PASS.
+- `BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:smoke --workspace @backy/sdk-js --silent` -> PASS.
+- `npm run build --workspace @backy-cms/core --silent` -> PASS.
+- Focused live local checks against `/api/sites/site-demo/agent-handoff`, `/manifest`, and `/openapi` -> PASS; all expose 33 blog child starters and `gallery` as `audio-transcript` with audio player, transcript, and files.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=http://127.0.0.1:3001/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo npm run test:custom-frontend-connection --silent` -> PARTIAL; 89 checks passed, then failed on the local demo site's reusable frontendDesign template registry being empty.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The full live custom-frontend connection gate failure is an existing local fixture/data condition around empty reusable templates, not the corrected blog child starter handoff; the focused live checks verified the corrected blog starter through every public mirror that frontend agents read.
+- This directly supports audio/transcript blog creation for custom frontend agents, so they preserve `starterTemplate=gallery`, `templateSource`, and optional `frontendDesignTemplateId` instead of treating media essays as generic articles.
+
+**Next:**
+1. Commit and push this custom frontend blog starter contract alignment.
+2. Re-read the survival guide after push, then continue long-page page/blog editor behavior or custom frontend template inheritance polish.
 
 ## 2026-06-03 13:14 IST
 

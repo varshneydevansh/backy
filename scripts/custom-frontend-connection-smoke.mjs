@@ -557,7 +557,10 @@ const assertTemplateActionability = (handoffData, label, acceptedSiteIdPaths = [
   assert(
     blogChildStarterTemplates.some((template) => (
       template?.id === 'gallery' &&
+      template.intent === 'audio-transcript' &&
       Array.isArray(template.sections) &&
+      template.sections.includes('Audio player') &&
+      template.sections.includes('Transcript') &&
       template.sections.includes('Files') &&
       String(template.customFrontendRoute || '').includes('templateSource=custom-frontend')
     )),

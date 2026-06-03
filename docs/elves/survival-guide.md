@@ -231,6 +231,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest blog audio transcript polish:** Blog creation now makes the existing audio-transcript canvas reachable from the visible 33-template catalog by wiring the Media essay starter to the `audio-transcript` intent. The rendered Blog create smoke proves the Backy-canvas starter route, selected intent, audio player, transcript/files blocks, and audio inspector controls for URL, Media select/upload, caption, transcript, controls, autoplay, loop, and muted settings.
 
+**Newest custom frontend blog handoff polish:** The public custom frontend blog child starter catalog now matches the admin Blog creator for audio/transcript posts: `gallery` / Media essay advertises `intent: audio-transcript` plus `Audio player`, `Transcript`, and `Files` sections across `/agent-handoff`, manifest, OpenAPI, SDK smoke, and the custom-frontend connection source guard.
+
 **Newest editor command coverage:** The rendered command-palette smoke now executes non-destructive shell/view commands through the actual palette, not only toolbar metadata: grid, snap, pan, component panel, layers panel, inspector panel, and focus mode all prove concrete editor state changes, while existing zero-unwired, `zoom-fit`, and blocked `undo` checks remain green.
 
 **Newest verification:** Source connection smoke, Help source/rendered smokes, Site Detail rendered smoke, admin typecheck, public typecheck, production API connection smoke against `https://backy-public.vercel.app/api`, and diff check are green for the in-admin custom frontend verifier slice.
