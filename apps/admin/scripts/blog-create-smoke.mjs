@@ -318,22 +318,41 @@ const assertBlogCreateSourceContract = () => {
     const focusActionsBlockStart = source.indexOf('actions={isWorkspaceFocus');
     const focusActionsBlockEnd = source.indexOf('density={isWorkspaceFocus', focusActionsBlockStart);
     const focusActionsBlock = focusActionsBlockStart >= 0
-      ? source.slice(focusActionsBlockStart, focusActionsBlockEnd >= 0 ? focusActionsBlockEnd : focusActionsBlockStart + 3200)
+      ? source.slice(focusActionsBlockStart, focusActionsBlockEnd >= 0 ? focusActionsBlockEnd : focusActionsBlockStart + 5600)
       : '';
     const focusSubmitIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-submit-button"');
     const focusPreviewIndex = focusActionsBlock.indexOf('Save draft and preview');
     const focusAddSectionIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-section"');
     const focusAddQuoteIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-quote"');
+    const focusAddImageIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-image"');
+    const focusAddAudioIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-audio"');
+    const focusAddFileIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-file"');
     const focusPanelsIndex = focusActionsBlock.indexOf('Show panels');
     assert(
       focusSubmitIndex >= 0 &&
         focusPreviewIndex > focusSubmitIndex &&
         focusAddSectionIndex > focusPreviewIndex &&
         focusAddQuoteIndex > focusAddSectionIndex &&
-        focusPanelsIndex > focusAddQuoteIndex &&
+        focusAddImageIndex > focusAddQuoteIndex &&
+        focusAddAudioIndex > focusAddImageIndex &&
+        focusAddFileIndex > focusAddAudioIndex &&
+        focusPanelsIndex > focusAddFileIndex &&
         focusActionsBlock.includes('onClick={() => addLongFormBlock(\'section\')}') &&
-        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'quote\')}'),
-      'Blog create focused canvas actions must keep Save/Publish first, Preview second, long-form insertions next, and Show panels last.',
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'quote\')}') &&
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'image\')}') &&
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'audio\')}') &&
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'file\')}'),
+      'Blog create focused canvas actions must keep Save/Publish first, Preview second, long-form media insertions next, and Show panels last.',
+    );
+    assert(
+      source.includes("type BlogLongFormBlockKind = 'section' | 'quote' | 'image' | 'audio' | 'file'") &&
+        source.includes("id: `blog-longform-image-${sequence}`") &&
+        source.includes("id: `blog-longform-audio-${sequence}`") &&
+        source.includes("id: `blog-longform-file-${sequence}`") &&
+        source.includes("dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'attachments'] }]") &&
+        source.includes("actionPreset: 'download'") &&
+        source.includes("fileDownloadDisposition: 'attachment'"),
+      'Blog long-form insertion must create APIable image, audio/transcript, and downloadable source-file blocks.',
     );
   }
   assert(
@@ -434,6 +453,36 @@ const patchFrontendDesign = async (frontendDesign) => {
   const updated = payload.data?.frontendDesign;
   assert(updated?.schemaVersion === 'backy.frontend-design.v1', `Patch did not return frontend design: ${JSON.stringify(payload).slice(0, 500)}`);
   return updated;
+};
+
+const assertFrontendDesignTemplates = (frontendDesign, templateIds, label) => {
+  const templates = Array.isArray(frontendDesign?.templates) ? frontendDesign.templates : [];
+  const ids = new Set(templates.map((template) => template?.id).filter(Boolean));
+  const missing = templateIds.filter((id) => !ids.has(id));
+  assert(
+    missing.length === 0,
+    `${label} missing frontend design templates: ${JSON.stringify({ missing, available: Array.from(ids).slice(0, 20) })}`,
+  );
+  return templates.filter((template) => templateIds.includes(template?.id));
+};
+
+const installSmokeFrontendDesign = async () => {
+  const expectedTemplateIds = [FRONTEND_BLOG_TEMPLATE_ID, FRONTEND_NEWSLETTER_TEMPLATE_ID];
+  const updated = await patchFrontendDesign(smokeFrontendDesignContract());
+  assertFrontendDesignTemplates(updated, expectedTemplateIds, 'Patched smoke frontend design');
+
+  let current = updated;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    current = await getFrontendDesign();
+    try {
+      return assertFrontendDesignTemplates(current, expectedTemplateIds, 'Persisted smoke frontend design');
+    } catch (error) {
+      if (attempt === 39) throw error;
+    }
+    await sleep(150);
+  }
+
+  return assertFrontendDesignTemplates(current, expectedTemplateIds, 'Persisted smoke frontend design');
 };
 
 const smokeFrontendDesignContract = () => ({
@@ -799,6 +848,9 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       writingMetrics: Boolean(document.querySelector('[data-testid="blog-create-writing-metrics"]')),
       addSection: Boolean(document.querySelector('[data-testid="blog-create-add-section"]')),
       addQuote: Boolean(document.querySelector('[data-testid="blog-create-add-quote"]')),
+      addImage: Boolean(document.querySelector('[data-testid="blog-create-add-image"]')),
+      addAudio: Boolean(document.querySelector('[data-testid="blog-create-add-audio"]')),
+      addFile: Boolean(document.querySelector('[data-testid="blog-create-add-file"]')),
       frontendTemplatePanel: Boolean(frontendTemplatePanel),
       templateSourceSwitch: Boolean(templateSourceSwitch),
       templateSourceActive: templateSourceSwitch?.getAttribute('data-active-source') || '',
@@ -816,6 +868,9 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       hasShowPanelsAction: bodyText.includes('Show panels'),
       hasFocusAddSectionAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-section"]')) && bodyText.includes('Add section'),
       hasFocusAddQuoteAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-quote"]')) && bodyText.includes('Pull quote'),
+      hasFocusAddImageAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-image"]')) && bodyText.includes('Image'),
+      hasFocusAddAudioAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-audio"]')) && bodyText.includes('Audio'),
+      hasFocusAddFileAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-file"]')) && bodyText.includes('File'),
       groupShortcut: document.querySelector('[data-testid="editor-group-selection"]')?.getAttribute('aria-keyshortcuts') || '',
       siblingShortcut: document.querySelector('[data-testid="editor-select-sibling-layers"]')?.getAttribute('aria-keyshortcuts') || '',
       hasBreakpointControls: bodyText.includes('Desktop') && bodyText.includes('Tablet') && bodyText.includes('Mobile'),
@@ -837,7 +892,10 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
         state.focusDensity === 'compact' &&
         state.hasShowPanelsAction &&
         state.hasFocusAddSectionAction &&
-        state.hasFocusAddQuoteAction,
+        state.hasFocusAddQuoteAction &&
+        state.hasFocusAddImageAction &&
+        state.hasFocusAddAudioAction &&
+        state.hasFocusAddFileAction,
       `${label} focus banner/actions missing: ${JSON.stringify(state)}`,
     );
     assert(!state.commandVisible && !state.draftPanel && !state.publishPanel, `${label} focus mode did not hide create panels: ${JSON.stringify(state)}`);
@@ -855,7 +913,10 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
     assert(state.controlMapVisible && state.controlMapOpen === false, `${label} control map should stay collapsed until requested: ${JSON.stringify(state)}`);
     assert(state.draftPanel && state.seoPanel && state.mediaPanel && state.publishPanel && state.taxonomyPanel && state.writingPanel, `${label} create panels missing: ${JSON.stringify(state)}`);
     assert(state.componentLibraryVisible && state.inspectorVisible, `${label} editor side panels were not visibly rendered: ${JSON.stringify(state)}`);
-    assert(state.writingMetrics && state.addSection && state.addQuote, `${label} writing structure controls missing: ${JSON.stringify(state)}`);
+    assert(
+      state.writingMetrics && state.addSection && state.addQuote && state.addImage && state.addAudio && state.addFile,
+      `${label} writing structure controls missing: ${JSON.stringify(state)}`,
+    );
     assert(
       state.frontendTemplatePanel &&
         state.templateSourceSwitch &&
@@ -1221,7 +1282,13 @@ const assertMobileBreakpointAuthoring = async (client) => {
 };
 
 const assertWritingStructureTools = async (client) => {
-  for (const testId of ['blog-create-add-section', 'blog-create-add-quote']) {
+  for (const testId of [
+    'blog-create-add-section',
+    'blog-create-add-quote',
+    'blog-create-add-image',
+    'blog-create-add-audio',
+    'blog-create-add-file',
+  ]) {
     const clicked = await evaluate(client, `(() => {
       const button = document.querySelector('[data-testid="${testId}"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
@@ -1238,23 +1305,63 @@ const assertWritingStructureTools = async (client) => {
     const metrics = document.querySelector('[data-testid="blog-create-writing-metrics"]')?.textContent || '';
     const section = document.querySelector('[data-element-id^="blog-longform-section-"]');
     const quote = document.querySelector('[data-element-id^="blog-longform-quote-"]');
+    const image = document.querySelector('[data-element-id^="blog-longform-image-"]');
+    const audio = document.querySelector('[data-element-id^="blog-longform-audio-"]');
+    const file = document.querySelector('[data-element-id^="blog-longform-file-"]');
+    const fileDownload = file?.querySelector('[data-element-id$="-download"]');
     return {
       metrics,
       sectionId: section?.getAttribute('data-element-id') || '',
       quoteId: quote?.getAttribute('data-element-id') || '',
+      imageId: image?.getAttribute('data-element-id') || '',
+      audioId: audio?.getAttribute('data-element-id') || '',
+      fileId: file?.getAttribute('data-element-id') || '',
+      fileDownloadId: fileDownload?.getAttribute('data-element-id') || '',
       hasSectionText: document.body?.innerText?.includes('New article section') || false,
       hasQuoteText: document.body?.innerText?.includes('memorable pull quote') || false,
+      imageAlt: image?.querySelector('img')?.getAttribute('alt') || '',
+      hasAudioText: (document.body?.innerText || '').includes('Add audio URL or upload an audio file') || (document.body?.innerText || '').includes('Select or upload an audio recording'),
+      hasFileText: document.body?.innerText?.includes('Attach a PDF, transcript, dataset') || false,
+      audioContract: audio?.querySelector('[data-backy-audio-player]')?.getAttribute('data-backy-audio-transcript') || '',
     };
   })()`);
 
-  assert(state.sectionId && state.quoteId, `Long-form canvas blocks were not inserted: ${JSON.stringify(state)}`);
-  assert(state.hasSectionText && state.hasQuoteText, `Long-form inserted block text missing: ${JSON.stringify(state)}`);
+  assert(
+    state.sectionId &&
+      state.quoteId &&
+      state.imageId &&
+      state.audioId &&
+      state.fileId &&
+      state.fileDownloadId,
+    `Long-form canvas blocks were not inserted: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.hasSectionText &&
+      state.hasQuoteText &&
+      state.imageAlt === 'Article image placeholder' &&
+      state.hasAudioText &&
+      state.hasFileText &&
+      state.audioContract === 'available',
+    `Long-form inserted block content missing: ${JSON.stringify(state)}`,
+  );
   assert(/Total words/i.test(state.metrics) && /Reading time/i.test(state.metrics), `Writing metrics did not render: ${JSON.stringify(state)}`);
   return state;
 };
 
 const navigateToBlogCreate = async (client) => {
-  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&frontendDesignTemplateId=${encodeURIComponent(FRONTEND_BLOG_TEMPLATE_ID)}` });
+  await evaluate(client, `(() => {
+    localStorage.removeItem(${JSON.stringify('backy:blog-new:draft:v1')});
+    return true;
+  })()`).catch(() => true);
+
+  const search = new URLSearchParams({
+    siteId: SITE_ID,
+    templateSource: 'custom-frontend',
+    designTemplate: FRONTEND_BLOG_TEMPLATE_ID,
+    frontendDesignTemplateId: FRONTEND_BLOG_TEMPLATE_ID,
+    frontendTemplate: FRONTEND_BLOG_TEMPLATE_ID,
+  });
+  await client.send('Page.navigate', { url: `${ADMIN_BASE_URL}/blog/new?${search.toString()}` });
 
   for (let attempt = 0; attempt < BLOG_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
     const state = await evaluate(client, `(() => ({
@@ -1800,7 +1907,13 @@ const assertCanvasFocusMode = async (client) => {
   const focusVisualState = await assertBlogCreateVisualState(client, 'blog create focus', FOCUS_VISUAL_SCREENSHOT_PATH, { focus: true });
 
   const focusedWriting = [];
-  for (const testId of ['blog-create-focus-add-section', 'blog-create-focus-add-quote']) {
+  for (const testId of [
+    'blog-create-focus-add-section',
+    'blog-create-focus-add-quote',
+    'blog-create-focus-add-image',
+    'blog-create-focus-add-audio',
+    'blog-create-focus-add-file',
+  ]) {
     const clicked = await evaluate(client, `(() => {
       const button = document.querySelector('[data-testid="${testId}"]');
       if (!(button instanceof HTMLButtonElement) || button.disabled) {
@@ -1817,21 +1930,41 @@ const assertCanvasFocusMode = async (client) => {
   const focusedWritingState = await evaluate(client, `(() => {
     const section = document.querySelector('[data-element-id^="blog-longform-section-"]');
     const quote = document.querySelector('[data-element-id^="blog-longform-quote-"]');
+    const image = document.querySelector('[data-element-id^="blog-longform-image-"]');
+    const audio = document.querySelector('[data-element-id^="blog-longform-audio-"]');
+    const file = document.querySelector('[data-element-id^="blog-longform-file-"]');
+    const fileDownload = file?.querySelector('[data-element-id$="-download"]');
     const canvas = document.querySelector('[data-testid="editor-canvas"]');
     return {
       sectionId: section?.getAttribute('data-element-id') || '',
       quoteId: quote?.getAttribute('data-element-id') || '',
+      imageId: image?.getAttribute('data-element-id') || '',
+      audioId: audio?.getAttribute('data-element-id') || '',
+      fileId: file?.getAttribute('data-element-id') || '',
+      fileDownloadId: fileDownload?.getAttribute('data-element-id') || '',
       hasSectionText: document.body?.innerText?.includes('New article section') || false,
       hasQuoteText: document.body?.innerText?.includes('memorable pull quote') || false,
+      imageAlt: image?.querySelector('img')?.getAttribute('alt') || '',
+      hasAudioText: (document.body?.innerText || '').includes('Add audio URL or upload an audio file') || (document.body?.innerText || '').includes('Select or upload an audio recording'),
+      hasFileText: document.body?.innerText?.includes('Attach a PDF, transcript, dataset') || false,
+      audioContract: audio?.querySelector('[data-backy-audio-player]')?.getAttribute('data-backy-audio-transcript') || '',
       canvasHeight: canvas?.getBoundingClientRect().height || 0,
     };
   })()`);
   assert(
     focusedWritingState.sectionId &&
       focusedWritingState.quoteId &&
+      focusedWritingState.imageId &&
+      focusedWritingState.audioId &&
+      focusedWritingState.fileId &&
+      focusedWritingState.fileDownloadId &&
       focusedWritingState.hasSectionText &&
-      focusedWritingState.hasQuoteText,
-    `Focused writing actions did not insert long-form canvas blocks: ${JSON.stringify(focusedWritingState)}`,
+      focusedWritingState.hasQuoteText &&
+      focusedWritingState.imageAlt === 'Article image placeholder' &&
+      focusedWritingState.hasAudioText &&
+      focusedWritingState.hasFileText &&
+      focusedWritingState.audioContract === 'available',
+    `Focused writing actions did not insert long-form text/media/audio/file canvas blocks: ${JSON.stringify(focusedWritingState)}`,
   );
 
   let restored = null;
@@ -1934,8 +2067,12 @@ const assertAutosaveWritten = async (client, slug) => {
         return null;
       };
       const heading = find(parsed?.canvasElements || [], 'frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-heading');
-      const hasLongFormSection = Boolean((parsed?.canvasElements || []).some((element) => JSON.stringify(element).includes('blog-longform-section-')));
-      const hasLongFormQuote = Boolean((parsed?.canvasElements || []).some((element) => JSON.stringify(element).includes('blog-longform-quote-')));
+      const canvasJson = JSON.stringify(parsed?.canvasElements || []);
+      const hasLongFormSection = canvasJson.includes('blog-longform-section-');
+      const hasLongFormQuote = canvasJson.includes('blog-longform-quote-');
+      const hasLongFormImage = canvasJson.includes('blog-longform-image-');
+      const hasLongFormAudio = canvasJson.includes('blog-longform-audio-') && canvasJson.includes('Paste or edit the transcript for this audio clip.');
+      const hasLongFormFile = canvasJson.includes('blog-longform-file-') && canvasJson.includes('"actionPreset":"download"') && canvasJson.includes('"fileDownloadDisposition":"attachment"');
       return {
         hasDraft: Boolean(parsed),
         slug: parsed?.slug || null,
@@ -1948,6 +2085,9 @@ const assertAutosaveWritten = async (client, slug) => {
         mobileOverride: heading?.responsive?.mobile || null,
         hasLongFormSection,
         hasLongFormQuote,
+        hasLongFormImage,
+        hasLongFormAudio,
+        hasLongFormFile,
         badge: Array.from(document.querySelectorAll('span')).map((node) => node.textContent || '').find((text) => /Autosaved|Saving draft|Autosave/.test(text)) || '',
       };
     })()`);
@@ -1965,6 +2105,9 @@ const assertAutosaveWritten = async (client, slug) => {
       && state.mobileOverride?.width === 320
       && state.hasLongFormSection
       && state.hasLongFormQuote
+      && state.hasLongFormImage
+      && state.hasLongFormAudio
+      && state.hasLongFormFile
     ) {
       break;
     }
@@ -1980,7 +2123,10 @@ const assertAutosaveWritten = async (client, slug) => {
   assert(state.designTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Autosave did not retain frontend template id: ${JSON.stringify(state)}`);
   assert(state.hasFrontendTemplateRoot === true, `Autosave did not retain frontend template canvas root: ${JSON.stringify(state)}`);
   assert(state.mobileOverride?.x === 24 && state.mobileOverride?.width === 320, `Autosave did not retain mobile breakpoint override: ${JSON.stringify(state)}`);
-  assert(state.hasLongFormSection && state.hasLongFormQuote, `Autosave did not retain long-form writing blocks: ${JSON.stringify(state)}`);
+  assert(
+    state.hasLongFormSection && state.hasLongFormQuote && state.hasLongFormImage && state.hasLongFormAudio && state.hasLongFormFile,
+    `Autosave did not retain long-form writing/media/audio/file blocks: ${JSON.stringify(state)}`,
+  );
   return state;
 };
 
@@ -2286,6 +2432,10 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   const bodyRegion = byId.get(`frontend-blog-template-${FRONTEND_BLOG_TEMPLATE_ID}-body-region`);
   const longFormSection = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-section-'));
   const longFormQuote = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-quote-'));
+  const longFormImage = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-image-'));
+  const longFormAudio = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-audio-'));
+  const longFormFile = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith('blog-longform-file-') && element.type === 'box');
+  const longFormFileDownload = allElements.find((element) => typeof element.id === 'string' && element.id.startsWith(`${longFormFile?.id || 'blog-longform-file-missing'}-download`));
 
   assert(wrapper?.type === 'section', `Frontend blog template wrapper missing: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 40) })}`);
   assert(wrapper.props?.frontendTemplateId === FRONTEND_BLOG_TEMPLATE_ID, `Frontend blog wrapper metadata mismatch: ${JSON.stringify(wrapper)}`);
@@ -2293,6 +2443,15 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   assert(heading?.responsive?.mobile?.x === 24 && heading?.responsive?.mobile?.width === 320, `Frontend blog heading did not persist mobile breakpoint override: ${JSON.stringify(heading?.responsive)}`);
   assert(Array.isArray(bodyRegion?.props?.bindingHints) && bodyRegion.props.bindingHints.length === 2, `Frontend blog body region missing binding hints: ${JSON.stringify(bodyRegion?.props)}`);
   assert(longFormSection && longFormQuote, `Created blog did not persist long-form writing blocks: ${JSON.stringify({ ids: allElements.map((element) => element.id).slice(0, 80) })}`);
+  assert(longFormImage?.type === 'image' && longFormImage.props?.alt === 'Article image placeholder', `Created blog did not persist APIable image block: ${JSON.stringify(longFormImage)}`);
+  assert(longFormAudio?.type === 'audio' && longFormAudio.props?.transcript === 'Paste or edit the transcript for this audio clip.', `Created blog did not persist APIable audio transcript block: ${JSON.stringify(longFormAudio)}`);
+  assert(
+    longFormFile?.type === 'box' &&
+      longFormFileDownload?.type === 'button' &&
+      longFormFileDownload.props?.actionPreset === 'download' &&
+      longFormFileDownload.props?.fileDownloadDisposition === 'attachment',
+    `Created blog did not persist APIable source-file download block: ${JSON.stringify({ longFormFile, longFormFileDownload })}`,
+  );
   assert(canvasSize.width === 1260 && canvasSize.height >= 940, `Frontend blog canvas size mismatch: ${JSON.stringify(canvasSize)}`);
   assert(typeof content.customCSS === 'string' && content.customCSS.includes('--backy-smoke-blog-primary'), `Frontend blog custom CSS was not persisted: ${JSON.stringify(content.customCSS)}`);
   assert(typeof content.customJS === 'string' && content.customJS.includes('__backySmokeBlogTemplate'), `Frontend blog custom JS was not persisted: ${JSON.stringify(content.customJS)}`);
@@ -2328,6 +2487,10 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
       headingMobileOverride: heading?.responsive?.mobile,
       longFormSectionId: longFormSection?.id,
       longFormQuoteId: longFormQuote?.id,
+      longFormImageId: longFormImage?.id,
+      longFormAudioId: longFormAudio?.id,
+      longFormFileId: longFormFile?.id,
+      longFormFileDownloadId: longFormFileDownload?.id,
       customCssStored: typeof content.customCSS === 'string',
       customJsStored: typeof content.customJS === 'string',
       contentTemplateSource: contentDocument?.metadata?.templateSource,
@@ -2401,7 +2564,7 @@ const main = async () => {
 
   try {
     originalFrontendDesign = await getFrontendDesign();
-    await patchFrontendDesign(smokeFrontendDesignContract());
+    await installSmokeFrontendDesign();
     const page = await waitForUsablePageTarget();
     assert(page?.webSocketDebuggerUrl, 'No Chrome page target found');
 
@@ -2419,6 +2582,7 @@ const main = async () => {
 
     const initialRender = await navigateToBlogCreate(client);
     const audioTranscriptStarter = await assertBackyCanvasAudioTranscriptStarter(client);
+    await installSmokeFrontendDesign();
     await navigateToBlogCreate(client);
     const starterRouteSync = await assertCustomFrontendStarterRouteSync(client);
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);

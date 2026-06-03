@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 12:29 IST
+- **Last updated:** 2026-06-03 12:58 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,34 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 12:58 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Blog/editor status:** Focused and normal blog authoring can insert APIable image, audio/transcript, and source-file blocks
+
+**What changed:**
+- Added Blog create long-form block kinds for image, audio/transcript, and downloadable source-file attachments.
+- Exposed the new insertions in both the normal Writing structure panel and focused canvas action bar, keeping Save/Preview first and Show panels last in focus mode.
+- The inserted blocks are ordinary canvas elements with media/data bindings, placeholder alt/caption/transcript metadata, and download-safe file button properties so custom frontends can read them through the persisted canvas contract.
+- Hardened the rendered Blog create smoke to install and verify captured custom frontend blog templates before UI navigation, preventing stale template setup from masquerading as a product failure.
+- Extended the rendered smoke to click section, pull quote, image, audio, and file insertions; prove autosave/recovery retains them; and prove the final created custom-frontend blog post persists all five long-form blocks with custom CSS/JS, editable map metadata, mobile override state, and grown canvas height.
+
+**Commands run:**
+- `node --check apps/admin/scripts/blog-create-smoke.mjs` -> PASS.
+- `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The first rendered attempt reached the new interactions but exposed a stale autosave draft race from the intermediate Backy-canvas audio starter. The smoke now clears that draft immediately before custom-frontend navigation and verifies the intended templates are installed.
+- This improves the authoring path the user kept pointing at: a custom frontend blog template can now be reused while the author inserts text, image, audio/transcript, and source-file blocks without rebuilding the page structure.
+
+**Next:**
+1. Commit and push this focused blog media/file authoring slice.
+2. Re-read the survival guide after push, then continue long-page page/blog editor behavior or custom frontend template inheritance polish.
 
 ## 2026-06-03 12:29 IST
 

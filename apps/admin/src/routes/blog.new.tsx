@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, Plus, Quote, RefreshCw, Save, Search, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileAudio, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, Plus, Quote, RefreshCw, Save, Search, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     createBlogPostPreview,
@@ -101,6 +101,7 @@ interface BlogCreateAutosaveDraft {
 }
 
 type BlogCreationStatus = BlogCreateAutosaveDraft['status'];
+type BlogLongFormBlockKind = 'section' | 'quote' | 'image' | 'audio' | 'file';
 
 const normalizedSearchString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
@@ -1156,7 +1157,7 @@ function getWritingStats(title: string, excerpt: string, elements: CanvasElement
 function appendLongFormBlockToElements(
     elements: CanvasElement[],
     options: {
-        kind: 'section' | 'quote';
+        kind: BlogLongFormBlockKind;
         selectedFrontendTemplateId?: string;
         sequence: number;
     },
@@ -1171,8 +1172,10 @@ function appendLongFormBlockToElements(
             const children = Array.isArray(element.children) ? element.children : [];
             const nextY = children.reduce((max, child) => Math.max(max, (child.y || 0) + (child.height || 0)), 0) + 36;
             const idPrefix = `blog-longform-${options.kind}-${options.sequence}`;
-            const nextChild = options.kind === 'section'
-                ? createCanvasElement('section', 28, nextY, {
+            let nextChild: CanvasElement;
+
+            if (options.kind === 'section') {
+                nextChild = createCanvasElement('section', 28, nextY, {
                     id: idPrefix,
                     width: Math.min(820, Math.max(320, (element.width || DEFAULT_CANVAS_SIZE.width) - 96)),
                     height: 240,
@@ -1212,8 +1215,9 @@ function appendLongFormBlockToElements(
                             },
                         }),
                     ],
-                })
-                : createCanvasElement('quote', 44, nextY, {
+                });
+            } else if (options.kind === 'quote') {
+                nextChild = createCanvasElement('quote', 44, nextY, {
                     id: idPrefix,
                     width: Math.min(760, Math.max(300, (element.width || DEFAULT_CANVAS_SIZE.width) - 120)),
                     height: 130,
@@ -1228,6 +1232,96 @@ function appendLongFormBlockToElements(
                         binding: 'post.content.quote',
                     },
                 });
+            } else if (options.kind === 'image') {
+                nextChild = createCanvasElement('image', 44, nextY, {
+                    id: idPrefix,
+                    width: Math.min(760, Math.max(300, (element.width || DEFAULT_CANVAS_SIZE.width) - 120)),
+                    height: 320,
+                    props: {
+                        alt: 'Article image placeholder',
+                        caption: 'Select or upload an image from Media, then edit the caption.',
+                        backgroundColor: '#f8fafc',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                        borderRadius: 12,
+                        binding: 'post.content.media.image',
+                    },
+                    assetIds: [],
+                    dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'coverImage'] }],
+                });
+            } else if (options.kind === 'audio') {
+                nextChild = createCanvasElement('audio', 44, nextY, {
+                    id: idPrefix,
+                    width: Math.min(760, Math.max(320, (element.width || DEFAULT_CANVAS_SIZE.width) - 120)),
+                    height: 150,
+                    props: {
+                        caption: 'Select or upload an audio recording',
+                        transcript: 'Paste or edit the transcript for this audio clip.',
+                        controls: true,
+                        preload: 'metadata',
+                        backgroundColor: '#ffffff',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                        borderRadius: 12,
+                        binding: 'post.content.media.audio',
+                    },
+                    assetIds: [],
+                    dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'attachments'] }],
+                });
+            } else {
+                nextChild = createCanvasElement('box', 44, nextY, {
+                    id: idPrefix,
+                    width: Math.min(760, Math.max(320, (element.width || DEFAULT_CANVAS_SIZE.width) - 120)),
+                    height: 190,
+                    props: {
+                        backgroundColor: '#f8fafc',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        borderStyle: 'solid',
+                        borderRadius: 12,
+                        padding: 0,
+                    },
+                    dataBindings: [{ source: 'blog', mode: 'current', fields: ['attachments', 'media'] }],
+                    children: [
+                        createCanvasElement('heading', 28, 24, {
+                            id: `${idPrefix}-heading`,
+                            width: 420,
+                            height: 38,
+                            props: { content: 'Source file', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                        }),
+                        createCanvasElement('paragraph', 28, 74, {
+                            id: `${idPrefix}-copy`,
+                            width: 560,
+                            height: 50,
+                            props: { content: 'Attach a PDF, transcript, dataset, evidence file, or supporting document from Media.', fontSize: 15, lineHeight: 1.55, color: '#475569' },
+                        }),
+                        createCanvasElement('button', 28, 132, {
+                            id: `${idPrefix}-download`,
+                            width: 190,
+                            height: 42,
+                            props: {
+                                label: 'Attach file',
+                                actionPreset: 'download',
+                                action: 'media.download',
+                                download: true,
+                                downloadMediaId: '',
+                                downloadMediaIds: [],
+                                fileMediaId: '',
+                                fileMediaIds: [],
+                                fileDownloadDisposition: 'attachment',
+                                backgroundColor: '#0f172a',
+                                color: '#ffffff',
+                                borderRadius: 8,
+                                fontWeight: '700',
+                                binding: 'post.content.attachments',
+                            },
+                        }),
+                    ],
+                });
+            }
+
             const nextHeight = Math.max(element.height || 0, nextY + nextChild.height + 48);
             appended = true;
             return {
@@ -1261,8 +1355,10 @@ function appendLongFormBlockToElements(
 
     const sequence = options.sequence;
     const y = getCanvasHeightForElements(elements) + 40;
-    const fallback = options.kind === 'section'
-        ? createCanvasElement('section', 0, y, {
+    let fallback: CanvasElement;
+
+    if (options.kind === 'section') {
+        fallback = createCanvasElement('section', 0, y, {
             id: `blog-longform-section-${sequence}`,
             width: DEFAULT_CANVAS_SIZE.width,
             height: 260,
@@ -1282,13 +1378,75 @@ function appendLongFormBlockToElements(
                     props: { content: 'Develop this section with supporting details, examples, media references, or product/context links before publishing.', fontSize: 17, lineHeight: 1.7, color: '#334155' },
                 }),
             ],
-        })
-        : createCanvasElement('quote', 260, y, {
+        });
+    } else if (options.kind === 'quote') {
+        fallback = createCanvasElement('quote', 260, y, {
             id: `blog-longform-quote-${sequence}`,
             width: 680,
             height: 130,
             props: { content: 'Add a memorable pull quote or editorial takeaway for readers scanning the article.', fontSize: 24, fontWeight: '700', lineHeight: 1.45, color: '#0f172a' },
         });
+    } else if (options.kind === 'image') {
+        fallback = createCanvasElement('image', 220, y, {
+            id: `blog-longform-image-${sequence}`,
+            width: 760,
+            height: 320,
+            props: { alt: 'Article image placeholder', caption: 'Select or upload an image from Media, then edit the caption.', backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', borderRadius: 12 },
+            assetIds: [],
+            dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'coverImage'] }],
+        });
+    } else if (options.kind === 'audio') {
+        fallback = createCanvasElement('audio', 220, y, {
+            id: `blog-longform-audio-${sequence}`,
+            width: 760,
+            height: 150,
+            props: { caption: 'Select or upload an audio recording', transcript: 'Paste or edit the transcript for this audio clip.', controls: true, preload: 'metadata', backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', borderRadius: 12 },
+            assetIds: [],
+            dataBindings: [{ source: 'blog', mode: 'current', fields: ['content', 'media', 'attachments'] }],
+        });
+    } else {
+        fallback = createCanvasElement('box', 220, y, {
+            id: `blog-longform-file-${sequence}`,
+            width: 760,
+            height: 190,
+            props: { backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', borderRadius: 12, padding: 0 },
+            dataBindings: [{ source: 'blog', mode: 'current', fields: ['attachments', 'media'] }],
+            children: [
+                createCanvasElement('heading', 28, 24, {
+                    id: `blog-longform-file-${sequence}-heading`,
+                    width: 420,
+                    height: 38,
+                    props: { content: 'Source file', level: 'h3', fontSize: 24, fontWeight: '800', color: '#0f172a' },
+                }),
+                createCanvasElement('paragraph', 28, 74, {
+                    id: `blog-longform-file-${sequence}-copy`,
+                    width: 560,
+                    height: 50,
+                    props: { content: 'Attach a PDF, transcript, dataset, evidence file, or supporting document from Media.', fontSize: 15, lineHeight: 1.55, color: '#475569' },
+                }),
+                createCanvasElement('button', 28, 132, {
+                    id: `blog-longform-file-${sequence}-download`,
+                    width: 190,
+                    height: 42,
+                    props: {
+                        label: 'Attach file',
+                        actionPreset: 'download',
+                        action: 'media.download',
+                        download: true,
+                        downloadMediaId: '',
+                        downloadMediaIds: [],
+                        fileMediaId: '',
+                        fileMediaIds: [],
+                        fileDownloadDisposition: 'attachment',
+                        backgroundColor: '#0f172a',
+                        color: '#ffffff',
+                        borderRadius: 8,
+                        fontWeight: '700',
+                    },
+                }),
+            ],
+        });
+    }
 
     return [...elements, fallback];
 }
@@ -1886,7 +2044,7 @@ function NewBlogPostPage() {
         () => getWritingStats(title, excerpt, canvasElements),
         [canvasElements, excerpt, title],
     );
-    const addLongFormBlock = (kind: 'section' | 'quote') => {
+    const addLongFormBlock = (kind: BlogLongFormBlockKind) => {
         if (isCreateBusy) return;
         if (!canEditBlog) {
             setError(editBlogDeniedMessage);
@@ -1906,7 +2064,14 @@ function NewBlogPostPage() {
             height: Math.max(current.height, getCanvasHeightForElements(nextElements)),
         }));
         setCanvasSeedKey(`longform-${kind}-${Date.now()}`);
-        setNotice(kind === 'section' ? 'Added an editable article section to the canvas.' : 'Added an editable pull quote to the canvas.');
+        const noticeByKind: Record<BlogLongFormBlockKind, string> = {
+            section: 'Added an editable article section to the canvas.',
+            quote: 'Added an editable pull quote to the canvas.',
+            image: 'Added an editable image block to the canvas.',
+            audio: 'Added an editable audio and transcript block to the canvas.',
+            file: 'Added an editable source-file block to the canvas.',
+        };
+        setNotice(noticeByKind[kind]);
     };
 
     const handleTemplateSourceChange = (nextSourceMode: BlogTemplateSourceMode) => {
@@ -3578,14 +3743,15 @@ function NewBlogPostPage() {
                                         <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{writingStats.readingMinutes} min</div>
                                     </div>
                                 </div>
-                                <div className="grid gap-3 md:grid-cols-2">
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                                     <Button
                                         type="button"
                                         variant="outline"
-                                disabled={createFormDisabled}
-                                title={editBlogPermissionTitle}
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
                                         onClick={() => addLongFormBlock('section')}
                                         data-testid="blog-create-add-section"
+                                        iconStart={<Plus className="size-4" />}
                                     >
                                         Add section
                                     </Button>
@@ -3596,8 +3762,42 @@ function NewBlogPostPage() {
                                         title={editBlogPermissionTitle}
                                         onClick={() => addLongFormBlock('quote')}
                                         data-testid="blog-create-add-quote"
+                                        iconStart={<Quote className="size-4" />}
                                     >
                                         Add pull quote
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
+                                        onClick={() => addLongFormBlock('image')}
+                                        data-testid="blog-create-add-image"
+                                        iconStart={<ImageIcon className="size-4" />}
+                                    >
+                                        Image
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
+                                        onClick={() => addLongFormBlock('audio')}
+                                        data-testid="blog-create-add-audio"
+                                        iconStart={<FileAudio className="size-4" />}
+                                    >
+                                        Audio
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={createFormDisabled}
+                                        title={editBlogPermissionTitle}
+                                        onClick={() => addLongFormBlock('file')}
+                                        data-testid="blog-create-add-file"
+                                        iconStart={<Download className="size-4" />}
+                                    >
+                                        File
                                     </Button>
                                 </div>
                                 <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs leading-5 text-muted-foreground">
@@ -4112,6 +4312,42 @@ function NewBlogPostPage() {
                                             iconStart={<Quote className="size-4" />}
                                         >
                                             Pull quote
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle || 'Add an editable image block to the article canvas'}
+                                            onClick={() => addLongFormBlock('image')}
+                                            data-testid="blog-create-focus-add-image"
+                                            iconStart={<ImageIcon className="size-4" />}
+                                        >
+                                            Image
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle || 'Add an editable audio and transcript block to the article canvas'}
+                                            onClick={() => addLongFormBlock('audio')}
+                                            data-testid="blog-create-focus-add-audio"
+                                            iconStart={<FileAudio className="size-4" />}
+                                        >
+                                            Audio
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle || 'Add an editable source-file block to the article canvas'}
+                                            onClick={() => addLongFormBlock('file')}
+                                            data-testid="blog-create-focus-add-file"
+                                            iconStart={<Download className="size-4" />}
+                                        >
+                                            File
                                         </Button>
                                         <Button
                                             type="button"

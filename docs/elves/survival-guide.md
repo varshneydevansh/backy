@@ -119,6 +119,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest deploy verification:** `efe19571` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, the production Supabase trigger still verifies hardened, and recent Vercel error logs are empty.
 
+**Newest blog authoring polish:** Blog create now has focused and normal controls for APIable image, audio/transcript, and source-file blocks. The rendered blog-create smoke installs/verifies captured custom frontend blog templates before navigation, clicks section/quote/image/audio/file insertions, proves autosave/recovery, and proves the final custom-frontend blog post persists all five long-form blocks plus mobile override/design metadata.
+
 **Newest Help polish:** Help now explains role-aware admin UI filtering: Backy combines signed-in profile role, profile status/invite state, and the backend permission matrix to decide visible/enabled navigation, quick-create actions, dashboard shortcuts, Settings, and Users controls.
 
 **Newest header role polish:** The account menu now shows the active Backy role and permission source, and its Settings shortcut is blocked with a clear reason when the signed-in role/permission matrix lacks `settings.view`.
