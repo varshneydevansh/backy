@@ -124,6 +124,13 @@ const assertBlogCreateSourceContract = () => {
       source.includes('templateSourceMode,'),
     'Blog create must expose Backy canvas vs custom frontend source controls and persist template source into post meta, autosave, and serialized content metadata',
   );
+  const backyCanvasRouteSyncCount = (source.match(/templateSource: 'backy-canvas' as const/g) || []).length;
+  assert(
+    backyCanvasRouteSyncCount >= 3 &&
+      source.includes('templateSource: templateSourceMode,') &&
+      source.includes('templateSource: recoveredTemplateSourceMode,'),
+    'Blog create Backy-canvas site switch, source switch, starter switch, recovery, and focus routes must preserve explicit templateSource query state.',
+  );
   assert(
     source.includes('extractFrontendTemplateDesignSerialization') &&
       source.includes('const frontendTemplateDesignState = effectiveFrontendTemplate') &&

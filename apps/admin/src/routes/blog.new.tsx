@@ -1746,7 +1746,7 @@ function NewBlogPostPage() {
                     siteId: fallbackSiteId,
                     ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
                     ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
-                    ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                    templateSource: templateSourceMode,
                     ...(templateSourceMode === 'custom-frontend' && designTemplateId ? {
                         designTemplate: designTemplateId,
                         frontendDesignTemplateId: designTemplateId,
@@ -1803,7 +1803,11 @@ function NewBlogPostPage() {
         clearCreationFeedback();
         navigate({
             to: '/blog/new',
-            search: { siteId: nextSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}) },
+            search: {
+                siteId: nextSiteId,
+                ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                templateSource: 'backy-canvas' as const,
+            },
             replace: true,
         });
     };
@@ -2095,7 +2099,12 @@ function NewBlogPostPage() {
             setCanvasSeedKey(`blog-starter-${selectedBlogStarterTemplate}-${Date.now()}`);
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}) },
+                search: {
+                    siteId: activeSiteId,
+                    ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                    ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
+                    templateSource: 'backy-canvas' as const,
+                },
                 replace: true,
             });
             return;
@@ -2138,7 +2147,12 @@ function NewBlogPostPage() {
             setNotice(`${nextTemplateOption.name} selected.`);
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), ...(nextTemplateId !== 'blog-post' ? { starterTemplate: nextTemplateId } : {}) },
+                search: {
+                    siteId: activeSiteId,
+                    ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                    ...(nextTemplateId !== 'blog-post' ? { starterTemplate: nextTemplateId } : {}),
+                    templateSource: 'backy-canvas' as const,
+                },
                 replace: true,
             });
             return;
@@ -2815,7 +2829,7 @@ function NewBlogPostPage() {
                 siteId: recoveredSiteId,
                 ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
                 ...(recoveredStarterTemplate !== 'blog-post' ? { starterTemplate: recoveredStarterTemplate } : {}),
-                ...(recoveredTemplateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                templateSource: recoveredTemplateSourceMode,
                 ...(recoveredTemplateSourceMode === 'custom-frontend' && draftRecovery.designTemplateId ? {
                     designTemplate: draftRecovery.designTemplateId,
                     frontendDesignTemplateId: draftRecovery.designTemplateId,
@@ -2841,7 +2855,7 @@ function NewBlogPostPage() {
                 siteId: activeSiteId,
                 ...(focused ? { focus: 'canvas' as const } : {}),
                 ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
-                ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
+                templateSource: templateSourceMode,
                 ...(templateSourceMode === 'custom-frontend' && designTemplateId ? {
                     designTemplate: designTemplateId,
                     frontendDesignTemplateId: designTemplateId,
