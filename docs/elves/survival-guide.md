@@ -123,6 +123,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor command polish:** The rendered command-palette smoke now executes Copy selection and Paste selection against a real selected canvas layer, proves the clipboard count/paste readiness state, proves paste creates and selects a fresh copied element, then deletes that pasted layer to restore the original canvas count.
 
+**Newest editor command polish:** The rendered command-palette smoke now executes `select-child-layer` and `select-parent-layer` against the nested `smoke-box` canvas container, proving command-palette hierarchy traversal selects real child layers and returns to the parent without mutating canvas element count.
+
 **Newest Help polish:** Help now explains role-aware admin UI filtering: Backy combines signed-in profile role, profile status/invite state, and the backend permission matrix to decide visible/enabled navigation, quick-create actions, dashboard shortcuts, Settings, and Users controls.
 
 **Newest header role polish:** The account menu now shows the active Backy role and permission source, and its Settings shortcut is blocked with a clear reason when the signed-in role/permission matrix lacks `settings.view`.

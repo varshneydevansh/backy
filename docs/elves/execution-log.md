@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 13:07 IST
+- **Last updated:** 2026-06-03 13:14 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 13:14 IST
+
+**Batch:** 2 / 5: Canvas Editor Interaction Fidelity / Ongoing UX Scout And Polish
+**Editor status:** Command palette hierarchy selection workflow is rendered-smoke covered
+
+**What changed:**
+- Extended the rendered command-palette smoke to select the nested `smoke-box` canvas container and exercise hierarchy navigation through the actual palette.
+- The smoke now executes `select-child-layer`, proves a real child layer from that container is selected, then executes `select-parent-layer` and proves selection returns to `smoke-box` without changing the unique canvas element count.
+- Tightened the command-palette source guard so hierarchy-selection commands are required alongside clipboard, page settings, duplicate, and delete command proof.
+
+**Commands run:**
+- `node --check apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The rendered proof now covers parent/child layer traversal from the user-facing command palette, not just direct layer-row selection.
+- No product code changed in this slice; the improvement is stronger release protection around nested editor selection behavior.
+
+**Next:**
+1. Commit and push this command-palette hierarchy coverage slice.
+2. Re-read the survival guide after push, then continue long-page page/blog editor behavior or custom frontend template inheritance polish.
 
 ## 2026-06-03 13:07 IST
 

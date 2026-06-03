@@ -642,14 +642,18 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("'open-page-settings'") &&
       smokeSource.includes("'copy-selection'") &&
       smokeSource.includes("'paste-selection'") &&
+      smokeSource.includes("'select-child-layer'") &&
+      smokeSource.includes("'select-parent-layer'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
       smokeSource.includes('copyCommand') &&
       smokeSource.includes('pasteCommand') &&
+      smokeSource.includes('selectChildCommand') &&
+      smokeSource.includes('selectParentCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
-    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard and safe mutation commands',
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard, hierarchy selection, and safe mutation commands',
   );
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
@@ -12278,6 +12282,42 @@ const testEditorCommandPalette = async (client) => {
     ),
   );
 
+  const containerTargetId = 'smoke-box';
+  await selectLayerIds(client, [containerTargetId]);
+  const beforeChildSelection = await readEditorCommandPaletteState(client);
+  assert(
+    beforeChildSelection.canvasIds.includes(containerTargetId) &&
+      beforeChildSelection.selectedIds.split(',').includes(containerTargetId),
+    `Command palette hierarchy setup did not select ${containerTargetId}: ${JSON.stringify(beforeChildSelection)}`,
+  );
+  const selectChildCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'select-child-layer',
+    'select-child-layer',
+    'select first child layer',
+    (state) => (
+      state.canvasUniqueCount === beforeChildSelection.canvasUniqueCount &&
+      state.selectedIds.split(',').some((id) => id && id !== containerTargetId)
+    ),
+  );
+  const childId = selectChildCommand.after.selectedIds
+    .split(',')
+    .find((id) => id && id !== containerTargetId);
+  assert(
+    childId && selectChildCommand.after.canvasIds.includes(childId),
+    `Command palette child selection did not select a real child layer: ${JSON.stringify(selectChildCommand.after)}`,
+  );
+  const selectParentCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'select-parent-layer',
+    'select-parent-layer',
+    'select parent layer',
+    (state) => (
+      state.canvasUniqueCount === beforeChildSelection.canvasUniqueCount &&
+      state.selectedIds.split(',').includes(containerTargetId)
+    ),
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12305,6 +12345,13 @@ const testEditorCommandPalette = async (client) => {
       after: pasteCommand.after,
     },
     deletePastedCommand,
+    selectChildCommand: {
+      containerTargetId,
+      childId,
+      filtered: selectChildCommand.filtered,
+      after: selectChildCommand.after,
+    },
+    selectParentCommand,
     undoFiltered,
     afterBlockedClick,
   };
