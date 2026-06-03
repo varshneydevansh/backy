@@ -638,7 +638,9 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes("key === 'k' && !e.altKey") &&
       source.includes("case 'save-page':") &&
       smokeSource.includes('BACKY_EDITOR_COMMAND_PALETTE_SMOKE') &&
-      smokeSource.includes('testEditorCommandPalette'),
+      smokeSource.includes('testEditorCommandPalette') &&
+      smokeSource.includes("'open-page-settings'") &&
+      smokeSource.includes('pageSettingsDialogOpen'),
     'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke',
   );
   assert(
@@ -11962,6 +11964,13 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
     rightPanel: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-right-panel') || '',
     autoFit: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-auto-fit') || '',
+    pageSettingsDialogOpen: Boolean(document.querySelector('[data-testid="page-settings-dialog"]')),
+    pageSettingsTitle: document.querySelector('[data-testid="page-settings-title"]') instanceof HTMLInputElement
+      ? document.querySelector('[data-testid="page-settings-title"]').value
+      : '',
+    pageSettingsSaveDisabled: document.querySelector('[data-testid="page-settings-save"]') instanceof HTMLButtonElement
+      ? document.querySelector('[data-testid="page-settings-save"]').disabled
+      : null,
     notice: normalize(document.querySelector('[data-testid="editor-notice"]')?.textContent || ''),
   };
 })()`);
@@ -12117,6 +12126,24 @@ const testEditorCommandPalette = async (client) => {
     (state) => state.focusMode && state.focusMode !== beforeFocus.focusMode,
   );
 
+  const settingsCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'settings',
+    'open-page-settings',
+    'open page settings',
+    (state) => state.pageSettingsDialogOpen && state.pageSettingsTitle,
+  );
+  assert(
+    settingsCommand.after.pageSettingsSaveDisabled === false,
+    `Page settings command did not open an actionable settings dialog: ${JSON.stringify(settingsCommand.after)}`,
+  );
+  await clickEnabledControlByTestId(client, 'page-settings-close', 'page settings close');
+  await waitForEditorCommandPaletteState(
+    client,
+    (state) => !state.pageSettingsDialogOpen,
+    'page settings closed after command palette execution',
+  );
+
   await clickEnabledControlByTestId(client, 'editor-command-palette-trigger', 'command palette trigger');
   await setFormControlByTestId(client, 'editor-command-palette-input', 'undo');
   const undoFiltered = await waitForEditorCommandPaletteState(
@@ -12152,6 +12179,7 @@ const testEditorCommandPalette = async (client) => {
     toggleLayers,
     toggleInspector,
     toggleFocus,
+    settingsCommand,
     undoFiltered,
     afterBlockedClick,
   };

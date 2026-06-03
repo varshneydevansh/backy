@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 11:52 IST
+- **Last updated:** 2026-06-03 12:02 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 12:02 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Editor status:** Command palette page-settings workflow is rendered-smoke covered
+
+**What changed:**
+- Expanded the editor drag smoke command-palette contract so the visible `open-page-settings` workflow command is source-guarded alongside the page settings dialog state.
+- Added rendered command-palette state capture for the page settings dialog, current title, and save-disabled state.
+- Extended the rendered command-palette smoke to search for Page settings, execute the ready command, verify the real page settings dialog opens with a saveable title, then close it before continuing blocked-command checks.
+
+**Commands run:**
+- `node --check apps/admin/scripts/editor-drag-smoke.mjs` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This closes one more visible editor command invariant with a real browser path instead of relying on registry metadata alone.
+- The smoke proves the command remains executable after focus-mode toggling and does not regress the blocked Undo behavior.
+
+**Next:**
+1. Commit and push this command-palette workflow slice.
+2. Re-read the survival guide after push, then continue long-page/custom-frontend blog authoring polish.
 
 ## 2026-06-03 11:52 IST
 

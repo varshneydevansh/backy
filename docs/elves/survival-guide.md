@@ -139,6 +139,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest dashboard authority polish:** Dashboard RBAC now exposes an Account authority panel with signed-in role/source, active owner/admin/user counts, access state, and direct Users/Settings review actions, so Supabase/Auth identity state and Backy role-gated admin controls are visible from the cockpit.
 
+**Newest editor command polish:** The rendered command-palette smoke now executes the visible Page settings workflow command, verifies the real page settings dialog opens with a saveable title, and closes it before proving blocked Undo behavior still reports the correct unavailable state.
+
 **Newest deploy verification:** `8819f704` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
 **Newest Users authority polish:** Users now exposes a Workspace authority panel with signed-in role/status, active owner/admin/user counts, invited owner count, active-owner/admin filters, owner-continuity readiness, and non-PII handoff metadata so account changes happen with production owner safety visible.
