@@ -26,6 +26,22 @@ const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 
+const isLoopbackUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const assertProductionShellTarget = () => {
+  if (!PRODUCTION_SHELL_SMOKE || !isLoopbackUrl(ADMIN_BASE_URL)) return;
+  throw new Error(
+    'BACKY_LOGIN_PRODUCTION_SHELL_SMOKE requires a production-built admin URL. Set BACKY_ADMIN_BASE_URL=https://<backy-admin-domain> or run a production preview; local Vite dev intentionally exposes demo access.',
+  );
+};
+
 const waitForExit = (childProcess, timeoutMs = 1500) => new Promise((resolve) => {
   if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
     resolve(true);
@@ -353,7 +369,9 @@ const assertAuthRecoverySource = () => {
 
   assert(
     loginSmokeSource.includes('process.env.BACKY_ADMIN_BASE_URL || process.env.BACKY_LOGIN_BASE_URL') &&
-      loginSmokeSource.includes('process.env.BACKY_PUBLIC_API_BASE_URL || process.env.BACKY_LOGIN_PUBLIC_API_BASE_URL'),
+      loginSmokeSource.includes('process.env.BACKY_PUBLIC_API_BASE_URL || process.env.BACKY_LOGIN_PUBLIC_API_BASE_URL') &&
+      loginSmokeSource.includes('const isLoopbackUrl = (value) => {') &&
+      loginSmokeSource.includes('BACKY_LOGIN_PRODUCTION_SHELL_SMOKE requires a production-built admin URL'),
     'Login production-shell smoke must accept the documented BACKY_LOGIN_* URL aliases so hosted checks cannot accidentally fall back to localhost.',
   );
 
@@ -4549,6 +4567,7 @@ const main = async () => {
       console.log(JSON.stringify({ ok: true, mode: 'login-source-only', route: '/login' }, null, 2));
       return;
     }
+    assertProductionShellTarget();
 
     if (!PRODUCTION_SHELL_SMOKE) {
       await assertEditorCanReadOwnPermissionMatrix();
