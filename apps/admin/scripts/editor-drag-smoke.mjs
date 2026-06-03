@@ -648,6 +648,10 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("'align-left'") &&
       smokeSource.includes("'align-center'") &&
       smokeSource.includes("'distribute-horizontal'") &&
+      smokeSource.includes("'send-to-back'") &&
+      smokeSource.includes("'send-backward'") &&
+      smokeSource.includes("'bring-forward'") &&
+      smokeSource.includes("'bring-to-front'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
       smokeSource.includes('copyCommand') &&
@@ -658,10 +662,14 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('alignLeftCommand') &&
       smokeSource.includes('alignCenterCommand') &&
       smokeSource.includes('distributeHorizontalCommand') &&
+      smokeSource.includes('sendToBackCommand') &&
+      smokeSource.includes('sendBackwardCommand') &&
+      smokeSource.includes('bringForwardCommand') &&
+      smokeSource.includes('bringToFrontCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
-    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard, hierarchy selection, and safe mutation commands',
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard, hierarchy selection, z-order, and safe mutation commands',
   );
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
@@ -12459,6 +12467,87 @@ const testEditorCommandPalette = async (client) => {
     })}`,
   );
 
+  const zOrderTargetId = 'smoke-image';
+  await selectLayerIds(client, [zOrderTargetId]);
+  const beforeZOrder = await readSelectedZIndexControl(client, zOrderTargetId);
+  assert(
+    beforeZOrder.value > 1,
+    `Command palette z-order setup needs ${zOrderTargetId} above the back layer: ${JSON.stringify(beforeZOrder)}`,
+  );
+  const beforeZOrderPalette = await readEditorCommandPaletteState(client);
+  const sendToBackCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'send-to-back',
+    'send-to-back',
+    'send selected layer to back',
+    (state) => (
+      state.canvasUniqueCount === beforeZOrderPalette.canvasUniqueCount &&
+      state.selectedIds.split(',').includes(zOrderTargetId)
+    ),
+  );
+  const afterSendToBack = await readSelectedZIndexControl(client, zOrderTargetId);
+  assert(
+    afterSendToBack.value === 1,
+    `Command palette send-to-back did not move ${zOrderTargetId} to the back layer: ${JSON.stringify({
+      beforeZOrder,
+      afterSendToBack,
+      sendToBackCommand: sendToBackCommand.after,
+    })}`,
+  );
+
+  const bringForwardCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'bring-forward',
+    'bring-forward',
+    'bring selected layer forward',
+    (state) => state.selectedIds.split(',').includes(zOrderTargetId),
+  );
+  const afterBringForward = await readSelectedZIndexControl(client, zOrderTargetId);
+  assert(
+    afterBringForward.value === afterSendToBack.value + 1,
+    `Command palette bring-forward did not raise ${zOrderTargetId} by one layer: ${JSON.stringify({
+      afterSendToBack,
+      afterBringForward,
+      bringForwardCommand: bringForwardCommand.after,
+    })}`,
+  );
+
+  const sendBackwardCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'send-backward',
+    'send-backward',
+    'send selected layer backward',
+    (state) => state.selectedIds.split(',').includes(zOrderTargetId),
+  );
+  const afterSendBackward = await readSelectedZIndexControl(client, zOrderTargetId);
+  assert(
+    afterSendBackward.value === afterSendToBack.value,
+    `Command palette send-backward did not lower ${zOrderTargetId} by one layer: ${JSON.stringify({
+      afterBringForward,
+      afterSendBackward,
+      sendBackwardCommand: sendBackwardCommand.after,
+    })}`,
+  );
+
+  const bringToFrontCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'bring-to-front',
+    'bring-to-front',
+    'bring selected layer to front',
+    (state) => state.selectedIds.split(',').includes(zOrderTargetId),
+  );
+  const afterBringToFront = await readSelectedZIndexControl(client, zOrderTargetId);
+  assert(
+    afterBringToFront.value > beforeZOrder.value &&
+      afterBringToFront.value > afterBringForward.value,
+    `Command palette bring-to-front did not move ${zOrderTargetId} to the front layer: ${JSON.stringify({
+      beforeZOrder,
+      afterSendBackward,
+      afterBringToFront,
+      bringToFrontCommand: bringToFrontCommand.after,
+    })}`,
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12516,6 +12605,30 @@ const testEditorCommandPalette = async (client) => {
       after: afterAlignCenter,
       filtered: alignCenterCommand.filtered,
       afterCommand: alignCenterCommand.after,
+    },
+    zOrderCommand: {
+      targetId: zOrderTargetId,
+      before: beforeZOrder,
+      afterSendToBack,
+      afterBringForward,
+      afterSendBackward,
+      afterBringToFront,
+      sendToBackCommand: {
+        filtered: sendToBackCommand.filtered,
+        after: sendToBackCommand.after,
+      },
+      bringForwardCommand: {
+        filtered: bringForwardCommand.filtered,
+        after: bringForwardCommand.after,
+      },
+      sendBackwardCommand: {
+        filtered: sendBackwardCommand.filtered,
+        after: sendBackwardCommand.after,
+      },
+      bringToFrontCommand: {
+        filtered: bringToFrontCommand.filtered,
+        after: bringToFrontCommand.after,
+      },
     },
     undoFiltered,
     afterBlockedClick,

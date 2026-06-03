@@ -4091,6 +4091,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 14:21 IST - Command Palette Z-Order Execution Proof
+
+**Scope:** Batch 5 editor command-palette polish, focused on proving that layer stacking commands execute through Cmd/Ctrl+K with the same sibling z-order model as toolbar, Inspector, context bar, and keyboard shortcuts.
+
+**Changed:**
+- Extended `testEditorCommandPalette` to select `smoke-image` and execute `send-to-back`, `bring-forward`, `send-backward`, and `bring-to-front` from the command palette.
+- The rendered proof reads the Inspector Z-index control after each command and asserts the layer moves `2 -> 1 -> 2 -> 1 -> 28` without changing canvas layer count or losing selection.
+- The command-palette source guard now requires rendered smoke coverage for all four layer-order commands plus their returned proof objects.
+
+**Validation:**
+- PASS: `npm run test:editor-command-palette --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This is a test-hardening slice. The product command implementation was already wired; this closes a regression gap for visible layer-order authoring from the searchable command surface.
+
+**Next:**
+- Commit and push this z-order proof, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-03 11:39 IST - Custom Frontend Blog Starter Route Sync
 
 **Scope:** Batch 5 blog/editor authoring polish, focused on custom-frontend blog child templates reopening and copying the same starter/template state that the canvas actually uses.

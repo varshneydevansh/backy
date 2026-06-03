@@ -425,6 +425,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the center-alignment/distribution command proof slice.
 
+**Newest command-palette z-order proof:** The rendered command-palette smoke now executes all four layer-order commands through Cmd/Ctrl+K. It selects `smoke-image`, runs `send-to-back`, `bring-forward`, `send-backward`, and `bring-to-front`, and proves the Inspector Z-index moves `2 -> 1 -> 2 -> 1 -> 28` while selection and canvas layer count stay stable.
+
+**Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the z-order command proof slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
