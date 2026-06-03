@@ -261,7 +261,7 @@ const assertPagesListSourceContract = () => {
       source.includes('inline-block max-w-full whitespace-normal break-all rounded-md bg-muted px-2 py-1 font-mono text-xs leading-5 text-foreground') &&
       source.includes('max-w-full break-words text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]') &&
       source.includes('max-w-full whitespace-normal break-all rounded-md bg-muted px-2 py-0.5 font-mono text-[11px] leading-4 text-muted-foreground') &&
-      actionColumnBlock.includes("overflowMode: 'visible'") &&
+      !actionColumnBlock.includes("overflowMode: 'visible'") &&
       source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
       source.includes('data-testid={`pages-delivery-health-details-${pageId}`}') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
@@ -611,7 +611,7 @@ const assertSharedDataGridSourceContract = () => {
       source.includes('stickyActionColumn?: boolean;') &&
       source.includes('stickyActionColumn = true') &&
       source.includes('const shouldStickActionColumn = stickyActionColumn && isActionColumn;') &&
-      source.includes("const usesVisibleOverflow = col.overflowMode === 'visible' || isActionColumn;") &&
+      source.includes("const usesVisibleOverflow = col.overflowMode === 'visible';") &&
       source.includes("usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden'") &&
       source.includes("shouldStickActionColumn && 'sticky right-0 z-20 bg-muted/95 shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)]'") &&
       source.includes("shouldStickActionColumn && 'sticky right-0 z-30 bg-card shadow-[-10px_0_20px_-18px_rgba(15,23,42,0.45)] transition-colors group-hover:bg-muted/30'") &&
@@ -3460,11 +3460,12 @@ const assertPagesDataGridHeaderSemantics = async (client) => {
   assert(state.cells.every((cell) => cell.headers && cell.headerExists && cell.key === cell.headerKey && cell.dataLabel === cell.headerLabel && cell.dataLabel === cell.headerAriaLabel), `Every DataGrid body cell must reference its matching named column header: ${JSON.stringify(state.cells)}`);
   assert(
     state.cells.every((cell) => (
-      cell.key === 'actions'
-        ? cell.overflowPolicy === 'visible-and-wrapped' && cell.paintContainment === 'none' && cell.contentPolicy === 'visible-wrapped-content' && cell.descendantPolicy === 'visible'
-        : cell.overflowPolicy === 'clip-and-wrap' && cell.paintContainment === 'cell' && cell.contentPolicy === 'constrained-wrapped-content' && cell.descendantPolicy === 'paint-contained'
+      cell.overflowPolicy === 'clip-and-wrap' &&
+        cell.paintContainment === 'cell' &&
+        cell.contentPolicy === 'constrained-wrapped-content' &&
+        cell.descendantPolicy === 'paint-contained'
     )),
-    `Dense DataGrid cells must clip by default while interaction-heavy cells opt into visible wrapped content: ${JSON.stringify(state.cells)}`,
+    `Dense DataGrid cells must clip and wrap every cell, including action cells, so controls cannot paint over neighboring columns: ${JSON.stringify(state.cells)}`,
   );
   assert(state.cells.every((cell) => cell.contentFitsCell && cell.overflowingDescendantCount === 0), `Every dense DataGrid body cell wrapper and visible descendants must stay within its owning cell: ${JSON.stringify(state.cells)}`);
   assert(state.allVisibleCellsFit, `Every visible Pages DataGrid row must keep cell content and descendants inside its owning column: ${JSON.stringify(state.overflowingVisibleCells)}`);

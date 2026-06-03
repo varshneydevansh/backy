@@ -332,7 +332,7 @@ export function DataGrid<T extends { id: string }>({
                                         const columnLabel = getColumnLabel(col);
                                         const isActionColumn = columnKey === 'actions';
                                         const shouldStickActionColumn = stickyActionColumn && isActionColumn;
-                                        const usesVisibleOverflow = col.overflowMode === 'visible' || isActionColumn;
+                                        const usesVisibleOverflow = col.overflowMode === 'visible';
                                         const cellContent = col.render ? col.render(item) : String(item[col.key as keyof T]);
 
                                         return (

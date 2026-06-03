@@ -3389,21 +3389,14 @@ const assertUsersDataGridLayout = async (client) => {
   assert(state.headerCount === state.cellCount, `Users DataGrid first row cells must match headers: ${JSON.stringify(state)}`);
   assert(
     state.cells.every((cell) => (
-      cell.key === 'actions'
-        ? cell.overflowPolicy === 'visible-and-wrapped' &&
-          cell.paintContainment === 'none' &&
-          cell.contentPolicy === 'visible-wrapped-content' &&
-          cell.descendantPolicy === 'visible' &&
-          cell.contentFitsCell &&
-          cell.overflowingDescendantCount === 0
-        : cell.overflowPolicy === 'clip-and-wrap' &&
-          cell.paintContainment === 'cell' &&
-          cell.contentPolicy === 'constrained-wrapped-content' &&
-          cell.descendantPolicy === 'paint-contained' &&
-          cell.contentFitsCell &&
-          cell.overflowingDescendantCount === 0
+      cell.overflowPolicy === 'clip-and-wrap' &&
+        cell.paintContainment === 'cell' &&
+        cell.contentPolicy === 'constrained-wrapped-content' &&
+        cell.descendantPolicy === 'paint-contained' &&
+        cell.contentFitsCell &&
+        cell.overflowingDescendantCount === 0
     )),
-    `Users DataGrid cells must keep rendered content inside each owning column while action controls opt into visible wrapped paint: ${JSON.stringify(state.cells)}`,
+    `Users DataGrid cells must keep rendered content inside each owning column, including action controls: ${JSON.stringify(state.cells)}`,
   );
   assert(
     state.columnWidths.some((column) => column.key === 'fullName' && column.width === '420px') &&

@@ -2051,7 +2051,6 @@ function PagesListView() {
       key: 'actions',
       label: '',
       width: '220px',
-      overflowMode: 'visible',
       render: (page) => {
         const readiness = readinessMap[page.id];
         const publishBlocker = readiness ? getPublishBlocker(readiness) : null;

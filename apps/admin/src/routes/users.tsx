@@ -1148,7 +1148,6 @@ function UsersListView() {
       key: 'actions',
       label: '',
       width: '160px',
-      overflowMode: 'visible',
       render: (user) => {
         const userActionStatusId = `users-actions-status-${user.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
         const rowBusyReason = isUsersBusy
