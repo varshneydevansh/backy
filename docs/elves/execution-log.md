@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 12:02 IST
+- **Last updated:** 2026-06-03 12:15 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 12:15 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Blog/editor status:** Focused blog canvas can extend long-form articles without leaving focus mode
+
+**What changed:**
+- Added focused-canvas quick actions to `/blog/new` so authors can insert an editable article section or pull quote while the management panels are hidden.
+- Reused the existing long-form block insertion path, so focused insertions remain normal canvas layers, inherit custom frontend template context, grow the authored page height, and persist through the existing save/autosave pipeline.
+- Expanded the Blog create source and rendered smokes to require the focused quick actions, click them in focused canvas mode, and prove `blog-longform-section-*` plus `blog-longform-quote-*` layers appear in the editor.
+
+**Commands run:**
+- `node --check apps/admin/scripts/blog-create-smoke.mjs` -> PASS.
+- `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- First rendered `npm run test:blog-create --workspace @backy-cms/admin --silent` attempt -> RETRIED after the smoke route temporarily saw zero captured custom frontend blog templates.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The passing rendered smoke proves the focused actions are visible/enabled, insert section and quote layers, survive autosave/recovery, and save into a custom-frontend blog post with stored design metadata and a grown canvas height.
+- The initial rendered attempt exposed a transient smoke setup/read timing issue around captured template visibility after visiting the Backy-canvas audio starter; the immediate rerun passed without product changes.
+
+**Next:**
+1. Commit and push this focused blog long-form authoring slice.
+2. Re-read the survival guide after push, then continue the next rendered editor/blog authoring gap.
 
 ## 2026-06-03 12:02 IST
 

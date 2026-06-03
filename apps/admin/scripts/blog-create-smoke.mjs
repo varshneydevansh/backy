@@ -322,12 +322,18 @@ const assertBlogCreateSourceContract = () => {
       : '';
     const focusSubmitIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-submit-button"');
     const focusPreviewIndex = focusActionsBlock.indexOf('Save draft and preview');
+    const focusAddSectionIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-section"');
+    const focusAddQuoteIndex = focusActionsBlock.indexOf('data-testid="blog-create-focus-add-quote"');
     const focusPanelsIndex = focusActionsBlock.indexOf('Show panels');
     assert(
       focusSubmitIndex >= 0 &&
         focusPreviewIndex > focusSubmitIndex &&
-        focusPanelsIndex > focusPreviewIndex,
-      'Blog create focused canvas actions must keep Save/Publish first, Preview second, and Show panels last.',
+        focusAddSectionIndex > focusPreviewIndex &&
+        focusAddQuoteIndex > focusAddSectionIndex &&
+        focusPanelsIndex > focusAddQuoteIndex &&
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'section\')}') &&
+        focusActionsBlock.includes('onClick={() => addLongFormBlock(\'quote\')}'),
+      'Blog create focused canvas actions must keep Save/Publish first, Preview second, long-form insertions next, and Show panels last.',
     );
   }
   assert(
@@ -808,6 +814,8 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
       hasSavePreviewAction: bodyText.includes('Save draft and preview'),
       hasFocusAction: bodyText.includes('Focus canvas'),
       hasShowPanelsAction: bodyText.includes('Show panels'),
+      hasFocusAddSectionAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-section"]')) && bodyText.includes('Add section'),
+      hasFocusAddQuoteAction: Boolean(document.querySelector('[data-testid="blog-create-focus-add-quote"]')) && bodyText.includes('Pull quote'),
       groupShortcut: document.querySelector('[data-testid="editor-group-selection"]')?.getAttribute('aria-keyshortcuts') || '',
       siblingShortcut: document.querySelector('[data-testid="editor-select-sibling-layers"]')?.getAttribute('aria-keyshortcuts') || '',
       hasBreakpointControls: bodyText.includes('Desktop') && bodyText.includes('Tablet') && bodyText.includes('Mobile'),
@@ -824,7 +832,14 @@ const assertBlogCreateVisualState = async (client, label, screenshotPath, { focu
   assert(!state.hasFrameworkOverlay, `${label} rendered a framework/runtime overlay: ${JSON.stringify(state)}`);
 
   if (focus) {
-    assert(state.focusBannerVisible && state.focusDensity === 'compact' && state.hasShowPanelsAction, `${label} focus banner/actions missing: ${JSON.stringify(state)}`);
+    assert(
+      state.focusBannerVisible &&
+        state.focusDensity === 'compact' &&
+        state.hasShowPanelsAction &&
+        state.hasFocusAddSectionAction &&
+        state.hasFocusAddQuoteAction,
+      `${label} focus banner/actions missing: ${JSON.stringify(state)}`,
+    );
     assert(!state.commandVisible && !state.draftPanel && !state.publishPanel, `${label} focus mode did not hide create panels: ${JSON.stringify(state)}`);
     assert(!state.componentLibraryVisible && !state.inspectorVisible, `${label} focus mode should start with editor side panels hidden: ${JSON.stringify(state)}`);
   } else {
@@ -1739,6 +1754,18 @@ const assertCanvasFocusMode = async (client) => {
       adminSidebar: Boolean(document.querySelector('[data-testid="admin-sidebar-shell"]')),
       adminHeader: Boolean(document.querySelector('[data-testid="admin-header-shell"]')),
       showPanels: Array.from(document.querySelectorAll('button')).some((button) => (button.textContent || '').trim() === 'Show panels'),
+      focusAddSection: document.querySelector('[data-testid="blog-create-focus-add-section"]') instanceof HTMLButtonElement
+        ? {
+            disabled: document.querySelector('[data-testid="blog-create-focus-add-section"]').disabled,
+            text: document.querySelector('[data-testid="blog-create-focus-add-section"]').textContent || '',
+          }
+        : null,
+      focusAddQuote: document.querySelector('[data-testid="blog-create-focus-add-quote"]') instanceof HTMLButtonElement
+        ? {
+            disabled: document.querySelector('[data-testid="blog-create-focus-add-quote"]').disabled,
+            text: document.querySelector('[data-testid="blog-create-focus-add-quote"]').textContent || '',
+          }
+        : null,
     }))()`);
 
     if (
@@ -1756,6 +1783,8 @@ const assertCanvasFocusMode = async (client) => {
       !focused.publishPanel &&
       !focused.adminSidebar &&
       !focused.adminHeader &&
+      focused.focusAddSection?.disabled === false &&
+      focused.focusAddQuote?.disabled === false &&
       focused.search.includes('focus=canvas')
     ) {
       break;
@@ -1769,6 +1798,41 @@ const assertCanvasFocusMode = async (client) => {
   }
 
   const focusVisualState = await assertBlogCreateVisualState(client, 'blog create focus', FOCUS_VISUAL_SCREENSHOT_PATH, { focus: true });
+
+  const focusedWriting = [];
+  for (const testId of ['blog-create-focus-add-section', 'blog-create-focus-add-quote']) {
+    const clicked = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="${testId}"]');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) {
+        return { ok: false, found: Boolean(button), disabled: button instanceof HTMLButtonElement ? button.disabled : null };
+      }
+      button.click();
+      return { ok: true };
+    })()`);
+    assert(clicked?.ok, `Unable to click focused writing action ${testId}: ${JSON.stringify(clicked)}`);
+    await sleep(300);
+    focusedWriting.push({ testId, clicked });
+  }
+
+  const focusedWritingState = await evaluate(client, `(() => {
+    const section = document.querySelector('[data-element-id^="blog-longform-section-"]');
+    const quote = document.querySelector('[data-element-id^="blog-longform-quote-"]');
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    return {
+      sectionId: section?.getAttribute('data-element-id') || '',
+      quoteId: quote?.getAttribute('data-element-id') || '',
+      hasSectionText: document.body?.innerText?.includes('New article section') || false,
+      hasQuoteText: document.body?.innerText?.includes('memorable pull quote') || false,
+      canvasHeight: canvas?.getBoundingClientRect().height || 0,
+    };
+  })()`);
+  assert(
+    focusedWritingState.sectionId &&
+      focusedWritingState.quoteId &&
+      focusedWritingState.hasSectionText &&
+      focusedWritingState.hasQuoteText,
+    `Focused writing actions did not insert long-form canvas blocks: ${JSON.stringify(focusedWritingState)}`,
+  );
 
   let restored = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -1841,6 +1905,8 @@ const assertCanvasFocusMode = async (client) => {
       horizontalOverflow: focusVisualState.horizontalOverflow,
       viewport: focusVisualState.viewport,
     },
+    focusedWriting,
+    focusedWritingState,
     normal,
   };
 };

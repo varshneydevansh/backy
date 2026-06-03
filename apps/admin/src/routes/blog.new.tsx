@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, RefreshCw, Save, Search, SearchCheck, Tags, UserRound, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, Eye, FileText, Globe, Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, PenLine, Plus, Quote, RefreshCw, Save, Search, SearchCheck, Tags, UserRound, X } from 'lucide-react';
 import {
     createBlogPost,
     createBlogPostPreview,
@@ -4088,6 +4088,30 @@ function NewBlogPostPage() {
                                             iconStart={<Eye className="size-4" />}
                                         >
                                             {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle || 'Add an editable long-form article section to the canvas'}
+                                            onClick={() => addLongFormBlock('section')}
+                                            data-testid="blog-create-focus-add-section"
+                                            iconStart={<Plus className="size-4" />}
+                                        >
+                                            Add section
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={createFormDisabled}
+                                            title={editBlogPermissionTitle || 'Add an editable pull quote to the canvas'}
+                                            onClick={() => addLongFormBlock('quote')}
+                                            data-testid="blog-create-focus-add-quote"
+                                            iconStart={<Quote className="size-4" />}
+                                        >
+                                            Pull quote
                                         </Button>
                                         <Button
                                             type="button"

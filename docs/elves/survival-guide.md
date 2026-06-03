@@ -141,6 +141,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest editor command polish:** The rendered command-palette smoke now executes the visible Page settings workflow command, verifies the real page settings dialog opens with a saveable title, and closes it before proving blocked Undo behavior still reports the correct unavailable state.
 
+**Newest focused blog authoring polish:** Focused `/blog/new` canvas mode now exposes Add section and Pull quote actions beside Save/Preview/Show panels. The rendered Blog create smoke clicks those focused actions, proves real long-form canvas layers are inserted, and verifies they survive autosave/recovery and the saved custom-frontend blog post payload with grown canvas height.
+
 **Newest deploy verification:** `8819f704` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
 
 **Newest Users authority polish:** Users now exposes a Workspace authority panel with signed-in role/status, active owner/admin/user counts, invited owner count, active-owner/admin filters, owner-continuity readiness, and non-PII handoff metadata so account changes happen with production owner safety visible.
