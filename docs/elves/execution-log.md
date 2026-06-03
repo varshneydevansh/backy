@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-02 23:15 IST
+- **Last updated:** 2026-06-03 09:43 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 09:43 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Deployed separate frontend probe now matches Backy contract
+
+**What changed:**
+- Updated the separate `devanshvarshney-frontend` Next.js probe route to match Backy's checked custom frontend starter contract.
+- The deployed frontend `/api/backy-connection` now exposes template registry/admin endpoint pointers, template reuse metadata, blog child starter-template counts, and blog template inheritance pointers.
+- Redeployed the separate frontend to its stable production alias so Backy can prove the external website consumes the current custom frontend control-plane contract.
+
+**Commands run:**
+- `npm run typecheck` in the separate frontend repo -> PASS.
+- `NEXT_PUBLIC_BACKY_API_BASE_URL=https://backy-public.vercel.app/api NEXT_PUBLIC_BACKY_SITE_ID=<canonical-site-id> NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST=devanshvarshney.com BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api BACKY_SITE_ID=<canonical-site-id> BACKY_SITE_PUBLIC_HOST=devanshvarshney.com npm run build` in the separate frontend repo -> PASS.
+- `npx vercel@latest deploy --prod -y` in the separate frontend repo -> PASS; stable alias updated.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=<canonical-site-id> BACKY_CUSTOM_FRONTEND_SITE_PUBLIC_HOST=devanshvarshney.com BACKY_CUSTOM_FRONTEND_URL=https://devanshvarshney-frontend.vercel.app BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection --silent` -> PASS, 112 checks.
+
+**Notes:**
+- Separate frontend commit `7d6294d` contains the probe-contract update.
+- The previous deployed custom frontend DOM/probe gap is closed for the stable frontend alias. Vercel GitHub App access for automatic private-repo deployments remains an operator convenience, not a current Backy contract blocker.
+- The four audit partials remain external live Settings/Commerce provider certification artifacts.
+
+**Next:**
+1. Run repo-public hygiene, commit, push, re-read the survival guide.
+2. Return to highest-friction Backy admin/editor UX polish now that the live custom frontend proof is green.
 
 ## 2026-06-02 23:15 IST
 

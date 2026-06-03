@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Grant Vercel GitHub App access to the private separate frontend repository or connect it from the Vercel dashboard, add Preview env after Vercel confirms the Git connection, attach the public website domain only when ready to move DNS, and continue highest-friction Backy UX/editor polish.
+- **Next required action:** Continue highest-friction Backy UX/editor polish after the strict deployed separate-frontend contract gate passed. Vercel GitHub App access for the private separate frontend repository is now an automation convenience rather than the current release blocker; attach the public website domain only when ready to move DNS.
 
 ## Effort Standard
 
@@ -128,6 +128,8 @@ PR is not opened yet because this workspace is already carrying local release co
 **Newest domain/subdomain polish:** Same-site verified hosts are now modeled as `site.settings.domainAliases`, exposed through admin Site settings, public host matching, manifest/OpenAPI/SDK/agent-handoff delivery metadata, and Site Detail handoff copy. Use aliases for multiple verified hosts on the same site; create separate Backy sites when subdomains need independent content, navigation, SEO, or design tokens.
 
 **Newest deploy verification:** `20ba4a8b` is pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.
+
+**Newest custom frontend proof:** The separate `devanshvarshney-frontend` project is updated at commit `7d6294d`, redeployed on its stable production alias, and the strict live Backy custom-frontend connection gate passes 112 checks with live API, deployed DOM, and `/api/backy-connection` probe requirements enabled.
 
 **Newest editor/APIability polish:** The selected-layer Inspector now exposes a copyable `backy.editor-selected-component-api-contract.v1` Element API payload with selected element id/type, props, styles, responsive overrides, tokens, media asset ids, motion, bindings, child summaries, and the canonical `agent-handoff.componentApiContract.componentTypeContracts` plus `render.data.content.elements[]` pointers. Source and rendered Inspector smokes are green.
 
