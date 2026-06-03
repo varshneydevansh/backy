@@ -140,8 +140,9 @@ const assertBlogCreateSourceContract = () => {
       !source.includes('frontendDesignProvenanceArray') &&
       editorCatalogSource.includes('const templateProvenanceArrayOrRecord = (') &&
       editorCatalogSource.includes('return record && Object.keys(record).length > 0 ? record : undefined;') &&
-      frontendDesignContractSource.includes('const assets = cloneArrayOrRecord(current.frontendDesignAssets)') &&
-      frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.assets)') &&
+      frontendDesignContractSource.includes('const cloneProvenanceArray = (value: unknown): unknown[] | undefined => {') &&
+      frontendDesignContractSource.includes('const assets = cloneProvenanceArray(current.frontendDesignAssets)') &&
+      frontendDesignContractSource.includes('|| cloneProvenanceArray(content.assets)') &&
       frontendDesignContractSource.includes('const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)') &&
       frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.interactions)'),
     'Blog create frontend template seeding must preserve custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
@@ -2404,6 +2405,12 @@ const flattenElements = (elements = []) => {
   return flat;
 };
 
+const frontendDesignAssetGroup = (meta) => {
+  const assets = meta?.frontendDesignAssets;
+  if (Array.isArray(assets)) return assets[0] || {};
+  return assets || {};
+};
+
 const assertCreatedFrontendBlogPost = async (postId, slug) => {
   const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${postId}`);
   const post = payload.data?.post;
@@ -2418,7 +2425,7 @@ const assertCreatedFrontendBlogPost = async (postId, slug) => {
   assert(Array.isArray(post.meta?.frontendDesignBindingHints) && post.meta.frontendDesignBindingHints.length === 2, `Created blog did not store frontend binding hints: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignCustomJs?.includes('__backySmokeBlogTemplate'), `Created blog did not store frontend custom JS provenance: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignThemeTokenRefs?.primary === 'tokens.colors.primary', `Created blog did not store frontend theme token refs: ${JSON.stringify(post.meta)}`);
-  assert(post.meta?.frontendDesignAssets?.media?.[0]?.id === 'media-smoke-blog-cover', `Created blog did not store keyed frontend asset provenance: ${JSON.stringify(post.meta)}`);
+  assert(frontendDesignAssetGroup(post.meta)?.media?.[0]?.id === 'media-smoke-blog-cover', `Created blog did not store frontend asset provenance: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignAnimations?.titleEnter?.target === 'post.title', `Created blog did not store keyed frontend animation provenance: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignInteractions?.timeline?.[0]?.animation === 'slide-up', `Created blog did not store keyed frontend interaction provenance: ${JSON.stringify(post.meta)}`);
   assert(post.meta?.frontendDesignEditableMap?.['post.hero.title']?.field === 'props.content', `Created blog did not store frontend editable map provenance: ${JSON.stringify(post.meta)}`);
