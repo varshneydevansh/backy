@@ -421,6 +421,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Command-palette source guard, rendered command-palette smoke, editor smoke coverage, admin typecheck, and diff check are green for the sibling-selection/alignment command execution slice.
 
+**Newest command-palette layout proof:** The rendered command-palette smoke now also executes `distribute-horizontal` and `align-center` through Cmd/Ctrl+K. It proves three selected root layers end with equal center spacing after distribution and two selected root layers end with matching horizontal centers after alignment, closing more of the visible layout-command execution gap.
+
+**Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the center-alignment/distribution command proof slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

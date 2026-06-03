@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 13:54 IST
+- **Last updated:** 2026-06-03 14:11 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`, `docs/elves/survival-guide.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 14:11 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Editor command palette now proves center alignment and distribution commands against real canvas geometry
+
+**What changed:**
+- Extended the rendered command-palette smoke to execute `distribute-horizontal` through Cmd/Ctrl+K against `smoke-heading`, `smoke-image`, and `smoke-box`.
+- The proof now asserts Backy's distribution contract directly: selected layer centers are equal-spaced after the command.
+- Extended the same rendered smoke to execute `align-center` through Cmd/Ctrl+K against `smoke-image` and `smoke-box`.
+- Tightened the command-palette source guard so future editor command coverage must keep `align-center` and `distribute-horizontal`, not only `align-left`.
+
+**Commands run:**
+- `npm run test:editor-command-palette --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This is a test hardening slice for already-existing editor behavior. It closes more of the visible command-palette execution gap without touching production runtime code.
+
+**Next:**
+1. Commit and push this command-palette layout execution proof.
+2. Continue the highest-friction editor/admin authoring polish after re-reading the survival guide.
 
 ## 2026-06-03 13:54 IST
 

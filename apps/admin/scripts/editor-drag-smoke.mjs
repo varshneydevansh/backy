@@ -646,6 +646,8 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("'select-child-layer'") &&
       smokeSource.includes("'select-parent-layer'") &&
       smokeSource.includes("'align-left'") &&
+      smokeSource.includes("'align-center'") &&
+      smokeSource.includes("'distribute-horizontal'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
       smokeSource.includes('copyCommand') &&
@@ -654,6 +656,8 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('selectChildCommand') &&
       smokeSource.includes('selectParentCommand') &&
       smokeSource.includes('alignLeftCommand') &&
+      smokeSource.includes('alignCenterCommand') &&
+      smokeSource.includes('distributeHorizontalCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
@@ -12370,6 +12374,91 @@ const testEditorCommandPalette = async (client) => {
     `Command palette align-left did not align selected layers: ${JSON.stringify({ beforeAlign, afterAlign, alignLeftCommand: alignLeftCommand.after })}`,
   );
 
+  const distributeTargetIds = ['smoke-heading', 'smoke-image', 'smoke-box'];
+  await selectLayerIds(client, distributeTargetIds);
+  const beforeDistribute = await readEditorElementState(client, distributeTargetIds);
+  const beforeDistributePalette = await readEditorCommandPaletteState(client);
+  assert(
+    distributeTargetIds.every((id) => beforeDistributePalette.selectedIds.split(',').includes(id)),
+    `Command palette distribute setup did not keep three-layer selection: ${JSON.stringify(beforeDistributePalette)}`,
+  );
+  const beforeDistributeCenters = distributeTargetIds
+    .map((id) => ({
+      id,
+      center: beforeDistribute[id].x + beforeDistribute[id].width / 2,
+    }))
+    .sort((left, right) => left.center - right.center);
+  const beforeDistributeGapA = beforeDistributeCenters[1].center - beforeDistributeCenters[0].center;
+  const beforeDistributeGapB = beforeDistributeCenters[2].center - beforeDistributeCenters[1].center;
+  const distributeHorizontalCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'distribute-horizontal',
+    'distribute-horizontal',
+    'distribute selected layers horizontally',
+    (state) => (
+      state.canvasUniqueCount === beforeDistributePalette.canvasUniqueCount &&
+      distributeTargetIds.every((id) => state.selectedIds.split(',').includes(id))
+    ),
+  );
+  const afterDistribute = await readEditorElementState(client, distributeTargetIds);
+  const afterDistributeCenters = distributeTargetIds
+    .map((id) => ({
+      id,
+      center: afterDistribute[id].x + afterDistribute[id].width / 2,
+    }))
+    .sort((left, right) => left.center - right.center);
+  const afterDistributeGapA = afterDistributeCenters[1].center - afterDistributeCenters[0].center;
+  const afterDistributeGapB = afterDistributeCenters[2].center - afterDistributeCenters[1].center;
+  assert(
+    Math.abs(afterDistributeGapA - afterDistributeGapB) <= 2 &&
+      Math.abs(beforeDistributeGapA - beforeDistributeGapB) > 2,
+    `Command palette distribute-horizontal did not equalize center spacing: ${JSON.stringify({
+      beforeDistribute,
+      afterDistribute,
+      beforeDistributeCenters,
+      afterDistributeCenters,
+      beforeDistributeGapA,
+      beforeDistributeGapB,
+      afterDistributeGapA,
+      afterDistributeGapB,
+      distributeHorizontalCommand: distributeHorizontalCommand.after,
+    })}`,
+  );
+
+  await selectLayerIds(client, alignTargetIds);
+  const beforeAlignCenter = await readEditorElementState(client, alignTargetIds);
+  const beforeAlignCenterPalette = await readEditorCommandPaletteState(client);
+  assert(
+    Math.abs(
+      (beforeAlignCenter['smoke-image'].x + beforeAlignCenter['smoke-image'].width / 2) -
+        (beforeAlignCenter['smoke-box'].x + beforeAlignCenter['smoke-box'].width / 2),
+    ) > 1,
+    `Command palette align-center setup needs layers with different centers: ${JSON.stringify(beforeAlignCenter)}`,
+  );
+  const alignCenterCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'align-center',
+    'align-center',
+    'align selected layers center',
+    (state) => (
+      state.canvasUniqueCount === beforeAlignCenterPalette.canvasUniqueCount &&
+      alignTargetIds.every((id) => state.selectedIds.split(',').includes(id))
+    ),
+  );
+  const afterAlignCenter = await readEditorElementState(client, alignTargetIds);
+  const imageCenterAfterAlign = afterAlignCenter['smoke-image'].x + afterAlignCenter['smoke-image'].width / 2;
+  const boxCenterAfterAlign = afterAlignCenter['smoke-box'].x + afterAlignCenter['smoke-box'].width / 2;
+  assert(
+    Math.abs(imageCenterAfterAlign - boxCenterAfterAlign) <= 1,
+    `Command palette align-center did not align selected layer centers: ${JSON.stringify({
+      beforeAlignCenter,
+      afterAlignCenter,
+      imageCenterAfterAlign,
+      boxCenterAfterAlign,
+      alignCenterCommand: alignCenterCommand.after,
+    })}`,
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12411,6 +12500,22 @@ const testEditorCommandPalette = async (client) => {
       after: afterAlign,
       filtered: alignLeftCommand.filtered,
       afterCommand: alignLeftCommand.after,
+    },
+    distributeHorizontalCommand: {
+      targets: distributeTargetIds,
+      before: beforeDistribute,
+      after: afterDistribute,
+      beforeCenters: beforeDistributeCenters,
+      afterCenters: afterDistributeCenters,
+      filtered: distributeHorizontalCommand.filtered,
+      afterCommand: distributeHorizontalCommand.after,
+    },
+    alignCenterCommand: {
+      targets: alignTargetIds,
+      before: beforeAlignCenter,
+      after: afterAlignCenter,
+      filtered: alignCenterCommand.filtered,
+      afterCommand: alignCenterCommand.after,
     },
     undoFiltered,
     afterBlockedClick,
