@@ -1551,6 +1551,7 @@ const mediaStorageHandoffContract = ({
       privateFilesEnabled: booleanFlag(storage, 'privateFilesEnabled'),
       imageTransformsEnabled: objectValue(storage).imageTransformsEnabled !== false,
       maxFileSizeMb: objectValue(storage).maxFileSizeMb ?? null,
+      workspaceStorageLimitMb: objectValue(storage).workspaceStorageLimitMb ?? null,
       workspaceStorageLimitGb: objectValue(storage).workspaceStorageLimitGb ?? null,
       warningThresholdPercent: objectValue(storage).warningThresholdPercent ?? null,
       allowedFileTypes: stringField(storage, 'allowedFileTypes') || 'image/*,font/*,document/*,file/*',
@@ -3095,6 +3096,9 @@ const normalizeInfrastructureIntegrations = (value: unknown): BackyJsonObject | 
       lifecycleTempRetentionDays: Math.max(1, Math.min(365, Math.round(numberValue(storage.lifecycleTempRetentionDays, 7)))),
       lifecycleNoncurrentVersionDays: Math.max(1, Math.min(3650, Math.round(numberValue(storage.lifecycleNoncurrentVersionDays, 90)))),
       maxFileSizeMb: Math.min(Math.max(numberValue(storage.maxFileSizeMb, 25), 1), 2048),
+      workspaceStorageLimitMb: numberValue(storage.workspaceStorageLimitMb, 0) > 0
+        ? Math.min(Math.max(numberValue(storage.workspaceStorageLimitMb, 0), 1), 102400 * 1024)
+        : null,
       workspaceStorageLimitGb: Math.min(Math.max(numberValue(storage.workspaceStorageLimitGb, 10), 1), 102400),
       warningThresholdPercent: Math.min(Math.max(numberValue(storage.warningThresholdPercent, 80), 50), 100),
       allowedFileTypes: stringValue(storage.allowedFileTypes),

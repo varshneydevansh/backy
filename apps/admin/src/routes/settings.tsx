@@ -1967,6 +1967,7 @@ function buildSettingsMediaStorageHandoff({
       privateFilesEnabled: Boolean(storageMetadata.privateFilesEnabled),
       imageTransformsEnabled: storageMetadata.imageTransformsEnabled !== false,
       maxFileSizeMb: storageMetadata.maxFileSizeMb ?? null,
+      workspaceStorageLimitMb: storageMetadata.workspaceStorageLimitMb ?? null,
       workspaceStorageLimitGb: storageMetadata.workspaceStorageLimitGb ?? null,
       warningThresholdPercent: storageMetadata.warningThresholdPercent ?? null,
       allowedFileTypes: storageMetadata.allowedFileTypes || 'image/*,font/*,document/*,file/*',
@@ -7455,6 +7456,19 @@ function validateSettingsDraft({
     });
   }
 
+  if (
+    storage.workspaceStorageLimitMb !== undefined &&
+    storage.workspaceStorageLimitMb !== null &&
+    (storage.workspaceStorageLimitMb < 1 || storage.workspaceStorageLimitMb > 104857600)
+  ) {
+    addIssue(issues, {
+      tab: 'infrastructure',
+      label: 'Small workspace storage limit is outside the supported range',
+      detail: 'Use a small-plan storage limit from 1 MB to 104857600 MB.',
+      severity: 'error',
+    });
+  }
+
   if (storage.workspaceStorageLimitGb !== undefined && (storage.workspaceStorageLimitGb < 1 || storage.workspaceStorageLimitGb > 102400)) {
     addIssue(issues, {
       tab: 'infrastructure',
@@ -10764,6 +10778,22 @@ function InfrastructureSettings({
                   placeholder="10"
                   className={inputClassName}
                 />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Small-plan limit (MB)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={104857600}
+                  value={storage.workspaceStorageLimitMb ?? ''}
+                  disabled={storageDisabled}
+                  onChange={(event) => updateStorage({
+                    workspaceStorageLimitMb: event.target.value === '' ? null : Number(event.target.value),
+                  })}
+                  placeholder="Optional"
+                  className={inputClassName}
+                />
+                <span className="text-xs text-muted-foreground">Overrides the GB limit for free or launch workspaces.</span>
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Storage warning threshold (%)</span>

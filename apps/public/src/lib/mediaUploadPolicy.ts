@@ -8,6 +8,7 @@ type MediaUploadPolicySettings = {
   integrations?: {
     storage?: {
       maxFileSizeMb?: unknown;
+      workspaceStorageLimitMb?: unknown;
       workspaceStorageLimitGb?: unknown;
       warningThresholdPercent?: unknown;
       allowedFileTypes?: unknown;
@@ -46,6 +47,7 @@ const envQuotaBytes = () => {
 export const resolveMediaUploadPolicy = (settings: MediaUploadPolicySettings): MediaUploadPolicy => {
   const storage = settings?.integrations?.storage || {};
   const maxFileSizeMb = finitePositiveNumber(storage.maxFileSizeMb);
+  const workspaceStorageLimitMb = finitePositiveNumber(storage.workspaceStorageLimitMb);
   const workspaceStorageLimitGb = finitePositiveNumber(storage.workspaceStorageLimitGb);
   const warningThresholdPercent = finitePositiveNumber(storage.warningThresholdPercent);
   const allowedFileTypes = typeof storage.allowedFileTypes === 'string'
@@ -57,6 +59,9 @@ export const resolveMediaUploadPolicy = (settings: MediaUploadPolicySettings): M
       ? Math.floor(Math.min(Math.max(maxFileSizeMb, 1), 2048) * 1024 * 1024)
       : DEFAULT_MAX_UPLOAD_BYTES,
     quotaBytes: envQuotaBytes()
+      || (workspaceStorageLimitMb
+        ? Math.floor(Math.min(Math.max(workspaceStorageLimitMb, 1), 102400 * 1024) * 1024 * 1024)
+        : null)
       || (workspaceStorageLimitGb
         ? Math.floor(Math.min(Math.max(workspaceStorageLimitGb, 1), 102400) * 1024 * 1024 * 1024)
         : DEFAULT_SITE_MEDIA_QUOTA_BYTES),

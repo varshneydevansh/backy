@@ -7210,6 +7210,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     privateFilesEnabled: { type: "boolean" },
                     imageTransformsEnabled: { type: "boolean" },
                     maxFileSizeMb: { type: ["number", "null"] },
+                    workspaceStorageLimitMb: { type: ["number", "null"] },
                     workspaceStorageLimitGb: { type: ["number", "null"] },
                     warningThresholdPercent: { type: ["number", "null"] },
                     allowedFileTypes: { type: "string" },

@@ -2952,18 +2952,23 @@ const deleteSingleAssetThroughBulk = async (client, assetName) => {
 };
 
 const releaseQuarantineThroughBulk = async (client) => {
-  const focusResult = await evaluate(client, `(() => {
-    const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
-      (candidate.textContent || '').trim() === 'Quarantined'
-    ));
-    if (!(button instanceof HTMLButtonElement)) {
-      return { ok: false, reason: 'quarantine-filter-not-found' };
-    }
-    if (button.disabled) return { ok: false, reason: 'quarantine-filter-disabled' };
-    button.click();
-    return { ok: true };
-  })()`);
-  assert(focusResult.ok, `Unable to focus quarantined media: ${JSON.stringify(focusResult)}`);
+  let focusResult = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    focusResult = await evaluate(client, `(() => {
+      const button = Array.from(document.querySelectorAll('button')).find((candidate) => (
+        (candidate.textContent || '').trim() === 'Quarantined'
+      ));
+      if (!(button instanceof HTMLButtonElement)) {
+        return { ok: false, reason: 'quarantine-filter-not-found' };
+      }
+      if (button.disabled) return { ok: false, reason: 'quarantine-filter-disabled' };
+      button.click();
+      return { ok: true };
+    })()`);
+    if (focusResult.ok) break;
+    await sleep(150);
+  }
+  assert(focusResult?.ok, `Unable to focus quarantined media: ${JSON.stringify(focusResult)}`);
 
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const state = await evaluate(client, `(() => ({

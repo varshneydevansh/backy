@@ -3025,6 +3025,7 @@ const sdkAdminSettings = {
       privateFilesEnabled: true,
       imageTransformsEnabled: true,
       maxFileSizeMb: 128,
+      workspaceStorageLimitMb: 1024,
       workspaceStorageLimitGb: 512,
       warningThresholdPercent: 85,
       allowedFileTypes: "image/*,font/*,application/pdf",

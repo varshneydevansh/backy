@@ -4,6 +4,10 @@ const baseUrl = (process.env.BACKY_PUBLIC_CONTRACT_BASE_URL || 'http://localhost
 const siteId = process.env.BACKY_MEDIA_QUOTA_SMOKE_SITE_ID || 'site-demo';
 const adminApiKey = (process.env.BACKY_ADMIN_API_KEY || process.env.BACKY_ADMIN_SECRET_KEY || '').trim();
 const adminPassword = process.env.BACKY_ADMIN_DEMO_PASSWORD || 'admin123';
+const adminMfaCode = process.env.BACKY_MEDIA_QUOTA_SMOKE_MFA_CODE
+  || process.env.BACKY_ADMIN_MFA_CODE
+  || process.env.BACKY_ADMIN_2FA_CODE
+  || 'backy-dev-mfa';
 
 function assert(condition, message) {
   if (!condition) {
@@ -17,7 +21,7 @@ if (adminApiKey) {
 }
 
 async function loginAdmin() {
-  const response = await fetch(`${baseUrl}/api/admin/auth/login`, {
+  const login = (twoFactorCode = '') => fetch(`${baseUrl}/api/admin/auth/login`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -25,9 +29,17 @@ async function loginAdmin() {
     body: JSON.stringify({
       email: 'admin@backy.io',
       password: adminPassword,
+      ...(twoFactorCode ? { twoFactorCode } : {}),
     }),
   });
-  const json = await response.json().catch(() => null);
+
+  let response = await login();
+  let json = await response.json().catch(() => null);
+  if (!response.ok && json?.error?.code === 'MFA_REQUIRED' && adminMfaCode) {
+    response = await login(adminMfaCode);
+    json = await response.json().catch(() => null);
+  }
+
   assert(response.ok && json?.data?.session?.token, `Unable to login admin for media policy smoke: ${response.status} ${JSON.stringify(json).slice(0, 300)}`);
   return json.data.session.token;
 }
@@ -61,22 +73,38 @@ async function upload(uploadFormData, token = '') {
 }
 
 const token = adminApiKey ? '' : await loginAdmin();
-const formData = new FormData();
-formData.set('file', new Blob(['this upload should exceed the configured site quota'], { type: 'text/plain' }), 'quota-check.txt');
-
-const response = await upload(formData, token);
-const json = await response.json().catch(() => null);
-
-assert(response.status === 413, `Expected media quota upload to return 413, got ${response.status}`);
-assert(json?.success === false, 'Expected error envelope');
-assert(json?.error?.code === 'SITE_MEDIA_QUOTA_EXCEEDED', `Expected SITE_MEDIA_QUOTA_EXCEEDED, got ${json?.error?.code}`);
-assert(typeof json?.error?.details?.limitBytes === 'number', 'Expected quota limit details');
-assert(typeof json?.error?.details?.usedBytes === 'number', 'Expected quota usage details');
-
 const settingsToken = token || await loginAdmin();
 const beforeSettings = (await adminJson('/api/admin/settings', settingsToken)).data.settings;
+let quotaJson = null;
 
 try {
+  await adminJson('/api/admin/settings', settingsToken, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      integrations: {
+        ...(beforeSettings.integrations || {}),
+        storage: {
+          ...(beforeSettings.integrations?.storage || {}),
+          maxFileSizeMb: 2,
+          workspaceStorageLimitMb: 1,
+          allowedFileTypes: '',
+        },
+      },
+    }),
+  });
+
+  const formData = new FormData();
+  formData.set('file', new Blob([new Uint8Array(1024 * 1024 + 1)], { type: 'text/plain' }), 'quota-check.txt');
+
+  const response = await upload(formData, token);
+  quotaJson = await response.json().catch(() => null);
+
+  assert(response.status === 413, `Expected media quota upload to return 413, got ${response.status}`);
+  assert(quotaJson?.success === false, 'Expected error envelope');
+  assert(quotaJson?.error?.code === 'SITE_MEDIA_QUOTA_EXCEEDED', `Expected SITE_MEDIA_QUOTA_EXCEEDED, got ${quotaJson?.error?.code}`);
+  assert(typeof quotaJson?.error?.details?.limitBytes === 'number', 'Expected quota limit details');
+  assert(typeof quotaJson?.error?.details?.usedBytes === 'number', 'Expected quota usage details');
+
   await adminJson('/api/admin/settings', settingsToken, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -120,8 +148,8 @@ console.log(JSON.stringify({
   ok: true,
   baseUrl,
   siteId,
-  code: json.error.code,
-  details: json.error.details,
+  code: quotaJson.error.code,
+  details: quotaJson.error.details,
   policy: {
     typeRejected: true,
     maxSizeRejected: true,

@@ -956,6 +956,7 @@ const siteMediaStorageHandoffContract = ({
       privateFilesEnabled: booleanFlag(storage, "privateFilesEnabled"),
       imageTransformsEnabled: storage.imageTransformsEnabled !== false,
       maxFileSizeMb: storage.maxFileSizeMb ?? null,
+      workspaceStorageLimitMb: storage.workspaceStorageLimitMb ?? null,
       workspaceStorageLimitGb: storage.workspaceStorageLimitGb ?? null,
       warningThresholdPercent: storage.warningThresholdPercent ?? null,
       allowedFileTypes: stringField(storage, "allowedFileTypes") || "image/*,font/*,document/*,file/*",

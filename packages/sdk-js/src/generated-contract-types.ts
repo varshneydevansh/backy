@@ -551,6 +551,7 @@ export type GeneratedBackyOpenApiAdminSettingsMediaStorageHandoff = {
     privateFilesEnabled?: boolean;
     imageTransformsEnabled?: boolean;
     maxFileSizeMb?: number | null;
+    workspaceStorageLimitMb?: number | null;
     workspaceStorageLimitGb?: number | null;
     warningThresholdPercent?: number | null;
     allowedFileTypes?: string;

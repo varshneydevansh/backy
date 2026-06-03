@@ -1793,6 +1793,7 @@ export interface SettingsMediaStorageHandoff {
     privateFilesEnabled?: boolean;
     imageTransformsEnabled?: boolean;
     maxFileSizeMb?: number | null;
+    workspaceStorageLimitMb?: number | null;
     workspaceStorageLimitGb?: number | null;
     warningThresholdPercent?: number | null;
     allowedFileTypes?: string;
@@ -3077,6 +3078,7 @@ export interface SiteSettingsInput {
       lifecycleTempRetentionDays?: number;
       lifecycleNoncurrentVersionDays?: number;
       maxFileSizeMb?: number;
+      workspaceStorageLimitMb?: number | null;
       workspaceStorageLimitGb?: number;
       warningThresholdPercent?: number;
       allowedFileTypes?: string;
