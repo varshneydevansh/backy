@@ -17,6 +17,8 @@ const DESKTOP_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-b
 const FOCUS_VISUAL_SCREENSHOT_PATH = path.join(VISUAL_SCREENSHOT_DIR, 'backy-blog-create-focus.png');
 const FRONTEND_BLOG_TEMPLATE_ID = 'smoke-blog-create-contract-template';
 const FRONTEND_BLOG_TEMPLATE_NAME = 'Smoke Blog Contract';
+const FRONTEND_NEWSLETTER_TEMPLATE_ID = 'smoke-newsletter-issue-contract-template';
+const FRONTEND_NEWSLETTER_TEMPLATE_NAME = 'Smoke Newsletter Issue Contract';
 const BLOG_CREATE_CONTROL_WAIT_ATTEMPTS = Number(process.env.BACKY_BLOG_CREATE_CONTROL_WAIT_ATTEMPTS || 240);
 let apiAdminSessionToken = '';
 
@@ -92,6 +94,10 @@ const assertBlogCreateSourceContract = () => {
       source.includes('setCanvasElements(nextElements);') &&
       source.includes('setCanvasSeedKey(`blog-starter-${nextTemplateId}-${Date.now()}`);') &&
       source.includes('findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, selectedBlogStarterTemplate)') &&
+      source.includes('options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate } = {}') &&
+      source.includes('starterTemplateId: nextTemplateId') &&
+      source.includes('const routeStarterTemplate = options.starterTemplateId || selectedBlogStarterTemplate') &&
+      source.includes('starterTemplate: routeStarterTemplate') &&
       source.includes('data-frontend-template-match={isCustomFrontendTemplateSource ? frontendMatchState : undefined}') &&
       source.includes('data-action-status={getBlogStarterTemplateActionStatus(starterTemplate)}') &&
       source.includes('data-action-status={getBlogFrontendTemplateActionStatus(template)}') &&
@@ -453,7 +459,7 @@ const smokeFrontendDesignContract = () => ({
       type: 'blogPost',
       name: FRONTEND_BLOG_TEMPLATE_NAME,
       routePattern: '/blog/smoke-contract',
-      description: 'Frontend contract blog template used by the blog create smoke.',
+      description: 'Blog post frontend contract template used by the blog create smoke.',
       canvasSize: { width: 1260, height: 940 },
       content: {
         customCSS: ':root { --backy-smoke-blog-primary: #0f766e; }',
@@ -494,6 +500,18 @@ const smokeFrontendDesignContract = () => ({
       bindingHints: [
         { role: 'post.title', binding: 'post.title' },
         { role: 'post.content', binding: 'post.content' },
+      ],
+    },
+    {
+      id: FRONTEND_NEWSLETTER_TEMPLATE_ID,
+      type: 'blogPost',
+      name: FRONTEND_NEWSLETTER_TEMPLATE_NAME,
+      routePattern: '/newsletter/{slug}',
+      description: 'Newsletter issue digest template used by custom frontend starter switching smoke.',
+      canvasSize: { width: 1180, height: 980 },
+      bindingHints: [
+        { role: 'newsletter.issueTitle', binding: 'post.title' },
+        { role: 'newsletter.issueBody', binding: 'post.content' },
       ],
     },
   ],
@@ -1246,6 +1264,97 @@ const navigateToBlogCreate = async (client) => {
   }
 
   return null;
+};
+
+const assertCustomFrontendStarterRouteSync = async (client) => {
+  const clickStarter = async (starterTemplate) => {
+    const clicked = await evaluate(client, `(() => {
+      const option = document.querySelector('[data-testid="blog-template-option-${starterTemplate}"]');
+      const input = option?.querySelector('input[name="blogStarterTemplate"]');
+      if (!(input instanceof HTMLInputElement)) return false;
+      input.click();
+      return true;
+    })()`);
+
+    assert(clicked, `Unable to click custom frontend blog starter ${starterTemplate}`);
+  };
+
+  const waitForStarter = async (starterTemplate, templateId, templateName) => {
+    let state = null;
+
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      state = await evaluate(client, `(() => {
+        const url = new URL(window.location.href);
+        const payload = (() => {
+          try {
+            return JSON.parse(document.querySelector('[data-testid="blog-create-payload"]')?.textContent || '{}');
+          } catch {
+            return {};
+          }
+        })();
+        const starterOption = document.querySelector('[data-testid="blog-template-option-${starterTemplate}"]');
+        const frontendOption = document.querySelector('[data-testid="blog-frontend-template-${templateId}"]');
+        const shell = document.querySelector('[data-testid="blog-starter-library-shell"]');
+        const sourceSwitch = document.querySelector('[data-testid="blog-template-source-switch"]');
+
+        return {
+          href: window.location.href,
+          starterTemplate: url.searchParams.get('starterTemplate') || '',
+          templateSource: url.searchParams.get('templateSource') || '',
+          designTemplate: url.searchParams.get('designTemplate') || '',
+          frontendDesignTemplateId: url.searchParams.get('frontendDesignTemplateId') || '',
+          frontendTemplate: url.searchParams.get('frontendTemplate') || '',
+          shellSelectedStarter: shell?.getAttribute('data-selected-starter') || '',
+          shellSelectedIntent: shell?.getAttribute('data-selected-intent') || '',
+          shellTemplateId: shell?.getAttribute('data-custom-frontend-template-id') || '',
+          sourceActive: sourceSwitch?.getAttribute('data-active-source') || '',
+          starterActive: starterOption?.getAttribute('data-active') || '',
+          starterTemplateId: starterOption?.getAttribute('data-frontend-template-id') || '',
+          starterMatch: starterOption?.getAttribute('data-frontend-template-match') || '',
+          frontendActive: frontendOption?.getAttribute('data-active') || '',
+          frontendStatus: frontendOption?.getAttribute('data-action-status') || '',
+          payloadTemplateId: payload?.template?.id || '',
+          payloadTemplateSource: payload?.template?.source || '',
+          payloadTemplateSourceMode: payload?.templateSource || '',
+          payloadTemplateSourceLabel: payload?.templateSourceLabel || '',
+          body: document.body?.innerText?.slice(0, 500) || '',
+        };
+      })()`);
+
+      if (
+        state.starterTemplate === starterTemplate
+        && state.templateSource === 'custom-frontend'
+        && state.designTemplate === templateId
+        && state.frontendDesignTemplateId === templateId
+        && state.frontendTemplate === templateId
+        && state.shellSelectedStarter === starterTemplate
+        && state.shellTemplateId === templateId
+        && state.sourceActive === 'custom-frontend'
+        && state.starterActive === 'true'
+        && state.starterTemplateId === templateId
+        && state.starterMatch === 'matched'
+        && state.frontendActive === 'true'
+        && state.frontendStatus.includes(templateName)
+        && state.payloadTemplateId === templateId
+        && state.payloadTemplateSource === 'frontend-design'
+        && state.payloadTemplateSourceMode === 'custom-frontend'
+        && state.payloadTemplateSourceLabel === 'Custom frontend'
+      ) {
+        return state;
+      }
+
+      await sleep(250);
+    }
+
+    throw new Error(`Custom frontend blog starter route sync failed for ${starterTemplate}: ${JSON.stringify(state)}`);
+  };
+
+  await clickStarter('newsletter');
+  const newsletter = await waitForStarter('newsletter', FRONTEND_NEWSLETTER_TEMPLATE_ID, FRONTEND_NEWSLETTER_TEMPLATE_NAME);
+  await clickStarter('blog-post');
+  const article = await waitForStarter('blog-post', FRONTEND_BLOG_TEMPLATE_ID, FRONTEND_BLOG_TEMPLATE_NAME);
+
+  return { newsletter, article };
 };
 
 const assertSubmitBlockerState = async (client) => {
@@ -2134,6 +2243,7 @@ const main = async () => {
     await seedBrowserAuthStorage(client, apiAdminSessionToken);
 
     const initialRender = await navigateToBlogCreate(client);
+    const starterRouteSync = await assertCustomFrontendStarterRouteSync(client);
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
     const submitBlocker = await assertSubmitBlockerState(client);
     const focusMode = await assertCanvasFocusMode(client);
@@ -2163,6 +2273,7 @@ const main = async () => {
       ok: true,
       url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}`,
       initialRender,
+      starterRouteSync,
       desktopVisual: {
         screenshotPath: desktopVisual.screenshotPath,
         horizontalOverflow: desktopVisual.horizontalOverflow,

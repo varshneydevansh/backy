@@ -1989,10 +1989,13 @@ function NewBlogPostPage() {
             return;
         }
 
-        applyFrontendTemplate(nextTemplate, { syncRoute: true });
+        applyFrontendTemplate(nextTemplate, { syncRoute: true, starterTemplateId: nextTemplateId });
     };
 
-    const applyFrontendTemplate = (template: SiteFrontendDesignTemplate, options: { syncRoute?: boolean } = {}) => {
+    const applyFrontendTemplate = (
+        template: SiteFrontendDesignTemplate,
+        options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate } = {},
+    ) => {
         if (isCreateBusy) return;
         if (!canEditBlog) {
             setError(editBlogDeniedMessage);
@@ -2014,6 +2017,7 @@ function NewBlogPostPage() {
         const routeSlug = routeSlugFromPattern(template.routePattern);
 
         clearCreationFeedback();
+        appliedSearchTemplateRef.current = template.id;
         setTemplateSourceMode('custom-frontend');
         setDesignTemplateId(template.id);
         setCanvasElements(nextElements);
@@ -2031,12 +2035,13 @@ function NewBlogPostPage() {
         }
 
         if (options.syncRoute) {
+            const routeStarterTemplate = options.starterTemplateId || selectedBlogStarterTemplate;
             navigate({
                 to: '/blog/new',
                 search: {
                     siteId: activeSiteId,
                     ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
-                    starterTemplate: selectedBlogStarterTemplate,
+                    starterTemplate: routeStarterTemplate,
                     templateSource: 'custom-frontend' as const,
                     designTemplate: template.id,
                     frontendDesignTemplateId: template.id,
@@ -2123,6 +2128,11 @@ function NewBlogPostPage() {
             return;
         }
 
+        const expectedFrontendTemplateId = search.designTemplate || designTemplateId || appliedSearchTemplateRef.current;
+        if (expectedFrontendTemplateId && selectedFrontendTemplate.id !== expectedFrontendTemplateId) {
+            return;
+        }
+
         const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate);
         if (templateCanvasApplied) {
             appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
@@ -2132,7 +2142,7 @@ function NewBlogPostPage() {
         appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
         applyFrontendTemplate(selectedFrontendTemplate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canEditBlog, canvasElements, isCreateBusy, selectedFrontendTemplate]);
+    }, [canEditBlog, canvasElements, designTemplateId, isCreateBusy, selectedFrontendTemplate]);
 
     const adminBlogUrl = useMemo(
         () => `${getAdminApiBase()}/sites/${encodeURIComponent(activeSiteId)}/blog`,

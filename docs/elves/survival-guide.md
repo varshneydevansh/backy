@@ -391,6 +391,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Help source smoke, admin typecheck, diff check, and repo-public hygiene are green for the Help newsletter issue location slice.
 
+**Newest custom frontend blog starter polish:** `/blog/new` custom-frontend starter switching now keeps the selected blog child starter and captured frontend template route aliases in sync. Selecting a different starter passes the intended `starterTemplate` into route sync instead of stale React state, and the frontend-template auto-apply effect waits for the intended template id before touching the canvas. The rendered blog-create smoke now proves `blog-post -> newsletter -> blog-post` switching across two captured blog templates keeps URL aliases, selected starter, selected frontend template, payload template id, and the final created post aligned.
+
+**Newest verification:** Blog-create source guard, admin typecheck, rendered Blog create smoke with local dev MFA, diff check, and repo-public hygiene are green for the custom-frontend blog starter route-sync slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

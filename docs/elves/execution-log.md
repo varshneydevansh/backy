@@ -3785,6 +3785,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 11:39 IST - Custom Frontend Blog Starter Route Sync
+
+**Scope:** Batch 5 blog/editor authoring polish, focused on custom-frontend blog child templates reopening and copying the same starter/template state that the canvas actually uses.
+
+**Changed:**
+- Fixed `/blog/new` custom-frontend starter switching so selecting a different blog child starter passes the selected `starterTemplate` into route sync instead of reading stale React state.
+- Added a synchronous intended-template guard so the frontend-template auto-apply effect cannot re-apply the previous captured template while Router search and `designTemplateId` state are catching up.
+- Extended the rendered blog-create smoke with a second captured newsletter issue template and a regression that switches `blog-post -> newsletter -> blog-post`.
+- The rendered smoke now proves `starterTemplate`, `templateSource=custom-frontend`, `designTemplate`, `frontendDesignTemplateId`, `frontendTemplate`, starter matched/missing state, selected frontend template, payload template id, and persisted create flow stay aligned.
+
+**Validation:**
+- PASS: `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:repo-public-hygiene --silent`
+- PASS: `git diff --check`
+
+**Notes:**
+- The first rendered run proved the URL alias fix but exposed stale canvas/payload state; the final fix waits for the intended captured template id before auto-applying a frontend template.
+- This closes a practical authoring gap for custom frontend blogs: another agent or user copying the route now gets the same blog starter and captured frontend template that is visible in the canvas.
+
+**Next:**
+- Commit and push this slice, re-read the survival guide, then continue the next highest-friction editor/blog authoring issue.
+
 ## Checkpoint: 2026-06-03 11:22 IST - Command Palette Execution Coverage
 
 **Scope:** Batch 5 editor reliability polish, focused on proving visible command-palette actions execute instead of only appearing wired in metadata.
