@@ -66,7 +66,7 @@ interface BlogNewSearch {
 
 type BlogTemplateSourceMode = 'backy-canvas' | 'custom-frontend';
 type BlogStarterIntent = 'article' | 'investigation' | 'audio-transcript' | 'newsletter' | 'case-study';
-type BlogStarterTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
+type BlogStarterTemplate = 'blank' | 'landing' | 'storefront' | 'product-detail' | 'pricing' | 'services' | 'booking' | 'portfolio' | 'gallery' | 'investigation-report' | 'audio-transcript' | 'case-study' | 'events' | 'privacy' | 'terms' | 'cookie-policy' | 'accessibility-statement' | 'refund-policy' | 'shipping-policy' | 'cart' | 'checkout' | 'order-confirmation' | 'help-center' | 'faq' | 'testimonials' | 'blog-index' | 'blog-post' | 'team' | 'careers' | 'about' | 'contact' | 'newsletter' | 'survey' | 'registration' | 'member-login' | 'member-account';
 type SiteFrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type SiteFrontendDesignTemplate = SiteFrontendDesignContract['templates'][number];
 
@@ -272,6 +272,9 @@ const BLOG_STARTER_TEMPLATE_OPTIONS: BlogStarterTemplateOption[] = [
     { id: 'booking', name: 'Booking article', desc: 'Session intro, availability notes, and scheduling handoff.', detail: 'Good for explaining appointments, consultations, workshops, or public sessions.', sections: ['Intro', 'Availability', 'Schedule'], intent: 'article', aliases: ['booking', 'appointment', 'calendar'] },
     { id: 'portfolio', name: 'Portfolio story', desc: 'Featured work, project context, media, and inquiry CTA.', detail: 'Turns portfolio work into a rich case-study post.', sections: ['Work hero', 'Project media', 'Inquiry'], intent: 'case-study', aliases: ['portfolio', 'work', 'project'] },
     { id: 'gallery', name: 'Media essay', desc: 'Image, video, audio, and file-backed story blocks.', detail: 'Useful for photo essays, interview transcripts, evidence galleries, travel logs, and visual reporting.', sections: ['Audio player', 'Transcript', 'Files'], intent: 'audio-transcript', aliases: ['gallery', 'media', 'images', 'video', 'audio', 'transcript', 'files'] },
+    { id: 'investigation-report', name: 'Investigation report', desc: 'Evidence timeline, source notes, quotes, and public-interest reporting blocks.', detail: 'Use this for local reporting, investigations, audits, scams, government records, and source-backed stories.', sections: ['Report hero', 'Evidence timeline', 'Sources'], intent: 'investigation', aliases: ['investigation', 'report', 'journalism', 'scam', 'evidence', 'sources'] },
+    { id: 'audio-transcript', name: 'Audio transcript', desc: 'Audio player, timestamped transcript, notes, and downloadable source-file blocks.', detail: 'Use this for recorded interviews, podcast posts, meeting audio, field notes, and transcription-backed reporting.', sections: ['Audio player', 'Transcript', 'Files'], intent: 'audio-transcript', aliases: ['audio', 'podcast', 'transcript', 'recording', 'voice', 'files'] },
+    { id: 'case-study', name: 'Case study', desc: 'Problem, process, media, measurable outcomes, and reusable proof sections.', detail: 'Use this when the post should also feed portfolio cards, proof rails, or custom frontend case-study templates.', sections: ['Problem', 'Process', 'Outcome'], intent: 'case-study', aliases: ['case study', 'case', 'portfolio', 'proof', 'project'] },
     { id: 'events', name: 'Event recap', desc: 'Event context, agenda, media, and RSVP/follow-up actions.', detail: 'Good for event reports, upcoming event announcements, and meeting notes.', sections: ['Event hero', 'Agenda', 'Follow-up'], intent: 'article', aliases: ['event', 'webinar', 'meetup', 'recap'] },
     { id: 'privacy', name: 'Privacy update', desc: 'Policy summary, data-use sections, and reader action.', detail: 'Use for transparent public notes about privacy, data use, or policy changes.', sections: ['Summary', 'Data use', 'Contact'], intent: 'article', aliases: ['privacy', 'policy', 'data'] },
     { id: 'terms', name: 'Terms update', desc: 'Service rule changes, acceptable use, and support handoff.', detail: 'Good for publishing terms changes or platform operation notes.', sections: ['Summary', 'Rules', 'Support'], intent: 'article', aliases: ['terms', 'rules', 'policy'] },
@@ -311,13 +314,13 @@ const isBlogStarterTemplate = (value: unknown): value is BlogStarterTemplate => 
 const blogStarterTemplateFromIntent = (intent: BlogStarterIntent | undefined): BlogStarterTemplate => {
     switch (intent) {
         case 'investigation':
-            return 'survey';
+            return 'investigation-report';
         case 'audio-transcript':
-            return 'gallery';
+            return 'audio-transcript';
         case 'newsletter':
             return 'newsletter';
         case 'case-study':
-            return 'portfolio';
+            return 'case-study';
         case 'article':
         default:
             return 'blog-post';

@@ -564,18 +564,18 @@ const assertTemplateActionability = (handoffData, label, acceptedSiteIdPaths = [
   );
   assert(
     blogChildStarterTemplates.some((template) => (
-      template?.id === 'survey' &&
+      template?.id === 'investigation-report' &&
       template.intent === 'investigation' &&
       template.resourceType === 'blogPost' &&
       template.inheritsFrom === 'page-template-catalog' &&
-      String(template.backyCanvasRoute || '').includes('starterTemplate=survey') &&
+      String(template.backyCanvasRoute || '').includes('starterTemplate=investigation-report') &&
       String(template.customFrontendRoute || '').includes('frontendDesignTemplateId=:templateId')
     )),
-    `${label} exposes an investigation/survey blog child starter with custom frontend routing`,
+    `${label} exposes an investigation report blog child starter with custom frontend routing`,
   );
   assert(
     blogChildStarterTemplates.some((template) => (
-      template?.id === 'gallery' &&
+      template?.id === 'audio-transcript' &&
       template.intent === 'audio-transcript' &&
       Array.isArray(template.sections) &&
       template.sections.includes('Audio player') &&

@@ -27,7 +27,7 @@ export const PAGE_TEMPLATE_LIBRARY_CATEGORIES: Array<{
     {
         id: 'content',
         label: 'Content',
-        templates: ['blog-index', 'blog-post', 'portfolio', 'gallery', 'events', 'testimonials', 'help-center', 'faq'],
+        templates: ['blog-index', 'blog-post', 'investigation-report', 'audio-transcript', 'case-study', 'portfolio', 'gallery', 'events', 'testimonials', 'help-center', 'faq'],
     },
     {
         id: 'forms',

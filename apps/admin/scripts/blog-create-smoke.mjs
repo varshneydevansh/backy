@@ -84,6 +84,9 @@ const assertBlogCreateSourceContract = () => {
       source.includes('createBlogStarterTemplateElements') &&
       source.includes('createAudioTranscriptBlogElements') &&
       source.includes("id: 'gallery', name: 'Media essay'") &&
+      source.includes("id: 'audio-transcript', name: 'Audio transcript'") &&
+      source.includes("id: 'investigation-report', name: 'Investigation report'") &&
+      source.includes("id: 'case-study', name: 'Case study'") &&
       source.includes("intent: 'audio-transcript'") &&
       source.includes("id: 'blog-audio-player'") &&
       source.includes("createCanvasElement('audio'") &&
@@ -1060,7 +1063,7 @@ const selectLayerById = async (client, elementId) => {
 
 const assertBackyCanvasAudioTranscriptStarter = async (client) => {
   await client.send('Page.navigate', {
-    url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&templateSource=backy-canvas&starterTemplate=gallery`,
+    url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&templateSource=backy-canvas&starterTemplate=audio-transcript`,
   });
 
   let state = null;
@@ -1068,7 +1071,7 @@ const assertBackyCanvasAudioTranscriptStarter = async (client) => {
     state = await evaluate(client, `(() => {
       const url = new URL(window.location.href);
       const shell = document.querySelector('[data-testid="blog-starter-library-shell"]');
-      const starterOption = document.querySelector('[data-testid="blog-template-option-gallery"]');
+      const starterOption = document.querySelector('[data-testid="blog-template-option-audio-transcript"]');
       const audioNode = document.querySelector('[data-element-id="blog-audio-player"]');
       const transcriptCopy = document.querySelector('[data-element-id="blog-audio-transcript-copy"]');
       const filesBox = document.querySelector('[data-element-id="blog-audio-files"]');
@@ -1091,9 +1094,9 @@ const assertBackyCanvasAudioTranscriptStarter = async (client) => {
     })()`);
 
     if (
-      state.starterTemplate === 'gallery'
+      state.starterTemplate === 'audio-transcript'
       && state.templateSource === 'backy-canvas'
-      && state.shellSelectedStarter === 'gallery'
+      && state.shellSelectedStarter === 'audio-transcript'
       && state.shellSelectedIntent === 'audio-transcript'
       && state.starterActive === 'true'
       && state.starterIntent === 'audio-transcript'
