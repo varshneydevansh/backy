@@ -381,6 +381,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest layer-map readability polish:** The editor Layers panel now keeps narrow-row layer names usable by giving the readable label a wrapping flex basis, full title/data metadata, and a single ARIA label containing name, semantic meta, responsive state, and selection context. The rendered Layers smoke proves row readability, tree semantics, selection/actions, nested collapse/search, nav child selection, rename, duplicate/delete, visibility/lock, and persistence.
 
+**Newest Blog newsletter handoff polish:** Blog list now exposes a copyable `backy.blog-newsletter-issue-handoff.v1` bridge for the selected/latest report post. The handoff is embedded into the main Blog handoff, links the Newsletter workspace, issue draft builder, send-ready subscriber sync, public subscribe endpoint, agent handoff, manifest, and OpenAPI, and explicitly keeps raw subscribers, provider secrets, database credentials, service-role keys, admin sessions, and webhook secrets outside the Blog payload.
+
+**Newest verification:** Blog list source smoke, admin typecheck, Newsletter source smoke, diff check, and repo-public hygiene are green for the Blog newsletter issue handoff slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

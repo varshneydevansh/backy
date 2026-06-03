@@ -139,7 +139,14 @@ const BLOG_FRONTEND_SYSTEMS = [
     title: 'Frontend API handoff',
     detail: 'Public blog list, post-by-slug, render, resolve, and private admin management endpoints.',
   },
+  {
+    key: 'newsletter',
+    title: 'Newsletter issue handoff',
+    detail: 'Provider-safe report-to-newsletter draft metadata, send-ready audience sync, and subscriber signup endpoints.',
+  },
 ] as const;
+
+const BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.blog-newsletter-issue-handoff.v1';
 
 const BLOG_WORKFLOW_SURFACES = [
   {
@@ -160,6 +167,12 @@ const BLOG_WORKFLOW_SURFACES = [
     title: 'Comments',
     detail: 'Moderate public article discussions, reported replies, blocked authors, and approved comment feeds.',
     route: '/comments',
+  },
+  {
+    key: 'newsletter',
+    title: 'Newsletter',
+    detail: 'Turn published reports into provider-safe issue drafts, sync send-ready subscribers, and keep delivery secrets outside Backy handoffs.',
+    route: '/newsletter',
   },
   {
     key: 'users',
@@ -384,6 +397,13 @@ function BlogListView() {
   const adminBlogPostUrl = `${adminBlogUrl}/${handoffPostSegment}`;
   const adminBlogReadinessUrl = `${adminBlogPostUrl}/readiness`;
   const adminBlogPreviewUrl = `${adminBlogPostUrl}/preview`;
+  const newsletterWorkspaceUrl = `/newsletter?siteId=${encodeURIComponent(activeSiteId)}`;
+  const newsletterPublicSubscribeUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers`;
+  const newsletterIssueDraftBuilderUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/issues/draft`;
+  const newsletterSendReadySubscribersUrl = `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/newsletter/subscribers?audience=sendable`;
+  const newsletterAgentHandoffUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/agent-handoff`;
+  const newsletterManifestUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/manifest`;
+  const newsletterOpenApiUrl = `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/openapi`;
 
   const loadBlogPermissions = useCallback(() => {
     let cancelled = false;
@@ -1311,7 +1331,7 @@ function BlogListView() {
       return { siteId: activeSiteId, template: surface.template };
     }
 
-    if (surface.route === '/media' || surface.route === '/comments' || surface.route === '/users') {
+    if (surface.route === '/media' || surface.route === '/comments' || surface.route === '/users' || surface.route === '/newsletter') {
       return { siteId: activeSiteId };
     }
 
@@ -1503,6 +1523,96 @@ function BlogListView() {
     siteSlug,
     tags.length,
   ]);
+  const blogNewsletterIssueHandoff = useMemo(() => ({
+    schemaVersion: BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION,
+    source: 'blog-list-newsletter-issue-handoff',
+    generatedAt: new Date().toISOString(),
+    site: {
+      id: activeSiteId,
+      name: activeSite?.name || activeSiteId,
+      slug: siteSlug,
+    },
+    workspaceRoute: newsletterWorkspaceUrl,
+    selectedPost: handoffPost
+      ? {
+          id: handoffPost.id,
+          title: handoffPost.title,
+          slug: handoffPost.slug,
+          path: `/blog/${handoffPost.slug}`,
+          status: handoffPost.status,
+          excerpt: handoffPost.excerpt || '',
+          scheduledAt: handoffPost.scheduledAt || null,
+          publishedAt: handoffPost.publishedAt || null,
+          schedule: getPostScheduleSummary(handoffPost),
+          taxonomy: {
+            categoryIds: handoffPost.categoryIds || [],
+            tagIds: handoffPost.tagIds || [],
+          },
+          urls: {
+            publicBySlug: publicPostBySlugUrl,
+            publicRender: publicPostRenderUrl,
+            publicResolve: publicPostResolveUrl,
+            adminPost: adminBlogPostUrl,
+            readiness: adminBlogReadinessUrl,
+          },
+        }
+      : null,
+    endpoints: {
+      issueDraftBuilder: newsletterIssueDraftBuilderUrl,
+      sendReadySubscribers: newsletterSendReadySubscribersUrl,
+      publicSubscribe: newsletterPublicSubscribeUrl,
+      newsletterWorkspace: newsletterWorkspaceUrl,
+      agentHandoff: newsletterAgentHandoffUrl,
+      manifest: newsletterManifestUrl,
+      openapi: newsletterOpenApiUrl,
+    },
+    workflow: [
+      'Select or publish a report post in Blog.',
+      'Build a provider-safe issue draft from the selected post through the admin newsletter issue draft endpoint.',
+      'Sync only send-ready newsletter contacts to the external delivery provider.',
+      'Send through the configured provider and write delivery metadata back to Backy without exposing provider secrets.',
+    ],
+    providerBoundary: {
+      syncBoundarySchema: 'backy.newsletter-sync-boundary.v1',
+      audienceFilter: 'sendable',
+      deliveryProviderRequired: true,
+      keepOutsidePayload: [
+        'raw subscriber email export in blog handoff',
+        'SMTP passwords',
+        'provider API keys',
+        'database URLs',
+        'Supabase service-role keys',
+        'admin sessions',
+        'bounce/complaint webhook secrets',
+      ],
+      dnsAndDeliverability: ['SPF', 'DKIM', 'DMARC', 'unsubscribe headers'],
+    },
+    privacy: {
+      exposesRawSubscribers: false,
+      exposesProviderSecrets: false,
+      exposesAdminSession: false,
+      exposesDatabaseCredentials: false,
+    },
+  }), [
+    activeSite?.name,
+    activeSiteId,
+    adminBlogPostUrl,
+    adminBlogReadinessUrl,
+    handoffPost,
+    newsletterAgentHandoffUrl,
+    newsletterIssueDraftBuilderUrl,
+    newsletterManifestUrl,
+    newsletterOpenApiUrl,
+    newsletterPublicSubscribeUrl,
+    newsletterSendReadySubscribersUrl,
+    newsletterWorkspaceUrl,
+    publicPostBySlugUrl,
+    publicPostRenderUrl,
+    publicPostResolveUrl,
+    siteSlug,
+  ]);
+  const blogNewsletterIssueHandoffText = useMemo(() => JSON.stringify(blogNewsletterIssueHandoff, null, 2), [blogNewsletterIssueHandoff]);
+
   const blogHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
     site: {
@@ -1522,10 +1632,12 @@ function BlogListView() {
       adminPostReadiness: adminBlogReadinessUrl,
       adminPostPreview: adminBlogPreviewUrl,
     },
+    newsletterIssue: blogNewsletterIssueHandoff,
     controlRoutes: {
       blogIndexPageTemplate: `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=blog-index`,
       media: `/media?siteId=${encodeURIComponent(activeSiteId)}`,
       comments: `/comments?siteId=${encodeURIComponent(activeSiteId)}`,
+      newsletter: newsletterWorkspaceUrl,
       users: `/users?siteId=${encodeURIComponent(activeSiteId)}`,
       settings: '/settings',
     },
@@ -1608,6 +1720,7 @@ function BlogListView() {
     adminBlogReadinessUrl,
     adminBlogUrl,
     authors,
+    blogNewsletterIssueHandoff,
     categories,
     commentSummaries,
     currentPage,
@@ -1616,6 +1729,7 @@ function BlogListView() {
     editorialReadiness.score,
     editorialReadiness.workflow,
     handoffPost,
+    newsletterWorkspaceUrl,
     postMetrics,
     publicBlogUrl,
     publicBlogArchiveUrl,
@@ -2119,9 +2233,70 @@ function BlogListView() {
                   ))}
                 </div>
               </div>
-            </details>
+        </details>
+
+        <details
+          className="group overflow-hidden rounded-lg border border-border bg-background"
+          data-testid="blog-newsletter-issue-handoff"
+          data-issue-handoff-schema={BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION}
+          data-newsletter-workspace-route={newsletterWorkspaceUrl}
+          data-issue-draft-builder-url={newsletterIssueDraftBuilderUrl}
+          data-send-ready-subscribers-url={newsletterSendReadySubscribersUrl}
+          data-agent-handoff-url={newsletterAgentHandoffUrl}
+        >
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>Newsletter issue handoff</span>
+            <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show bridge</span>
+            <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide bridge</span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Report to newsletter workflow</h3>
+                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                  Copy a provider-safe issue draft handoff for the selected or latest post. Subscriber delivery still runs through the Newsletter workspace and external mail provider.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyBlogText(blogNewsletterIssueHandoffText, 'Blog newsletter issue handoff')}
+                  disabled={isBlogWorkflowBusy || !canViewBlog}
+                  title={viewBlogPermissionTitle}
+                  data-testid="blog-copy-newsletter-issue-handoff"
+                  data-target-site-id={activeSiteId}
+                  data-issue-handoff-schema={BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy issue handoff
+                </button>
+                <Link
+                  to="/newsletter"
+                  search={{ siteId: activeSiteId }}
+                  data-testid="blog-open-newsletter-workspace"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-muted"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Open Newsletter
+                </Link>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <BlogApiSnippet label="Issue draft builder" value={newsletterIssueDraftBuilderUrl} />
+              <BlogApiSnippet label="Send-ready subscribers" value={newsletterSendReadySubscribersUrl} />
+              <BlogApiSnippet label="Public subscribe" value={newsletterPublicSubscribeUrl} />
+              <BlogApiSnippet label="Agent handoff" value={newsletterAgentHandoffUrl} />
+            </div>
+
+            <div className="mt-4 rounded-lg border border-border bg-card p-3 text-xs leading-5 text-muted-foreground">
+              Provider boundary: this handoff exposes post metadata, draft-builder URLs, and send-ready audience routes only. Raw subscriber lists, SMTP passwords, provider API keys, database URLs, service-role keys, admin sessions, and webhook secrets stay outside the Blog payload.
+            </div>
           </div>
         </details>
+      </div>
+      </details>
       </section>
 
       <div id="blog-overview" className="mb-6 grid gap-3 scroll-mt-24 lg:grid-cols-[minmax(0,1fr)_auto]">

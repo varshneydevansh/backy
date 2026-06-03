@@ -226,6 +226,31 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
       source.includes('data-disclosure="blog-taxonomy-manager"'),
     'Blog command center must keep secondary readiness, connected workflow, API, and taxonomy detail behind compact disclosures.',
   );
+  assert(
+    source.includes("const BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION = 'backy.blog-newsletter-issue-handoff.v1';") &&
+      source.includes("key: 'newsletter'") &&
+      source.includes("route: '/newsletter'") &&
+      source.includes('const blogNewsletterIssueHandoff = useMemo(() => ({') &&
+      source.includes('source: \'blog-list-newsletter-issue-handoff\'') &&
+      source.includes('issueDraftBuilder: newsletterIssueDraftBuilderUrl') &&
+      source.includes('sendReadySubscribers: newsletterSendReadySubscribersUrl') &&
+      source.includes('publicSubscribe: newsletterPublicSubscribeUrl') &&
+      source.includes('agentHandoff: newsletterAgentHandoffUrl') &&
+      source.includes("syncBoundarySchema: 'backy.newsletter-sync-boundary.v1'") &&
+      source.includes("audienceFilter: 'sendable'") &&
+      source.includes('exposesRawSubscribers: false') &&
+      source.includes('exposesProviderSecrets: false') &&
+      source.includes('newsletterIssue: blogNewsletterIssueHandoff') &&
+      source.includes('data-testid="blog-newsletter-issue-handoff"') &&
+      source.includes('data-issue-handoff-schema={BLOG_NEWSLETTER_ISSUE_SCHEMA_VERSION}') &&
+      source.includes('data-issue-draft-builder-url={newsletterIssueDraftBuilderUrl}') &&
+      source.includes('data-send-ready-subscribers-url={newsletterSendReadySubscribersUrl}') &&
+      source.includes('data-agent-handoff-url={newsletterAgentHandoffUrl}') &&
+      source.includes('data-testid="blog-copy-newsletter-issue-handoff"') &&
+      source.includes('data-testid="blog-open-newsletter-workspace"') &&
+      source.includes('Raw subscriber lists, SMTP passwords, provider API keys, database URLs, service-role keys, admin sessions, and webhook secrets stay outside the Blog payload.'),
+    'Blog list must expose a provider-safe report-to-newsletter issue handoff without leaking raw subscribers, provider secrets, database credentials, or admin sessions.',
+  );
   assert(!completionSpec.includes('Missing dedicated blog content model'), 'Completion spec must not regress to stale blog-missing language');
   assert(completionSpec.includes('Blog authoring is implemented through the dedicated admin blog surfaces'), 'Completion spec must document current blog authoring implementation');
   assert(completionSpec.includes('templateType: "blogPost"'), 'Completion spec must document frontend-design blog template provenance');

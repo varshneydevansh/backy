@@ -3785,6 +3785,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 11:10 IST - Blog List Newsletter Issue Handoff
+
+**Scope:** Batch 5 Blog/Newsletter authoring polish, focused on making report-to-newsletter publishing discoverable from the Blog command surface without exposing subscriber exports, provider secrets, database credentials, or admin sessions.
+
+**Changed:**
+- Blog list now exposes `backy.blog-newsletter-issue-handoff.v1` as a copyable provider-safe handoff for the selected or latest post.
+- The handoff carries the active site, selected post metadata, public render/resolve/post URLs, admin readiness URL, newsletter issue draft builder, send-ready subscriber sync URL, public subscribe URL, agent handoff, manifest, and OpenAPI pointers.
+- Blog connected workflows now include the Newsletter workspace with site-scoped navigation.
+- The main Blog handoff embeds the newsletter issue handoff so frontend agents can find the report-to-newsletter path from the same payload they already copy for blog APIs.
+- Blog list source smoke now guards the schema, UI test hooks, send-ready audience filter, sync-boundary schema, and explicit privacy flags.
+
+**Validation:**
+- PASS: `BACKY_BLOG_LIST_SOURCE_ONLY=1 npm run test:blog-list --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:newsletter --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This does not add first-party mailbox hosting. Delivery remains behind the existing Newsletter provider boundary: Backy stores content, issue metadata, subscriber lifecycle, consent evidence, and sync routes; the external mail provider owns send execution and deliverability secrets.
+
 ## Checkpoint: 2026-06-03 11:00 IST - Layers Panel Narrow-Row Readability
 
 **Scope:** Batch 5 editor UX polish, focused on the user's reported layer-map friction where the right-panel Layers list could become hard to read on narrow or mobile-sized editor layouts even though selection and nested-layer metadata existed.
