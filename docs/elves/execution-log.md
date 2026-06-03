@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 10:17 IST
+- **Last updated:** 2026-06-03 11:52 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 11:52 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Blog/editor status:** Audio transcript starter is reachable and smoke-covered
+
+**What changed:**
+- Rewired the visible Blog "Media essay" starter to the existing `audio-transcript` intent so selecting it now seeds the audio player, transcript body, notes, and source-file blocks instead of a generic article canvas.
+- Kept the starter within the existing 33-template blog catalog while making audio/transcript discoverable through search aliases and visible section labels.
+- Added editor canvas API metadata to the audio placeholder state so an audio block remains `data-backy-audio-*` addressable before a recording is uploaded.
+- Expanded the rendered Blog create smoke to open the Backy canvas Media essay starter, verify the selected starter/intent route state, assert the audio/transcript/files blocks, select the audio layer, and prove the audio URL, Media select/upload, caption, transcript, controls, autoplay, loop, and muted controls are available.
+
+**Commands run:**
+- `node --check apps/admin/scripts/blog-create-smoke.mjs` -> PASS.
+- `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The first rendered smoke attempt exposed test-state pollution from the intermediate Backy-canvas starter visit. The smoke now clears only the transient blog-new autosave draft before returning to the custom frontend template flow.
+- Audio support already existed across editor controls, Canvas, public renderer, and the public component contract; this slice made the author-facing blog starter path prove it.
+
+**Next:**
+1. Commit and push this audio transcript starter slice.
+2. Re-read the survival guide after push, then continue the next highest-friction editor/blog authoring polish.
 
 ## 2026-06-03 10:17 IST
 

@@ -83,8 +83,11 @@ const assertBlogCreateSourceContract = () => {
       source.includes('createBlogStarterElements') &&
       source.includes('createBlogStarterTemplateElements') &&
       source.includes('createAudioTranscriptBlogElements') &&
+      source.includes("id: 'gallery', name: 'Media essay'") &&
+      source.includes("intent: 'audio-transcript'") &&
       source.includes("id: 'blog-audio-player'") &&
       source.includes("createCanvasElement('audio'") &&
+      source.includes("sections: ['Audio player', 'Transcript', 'Files']") &&
       source.includes('createInvestigationBlogElements') &&
       source.includes('blog-investigation-timeline') &&
       source.includes('createNewsletterIssueBlogElements') &&
@@ -977,6 +980,112 @@ const selectLayerById = async (client, elementId) => {
   assert(clicked?.ok, `Unable to select layer ${elementId}: ${JSON.stringify(clicked)}`);
   await sleep(250);
   await switchToPropertiesPanel(client);
+};
+
+const assertBackyCanvasAudioTranscriptStarter = async (client) => {
+  await client.send('Page.navigate', {
+    url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}&templateSource=backy-canvas&starterTemplate=gallery`,
+  });
+
+  let state = null;
+  for (let attempt = 0; attempt < BLOG_CREATE_CONTROL_WAIT_ATTEMPTS; attempt += 1) {
+    state = await evaluate(client, `(() => {
+      const url = new URL(window.location.href);
+      const shell = document.querySelector('[data-testid="blog-starter-library-shell"]');
+      const starterOption = document.querySelector('[data-testid="blog-template-option-gallery"]');
+      const audioNode = document.querySelector('[data-element-id="blog-audio-player"]');
+      const transcriptCopy = document.querySelector('[data-element-id="blog-audio-transcript-copy"]');
+      const filesBox = document.querySelector('[data-element-id="blog-audio-files"]');
+
+      return {
+        href: window.location.href,
+        starterTemplate: url.searchParams.get('starterTemplate') || '',
+        templateSource: url.searchParams.get('templateSource') || '',
+        shellSelectedStarter: shell?.getAttribute('data-selected-starter') || '',
+        shellSelectedIntent: shell?.getAttribute('data-selected-intent') || '',
+        starterActive: starterOption?.getAttribute('data-active') || '',
+        starterIntent: starterOption?.getAttribute('data-starter-intent') || '',
+        audioElement: Boolean(audioNode),
+        audioPlayer: audioNode?.querySelector('[data-backy-audio-player]') ? 'present' : '',
+        audioTranscriptState: audioNode?.querySelector('[data-backy-audio-player]')?.getAttribute('data-backy-audio-transcript') || '',
+        transcriptCopy: Boolean(transcriptCopy),
+        filesBox: Boolean(filesBox),
+        body: document.body?.innerText?.slice(0, 800) || '',
+      };
+    })()`);
+
+    if (
+      state.starterTemplate === 'gallery'
+      && state.templateSource === 'backy-canvas'
+      && state.shellSelectedStarter === 'gallery'
+      && state.shellSelectedIntent === 'audio-transcript'
+      && state.starterActive === 'true'
+      && state.starterIntent === 'audio-transcript'
+      && state.audioElement
+      && state.audioPlayer === 'present'
+      && state.audioTranscriptState === 'available'
+      && state.transcriptCopy
+      && state.filesBox
+    ) {
+      break;
+    }
+
+    if (attempt === BLOG_CREATE_CONTROL_WAIT_ATTEMPTS - 1) {
+      throw new Error(`Backy canvas audio transcript starter did not hydrate: ${JSON.stringify(state)}`);
+    }
+
+    await sleep(250);
+  }
+
+  await selectLayerById(client, 'blog-audio-player');
+
+  const propertyState = await evaluate(client, `(() => {
+    const audioSrc = document.querySelector('[data-testid="editor-audio-src"]');
+    const selectMedia = document.querySelector('[data-testid="editor-audio-select-media"]');
+    const uploadMedia = document.querySelector('[data-testid="editor-audio-upload-media"]');
+    const caption = document.querySelector('[data-testid="editor-audio-caption"]');
+    const transcript = document.querySelector('[data-testid="editor-audio-transcript"]');
+    const controls = document.querySelector('[data-testid="editor-audio-controls"]');
+    const autoplay = document.querySelector('[data-testid="editor-audio-autoplay"]');
+    const loop = document.querySelector('[data-testid="editor-audio-loop"]');
+    const muted = document.querySelector('[data-testid="editor-audio-muted"]');
+
+    return {
+      audioSrc: audioSrc instanceof HTMLInputElement ? audioSrc.placeholder : '',
+      selectMedia: selectMedia instanceof HTMLButtonElement ? selectMedia.disabled : null,
+      uploadMedia: uploadMedia instanceof HTMLButtonElement ? uploadMedia.disabled : null,
+      caption: caption instanceof HTMLInputElement ? caption.value : '',
+      transcript: transcript instanceof HTMLTextAreaElement ? transcript.value : '',
+      controls: controls instanceof HTMLInputElement ? controls.checked : null,
+      autoplay: autoplay instanceof HTMLInputElement ? autoplay.checked : null,
+      loop: loop instanceof HTMLInputElement ? loop.checked : null,
+      muted: muted instanceof HTMLInputElement ? muted.checked : null,
+      inspectorText: document.querySelector('[data-testid="editor-inspector"]')?.textContent || '',
+    };
+  })()`);
+
+  assert(
+    propertyState.audioSrc.includes('audio.mp3')
+      && propertyState.selectMedia === false
+      && propertyState.uploadMedia === false
+      && propertyState.caption.includes('Upload or select the audio recording')
+      && propertyState.transcript.includes('Transcript will be edited below.')
+      && propertyState.controls === true
+      && propertyState.autoplay === false
+      && propertyState.loop === false
+      && propertyState.muted === false,
+    `Backy canvas audio transcript starter did not expose audio authoring controls: ${JSON.stringify(propertyState)}`,
+  );
+
+  await evaluate(client, `(() => {
+    localStorage.removeItem(${JSON.stringify('backy:blog-new:draft:v1')});
+    return true;
+  })()`);
+
+  return {
+    ...state,
+    propertyState,
+  };
 };
 
 const setLayoutNumberInput = async (client, label, value) => {
@@ -2243,6 +2352,8 @@ const main = async () => {
     await seedBrowserAuthStorage(client, apiAdminSessionToken);
 
     const initialRender = await navigateToBlogCreate(client);
+    const audioTranscriptStarter = await assertBackyCanvasAudioTranscriptStarter(client);
+    await navigateToBlogCreate(client);
     const starterRouteSync = await assertCustomFrontendStarterRouteSync(client);
     const desktopVisual = await assertBlogCreateVisualState(client, 'blog create desktop', DESKTOP_VISUAL_SCREENSHOT_PATH);
     const submitBlocker = await assertSubmitBlockerState(client);
@@ -2273,6 +2384,7 @@ const main = async () => {
       ok: true,
       url: `${ADMIN_BASE_URL}/blog/new?siteId=${encodeURIComponent(SITE_ID)}`,
       initialRender,
+      audioTranscriptStarter,
       starterRouteSync,
       desktopVisual: {
         screenshotPath: desktopVisual.screenshotPath,

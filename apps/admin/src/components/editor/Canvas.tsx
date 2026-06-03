@@ -3978,6 +3978,9 @@ function CanvasElementComponent({
                 color: '#64748b',
                 fontSize: 14,
               }}
+              data-backy-audio-player=""
+              data-backy-audio-media-id={sanitizeText(p.mediaId) || undefined}
+              data-backy-audio-transcript={transcript ? 'available' : 'missing'}
             >
               Add audio URL or upload an audio file
             </div>
