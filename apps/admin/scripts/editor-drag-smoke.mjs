@@ -1632,6 +1632,16 @@ const assertCanvasSelectionInfoSource = () => {
   assert(editorSource.includes('data-editor-content-bounds="expanded"') && editorSource.includes('width: renderedCanvasSize.width') && editorSource.includes('height: renderedCanvasSize.height'), 'Editor edit surface must also expand to authored content bounds so resized root sections do not clip later layers.');
   assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = (') && pageRendererSource.includes('data-backy-render-content-bounds="expanded"') && pageRendererSource.includes('data-backy-render-height={renderCanvasSize.height}'), 'Public renderer must expand the rendered canvas frame to responsive content bounds so mobile previews can scroll to lower authored elements.');
   assert(
+    source.includes('const CANVAS_AUTO_EXTEND_PADDING = 240;') &&
+      source.includes('const getAutoExtendedCanvasHeight = (') &&
+      source.includes('const maybeAutoExtendCanvas = useCallback((desiredBottom: number): number =>') &&
+      source.includes('activeResizeState.snapshots.every((snapshot) => snapshot.parentId === null)') &&
+      source.includes('activeDragState.snapshots.every((snapshot) => snapshot.parentId === null)') &&
+      source.includes('data-canvas-auto-extend="root-transform-bottom"') &&
+      source.includes('data-canvas-auto-extend-max-height={CANVAS_MAX_AUTO_HEIGHT}'),
+    'Editor canvas must auto-extend long pages when root layers are dragged or resized below the current canvas bottom while keeping nested children parent-constrained.',
+  );
+  assert(
     editorSource.includes('const applyRootSectionFlow = (') &&
       editorSource.includes('const snapRootSectionInsertionsToFlowBoundary = (') &&
       editorSource.includes('element.y < insertionTop && elementBottom(element) > insertionTop') &&

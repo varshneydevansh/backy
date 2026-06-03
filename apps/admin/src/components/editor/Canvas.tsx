@@ -409,6 +409,9 @@ const isEmbedHostAllowed = (host: string, allowedHosts: string[]): boolean => {
 
 const DEFAULT_GRID_SIZE = 10;
 const SMART_GUIDE_THRESHOLD = 6;
+const CANVAS_AUTO_EXTEND_PADDING = 240;
+const CANVAS_AUTO_EXTEND_THRESHOLD = 80;
+const CANVAS_MAX_AUTO_HEIGHT = 24000;
 
 const normalizeGridSize = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -435,6 +438,24 @@ const clampToCanvas = (
 ): number => (
   Math.max(0, Math.min(value, Math.max(0, canvasDimension - dimension)))
 );
+
+const getAutoExtendedCanvasHeight = (
+  currentHeight: number,
+  desiredBottom: number,
+  gridSize: number,
+  snapEnabled: boolean,
+): number => {
+  if (!Number.isFinite(desiredBottom) || desiredBottom <= currentHeight - CANVAS_AUTO_EXTEND_THRESHOLD) {
+    return currentHeight;
+  }
+
+  const nextHeight = Math.min(
+    CANVAS_MAX_AUTO_HEIGHT,
+    Math.max(currentHeight, desiredBottom + CANVAS_AUTO_EXTEND_PADDING),
+  );
+
+  return snapToGrid(nextHeight, gridSize, snapEnabled);
+};
 
 interface TreeUpdateResult {
   elements: CanvasElement[];
@@ -2116,6 +2137,15 @@ export function Canvas({
     };
   }, [safeGridSize, snapEnabled, toCanvasDelta]);
 
+  const maybeAutoExtendCanvas = useCallback((desiredBottom: number): number => {
+    const nextHeight = getAutoExtendedCanvasHeight(size.height, desiredBottom, safeGridSize, snapEnabled);
+    if (nextHeight > size.height && onSizeChange) {
+      onSizeChange({ ...size, height: nextHeight });
+    }
+
+    return nextHeight;
+  }, [onSizeChange, safeGridSize, size, snapEnabled]);
+
   const startMarqueeSelection = useCallback((
     event: React.PointerEvent<Element> | React.MouseEvent<Element>,
     start: CanvasPoint,
@@ -2430,11 +2460,19 @@ export function Canvas({
       setAlignmentGuides([]);
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
       const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY, 'y');
+      const resizeCanAutoExtendCanvas = activeResizeState.snapshots.every((snapshot) => snapshot.parentId === null);
+      const affectsBottomEdge = activeResizeState.handle.includes('s') || event.altKey;
+      const resizeBoundsHeight = resizeCanAutoExtendCanvas && affectsBottomEdge
+        ? maybeAutoExtendCanvas(activeResizeState.bounds.y + activeResizeState.bounds.height + Math.max(0, deltaY))
+        : activeResizeState.bounds.boundsHeight;
 
       let nextElements = elementsRef.current;
       if (activeResizeState.snapshots.length > 1) {
         const nextBounds = resizeBoundsFromHandle(
-          activeResizeState.bounds,
+          {
+            ...activeResizeState.bounds,
+            boundsHeight: resizeBoundsHeight,
+          },
           activeResizeState.handle,
           deltaX,
           deltaY,
@@ -2474,7 +2512,7 @@ export function Canvas({
             width: activeResizeState.bounds.width,
             height: activeResizeState.bounds.height,
             boundsWidth: activeResizeState.bounds.boundsWidth,
-            boundsHeight: activeResizeState.bounds.boundsHeight,
+            boundsHeight: resizeBoundsHeight,
           },
           activeResizeState.handle,
           deltaX,
@@ -2519,9 +2557,13 @@ export function Canvas({
     const newX = activeDragState.bounds.x + deltaX;
     const newY = activeDragState.bounds.y + deltaY;
     let nextGuides: AlignmentGuide[] = [];
+    const dragCanAutoExtendCanvas = activeDragState.snapshots.every((snapshot) => snapshot.parentId === null);
+    const dragBoundsHeight = dragCanAutoExtendCanvas
+      ? maybeAutoExtendCanvas(newY + activeDragState.bounds.height)
+      : activeDragState.bounds.boundsHeight;
 
     const snappedX = snapToGrid(clampToCanvas(newX, activeDragState.bounds.width, activeDragState.bounds.boundsWidth), safeGridSize, snapEnabled);
-    const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, activeDragState.bounds.boundsHeight), safeGridSize, snapEnabled);
+    const snappedY = snapToGrid(clampToCanvas(newY, activeDragState.bounds.height, dragBoundsHeight), safeGridSize, snapEnabled);
     const activeParentId = activeDragState.snapshots[0]?.parentId ?? null;
     const guideScope = getSiblingScopeForParent(elementsRef.current, activeParentId);
     const smartSnap = snapEnabled
@@ -2530,7 +2572,7 @@ export function Canvas({
         activeDragState.elementIds,
         {
           width: activeDragState.bounds.boundsWidth,
-          height: activeDragState.bounds.boundsHeight,
+          height: dragBoundsHeight,
         },
         snappedX,
         snappedY,
@@ -2545,7 +2587,7 @@ export function Canvas({
     nextGuides = smartSnap.guides;
 
     const moveDeltaX = clampToCanvas(smartSnap.x, activeDragState.bounds.width, activeDragState.bounds.boundsWidth) - activeDragState.bounds.x;
-    const moveDeltaY = clampToCanvas(smartSnap.y, activeDragState.bounds.height, activeDragState.bounds.boundsHeight) - activeDragState.bounds.y;
+    const moveDeltaY = clampToCanvas(smartSnap.y, activeDragState.bounds.height, dragBoundsHeight) - activeDragState.bounds.y;
     const snapshotById = new Map(activeDragState.snapshots.map((snapshot) => [snapshot.id, snapshot]));
     let nextElements = elementsRef.current;
 
@@ -2558,7 +2600,11 @@ export function Canvas({
       const result = updateElementById(nextElements, elementId, (element) => ({
         ...element,
         x: clampToCanvas(snapshot.x + moveDeltaX, snapshot.width, snapshot.boundsWidth),
-        y: clampToCanvas(snapshot.y + moveDeltaY, snapshot.height, snapshot.boundsHeight),
+        y: clampToCanvas(
+          snapshot.y + moveDeltaY,
+          snapshot.height,
+          snapshot.parentId === null ? dragBoundsHeight : snapshot.boundsHeight,
+        ),
       }));
 
       nextElements = result.elements;
@@ -2567,7 +2613,7 @@ export function Canvas({
     setAlignmentGuides(nextGuides);
     elementsRef.current = nextElements;
     onElementsChange(nextElements, { transient: true, selectedId: activeDragState.elementId });
-  }, [disabled, getCanvasPoint, isPreview, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
+  }, [disabled, getCanvasPoint, isPreview, maybeAutoExtendCanvas, onElementsChange, safeGridSize, size.height, size.width, snapEnabled, toCanvasDelta]);
 
   const flushPendingCanvasMove = useCallback(() => {
     if (pendingCanvasMoveFrameRef.current !== null) {
@@ -3071,6 +3117,8 @@ export function Canvas({
         minHeight: size.height,
       }}
       data-preview-scroll-policy={isPreview ? 'canvas-overflow-auto' : undefined}
+      data-canvas-auto-extend="root-transform-bottom"
+      data-canvas-auto-extend-max-height={CANVAS_MAX_AUTO_HEIGHT}
       data-canvas-move-listener-scope="window-rAF"
       data-canvas-transform-frame-policy="latest-event-per-animation-frame"
       onMouseUp={handleMouseUp}
