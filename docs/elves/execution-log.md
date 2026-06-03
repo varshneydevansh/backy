@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 10:01 IST
+- **Last updated:** 2026-06-03 10:10 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 10:10 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Page/blog create routes preserve canonical template aliases
+
+**What changed:**
+- Updated `/blog/new` route sync so selecting a captured custom frontend blog template, restoring a recovered draft, or toggling focused canvas mode preserves `frontendDesignTemplateId`, `frontendTemplate`, and legacy `designTemplate` together.
+- Updated `/pages/new` route normalization and draft route sync so custom frontend page templates also keep the canonical `frontendDesignTemplateId` plus compatibility aliases visible in the URL.
+- Extended page/blog create source guards so future changes cannot silently fall back to the legacy `designTemplate` alias only.
+
+**Commands run:**
+- `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+
+**Notes:**
+- This keeps the visible admin creation routes aligned with `AGENTS.md` and the public custom frontend handoff examples: `/pages/new?...&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas` and `/blog/new?...&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`.
+- No provider secrets, database env, or admin credentials are involved; this is route contract polish for frontend agents and operators.
+
+**Next:**
+1. Run repo-public hygiene.
+2. Commit and push this route-alias contract slice, re-read the survival guide, then continue editor/authoring polish.
 
 ## 2026-06-03 10:01 IST
 

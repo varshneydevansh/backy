@@ -1353,6 +1353,8 @@ const normalizeNewPageSearch = (input: NewPageSearch): NewPageSearch => ({
     ...(input.templateSource ? { templateSource: input.templateSource } : {}),
     ...(input.focus === 'canvas' ? { focus: 'canvas' } : {}),
     ...(input.designTemplate?.trim() ? { designTemplate: input.designTemplate.trim() } : {}),
+    ...(input.frontendDesignTemplateId?.trim() ? { frontendDesignTemplateId: input.frontendDesignTemplateId.trim() } : {}),
+    ...(input.frontendTemplate?.trim() ? { frontendTemplate: input.frontendTemplate.trim() } : {}),
     ...(input.collectionId?.trim() ? { collectionId: input.collectionId.trim() } : {}),
     ...(input.datasetMode ? { datasetMode: input.datasetMode } : {}),
 });
@@ -1539,6 +1541,8 @@ function NewPageRoute() {
         templateSource: nextFormData.templateSourceMode,
         focus: search.focus,
         designTemplate: nextFormData.designTemplateId,
+        frontendDesignTemplateId: nextFormData.templateSourceMode === 'custom-frontend' ? nextFormData.designTemplateId : undefined,
+        frontendTemplate: nextFormData.templateSourceMode === 'custom-frontend' ? nextFormData.designTemplateId : undefined,
         collectionId: nextFormData.collectionId,
         datasetMode: nextFormData.datasetMode || undefined,
     });

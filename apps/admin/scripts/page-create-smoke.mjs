@@ -1521,6 +1521,13 @@ const assertPageCreateSourceContracts = () => {
     'Page create route must accept designTemplate, frontendDesignTemplateId, frontendTemplate, and templateSource aliases for custom frontend template handoffs',
   );
   assert(
+      source.includes('frontendDesignTemplateId: nextFormData.templateSourceMode === \'custom-frontend\' ? nextFormData.designTemplateId : undefined') &&
+      source.includes('frontendTemplate: nextFormData.templateSourceMode === \'custom-frontend\' ? nextFormData.designTemplateId : undefined') &&
+      source.includes('input.frontendDesignTemplateId?.trim()') &&
+      source.includes('input.frontendTemplate?.trim()'),
+    'Page create route sync must preserve canonical frontendDesignTemplateId plus frontendTemplate/designTemplate aliases for custom frontend template handoffs',
+  );
+  assert(
       source.includes('extractFrontendTemplateDesignSerialization') &&
       source.includes('const frontendTemplateDesignState = selectedFrontendTemplate') &&
       source.includes('templateSource: formData.templateSourceMode') &&

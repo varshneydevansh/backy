@@ -46,6 +46,15 @@ const assertBlogCreateSourceContract = () => {
     'Blog create route must accept templateSource plus designTemplate, frontendDesignTemplateId, and frontendTemplate aliases for custom frontend template handoffs',
   );
   assert(
+    source.includes('frontendDesignTemplateId: template.id') &&
+      source.includes('frontendTemplate: template.id') &&
+      source.includes('frontendDesignTemplateId: draftRecovery.designTemplateId') &&
+      source.includes('frontendTemplate: draftRecovery.designTemplateId') &&
+      source.includes('frontendDesignTemplateId: designTemplateId') &&
+      source.includes('frontendTemplate: designTemplateId'),
+    'Blog create route sync must preserve canonical frontendDesignTemplateId plus frontendTemplate/designTemplate aliases when selecting, restoring, or focusing custom frontend templates',
+  );
+  assert(
     source.includes('data-testid="blog-template-source-switch"') &&
       source.includes('data-testid="blog-template-source-backy-canvas"') &&
       source.includes('data-testid="blog-template-source-custom-frontend"') &&

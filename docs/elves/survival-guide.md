@@ -371,7 +371,9 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest plan hygiene:** `docs/elves/backy-release-plan.md` now marks the already-guarded Batch 1 sidebar/site switcher, Pages dense rows, Users table wrapping, and Settings More actions layering rows as done, and records the current Batch 2 editor primitive coverage. The remaining editor work is command execution coverage plus real long-page/custom-frontend blog-template authoring polish, not the old top-left marquee/zoom/drag-preview primitives.
 
-**Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
+**Newest custom frontend route-alias polish:** Page and blog creation routes now preserve the canonical `frontendDesignTemplateId` plus `frontendTemplate` and legacy `designTemplate` aliases when custom frontend templates are selected or restored in admin. Source guards for page/blog creation prove the visible URLs stay aligned with the public handoff examples and `AGENTS.md`.
+
+**Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
 

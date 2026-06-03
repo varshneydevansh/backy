@@ -2006,7 +2006,15 @@ function NewBlogPostPage() {
         if (options.syncRoute) {
             navigate({
                 to: '/blog/new',
-                search: { siteId: activeSiteId, ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}), starterTemplate: selectedBlogStarterTemplate, templateSource: 'custom-frontend' as const, designTemplate: template.id },
+                search: {
+                    siteId: activeSiteId,
+                    ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
+                    starterTemplate: selectedBlogStarterTemplate,
+                    templateSource: 'custom-frontend' as const,
+                    designTemplate: template.id,
+                    frontendDesignTemplateId: template.id,
+                    frontendTemplate: template.id,
+                },
                 replace: true,
             });
         }
@@ -2603,7 +2611,11 @@ function NewBlogPostPage() {
                 ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
                 ...(recoveredStarterTemplate !== 'blog-post' ? { starterTemplate: recoveredStarterTemplate } : {}),
                 ...(recoveredTemplateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
-                ...(recoveredTemplateSourceMode === 'custom-frontend' && draftRecovery.designTemplateId ? { designTemplate: draftRecovery.designTemplateId } : {}),
+                ...(recoveredTemplateSourceMode === 'custom-frontend' && draftRecovery.designTemplateId ? {
+                    designTemplate: draftRecovery.designTemplateId,
+                    frontendDesignTemplateId: draftRecovery.designTemplateId,
+                    frontendTemplate: draftRecovery.designTemplateId,
+                } : {}),
             },
             replace: true,
         });
@@ -2625,7 +2637,11 @@ function NewBlogPostPage() {
                 ...(focused ? { focus: 'canvas' as const } : {}),
                 ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
                 ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
-                ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
+                ...(templateSourceMode === 'custom-frontend' && designTemplateId ? {
+                    designTemplate: designTemplateId,
+                    frontendDesignTemplateId: designTemplateId,
+                    frontendTemplate: designTemplateId,
+                } : {}),
             },
             replace: true,
         });
