@@ -1577,7 +1577,11 @@ function NewBlogPostPage() {
                     ...(isWorkspaceFocus ? { focus: 'canvas' as const } : {}),
                     ...(selectedBlogStarterTemplate !== 'blog-post' ? { starterTemplate: selectedBlogStarterTemplate } : {}),
                     ...(templateSourceMode === 'custom-frontend' ? { templateSource: 'custom-frontend' as const } : {}),
-                    ...(templateSourceMode === 'custom-frontend' && designTemplateId ? { designTemplate: designTemplateId } : {}),
+                    ...(templateSourceMode === 'custom-frontend' && designTemplateId ? {
+                        designTemplate: designTemplateId,
+                        frontendDesignTemplateId: designTemplateId,
+                        frontendTemplate: designTemplateId,
+                    } : {}),
                 },
                 replace: true,
             });

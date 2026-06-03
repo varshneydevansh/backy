@@ -19,7 +19,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Custom frontend status:** Page/blog create routes preserve canonical template aliases
 
 **What changed:**
-- Updated `/blog/new` route sync so selecting a captured custom frontend blog template, restoring a recovered draft, or toggling focused canvas mode preserves `frontendDesignTemplateId`, `frontendTemplate`, and legacy `designTemplate` together.
+- Updated `/blog/new` route sync so selecting a captured custom frontend blog template, falling back from an invalid site, restoring a recovered draft, or toggling focused canvas mode preserves `frontendDesignTemplateId`, `frontendTemplate`, and legacy `designTemplate` together.
 - Updated `/pages/new` route normalization and draft route sync so custom frontend page templates also keep the canonical `frontendDesignTemplateId` plus compatibility aliases visible in the URL.
 - Extended page/blog create source guards so future changes cannot silently fall back to the legacy `designTemplate` alias only.
 
@@ -28,6 +28,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - `BACKY_PAGE_CREATE_SOURCE_ONLY=1 npm run test:page-create --workspace @backy-cms/admin --silent` -> PASS.
 - `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
 - `git diff --check` -> PASS.
+- Follow-up fallback-site path recheck: `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent`, `npm run typecheck --workspace @backy-cms/admin --silent`, and `git diff --check` -> PASS.
 
 **Notes:**
 - This keeps the visible admin creation routes aligned with `AGENTS.md` and the public custom frontend handoff examples: `/pages/new?...&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas` and `/blog/new?...&templateSource=custom-frontend&frontendDesignTemplateId=:templateId&focus=canvas`.
