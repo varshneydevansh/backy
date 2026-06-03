@@ -178,9 +178,9 @@ const assertDashboardSourceContracts = () => {
     'Dashboard refresh/hydration must not clear completed infrastructure diagnostics after the check succeeds.',
   );
   assert(
-    sidebarSource.includes('data-testid={`${testIdPrefix}-brand-header`}') &&
+      sidebarSource.includes('data-testid={`${testIdPrefix}-brand-header`}') &&
       sidebarSource.includes("data-brand-header-layout={collapsed ? 'compact-brand' : 'expanded-site-controls'}") &&
-      sidebarSource.includes("collapsed ? 'h-16 items-center justify-center' : 'min-h-[120px] items-start justify-start py-3'") &&
+      sidebarSource.includes("collapsed ? 'h-16 items-center justify-center' : 'min-h-[136px] items-start justify-start py-3'") &&
       sidebarSource.includes("data-expanded-site-switcher-layout={collapsed ? 'compact-brand' : 'stacked-site-controls'}"),
     'Sidebar expanded site switcher must reserve enough vertical space for Backy, Manage, Site, Domains, and Help controls.',
   );
@@ -1576,8 +1576,8 @@ const assertDashboardSidebarNavigation = async (client) => {
   assert(initial.activeSection === 'workspace', `Dashboard sidebar should keep workspace active: ${JSON.stringify(initial)}`);
   assert(
     initial.brandHeaderLayout === 'expanded-site-controls' &&
-      initial.brandHeaderMinHeight === '120' &&
-      initial.brandHeaderHeight >= 116 &&
+      initial.brandHeaderMinHeight === '136' &&
+      initial.brandHeaderHeight >= 132 &&
       initial.siteSwitcherLayout === 'stacked-site-controls' &&
       initial.activeSiteBottom <= initial.brandHeaderBottom + 1 &&
       initial.discoveryLinksBottom <= initial.brandHeaderBottom + 1 &&

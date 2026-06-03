@@ -1135,11 +1135,17 @@ function NewSitePage() {
         </div>
       </section>
 
-      <form onSubmit={handleSubmit} noValidate data-testid="site-create-form" className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        data-testid="site-create-form"
+        data-layout-contract="site-create-contained-two-column"
+        className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]"
+      >
         <span id={siteCreateSubmitStatusId} className="sr-only" data-testid="site-create-submit-action-status" aria-live="polite">
           {siteCreateSubmitStatus}
         </span>
-        <section id="site-identity" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
+        <section id="site-identity" className="min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
           <div className="flex items-start gap-3">
             <span className="rounded-lg bg-teal-50 p-2 text-teal-700">
               <Globe className="h-5 w-5" />
@@ -1685,7 +1691,11 @@ function NewSitePage() {
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside
+          className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:[scrollbar-gutter:stable]"
+          data-testid="site-create-handoff-rail"
+          data-layout-contract="site-create-contained-sticky-handoff-rail"
+        >
           <section id="site-preview" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Globe className="h-4 w-4 text-teal-700" />

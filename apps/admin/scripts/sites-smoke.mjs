@@ -179,9 +179,14 @@ const assertSitesRouteSourceContract = () => {
     'Site create route must keep role-default create/page-seeding workflows usable while permission details hydrate',
   );
   assert(
-    createSource.includes('buildSiteCreateInlineErrors') &&
+      createSource.includes('buildSiteCreateInlineErrors') &&
       createSource.includes('const [siteCreateSubmitted, setSiteCreateSubmitted] = useState(false);') &&
       createSource.includes('data-testid="site-create-form"') &&
+      createSource.includes('data-layout-contract="site-create-contained-two-column"') &&
+      createSource.includes('lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]') &&
+      createSource.includes('data-testid="site-create-handoff-rail"') &&
+      createSource.includes('data-layout-contract="site-create-contained-sticky-handoff-rail"') &&
+      createSource.includes('lg:max-h-[calc(100dvh-8rem)]') &&
       createSource.includes('noValidate') &&
       createSource.includes('data-testid="site-create-inline-error"') &&
       createSource.includes('data-testid="site-create-name-error"') &&
@@ -938,6 +943,7 @@ const assertCreateSiteViewportShell = async (client) => {
     const sidebarShell = document.querySelector('[data-testid="admin-sidebar-shell"]');
     const footer = document.querySelector('[data-testid="admin-shell-footer"]');
     const form = document.querySelector('[data-testid="site-create-form"]');
+    const handoffRail = document.querySelector('[data-testid="site-create-handoff-rail"]');
     const submit = document.querySelector('button[type="submit"]');
     const appRoot = document.getElementById('root');
     const mainRect = main?.getBoundingClientRect();
@@ -969,6 +975,11 @@ const assertCreateSiteViewportShell = async (client) => {
       footerExists: footer instanceof HTMLElement,
       footerText: footer?.textContent?.replace(/\\s+/g, ' ').trim() || '',
       formExists: form instanceof HTMLFormElement,
+      formLayoutContract: form?.getAttribute('data-layout-contract') || '',
+      handoffRailExists: handoffRail instanceof HTMLElement,
+      handoffRailLayoutContract: handoffRail?.getAttribute('data-layout-contract') || '',
+      handoffRailOverflowY: handoffRail instanceof HTMLElement ? getComputedStyle(handoffRail).overflowY : '',
+      handoffRailMaxHeight: handoffRail instanceof HTMLElement ? getComputedStyle(handoffRail).maxHeight : '',
       submitExists: submit instanceof HTMLButtonElement,
       body: document.body?.innerText?.slice(0, 1000) || '',
     };
@@ -994,8 +1005,13 @@ const assertCreateSiteViewportShell = async (client) => {
       state.mainClientHeight <= state.viewportHeight &&
       state.mainScrollHeight > state.mainClientHeight &&
       state.formExists &&
+      state.formLayoutContract === 'site-create-contained-two-column' &&
+      state.handoffRailExists &&
+      state.handoffRailLayoutContract === 'site-create-contained-sticky-handoff-rail' &&
+      state.handoffRailOverflowY !== 'visible' &&
+      state.handoffRailMaxHeight !== 'none' &&
       state.submitExists,
-    `Create-site content should scroll inside admin main, not the browser document: ${JSON.stringify(state)}`,
+    `Create-site content and handoff rail should scroll inside admin main without exposing blank shell space: ${JSON.stringify(state)}`,
   );
   assert(
     state.footerExists &&

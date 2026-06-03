@@ -478,11 +478,11 @@ export function Sidebar({
       <div
         className={cn(
           'flex shrink-0 border-b border-border px-3',
-          collapsed ? 'h-16 items-center justify-center' : 'min-h-[120px] items-start justify-start py-3',
+          collapsed ? 'h-16 items-center justify-center' : 'min-h-[136px] items-start justify-start py-3',
         )}
         data-testid={`${testIdPrefix}-brand-header`}
         data-brand-header-layout={collapsed ? 'compact-brand' : 'expanded-site-controls'}
-        data-brand-header-min-height={collapsed ? '64' : '120'}
+        data-brand-header-min-height={collapsed ? '64' : '136'}
       >
         <div
           className={cn(
@@ -514,8 +514,8 @@ export function Sidebar({
 
           {/* Logo Text (hidden when collapsed) */}
           {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="flex min-h-6 min-w-0 items-center justify-between gap-2">
                 <Link
                   to="/"
                   search={getNavSearch('/')}
@@ -541,7 +541,7 @@ export function Sidebar({
                 </Link>
               </div>
               <div
-                className="mt-1 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
+                className="mt-2 flex min-w-0 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site`}
                 data-site-switcher-discovery="visible-site-select-no-signout"
                 data-active-site-domain-state={activeSiteDomainState}
@@ -586,7 +586,7 @@ export function Sidebar({
                 <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
               </div>
               <div
-                className="mt-1 flex min-w-0 items-center justify-between gap-2 px-1 text-[11px] leading-4 text-muted-foreground"
+                className="mt-2 flex min-w-0 items-center justify-between gap-2 px-1 text-[11px] leading-4 text-muted-foreground"
                 data-testid={`${testIdPrefix}-active-site-discovery-links`}
                 data-active-site-domain-state={activeSiteDomainState}
                 data-active-site-domain-label={activeSiteDomainLabel}
