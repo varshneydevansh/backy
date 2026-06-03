@@ -3785,6 +3785,29 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 11:00 IST - Layers Panel Narrow-Row Readability
+
+**Scope:** Batch 5 editor UX polish, focused on the user's reported layer-map friction where the right-panel Layers list could become hard to read on narrow or mobile-sized editor layouts even though selection and nested-layer metadata existed.
+
+**Changed:**
+- Layer rows now expose a single readable ARIA label composed from the layer name, semantic meta, responsive state, and selection context.
+- Layer rows now carry explicit `data-layer-readable-name-value`, `data-layer-readable-meta-title`, and `data-layer-readable-fit="wrap-below-icons"` metadata so admin smokes and custom tooling can verify full names without relying on clipped text.
+- The visible layer-name column now uses a wrapping flex basis instead of a zero-width basis, so it can wrap below row icons/actions in cramped panels rather than collapsing into unreadable fragments.
+- Layer name and meta spans now expose full `title`/data attributes while preserving the existing two-line dense visual style.
+- The Layers smoke now verifies the rendered row contract: full readable labels, meta titles, ARIA label content, nonzero flex basis/min-width, selected-row actions, tree semantics, nesting, search, nav child selection, rename, duplicate/delete, visibility/lock, and persistence.
+
+**Validation:**
+- PASS: `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_EDITOR_LAYERS_SMOKE=1 npm run test:editor-layers --workspace @backy-cms/admin --silent`
+
+**Notes:**
+- Code block authoring was checked before this slice and is already materially covered by catalog entries, inspector controls, editor/public rendering, custom frontend handoff contracts, and editor smoke assertions.
+- The layer-map fix is intentionally small: it preserves Backy's dense control-room UI while making long and nested layer rows readable enough for page/blog authoring.
+
+**Next:**
+- Run diff check and repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
+
 ## Checkpoint: 2026-06-03 10:50 IST - Captured Page Template Copy And Autosave Cleanup
 
 **Scope:** Batch 5 custom-frontend page authoring polish, focused on making captured frontend page templates safe to reuse from `/pages/new` without stale copied title/description text or lingering local drafts after successful canvas creation.

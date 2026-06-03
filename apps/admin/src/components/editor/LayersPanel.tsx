@@ -599,6 +599,7 @@ function LayerItem({
         isLocked ? 'Layer is locked.' : 'Layer is unlocked.',
         layerResponsiveLabel,
     ].join(' ');
+    const layerRowLabel = `${layerName}. ${layerReadableMeta}. ${layerResponsiveLabel}. ${layerRowSelectionContext}`;
 
     useEffect(() => {
         if (!isRenaming) {
@@ -709,10 +710,14 @@ function LayerItem({
             data-layer-selection-peer-count={selectedPeerCount}
             data-layer-selection-context={layerRowSelectionContext}
             data-layer-readable-name="two-line"
+            data-layer-readable-name-value={layerName}
+            data-layer-readable-meta-title={layerReadableMeta}
+            data-layer-readable-fit="wrap-below-icons"
             data-layer-selectable-child-policy={navSelectableChildPolicy}
             data-action-status={layerRowActionStatus}
             data-action-state={getLayerActionState(disabledPanelReason, isSelected)}
             data-disabled-reason={disabledPanelReason || undefined}
+            aria-label={layerRowLabel}
             title={`${layerName} (${element.type} layer)`}
             style={{
                 display: 'flex',
@@ -824,8 +829,8 @@ function LayerItem({
             {/* Element name */}
             <span
                 style={{
-                    flex: '1 1 0',
-                    minWidth: 0,
+                    flex: '1 1 10rem',
+                    minWidth: 'min(100%, 8rem)',
                     fontSize: '13px',
                     lineHeight: '18px',
                     overflow: 'hidden',
@@ -873,6 +878,8 @@ function LayerItem({
                     <>
                         <span
                             data-testid="editor-layer-readable-name"
+                            data-layer-readable-name-value={layerName}
+                            title={layerName}
                             style={{
                                 display: '-webkit-box',
                                 overflow: 'hidden',
@@ -885,6 +892,7 @@ function LayerItem({
                         </span>
                         <span
                             data-testid="editor-layer-readable-meta"
+                            data-layer-readable-meta-title={layerReadableMeta}
                             title={layerReadableMeta}
                             style={{
                                 display: '-webkit-box',

@@ -379,6 +379,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest page template authoring polish:** Page creation now rewrites captured custom frontend template `page.title` and `page.description` bindings into the actual canvas elements before save, and cancels pending autosave timers so successful page creation does not leave a stale `/pages/new` draft in localStorage. Source page-create guard, admin typecheck, rendered custom-frontend page-create smoke, diff check, and repo-public hygiene are green.
 
+**Newest layer-map readability polish:** The editor Layers panel now keeps narrow-row layer names usable by giving the readable label a wrapping flex basis, full title/data metadata, and a single ARIA label containing name, semantic meta, responsive state, and selection context. The rendered Layers smoke proves row readability, tree semantics, selection/actions, nested collapse/search, nav child selection, rename, duplicate/delete, visibility/lock, and persistence.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
@@ -405,7 +407,7 @@ No active paid or long-running compute recorded by this guide. Local dev servers
 - `apps/admin/src/components/editor/Canvas.tsx`
 - `apps/admin/src/components/editor/CanvasEditor.tsx`
 - `apps/admin/src/components/editor/ComponentLibrary.tsx`
-- `apps/admin/src/components/editor/LayerPanel.tsx`
+- `apps/admin/src/components/editor/LayersPanel.tsx`
 - `apps/admin/src/routes/pages.tsx`
 - `apps/admin/src/routes/blog.tsx`
 - `apps/admin/src/routes/help.tsx`

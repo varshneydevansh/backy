@@ -1170,9 +1170,15 @@ const assertCanvasEditorShortcutSource = () => {
       layersPanelSource.includes("return `${element.type} · ${href}`") &&
       layersPanelSource.includes('getLayerReadableMeta(element)') &&
       layersPanelSource.includes('navRecords.map((item) => `${item.label} ${item.href}`).join') &&
+      layersPanelSource.includes('data-layer-readable-name-value={layerName}') &&
+      layersPanelSource.includes('data-layer-readable-meta-title={layerReadableMeta}') &&
+      layersPanelSource.includes('data-layer-readable-fit="wrap-below-icons"') &&
+      layersPanelSource.includes('aria-label={layerRowLabel}') &&
+      layersPanelSource.includes("flex: '1 1 10rem'") &&
+      layersPanelSource.includes("minWidth: 'min(100%, 8rem)'") &&
       layersPanelSource.includes("flex: '1 0 100%'") &&
       layersPanelSource.includes('WebkitLineClamp: 2'),
-    'Editor layers panel must keep readable two-line labels, expose nav/link child metadata, clarify nav child selection mode, and wrap row actions below the layer name in narrow panels',
+    'Editor layers panel must keep readable two-line labels, expose nav/link child metadata, clarify nav child selection mode, and wrap readable row labels/actions in narrow panels',
   );
   assert(layersPanelSource.includes("pointerEvents: showRowActions ? 'auto' : 'none'") && layersPanelSource.includes('tabIndex={actionButtonTabIndex}') && layersPanelSource.includes('aria-hidden={showRowActions ? undefined : true}'), 'Editor layers panel must keep hidden row actions out of pointer and keyboard interaction');
   assert(layersPanelSource.includes('role="treeitem"') && layersPanelSource.includes('role="tree"') && layersPanelSource.includes('const handleKeyDown') && layersPanelSource.includes('aria-selected={isSelected}'), 'Editor layers panel rows must expose keyboard-selectable tree semantics');
@@ -21137,10 +21143,19 @@ const testLayersPanelControls = async (client, pageId) => {
         id: row.getAttribute('data-layer-id') || '',
         layerName: row.getAttribute('data-layer-name') || '',
         readableMode: row.getAttribute('data-layer-readable-name') || '',
+        readableValue: row.getAttribute('data-layer-readable-name-value') || '',
+        readableMetaTitle: row.getAttribute('data-layer-readable-meta-title') || '',
+        readableFit: row.getAttribute('data-layer-readable-fit') || '',
+        ariaLabel: row.getAttribute('aria-label') || '',
         nameText: name?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        nameTitle: name?.getAttribute('title') || '',
+        nameValue: name?.getAttribute('data-layer-readable-name-value') || '',
         metaText: meta?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+        metaTitle: meta?.getAttribute('data-layer-readable-meta-title') || '',
         nameDisplay: nameStyle?.display || '',
         nameLineClamp: nameStyle?.webkitLineClamp || '',
+        nameFlexBasis: name instanceof HTMLElement ? getComputedStyle(name.parentElement || name).flexBasis : '',
+        nameMinWidth: name instanceof HTMLElement ? getComputedStyle(name.parentElement || name).minWidth : '',
         actionsVisible: actions?.getAttribute('data-layer-actions-visible') || '',
         actionsFlexBasis: actionsStyle?.flexBasis || '',
       };
@@ -21156,9 +21171,18 @@ const testLayersPanelControls = async (client, pageId) => {
       layerRowReadability.rows.every((row) => (
         row.readableMode === 'two-line' &&
         row.layerName &&
+        row.readableValue === row.layerName &&
+        row.nameTitle === row.layerName &&
+        row.nameValue === row.layerName &&
+        row.readableMetaTitle === row.metaTitle &&
+        row.readableFit === 'wrap-below-icons' &&
+        row.ariaLabel.includes(row.layerName) &&
+        row.ariaLabel.includes(row.readableMetaTitle) &&
         row.nameText.includes(row.layerName) &&
         row.metaText.includes(row.id) &&
-        row.nameLineClamp === '2'
+        row.nameLineClamp === '2' &&
+        row.nameFlexBasis !== '0px' &&
+        row.nameMinWidth !== '0px'
       )) &&
       layerRowReadability.selectedRows.length >= 1 &&
       layerRowReadability.selectedRows.every((row) => row.actionsVisible === 'true' && row.actionsFlexBasis === '100%'),
