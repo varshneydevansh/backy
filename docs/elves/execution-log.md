@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 10:10 IST
+- **Last updated:** 2026-06-03 10:17 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,30 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 10:17 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Custom frontend status:** Dashboard launch routes mirror page/blog template aliases
+
+**What changed:**
+- Updated the Dashboard custom frontend content-creation route builder so page/blog create routes include `frontendDesignTemplateId`, `frontendTemplate`, and legacy `designTemplate` together when a synced template is available.
+- Updated Dashboard copy/detail text to describe the alias-preserving page/blog route contract instead of implying only one field is persisted.
+- Tightened the Dashboard smoke so rendered custom frontend page/post create routes must include all three page/blog aliases plus `templateSource=custom-frontend`.
+
+**Commands run:**
+- `BACKY_DASHBOARD_SOURCE_ONLY=1 npm run test:dashboard --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This keeps Dashboard buttons, copied agent briefs, and `/pages/new`/`/blog/new` route state aligned around the same custom frontend template aliases.
+- Form, product, collection, and reusable-section launch routes still use their established `frontendTemplate` convention.
+
+**Next:**
+1. Commit and push this Dashboard launch-route handoff slice.
+2. Continue rendered editor/authoring polish for real page/blog creation.
 
 ## 2026-06-03 10:10 IST
 

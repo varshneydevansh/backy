@@ -167,6 +167,8 @@ const buildCreateRoute = ({
     if (route === '/pages/new' || route === '/blog/new') {
       params.set('templateSource', 'custom-frontend');
       params.set('frontendDesignTemplateId', templateId);
+      params.set('frontendTemplate', templateId);
+      params.set('designTemplate', templateId);
       params.set('focus', 'canvas');
     } else {
       params.set('frontendTemplate', templateId);
@@ -293,7 +295,7 @@ export const buildDashboardCustomFrontendContentCreation = ({
       fallbackRoute,
       setupRoute,
       detail: template
-        ? `${label} starts from the captured "${template.name}" custom frontend template and persists ${route === '/pages/new' || route === '/blog/new' ? 'frontendDesignTemplateId' : 'frontendTemplate'}.`
+        ? `${label} starts from the captured "${template.name}" custom frontend template and persists ${route === '/pages/new' || route === '/blog/new' ? 'frontendDesignTemplateId plus frontendTemplate/designTemplate route aliases' : 'frontendTemplate'}.`
         : missingDetail,
     };
   };
@@ -356,7 +358,7 @@ export const buildDashboardCustomFrontendContentCreation = ({
     items,
     rules: [
       'Use createRoute when present to start new content from the synced custom frontend design template.',
-      'Preserve frontendDesignTemplateId/templateSource for page and blog creation, and frontendTemplate for form, product, collection, and reusable-section entry points.',
+      'Preserve frontendDesignTemplateId/templateSource plus frontendTemplate/designTemplate route aliases for page and blog creation, and frontendTemplate for form, product, collection, and reusable-section entry points.',
       'Use fallbackRoute only when the author intentionally wants Backy canvas starter content instead of the custom frontend template.',
     ],
   };

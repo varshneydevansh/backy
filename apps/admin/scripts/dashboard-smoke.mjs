@@ -955,12 +955,16 @@ const assertDashboardLayout = async (client, siteName) => {
       (!customLaunchState.contentCreation.pageCreateRoute || (
         customLaunchState.contentCreation.pageCreateRoute.includes('/pages/new') &&
         customLaunchState.contentCreation.pageCreateRoute.includes('templateSource=custom-frontend') &&
-        customLaunchState.contentCreation.pageCreateRoute.includes('frontendDesignTemplateId=')
+        customLaunchState.contentCreation.pageCreateRoute.includes('frontendDesignTemplateId=') &&
+        customLaunchState.contentCreation.pageCreateRoute.includes('frontendTemplate=') &&
+        customLaunchState.contentCreation.pageCreateRoute.includes('designTemplate=')
       )) &&
       (!customLaunchState.contentCreation.blogCreateRoute || (
         customLaunchState.contentCreation.blogCreateRoute.includes('/blog/new') &&
         customLaunchState.contentCreation.blogCreateRoute.includes('templateSource=custom-frontend') &&
-        customLaunchState.contentCreation.blogCreateRoute.includes('frontendDesignTemplateId=')
+        customLaunchState.contentCreation.blogCreateRoute.includes('frontendDesignTemplateId=') &&
+        customLaunchState.contentCreation.blogCreateRoute.includes('frontendTemplate=') &&
+        customLaunchState.contentCreation.blogCreateRoute.includes('designTemplate=')
       )) &&
       (!customLaunchState.contentCreation.formCreateRoute || (
         customLaunchState.contentCreation.formCreateRoute.includes('/forms') &&
