@@ -94,6 +94,13 @@ const cloneArrayOrRecord = (value: unknown): unknown[] | Record<string, unknown>
     : cloneRecord(value)
 );
 
+const cloneProvenanceArray = (value: unknown): unknown[] | undefined => {
+  if (Array.isArray(value)) return cloneArray(value);
+
+  const record = cloneRecord(value);
+  return record && Object.keys(record).length > 0 ? [record] : undefined;
+};
+
 const cloneJsonValue = <T>(value: T): T => (
   JSON.parse(JSON.stringify(value)) as T
 );
@@ -1417,7 +1424,12 @@ const directFrontendDesignMeta = (
   applyProvenanceField(meta, 'frontendDesignElements', directDesignArray(envelope, content, ['frontendDesignElements', 'elements']));
   applyProvenanceField(meta, 'frontendDesignCanvasSize', directDesignRecord(envelope, content, ['frontendDesignCanvasSize', 'canvasSize']));
   applyProvenanceField(meta, 'frontendDesignThemeTokenRefs', directDesignRecord(envelope, content, ['frontendDesignThemeTokenRefs', 'themeTokenRefs']));
-  applyProvenanceField(meta, 'frontendDesignAssets', directDesignArray(envelope, content, ['frontendDesignAssets', 'assets']) || directDesignRecord(envelope, content, ['frontendDesignAssets', 'assets']));
+  applyProvenanceField(
+    meta,
+    'frontendDesignAssets',
+    directDesignArray(envelope, content, ['frontendDesignAssets', 'assets'])
+      || cloneProvenanceArray(directDesignRecord(envelope, content, ['frontendDesignAssets', 'assets'])),
+  );
   applyProvenanceField(meta, 'frontendDesignAnimations', directDesignArray(envelope, content, ['frontendDesignAnimations', 'animations']) || directDesignRecord(envelope, content, ['frontendDesignAnimations', 'animations']));
   applyProvenanceField(meta, 'frontendDesignInteractions', directDesignArray(envelope, content, ['frontendDesignInteractions', 'interactions']) || directDesignRecord(envelope, content, ['frontendDesignInteractions', 'interactions']));
   applyProvenanceField(meta, 'frontendDesignDataBindings', directDesignRecord(envelope, content, ['frontendDesignDataBindings', 'dataBindings']));
@@ -2014,9 +2026,9 @@ const buildFrontendDesignProvenanceFields = (
   const themeTokenRefs = cloneRecord(current.frontendDesignThemeTokenRefs)
     || cloneRecord(content.themeTokenRefs)
     || cloneRecord(metadata.themeTokenRefs);
-  const assets = cloneArrayOrRecord(current.frontendDesignAssets)
-    || cloneArrayOrRecord(content.assets)
-    || cloneArrayOrRecord(metadata.assets);
+  const assets = cloneProvenanceArray(current.frontendDesignAssets)
+    || cloneProvenanceArray(content.assets)
+    || cloneProvenanceArray(metadata.assets);
   const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)
     || cloneArrayOrRecord(content.interactions)
     || cloneArrayOrRecord(metadata.interactions);
