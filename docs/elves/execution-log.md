@@ -3659,6 +3659,27 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 09:24 IST - Custom Frontend Scaffold Text Hygiene
+
+**Scope:** Batch 5 custom-frontend launch polish, focused on the real-site separate frontend scaffold path after proving it against production Backy.
+
+**Changed:**
+- `npm run custom-frontend:scaffold` now writes generated `.env.example` and `BACKY_FRONTEND_STARTER.md` files with trailing newlines.
+- The protected admin starter export route now returns the same copy-friendly trailing-newline behavior for generated `.env.example` and `BACKY_FRONTEND_STARTER.md` file-list entries.
+- `npm run test:custom-frontend-starter` now asserts scaffolded starter text files end with trailing newlines so future starter edits cannot regress into awkward concatenated copy/output.
+
+**Validation:**
+- PASS: `npm run test:custom-frontend-starter --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `git diff --check`
+- PASS: `npm run custom-frontend:scaffold -- --site-id devanshvarshney --public-host devanshvarshney.com --api-base https://backy-public.vercel.app/api --out /tmp/backy-newline-scaffold-proof` plus a Node newline assertion over generated `.env.example` and `BACKY_FRONTEND_STARTER.md`
+- PASS: `npm run doctor:release-certification --silent`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- Before this patch, the real-site scaffold/build/local-frontend proof passed against production Backy: scaffolded `devanshvarshney.com`, built the generated Next.js frontend, started it locally, and ran `BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection --silent` with 112 checks passing.
+- No public repo file records personal generated output or temporary `/tmp` scaffold contents.
+
 ## Checkpoint: 2026-06-03 01:38 IST - Starter Blog Probe Deploy Verification
 
 **Scope:** Batch 5 custom-frontend release proof, focused on proving the pushed starter `/api/backy-connection` blog child-template probe pointers are live on the protected/public Vercel topology.

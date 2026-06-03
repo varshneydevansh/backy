@@ -304,6 +304,14 @@ if (
   fail(`Starter scaffold failed:\n${scaffoldRun.stdout}\n${scaffoldRun.stderr}`);
 }
 
+const scaffoldEnv = fs.readFileSync(path.join(scaffoldOutputPath, '.env.example'), 'utf8');
+const scaffoldRunbook = fs.readFileSync(path.join(scaffoldOutputPath, 'BACKY_FRONTEND_STARTER.md'), 'utf8');
+if (scaffoldEnv.endsWith('\n') && scaffoldRunbook.endsWith('\n')) {
+  pass('Starter scaffold writes copy-friendly text files with trailing newlines');
+} else {
+  fail('Starter scaffold generated .env.example or BACKY_FRONTEND_STARTER.md without a trailing newline');
+}
+
 if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {
   const nextEnvPath = path.join(starterRoot, 'next-env.d.ts');
   const hadNextEnv = fs.existsSync(nextEnvPath);

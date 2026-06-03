@@ -192,7 +192,7 @@ const verifyPublicSite = async ({ apiBaseUrl, siteId, publicHost }) => {
 };
 
 const envExample = ({ apiBaseUrl, siteId, publicHost }) =>
-  [
+  `${[
     '# Browser-safe values for the separate public website frontend.',
     `NEXT_PUBLIC_BACKY_API_BASE_URL=${apiBaseUrl}`,
     `NEXT_PUBLIC_BACKY_SITE_ID=${siteId}`,
@@ -204,10 +204,10 @@ const envExample = ({ apiBaseUrl, siteId, publicHost }) =>
     `BACKY_SITE_PUBLIC_HOST=${publicHost}`,
     '',
     '# Never add database, Supabase service role, admin, cron, SMTP, or provider secrets to this project.',
-  ].join('\n');
+  ].join('\n')}\n`;
 
 const starterReadme = ({ apiBaseUrl, siteId, publicHost, scaffoldCommand }) =>
-  [
+  `${[
     '# Backy Custom Frontend Starter',
     '',
     'This project was scaffolded by Backy for a separate public website frontend.',
@@ -247,7 +247,7 @@ const starterReadme = ({ apiBaseUrl, siteId, publicHost, scaffoldCommand }) =>
     ...REQUIRED_DOM_ATTRIBUTES.map((attribute) => `- \`${attribute}\``),
     '',
     'Keep Backy as the source of truth for content, design metadata, media, forms, newsletter subscribers, and commerce records.',
-  ].join('\n');
+  ].join('\n')}\n`;
 
 const buildStarterExport = ({ apiBaseUrl, siteId, publicHost, siteName, siteSlug, outPath }) => {
   const recommendedName = safeProjectName(siteId, publicHost);
