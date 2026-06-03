@@ -417,6 +417,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Public typecheck, public template-registry smoke, source custom-frontend connection smoke, live local `site-demo` custom-frontend connection smoke, admin typecheck, control-plane source gate, diff check, and repo-public hygiene are green for the custom frontend template-registry slice.
 
+**Newest command-palette execution polish:** The rendered command-palette smoke now proves selection/layout commands execute through Cmd/Ctrl+K, not only clipboard mutations. It runs `select-sibling-layers` from a single root layer and proves sibling multi-selection, then runs `align-left` on non-aligned `smoke-image`/`smoke-box` root layers and proves `smoke-box` moves from `x=460` to `x=120`.
+
+**Newest verification:** Command-palette source guard, rendered command-palette smoke, editor smoke coverage, admin typecheck, and diff check are green for the sibling-selection/alignment command execution slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

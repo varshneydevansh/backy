@@ -642,14 +642,18 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("'open-page-settings'") &&
       smokeSource.includes("'copy-selection'") &&
       smokeSource.includes("'paste-selection'") &&
+      smokeSource.includes("'select-sibling-layers'") &&
       smokeSource.includes("'select-child-layer'") &&
       smokeSource.includes("'select-parent-layer'") &&
+      smokeSource.includes("'align-left'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
       smokeSource.includes('copyCommand') &&
       smokeSource.includes('pasteCommand') &&
+      smokeSource.includes('selectSiblingCommand') &&
       smokeSource.includes('selectChildCommand') &&
       smokeSource.includes('selectParentCommand') &&
+      smokeSource.includes('alignLeftCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
@@ -12318,6 +12322,54 @@ const testEditorCommandPalette = async (client) => {
     ),
   );
 
+  const siblingSelectionTargetId = 'smoke-heading';
+  await selectLayerIds(client, [siblingSelectionTargetId]);
+  const beforeSiblingSelection = await readEditorCommandPaletteState(client);
+  assert(
+    beforeSiblingSelection.selectedIds.split(',').includes(siblingSelectionTargetId),
+    `Command palette sibling selection setup did not select ${siblingSelectionTargetId}: ${JSON.stringify(beforeSiblingSelection)}`,
+  );
+  const selectSiblingCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'select-sibling-layers',
+    'select-sibling-layers',
+    'select sibling layers',
+    (state) => (
+      state.canvasUniqueCount === beforeSiblingSelection.canvasUniqueCount &&
+      state.selectedIds.split(',').includes(siblingSelectionTargetId) &&
+      state.selectedIds.split(',').includes('smoke-image') &&
+      state.selectedIds.split(',').length >= 2
+    ),
+  );
+
+  const alignTargetIds = ['smoke-image', 'smoke-box'];
+  await selectLayerIds(client, alignTargetIds);
+  const beforeAlign = await readEditorElementState(client, alignTargetIds);
+  const beforeAlignPalette = await readEditorCommandPaletteState(client);
+  assert(
+    alignTargetIds.every((id) => beforeAlignPalette.selectedIds.split(',').includes(id)),
+    `Command palette align setup did not keep multi-selection: ${JSON.stringify(beforeAlignPalette)}`,
+  );
+  assert(
+    Math.abs(beforeAlign['smoke-image'].x - beforeAlign['smoke-box'].x) > 1,
+    `Command palette align-left setup needs non-aligned root layers: ${JSON.stringify(beforeAlign)}`,
+  );
+  const alignLeftCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'align-left',
+    'align-left',
+    'align selected layers left',
+    (state) => (
+      state.canvasUniqueCount === beforeAlignPalette.canvasUniqueCount &&
+      alignTargetIds.every((id) => state.selectedIds.split(',').includes(id))
+    ),
+  );
+  const afterAlign = await readEditorElementState(client, alignTargetIds);
+  assert(
+    Math.abs(afterAlign['smoke-image'].x - afterAlign['smoke-box'].x) <= 1,
+    `Command palette align-left did not align selected layers: ${JSON.stringify({ beforeAlign, afterAlign, alignLeftCommand: alignLeftCommand.after })}`,
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12352,6 +12404,14 @@ const testEditorCommandPalette = async (client) => {
       after: selectChildCommand.after,
     },
     selectParentCommand,
+    selectSiblingCommand,
+    alignLeftCommand: {
+      targets: alignTargetIds,
+      before: beforeAlign,
+      after: afterAlign,
+      filtered: alignLeftCommand.filtered,
+      afterCommand: alignLeftCommand.after,
+    },
     undoFiltered,
     afterBlockedClick,
   };

@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 13:42 IST
+- **Last updated:** 2026-06-03 13:54 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`, `docs/elves/survival-guide.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 13:54 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Contract status:** Editor command palette executes visible selection and layout commands against real canvas geometry
+
+**What changed:**
+- Extended the rendered command-palette smoke to execute `select-sibling-layers` through Cmd/Ctrl+K and prove a single root-layer selection expands into sibling multi-selection.
+- Extended the same smoke to execute `align-left` through Cmd/Ctrl+K against two non-aligned root layers.
+- The rendered proof now asserts `smoke-box` moves from `x=460` to the selected left edge at `x=120` while `smoke-image` remains at `x=120`.
+- Tightened the source guard so command-palette coverage must keep sibling selection and align-left execution assertions, not only clipboard/hierarchy mutation assertions.
+
+**Commands run:**
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_EDITOR_COMMAND_PALETTE_SMOKE=1 npm run test:editor-command-palette --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The first rendered attempt exposed a bad test assumption: `Undo` is not a reliable follow-up when an alignment command can be a no-op. The final proof uses two deliberately non-aligned root layers and verifies the geometry change directly.
+
+**Next:**
+1. Commit and push this editor command-palette execution coverage slice.
+2. Re-read the survival guide after push, then continue the highest-friction visible editor/admin UX polish.
 
 ## 2026-06-03 13:42 IST
 
