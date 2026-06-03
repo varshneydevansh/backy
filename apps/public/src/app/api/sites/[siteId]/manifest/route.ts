@@ -3259,7 +3259,7 @@ const buildManifestNewsletterDiscovery = (
     },
     canvasRoutes: {
       newsletterPage: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
-      blogPost: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
+      blogPost: `/blog/new?siteId=${siteId}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`,
     },
     providerBoundary: {
       nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private subscriber API', 'public signup API'],

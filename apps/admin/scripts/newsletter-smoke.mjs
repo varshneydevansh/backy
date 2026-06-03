@@ -81,7 +81,7 @@ assert(routeSource.includes('data-issue-handoff-schema={NEWSLETTER_ISSUE_SCHEMA_
 assert(routeSource.includes('data-testid="newsletter-copy-handoff"'), 'Newsletter page must expose a copy-handoff action.');
 assert(routeSource.includes('data-testid="newsletter-export-csv"'), 'Newsletter page must expose a subscriber CSV export action.');
 assert(routeSource.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter page creation must land in focused Backy canvas mode.');
-assert(routeSource.includes("navigate({ to: '/blog/new', search: { siteId: activeSiteId, templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter writing workflow must open focused blog canvas mode.');
+assert(routeSource.includes("navigate({ to: '/blog/new', search: { siteId: activeSiteId, starterTemplate: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } })"), 'Newsletter writing workflow must open focused newsletter blog canvas mode.');
 assert(routeSource.includes('Manually added in Backy Newsletter workspace after explicit reader consent.'), 'Manual subscriber adds must persist an explicit consent note.');
 assert(routeSource.includes('provider API keys') && routeSource.includes('SMTP credentials') && routeSource.includes('bounce webhook secrets'), 'Newsletter issue handoff must keep provider secrets outside Backy/content payloads.');
 assert(routeSource.includes('overflow-x-auto') && routeSource.includes('min-w-[900px]'), 'Newsletter subscriber table must avoid admin-table text overlap on narrow screens.');

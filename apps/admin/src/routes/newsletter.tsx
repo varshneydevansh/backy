@@ -223,7 +223,7 @@ function NewsletterRoute() {
   const resolveRootUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/resolve?path=/`;
   const publicNewsletterSubscribersUrl = `${publicBaseUrl}/api/sites/${activeSiteId}/newsletter/subscribers`;
   const newsletterPageRoute = `/pages/new?siteId=${encodeURIComponent(activeSiteId)}&template=newsletter&templateSource=backy-canvas&focus=canvas`;
-  const blogRoute = `/blog/new?siteId=${encodeURIComponent(activeSiteId)}&templateSource=backy-canvas&focus=canvas`;
+  const blogRoute = `/blog/new?siteId=${encodeURIComponent(activeSiteId)}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`;
   const newsletterHandoff = useMemo(() => buildNewsletterHandoff({
     activeSiteId,
     adminBaseUrl,
@@ -502,7 +502,7 @@ function NewsletterRoute() {
   };
 
   const openBlogComposer = () => {
-    navigate({ to: '/blog/new', search: { siteId: activeSiteId, templateSource: 'backy-canvas', focus: 'canvas' } });
+    navigate({ to: '/blog/new', search: { siteId: activeSiteId, starterTemplate: 'newsletter', templateSource: 'backy-canvas', focus: 'canvas' } });
   };
 
   return (
@@ -1430,7 +1430,7 @@ function buildNewsletterHandoff({
     },
     canvasRoutes: {
       newsletterPage: `/pages/new?siteId=${activeSiteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
-      blogPost: `/blog/new?siteId=${activeSiteId}&templateSource=backy-canvas&focus=canvas`,
+      blogPost: `/blog/new?siteId=${activeSiteId}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`,
     },
     providerBoundary: {
       status: 'external-delivery-required',

@@ -465,7 +465,7 @@ export const buildCustomFrontendAgentAdminEntryPoints = (siteId: string) => ({
   formCustomFrontend: `/forms?siteId=${siteId}&frontendTemplate=:templateId`,
   newsletterWorkspace: `/newsletter?siteId=${siteId}`,
   newsletterPageBackyCanvas: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
-  newsletterBlogBackyCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
+  newsletterBlogBackyCanvas: `/blog/new?siteId=${siteId}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`,
   collectionBackyCanvas: `/collections?siteId=${siteId}&draft=new`,
   collectionCustomFrontend: `/collections?siteId=${siteId}&frontendTemplate=:templateId`,
   reusableSectionBackyCanvas: `/reusable-sections?siteId=${siteId}`,
@@ -922,7 +922,7 @@ export const buildCustomFrontendAgentHandoff = (
     newsletter: {
       workspace: `/newsletter?siteId=${siteId}`,
       signupPageCanvas: `/pages/new?siteId=${siteId}&template=newsletter&templateSource=backy-canvas&focus=canvas`,
-      writingCanvas: `/blog/new?siteId=${siteId}&templateSource=backy-canvas&focus=canvas`,
+      writingCanvas: `/blog/new?siteId=${siteId}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`,
       publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`,
       adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
       sendableSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers?audience=sendable`,
