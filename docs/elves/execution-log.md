@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 09:43 IST
+- **Last updated:** 2026-06-03 09:52 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,31 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 09:52 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Admin shell status:** Multi-route blank-space regression guard added
+
+**What changed:**
+- Extended the rendered Sites smoke so the shared admin shell layout contract is checked across Dashboard, Pages, Users, and Settings, not only `/sites/new`.
+- The guard attempts browser-window scrolling on each route and asserts document/body stay locked, the main pane owns route overflow, the ordinary content frame remains contained, and the operational footer stays inside the main pane.
+- This directly covers the reported blank-space/overflow class of bugs as a shared shell invariant instead of a one-route visual fix.
+
+**Commands run:**
+- `node --check apps/admin/scripts/sites-smoke.mjs` -> PASS.
+- `BACKY_SITES_SOURCE_ONLY=1 npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_ADMIN_MFA_CODE=backy-dev-mfa npm run test:sites --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- The first rendered smoke attempt failed because no local public API was listening on port 3001. After starting the smoke API/admin dev servers and restarting the API with the dev MFA verifier, the rendered smoke passed.
+- The local public API and admin Vite dev servers were left running for follow-up browser/editor work.
+
+**Next:**
+1. Commit and push this admin-shell coverage slice, then re-read the survival guide.
+2. Continue highest-friction editor/content creation polish.
 
 ## 2026-06-03 09:43 IST
 

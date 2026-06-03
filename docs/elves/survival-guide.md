@@ -131,6 +131,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest custom frontend proof:** The separate `devanshvarshney-frontend` project is updated at commit `7d6294d`, redeployed on its stable production alias, and the strict live Backy custom-frontend connection gate passes 112 checks with live API, deployed DOM, and `/api/backy-connection` probe requirements enabled.
 
+**Newest admin shell coverage:** The rendered Sites smoke now verifies the shared blank-space/overflow contract across Dashboard, Pages, Users, and Settings in addition to `/sites/new`: document/body stay locked, the main pane owns route overflow, ordinary content remains contained, and the operational footer stays inside the main pane. The full rendered `test:sites` smoke is green with the dev MFA verifier configured.
+
 **Newest editor/APIability polish:** The selected-layer Inspector now exposes a copyable `backy.editor-selected-component-api-contract.v1` Element API payload with selected element id/type, props, styles, responsive overrides, tokens, media asset ids, motion, bindings, child summaries, and the canonical `agent-handoff.componentApiContract.componentTypeContracts` plus `render.data.content.elements[]` pointers. Source and rendered Inspector smokes are green.
 
 **Newest deploy verification:** `732a7ed1` and `a0f84af7` are pushed. The latest `backy-public` and `backy-admin` production deployments are Ready, live public readiness and hosted login-shell smokes pass, and recent Vercel error logs are empty.

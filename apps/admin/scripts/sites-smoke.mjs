@@ -914,6 +914,23 @@ const navigateToCreateSite = (client) => navigate(
   'Create site page',
 );
 
+const ordinaryShellRoutes = [
+  { path: '/', readyTestId: 'dashboard-command-center', label: 'Dashboard' },
+  { path: '/pages', readyTestId: 'pages-command-center', label: 'Pages' },
+  { path: '/users', readyTestId: 'users-command-center', label: 'Users' },
+  { path: '/settings', readyTestId: 'settings-command-center', label: 'Settings' },
+];
+
+const navigateToOrdinaryShellRoute = (client, route) => navigate(
+  client,
+  `${ADMIN_BASE_URL}${route.path}`,
+  `(() => ({
+    ready: Boolean(document.querySelector('[data-testid="${route.readyTestId}"]')),
+    body: document.body?.innerText?.slice(0, 900) || '',
+  }))()`,
+  `${route.label} shell page`,
+);
+
 const assertCreateSiteViewportShell = async (client) => {
   const state = await evaluate(client, `(() => {
     const adminShell = document.querySelector('[data-testid="admin-shell"]');
@@ -988,6 +1005,89 @@ const assertCreateSiteViewportShell = async (client) => {
   );
 
   return state;
+};
+
+const assertOrdinaryRouteViewportShell = async (client, route) => {
+  const state = await evaluate(client, `(() => {
+    const routeLabel = ${JSON.stringify(route.label)};
+    const adminShell = document.querySelector('[data-testid="admin-shell"]');
+    const main = document.querySelector('[data-testid="admin-main-content"]');
+    const contentFrame = document.querySelector('[data-testid="admin-content-frame"]');
+    const footer = document.querySelector('[data-testid="admin-shell-footer"]');
+    const appRoot = document.getElementById('root');
+    const mainRect = main?.getBoundingClientRect();
+    const footerParentMain = Boolean(footer?.closest('[data-testid="admin-main-content"]'));
+    const readyNode = document.querySelector('[data-testid="${route.readyTestId}"]');
+    const windowScrollBeforeAttempt = window.scrollY;
+    window.scrollTo(0, 9999);
+    const windowScrollAfterAttempt = window.scrollY;
+    return {
+      routeLabel,
+      viewportHeight: window.innerHeight,
+      documentScrollHeight: document.documentElement.scrollHeight,
+      bodyScrollHeight: document.body?.scrollHeight || 0,
+      windowScrollBeforeAttempt,
+      windowScrollAfterAttempt,
+      adminShellExists: adminShell instanceof HTMLElement,
+      adminShellScrollLock: adminShell?.getAttribute('data-document-scroll-lock') || '',
+      htmlShellClass: document.documentElement.classList.contains('backy-admin-shell-active'),
+      bodyShellClass: document.body.classList.contains('backy-admin-shell-active'),
+      rootOverflowY: getComputedStyle(document.documentElement).overflowY,
+      bodyOverflowY: getComputedStyle(document.body).overflowY,
+      appRootScrollLock: appRoot?.getAttribute('data-admin-shell-scroll-lock') || '',
+      mainExists: main instanceof HTMLElement,
+      mainOverflowY: main instanceof HTMLElement ? getComputedStyle(main).overflowY : '',
+      mainScrollHeight: main instanceof HTMLElement ? main.scrollHeight : 0,
+      mainClientHeight: main instanceof HTMLElement ? main.clientHeight : 0,
+      mainTop: Math.round(mainRect?.top || 0),
+      mainBottom: Math.round(mainRect?.bottom || 0),
+      contentFrameContract: contentFrame?.getAttribute('data-layout-contract') || '',
+      footerExists: footer instanceof HTMLElement,
+      footerParentMain,
+      footerText: footer?.textContent?.replace(/\\s+/g, ' ').trim() || '',
+      readyNodeExists: readyNode instanceof HTMLElement,
+      body: document.body?.innerText?.slice(0, 1000) || '',
+    };
+  })()`);
+
+  assert(
+    state.adminShellExists &&
+      state.adminShellScrollLock === 'html-body-root' &&
+      state.htmlShellClass &&
+      state.bodyShellClass &&
+      state.appRootScrollLock === 'document' &&
+      state.rootOverflowY !== 'visible' &&
+      state.bodyOverflowY !== 'visible' &&
+      state.windowScrollBeforeAttempt === 0 &&
+      state.windowScrollAfterAttempt === 0 &&
+      state.bodyScrollHeight <= state.viewportHeight + 8,
+    `${route.label} route leaked document/body scrolling and can expose blank shell space: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.mainExists &&
+      ['auto', 'scroll'].includes(state.mainOverflowY) &&
+      state.mainClientHeight <= state.viewportHeight &&
+      state.mainBottom <= state.viewportHeight + 4 &&
+      state.contentFrameContract === 'ordinary-route-contained' &&
+      state.readyNodeExists,
+    `${route.label} route should keep ordinary admin content inside the scroll-owned main pane: ${JSON.stringify(state)}`,
+  );
+  assert(
+    state.footerExists &&
+      state.footerParentMain &&
+      state.footerText.includes('Backy admin') &&
+      state.footerText.includes('Protected workspace'),
+    `${route.label} route should keep the shared operational footer inside the main pane: ${JSON.stringify(state)}`,
+  );
+
+  return state;
+};
+
+const assertOrdinaryRoutesViewportShell = async (client) => {
+  for (const route of ordinaryShellRoutes) {
+    await navigateToOrdinaryShellRoute(client, route);
+    await assertOrdinaryRouteViewportShell(client, route);
+  }
 };
 
 const navigateToSites = (client, expectedText = 'Sites command center', siteId = '') => navigate(
@@ -2148,6 +2248,8 @@ const main = async () => {
 
     await navigateToCreateSite(client);
     await assertCreateSiteViewportShell(client);
+    await assertOrdinaryRoutesViewportShell(client);
+    await navigateToCreateSite(client);
     const { site: created, pages } = await createSiteThroughUi(client, {
       siteName,
       slug,
