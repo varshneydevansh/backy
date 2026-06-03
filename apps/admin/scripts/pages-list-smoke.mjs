@@ -250,9 +250,9 @@ const assertPagesListSourceContract = () => {
     ? source.slice(actionColumnStart, actionColumnEnd)
     : '';
   assert(
-    source.includes('tableMinWidth="2140px"') &&
+    source.includes('tableMinWidth="2240px"') &&
       source.includes('stickyActionColumn={false}') &&
-      source.includes("width: '360px'") &&
+      source.includes("width: '430px'") &&
       source.includes("width: '260px'") &&
       source.includes("width: '220px'") &&
       deliveryColumnBlock &&
@@ -264,6 +264,7 @@ const assertPagesListSourceContract = () => {
       !actionColumnBlock.includes("overflowMode: 'visible'") &&
       source.includes('className="flex max-w-full items-start gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground"') &&
       source.includes('data-testid={`pages-delivery-health-details-${pageId}`}') &&
+      source.includes('max-h-44 overflow-y-auto') &&
       source.includes('data-testid={`pages-delivery-history-${pageId}`}') &&
       source.includes('data-default-collapsed="true"') &&
       source.includes('Health details') &&

@@ -188,7 +188,7 @@ const assertSitesRouteSourceContract = () => {
       createSource.includes('lg:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]') &&
       createSource.includes('data-testid="site-create-handoff-rail"') &&
       createSource.includes('data-layout-contract="site-create-contained-sticky-handoff-rail"') &&
-      createSource.includes('lg:max-h-[calc(100dvh-8rem)]') &&
+      createSource.includes('lg:max-h-[calc(100dvh-10rem)]') &&
       createSource.includes('noValidate') &&
       createSource.includes('data-testid="site-create-inline-error"') &&
       createSource.includes('data-testid="site-create-name-error"') &&

@@ -184,7 +184,7 @@ export function DataGrid<T extends { id: string }>({
                 }}
             >
                 <div
-                    className="w-full min-w-0 overflow-x-auto"
+                    className="w-full min-w-0 overflow-x-auto overscroll-x-contain"
                     style={{
                         contain: 'layout paint inline-size',
                         maxInlineSize: '100%',
@@ -357,7 +357,10 @@ export function DataGrid<T extends { id: string }>({
                                             >
                                                 <div
                                                     className={cn(
-                                                        'isolate min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] [&_a]:break-words [&_a]:[overflow-wrap:anywhere] [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]',
+                                                        'isolate min-w-0 max-w-full whitespace-normal break-words [overflow-wrap:anywhere]',
+                                                        '[&_*]:min-w-0 [&_a]:max-w-full [&_a]:break-words [&_a]:[overflow-wrap:anywhere]',
+                                                        '[&_button]:max-w-full [&_code]:max-w-full [&_code]:whitespace-normal [&_code]:break-words [&_code]:[overflow-wrap:anywhere]',
+                                                        '[&_input]:max-w-full [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_select]:max-w-full [&_textarea]:max-w-full',
                                                         usesVisibleOverflow ? 'overflow-visible' : 'overflow-hidden',
                                                         col.contentClassName,
                                                     )}

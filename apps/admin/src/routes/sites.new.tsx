@@ -1695,7 +1695,7 @@ function NewSitePage() {
         </section>
 
         <aside
-          className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:[scrollbar-gutter:stable]"
+          className="min-w-0 self-start space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1 lg:[scrollbar-gutter:stable]"
           data-testid="site-create-handoff-rail"
           data-layout-contract="site-create-contained-sticky-handoff-rail"
         >

@@ -2002,7 +2002,7 @@ function PagesListView() {
     {
       key: 'content',
       label: 'Revisions',
-      width: '210px',
+      width: '230px',
       render: (page) => (
         <PageRevisionCell
           page={page}
@@ -2015,7 +2015,7 @@ function PagesListView() {
     {
       key: 'siteId',
       label: 'Delivery',
-      width: '360px',
+      width: '430px',
       render: (page) => {
         const pageSiteId = page.siteId || activeSiteId;
         const pagePath = pagePublicPath(page);
@@ -2044,7 +2044,7 @@ function PagesListView() {
       key: 'lastUpdated',
       label: 'Last Updated',
       sortable: true,
-      width: '145px',
+      width: '170px',
       render: (page) => <span className="block min-w-0 break-words leading-5 text-muted-foreground [overflow-wrap:anywhere]">{formatDate(page.lastUpdated)}</span>
     },
     {
@@ -4118,7 +4118,7 @@ function PagesListView() {
         <DataGrid
           columns={columns}
           data={data}
-          tableMinWidth="2140px"
+          tableMinWidth="2240px"
           stickyActionColumn={false}
           loading={isBlockingInitialPageLoad}
           interactionDisabled={isPageLibraryBusy}
@@ -5096,7 +5096,7 @@ function PageDeliveryHealthSummary({
         </button>
       </div>
       <details
-        className="mt-2 border-t border-border pt-2"
+        className="mt-2 max-h-44 overflow-y-auto border-t border-border pt-2 pr-1 [scrollbar-gutter:stable]"
         data-testid={`pages-delivery-health-details-${pageId}`}
         data-default-collapsed="true"
       >
