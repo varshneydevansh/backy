@@ -812,7 +812,334 @@ const seedTheme = {
   },
 };
 
-const createDefaultSiteSettings = (): SiteSettings => ({
+const customFrontendTemplateSource = (input: {
+  publicHost: string;
+  sourceLabel: string;
+  now: string;
+}) => ({
+  type: "custom-frontend",
+  label: input.sourceLabel,
+  url: `https://${input.publicHost}`,
+  branch: "main",
+  publicHost: input.publicHost,
+  backyPublicApiBaseUrl: "http://127.0.0.1:3001/api",
+  capturedAt: input.now,
+});
+
+const customFrontendTemplateContent = (
+  input: {
+    templateId: string;
+    templateName: string;
+    routePattern: string;
+    bindings: Array<Record<string, unknown> & { field: string; role: string; binding: string; targetPath: string }>;
+    source: Record<string, unknown>;
+    now: string;
+  },
+) => ({
+  canvasSize: { width: 1200, height: 900 },
+  dataBindings: {
+    source: "backy-render",
+    mode: "current-route",
+    bindings: input.bindings,
+  },
+  editableMap: Object.fromEntries(
+    input.bindings.map((binding) => [
+      `${input.templateId}.${binding.field}`,
+      {
+        role: binding.role,
+        binding: binding.binding,
+        field: binding.field,
+        targetPath: binding.targetPath,
+        fields: Array.isArray(binding.fields) ? binding.fields : [binding.field],
+        editable: true,
+        valueType: typeof binding.valueType === "string" ? binding.valueType : "string",
+        scope: typeof binding.scope === "string" ? binding.scope : "template",
+        label: typeof binding.label === "string" ? binding.label : binding.field,
+      },
+    ]),
+  ),
+  metadata: {
+    templateSource: "custom-frontend",
+    frontendDesignTemplateId: input.templateId,
+    frontendDesignTemplateName: input.templateName,
+    frontendDesignRoutePattern: input.routePattern,
+    frontendDesignSource: input.source,
+    frontendDesignCapturedAt: input.now,
+    createThroughBackyCanvas: true,
+  },
+});
+
+const buildDemoCustomFrontendDesignContract = (
+  input: {
+    siteName: string;
+    publicHost: string;
+    theme: typeof seedTheme;
+    now: string;
+  },
+): NonNullable<SiteSettings["frontendDesign"]> => {
+  const source = customFrontendTemplateSource({
+    publicHost: input.publicHost,
+    sourceLabel: `${input.siteName} demo custom frontend`,
+    now: input.now,
+  });
+  const makeTemplate = (
+    template: {
+      id: string;
+      type: NonNullable<SiteSettings["frontendDesign"]>["templates"][number]["type"];
+      name: string;
+      routePattern: string;
+      description: string;
+      bindings: Array<Record<string, unknown> & { field: string; role: string; binding: string; targetPath: string }>;
+      content?: Record<string, unknown>;
+    },
+  ) => ({
+    id: template.id,
+    type: template.type,
+    name: template.name,
+    status: "active",
+    version: 1,
+    createdAt: input.now,
+    updatedAt: input.now,
+    routePattern: template.routePattern,
+    description: template.description,
+    canvasSize: { width: 1200, height: 900 },
+    content: {
+      ...customFrontendTemplateContent({
+        templateId: template.id,
+        templateName: template.name,
+        routePattern: template.routePattern,
+        bindings: template.bindings,
+        source,
+        now: input.now,
+      }),
+      ...(template.content || {}),
+    },
+    bindingHints: template.bindings,
+  });
+  const pageBindings = [
+    { role: "page.title", binding: "page.title", field: "title", targetPath: "props.content", fields: ["title"], label: "Page title" },
+    { role: "page.description", binding: "page.description", field: "description", targetPath: "props.content", fields: ["description"], label: "Page summary" },
+    { role: "page.body", binding: "page.content", field: "content", targetPath: "children", fields: ["content", "elements", "sections"], valueType: "json", label: "Page content sections" },
+  ];
+  const blogBindings = [
+    { role: "post.title", binding: "post.title", field: "title", targetPath: "props.content", fields: ["title"], label: "Post title" },
+    { role: "post.excerpt", binding: "post.excerpt", field: "excerpt", targetPath: "props.content", fields: ["excerpt"], label: "Post excerpt" },
+    { role: "post.body", binding: "post.content", field: "content", targetPath: "children", fields: ["content", "blocks", "elements"], valueType: "json", label: "Post body" },
+    { role: "post.coverImage", binding: "post.coverImage", field: "coverImage", targetPath: "props.mediaId", fields: ["featuredImageId", "coverImage"], valueType: "image", label: "Post cover image" },
+  ];
+  const sectionBindings = [
+    { role: "section.heading", binding: "section.heading", field: "heading", targetPath: "props.content", fields: ["heading", "title"], label: "Section heading" },
+    { role: "section.body", binding: "section.content", field: "content", targetPath: "children", fields: ["content", "elements"], valueType: "json", label: "Section body" },
+  ];
+  const formBindings = [
+    { role: "form.title", binding: "form.title", field: "title", targetPath: "props.formTitle", fields: ["title", "name"], label: "Form title" },
+    { role: "form.fields", binding: "form.fields", field: "fields", targetPath: "props.fields", fields: ["fields"], valueType: "json", label: "Form fields" },
+  ];
+  const productBindings = [
+    { role: "product.title", binding: "product.title", field: "title", targetPath: "props.content", fields: ["title", "name"], label: "Product title" },
+    { role: "product.price", binding: "product.price", field: "price", targetPath: "props.content", fields: ["price", "currency"], label: "Product price" },
+    { role: "product.media", binding: "product.media", field: "media", targetPath: "props.mediaIds", fields: ["media", "image", "gallery"], valueType: "image", label: "Product media" },
+  ];
+  const collectionBindings = [
+    { role: "collection.title", binding: "collection.name", field: "name", targetPath: "props.content", fields: ["name", "title"], label: "Collection name" },
+    { role: "collection.records", binding: "collection.records", field: "records", targetPath: "children", fields: ["records", "items"], valueType: "json", label: "Collection records" },
+  ];
+
+  return normalizeFrontendDesignContract({
+    schemaVersion: "backy.frontend-design.v1",
+    status: "synced",
+    source,
+    tokens: {
+      colors: input.theme.colors,
+      fonts: input.theme.fonts,
+      customCss: input.theme.customCSS,
+    },
+    chrome: {
+      navigation: {
+        source: "backy-render-navigation",
+        publicHost: input.publicHost,
+      },
+    },
+    templates: [
+      makeTemplate({
+        id: "custom-frontend-page",
+        type: "page",
+        name: `${input.siteName} page`,
+        routePattern: "/:pageSlug",
+        description: "Demo custom frontend page shell for new Backy pages.",
+        bindings: pageBindings,
+      }),
+      makeTemplate({
+        id: "custom-frontend-blog-post",
+        type: "blogPost",
+        name: `${input.siteName} blog post`,
+        routePattern: "/blog/:postSlug",
+        description: "Demo custom frontend article shell for posts, newsletters, and long-form reports.",
+        bindings: blogBindings,
+      }),
+      makeTemplate({
+        id: "custom-frontend-section",
+        type: "section",
+        name: `${input.siteName} reusable section`,
+        routePattern: "section:*",
+        description: "Demo reusable custom frontend section shell.",
+        bindings: sectionBindings,
+        content: {
+          section: customFrontendTemplateContent({
+            templateId: "custom-frontend-section",
+            templateName: `${input.siteName} reusable section`,
+            routePattern: "section:*",
+            bindings: sectionBindings,
+            source,
+            now: input.now,
+          }),
+        },
+      }),
+      makeTemplate({
+        id: "custom-frontend-form",
+        type: "form",
+        name: `${input.siteName} form`,
+        routePattern: "/forms/:formSlug",
+        description: "Demo custom frontend form shell for public submissions and consent fields.",
+        bindings: formBindings,
+        content: {
+          fields: [
+            { name: "email", key: "email", label: "Email", type: "email", required: true },
+            { name: "message", key: "message", label: "Message", type: "textarea", required: false },
+          ],
+        },
+      }),
+      makeTemplate({
+        id: "custom-frontend-product",
+        type: "product",
+        name: `${input.siteName} product`,
+        routePattern: "/products/:productSlug",
+        description: "Demo custom frontend product shell for commerce records.",
+        bindings: productBindings,
+        content: {
+          values: {
+            design: customFrontendTemplateContent({
+              templateId: "custom-frontend-product",
+              templateName: `${input.siteName} product`,
+              routePattern: "/products/:productSlug",
+              bindings: productBindings,
+              source,
+              now: input.now,
+            }),
+          },
+        },
+      }),
+      makeTemplate({
+        id: "custom-frontend-collection",
+        type: "collection",
+        name: `${input.siteName} collection`,
+        routePattern: "/collections/:collectionSlug",
+        description: "Demo custom frontend collection shell for structured records and repeaters.",
+        bindings: collectionBindings,
+      }),
+    ],
+    editableMap: [
+      { role: "site.header", binding: "site.navigation.primary", fields: ["label", "href", "children"] },
+      { role: "site.footer", binding: "site.navigation.footer", fields: ["label", "href", "children"] },
+      { role: "site.tokens", binding: "site.theme", fields: ["colors", "fonts", "spacing", "customCss"] },
+      { role: "site.domain", binding: "site.delivery", fields: ["customDomain", "domainAliases"] },
+    ],
+    notes: "Demo custom frontend design contract used by local smokes so pages, posts, forms, products, collections, and reusable sections can inherit a reusable template registry.",
+  }, { updatedAt: input.now });
+};
+
+const customFrontendLabel = (
+  frontendDesign: NonNullable<SiteSettings["frontendDesign"]>,
+): string => {
+  const label = frontendDesign.source?.label?.replace(/\s+custom\s+frontend$/iu, "").trim();
+  return label || "Custom frontend";
+};
+
+const customFrontendPublicHost = (
+  frontendDesign: NonNullable<SiteSettings["frontendDesign"]>,
+): string => {
+  if (frontendDesign.source?.url) {
+    try {
+      return new URL(frontendDesign.source.url).host || "custom-frontend.local";
+    } catch {
+      return frontendDesign.source.url
+        .replace(/^https?:\/\//u, "")
+        .replace(/\/.*$/u, "")
+        .trim() || "custom-frontend.local";
+    }
+  }
+  return "custom-frontend.local";
+};
+
+const completeCustomFrontendTemplateRegistry = (
+  frontendDesign: NonNullable<SiteSettings["frontendDesign"]>,
+): NonNullable<SiteSettings["frontendDesign"]> => {
+  if (
+    frontendDesign.status !== "synced" ||
+    frontendDesign.source?.type !== "custom-frontend"
+  ) {
+    return frontendDesign;
+  }
+
+  const templateTypes = new Set(frontendDesign.templates.map((template) => template.type));
+  const requiredTypes: Array<NonNullable<SiteSettings["frontendDesign"]>["templates"][number]["type"]> = [
+    "page",
+    "blogPost",
+    "section",
+    "form",
+    "product",
+    "collection",
+  ];
+  if (requiredTypes.every((type) => templateTypes.has(type))) {
+    return frontendDesign;
+  }
+
+  const now = new Date().toISOString();
+  const label = customFrontendLabel(frontendDesign);
+  const completed = buildDemoCustomFrontendDesignContract({
+    siteName: label,
+    publicHost: customFrontendPublicHost(frontendDesign),
+    theme: seedTheme,
+    now,
+  });
+  const missingTemplates = completed.templates.filter((template) => !templateTypes.has(template.type));
+
+  return normalizeFrontendDesignContract({
+    ...frontendDesign,
+    templates: [...frontendDesign.templates, ...missingTemplates],
+    editableMap: frontendDesign.editableMap.length > 0
+      ? frontendDesign.editableMap
+      : completed.editableMap,
+    notes: frontendDesign.notes ||
+      "Backy completed the custom frontend template registry with safe generated defaults so every content surface can inherit the connected design.",
+  }, { updatedAt: now });
+};
+
+const completeStoreSiteFrontendDesign = (site: StoreSite): StoreSite => {
+  if (!site.settings?.frontendDesign) {
+    return site;
+  }
+
+  const frontendDesign = completeCustomFrontendTemplateRegistry(
+    site.settings.frontendDesign,
+  );
+
+  if (frontendDesign === site.settings.frontendDesign) {
+    return site;
+  }
+
+  return {
+    ...site,
+    settings: {
+      ...site.settings,
+      frontendDesign,
+    },
+  };
+};
+
+const createDefaultSiteSettings = (
+  frontendDesign?: SiteSettings["frontendDesign"],
+): SiteSettings => ({
   seo: { ...DEFAULT_SITE_SETTINGS.seo },
   analytics: {},
   social: {},
@@ -845,7 +1172,7 @@ const createDefaultSiteSettings = (): SiteSettings => ({
     usage: { ...DEFAULT_SITE_SETTINGS.billingQuota.usage },
     history: [],
   },
-  frontendDesign: emptyFrontendDesignContract(),
+  frontendDesign: completeCustomFrontendTemplateRegistry(frontendDesign || emptyFrontendDesignContract()),
   contacts: { savedLists: [] },
   editor: { collectionBindingPresets: [] },
 });
@@ -860,7 +1187,14 @@ const SITE_LIST: StoreSite[] = [
     customDomain: null,
     status: "published",
     isPublished: true,
-    settings: createDefaultSiteSettings(),
+    settings: createDefaultSiteSettings(
+      buildDemoCustomFrontendDesignContract({
+        siteName: "Backy Demo Site",
+        publicHost: "demo.backy.app",
+        theme: seedTheme,
+        now: nowIso,
+      }),
+    ),
     theme: seedTheme,
   },
   {
@@ -2850,7 +3184,11 @@ function refreshPersistedAdminContent() {
     persistedAdminContentSignature = nextSignature;
 
     if (Array.isArray(parsed.sites)) {
-      SITE_LIST.splice(0, SITE_LIST.length, ...parsed.sites);
+      SITE_LIST.splice(
+        0,
+        SITE_LIST.length,
+        ...parsed.sites.map((site) => completeStoreSiteFrontendDesign(site)),
+      );
     }
 
     if (Array.isArray(parsed.pages)) {
@@ -6120,7 +6458,7 @@ export function getSites(
   const raw = includeUnpublished
     ? SITE_LIST
     : SITE_LIST.filter((site) => site.isPublished);
-  return clone(raw);
+  return clone(raw.map((site) => completeStoreSiteFrontendDesign(site)));
 }
 
 export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
@@ -6136,7 +6474,7 @@ export function getSiteByIdOrSlug(identifier: string): StoreSite | undefined {
         : false),
   );
 
-  return found ? clone(found) : undefined;
+  return found ? clone(completeStoreSiteFrontendDesign(found)) : undefined;
 }
 
 const normalizeSiteWebhookEventKinds = (
@@ -6624,7 +6962,7 @@ function normalizeSiteSettingsInput(
                   .slice(0, 10)
               : [],
           },
-    frontendDesign:
+    frontendDesign: completeCustomFrontendTemplateRegistry(
       settingsInput.frontendDesign === undefined
         ? base.frontendDesign || emptyFrontendDesignContract()
         : normalizeFrontendDesignContract(settingsInput.frontendDesign, {
@@ -6632,6 +6970,7 @@ function normalizeSiteSettingsInput(
             updatedAt: new Date().toISOString(),
             mergeFallback: true,
           }),
+    ),
     contacts:
       settingsInput.contacts === undefined
         ? {

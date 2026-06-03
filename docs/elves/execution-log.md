@@ -4,14 +4,43 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 13:26 IST
+- **Last updated:** 2026-06-03 13:42 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
 - **Next exact batch:** Batch 5: Ongoing UX Scout And Polish
 - **Active PR:** not created yet
-- **Docs promoted this run:** `docs/elves/learnings.md`
+- **Docs promoted this run:** `docs/elves/learnings.md`, `docs/elves/survival-guide.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 13:42 IST
+
+**Batch:** 3 / 5: Custom Frontend And Newsletter Handoff Readiness / Ongoing UX Scout And Polish
+**Contract status:** Local and persisted custom frontend design contracts expose a complete reusable template registry
+
+**What changed:**
+- Seeded the demo custom frontend design contract with reusable `page`, `blogPost`, `section`, `form`, `product`, and `collection` templates.
+- Completed synced custom frontend site records at the store boundary so persisted sites keep user-captured templates while receiving safe generated defaults for any missing template class.
+- Tightened the custom frontend connection smoke so source mode guards the public store seed/read path, not only the external ensure-site CLI.
+
+**Commands run:**
+- `npm run typecheck --workspace @backy/public --silent` -> PASS.
+- `npm run test:template-registry --workspace @backy/public --silent` -> PASS.
+- `npm run test:custom-frontend-connection --silent` -> PASS, source mode, 24 checks.
+- Focused local manifest probe against `http://127.0.0.1:3001/api/sites/site-demo/manifest` -> PASS; template types are `section`, `page`, `blogPost`, `form`, `product`, and `collection`.
+- `BACKY_CUSTOM_FRONTEND_API_BASE_URL=http://127.0.0.1:3001/api BACKY_CUSTOM_FRONTEND_SITE_ID=site-demo npm run test:custom-frontend-connection --silent` -> PASS, 95 checks.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:custom-frontend-control-plane --silent` -> PASS in source mode; live production and deployed frontend DOM proofs remain env-gated.
+
+**Notes:**
+- This closes the live local failure from the prior slice where `site-demo` exposed only a reusable section template, forcing custom frontend agents to guess page/blog/form/product/collection shapes.
+- Existing custom frontend templates are preserved; Backy only appends missing safe defaults when the site is already marked `status: synced` with `source.type: custom-frontend`.
+
+**Next:**
+1. Commit and push this custom frontend template-registry completion.
+2. Re-read the survival guide after push, then continue the highest-friction visible editor/admin UX polish.
 
 ## 2026-06-03 13:26 IST
 

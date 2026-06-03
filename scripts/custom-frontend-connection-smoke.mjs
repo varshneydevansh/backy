@@ -31,6 +31,7 @@ const starterConnectionProbe = read('examples/custom-frontend-next/src/app/api/b
 const starterTemplateModule = read('apps/public/src/lib/customFrontendStarterProjectTemplate.ts');
 const adminConnectionVerifierRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/connection/route.ts');
 const adminStarterExportRoute = read('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/starter/route.ts');
+const backyStore = read('apps/public/src/lib/backyStore.ts');
 const adminSiteDetailRoute = read('apps/admin/src/routes/sites.$siteId.tsx');
 const adminContentApi = read('apps/admin/src/lib/adminContentApi.ts');
 const handoffSource = read('packages/core/src/custom-frontend-agent-handoff.ts');
@@ -164,6 +165,24 @@ includesAll(
     'custom-frontend:scaffold',
   ],
   'Custom frontend site ensure CLI uses the protected admin boundary, preserves domain state, syncs deployed frontend design, seeds reusable templates, and prints safe frontend handoff',
+);
+includesAll(
+  backyStore,
+  [
+    'buildDemoCustomFrontendDesignContract',
+    'completeCustomFrontendTemplateRegistry',
+    'completeStoreSiteFrontendDesign',
+    'custom-frontend-page',
+    'custom-frontend-blog-post',
+    'custom-frontend-section',
+    'custom-frontend-form',
+    'custom-frontend-product',
+    'custom-frontend-collection',
+    'frontendDesign.source?.type !== "custom-frontend"',
+    'frontendDesignTemplateId',
+    'frontendDesignRoutePattern',
+  ],
+  'Public store completes synced custom frontend sites with reusable page, blog, section, form, product, and collection templates',
 );
 includesAll(
   starterConnectionProbe,

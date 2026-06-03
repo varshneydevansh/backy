@@ -413,6 +413,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Command-palette source guard, editor smoke coverage, rendered command-palette smoke with local dev MFA, admin typecheck, diff check, and repo-public hygiene are green for the command-palette layer mutation slice.
 
+**Newest custom frontend template-registry polish:** Demo and persisted synced custom frontend site records now expose reusable `page`, `blogPost`, `section`, `form`, `product`, and `collection` templates. Backy preserves any user-captured custom frontend templates and appends only missing safe defaults, so new pages, blog posts, reusable sections, forms, products, and collections can inherit connected frontend design metadata instead of making frontend agents guess shapes.
+
+**Newest verification:** Public typecheck, public template-registry smoke, source custom-frontend connection smoke, live local `site-demo` custom-frontend connection smoke, admin typecheck, control-plane source gate, diff check, and repo-public hygiene are green for the custom frontend template-registry slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
