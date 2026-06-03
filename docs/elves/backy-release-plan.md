@@ -25,15 +25,21 @@ Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, r
 ### Batch 1: Admin Layout And Site Discoverability
 
 **Tasks:**
-- [ ] Make the sidebar active-site identity actionable so users can manage/switch sites from the left rail without signing out.
-- [ ] Fix dense `/pages` row overlap/clipping around delivery health, revisions, route, status, and row actions.
-- [ ] Tighten `/users` table wrapping and spacing so role/status controls and actions do not collide.
-- [ ] Make Settings `More actions` render in a stable in-flow or collision-safe surface instead of hiding behind the Appearance/workbar area.
+- [x] Make the sidebar active-site identity actionable so users can manage/switch sites from the left rail without signing out.
+- [x] Fix dense `/pages` row overlap/clipping around delivery health, revisions, route, status, and row actions.
+- [x] Tighten `/users` table wrapping and spacing so role/status controls and actions do not collide.
+- [x] Make Settings `More actions` render in a stable in-flow or collision-safe surface instead of hiding behind the Appearance/workbar area.
 
 **Acceptance criteria:**
-- [ ] Pages, Users, and Settings source/render smokes cover the non-overlap conditions.
-- [ ] `npm run typecheck --workspace @backy-cms/admin` passes.
-- [ ] `git diff --check` passes.
+- [x] Pages, Users, and Settings source/render smokes cover the non-overlap conditions.
+- [x] `npm run typecheck --workspace @backy-cms/admin` passes in the current post-plan-change verification pass.
+- [x] `git diff --check` passes in the current post-plan-change verification pass.
+
+**Current evidence:**
+- Sidebar and header site management/switching are guarded by `apps/admin/scripts/login-smoke.mjs` and `apps/admin/scripts/dashboard-smoke.mjs`, including the Manage, Site selector, Domains, Help, and no-signout action-status contracts.
+- `/pages` dense-row overlap is guarded by `apps/admin/scripts/pages-list-smoke.mjs`, including `BACKY_PAGES_LIST_DATAGRID_HEADER_SMOKE`, explicit table width, in-flow actions, delivery-cell clipping, and delivery-history details.
+- `/users` table wrapping is guarded by `apps/admin/scripts/users-smoke.mjs`, including `BACKY_USERS_DATAGRID_LAYOUT_SMOKE`, explicit role/status/person/action widths, wrapped names/emails/activity, and constrained action cells.
+- Settings `More actions` layering is guarded by `apps/admin/scripts/settings-smoke.mjs`, including the header/workbar stack-layer contract and a rendered top-element overlap assertion.
 
 **Docs likely touched:**
 - `docs/elves/*`
@@ -44,16 +50,23 @@ Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, r
 ### Batch 2: Canvas Editor Interaction Fidelity
 
 **Tasks:**
-- [ ] Verify and harden marquee selection origin so drag rectangles start at the pointer, not the canvas top-left.
-- [ ] Verify Mac trackpad/mouse in-canvas zoom intercepts canvas gestures without browser/page zoom.
-- [ ] Fix component drag preview so the source palette does not visibly smear or stack into the canvas.
-- [ ] Ensure preview/editor scroll behavior works in desktop/tablet/mobile canvas modes.
-- [ ] Make navigation child links selectable/linkable as layer items when a nav block is generated or imported.
+- [x] Verify and harden marquee selection origin so drag rectangles start at the pointer, not the canvas top-left.
+- [x] Verify Mac trackpad/mouse in-canvas zoom intercepts canvas gestures without browser/page zoom.
+- [x] Fix component drag preview so the source palette does not visibly smear or stack into the canvas.
+- [x] Ensure preview/editor scroll behavior works in desktop/tablet/mobile canvas modes.
+- [x] Make navigation child links selectable/linkable as layer items when a nav block is generated or imported.
+- [ ] Keep expanding editor command execution coverage so every visible command/palette action has an executor invariant and a rendered smoke guard.
+- [ ] Continue polishing long-page authoring and custom-frontend blog templates against real authored pages.
 
 **Acceptance criteria:**
 - [ ] Focused editor drag/zoom/component/layers smokes pass.
 - [ ] Canvas changes preserve existing element geometry, responsive overrides, and save/publish behavior.
 - [ ] Public renderer remains aligned for any canvas contract change.
+
+**Current evidence:**
+- Marquee origin, reverse marquee, and root-surface marquee are guarded by `BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE`.
+- Canvas zoom, preview scroll, rendered long-page media drops, component drag image isolation, section flow, resize auto-growth, and navigation child-link layer controls are guarded in `apps/admin/scripts/editor-drag-smoke.mjs` and related editor smoke scripts.
+- The remaining editor work is now less about missing primitives and more about proving every visible command and template workflow stays executable as the editor grows.
 
 **Docs likely touched:**
 - Smoke scripts and, if a durable rule is discovered, `docs/elves/learnings.md`.

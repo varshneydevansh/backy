@@ -34,7 +34,7 @@ Continue completing Backy as a secure Wix/Webflow-like backend with WordPress-li
 - **Planned batches remaining:** 1
 - **Stop allowed right now:** no
 - **Why:** The user asked to keep pursuing Backy completion and the ongoing UX scout/polish batch remains.
-- **Next required action:** Continue highest-friction Backy UX/editor polish after the strict deployed separate-frontend contract gate passed. Vercel GitHub App access for the private separate frontend repository is now an automation convenience rather than the current release blocker; attach the public website domain only when ready to move DNS.
+- **Next required action:** Continue highest-friction Backy UX/editor polish after the release plan was reconciled with current guards. Do not spend the next slice re-solving Batch 1 sidebar/Pages/Users/Settings overlap rows unless a fresh rendered regression appears. Focus on editor command execution invariants, long-page authoring, and custom-frontend blog-template polish. Vercel GitHub App access for the private separate frontend repository is now an automation convenience rather than the current release blocker; attach the public website domain only when ready to move DNS.
 
 ## Effort Standard
 
@@ -368,6 +368,8 @@ PR is not opened yet because this workspace is already carrying local release co
 **Newest starter hygiene polish:** CLI scaffold and protected admin starter export now write generated `.env.example` plus `BACKY_FRONTEND_STARTER.md` with trailing newlines, and `npm run test:custom-frontend-starter` guards that copy-friendly behavior. Release doctor, public typecheck, scaffold newline proof, diff check, and repo-public hygiene are green.
 
 **Newest deploy verification:** `ff7c6731` is pushed. Fresh `backy-public` and `backy-admin` production deployments are Ready, production readiness passes 47 checks, the real-site custom frontend API gate passes 94 checks, and the hosted admin login shell remains clean of demo/dev credentials. Deployed separate frontend DOM proof still requires `BACKY_CUSTOM_FRONTEND_URL`.
+
+**Newest plan hygiene:** `docs/elves/backy-release-plan.md` now marks the already-guarded Batch 1 sidebar/site switcher, Pages dense rows, Users table wrapping, and Settings More actions layering rows as done, and records the current Batch 2 editor primitive coverage. The remaining editor work is command execution coverage plus real long-page/custom-frontend blog-template authoring polish, not the old top-left marquee/zoom/drag-preview primitives.
 
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 

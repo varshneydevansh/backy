@@ -4,7 +4,7 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 
 ## Run Digest
 
-- **Last updated:** 2026-06-03 09:52 IST
+- **Last updated:** 2026-06-03 10:01 IST
 - **Current phase:** In progress
 - **Active batch:** Batch 5: Ongoing UX Scout And Polish
 - **Last completed batch:** Batch 4: Release Certification And Vercel Readiness
@@ -12,6 +12,33 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - **Active PR:** not created yet
 - **Docs promoted this run:** `docs/elves/learnings.md`
 - **Latest Elves Report:** not generated yet
+
+## 2026-06-03 10:01 IST
+
+**Batch:** 5: Ongoing UX Scout And Polish
+**Release plan status:** Stale unchecked UI/editor rows reconciled with current source evidence
+
+**What changed:**
+- Updated `docs/elves/backy-release-plan.md` so Batch 1 no longer presents already-guarded sidebar/site switching, Pages dense-row layout, Users table wrapping, and Settings More actions layering as open work.
+- Updated Batch 2 to reflect current editor primitives that already have smoke coverage: marquee origin, canvas zoom, component drag preview isolation, preview scroll, and nav child-link layer controls.
+- Kept the remaining editor work explicit instead of overclaiming completion: command execution coverage and real long-page/custom-frontend blog-template authoring polish remain open.
+
+**Commands run:**
+- `BACKY_PAGES_LIST_SOURCE_ONLY=1 npm run test:pages-list --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_USERS_SOURCE_ONLY=1 npm run test:users --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_SETTINGS_SOURCE_ONLY=1 npm run test:settings --workspace @backy-cms/admin --silent` -> PASS.
+- `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent` -> PASS.
+- `npm run typecheck --workspace @backy-cms/admin --silent` -> PASS.
+- `git diff --check` -> PASS.
+- `npm run test:repo-public-hygiene --silent` -> PASS.
+
+**Notes:**
+- This was a plan/status correction, not a product-completion claim. The four audit partials remain external live Settings/Commerce provider certification artifacts.
+- The next code slice should avoid re-solving stale Batch 1 rows and focus on the live editor/authoring gaps that still affect daily use.
+
+**Next:**
+1. Run typecheck, diff hygiene, and repo-public hygiene for this documentation correction.
+2. Commit and push if clean, re-read the survival guide, then continue with editor command/template authoring polish.
 
 ## 2026-06-03 09:52 IST
 
