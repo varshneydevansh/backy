@@ -38,8 +38,10 @@ assert(
   routeSource.includes("process.env.BACKY_DATA_MODE !== 'database'") &&
     routeSource.includes('Supabase URL and server-only service role key are required') &&
     routeSource.includes("'/auth/v1/admin/users'") &&
-    routeSource.includes("'/rest/v1/profiles?on_conflict=id'"),
-  'Owner bootstrap must run only in database mode and create both Supabase Auth identity and Backy owner profile.',
+    routeSource.includes("'/rest/v1/profiles?on_conflict=id'") &&
+    routeSource.includes('findExistingBackyProfileByEmail') &&
+    routeSource.includes('adopted-existing-backy-profile'),
+  'Owner bootstrap must run only in database mode and create or safely adopt a Supabase-backed Backy owner profile.',
 );
 
 assert(

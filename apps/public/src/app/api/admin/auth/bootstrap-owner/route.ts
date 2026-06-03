@@ -43,6 +43,8 @@ const normalizeSlug = (value: unknown, fallback: string) => {
   return normalized || 'backy-workspace';
 };
 
+const restEq = (value: string) => `eq.${encodeURIComponent(value)}`;
+
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
   NextResponse.json(
     {
@@ -164,6 +166,21 @@ async function activeOwnerExists(url: string, serviceKey: string) {
   }
 
   return Array.isArray(response.json) && response.json.length > 0;
+}
+
+async function findExistingBackyProfileByEmail(url: string, serviceKey: string, email: string) {
+  const response = await fetchSupabaseJson(
+    url,
+    serviceKey,
+    `/rest/v1/profiles?select=id,email,full_name,role,status,is_active&email=${restEq(email)}&limit=1`,
+    { method: 'GET' },
+  );
+  if (!response.ok) {
+    throw new Error(`Existing owner profile lookup failed with ${response.status}`);
+  }
+
+  const profile = firstObject(response.json);
+  return typeof profile?.id === 'string' && profile.id ? profile : null;
 }
 
 async function createSupabaseAuthUser(input: {
@@ -365,11 +382,20 @@ export async function POST(request: NextRequest) {
       password,
       fullName,
     });
-    if (!authUser.ok || !authUser.userId) {
+    let ownerUserId = authUser.ok ? authUser.userId : '';
+    let authAction = 'created-supabase-auth-user';
+    if (!ownerUserId && (authUser.status === 409 || authUser.status === 422)) {
+      const existingProfile = await findExistingBackyProfileByEmail(supabase.url, supabase.serviceKey, email);
+      if (existingProfile) {
+        ownerUserId = existingProfile.id as string;
+        authAction = 'adopted-existing-backy-profile';
+      }
+    }
+    if (!ownerUserId) {
       return errorResponse(
         authUser.status === 422 || authUser.status === 409 ? 409 : 502,
         'SUPABASE_OWNER_CREATE_FAILED',
-        'Supabase Auth rejected owner creation. Use an unused email address or create the auth user in Supabase before retrying a Backy profile bootstrap.',
+        'Supabase Auth rejected owner creation and no matching Backy profile exists to adopt. Use an unused email address, or sign in once/create the profile before retrying owner bootstrap.',
         requestId,
       );
     }
@@ -377,21 +403,21 @@ export async function POST(request: NextRequest) {
     const owner = await upsertOwnerProfile({
       url: supabase.url,
       serviceKey: supabase.serviceKey,
-      userId: authUser.userId,
+      userId: ownerUserId,
       email,
       fullName,
     });
     const workspace = await ensureWorkspace({
       url: supabase.url,
       serviceKey: supabase.serviceKey,
-      userId: authUser.userId,
+      userId: ownerUserId,
       workspaceName,
       workspaceSlug,
     });
 
     return successResponse(requestId, {
       owner: {
-        id: typeof owner?.id === 'string' ? owner.id : authUser.userId,
+        id: typeof owner?.id === 'string' ? owner.id : ownerUserId,
         email,
         fullName,
         role: 'owner',
@@ -399,6 +425,7 @@ export async function POST(request: NextRequest) {
       },
       workspace,
       authProvider: 'supabase',
+      authAction,
       nextStep: 'Sign in through backy-admin with this owner email and password. Remove BACKY_OWNER_BOOTSTRAP_TOKEN after first owner creation.',
     });
   } catch (error) {

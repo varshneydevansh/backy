@@ -4110,6 +4110,28 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Notes:**
 - This keeps closing the visible editor execution surface one command family at a time. It does not touch the external Settings/Commerce live provider certification partials.
 
+## Checkpoint: 2026-06-03 14:38 IST - Owner Bootstrap Existing Profile Adoption
+
+**Scope:** Production owner setup hardening, focused on the real Supabase setup path where an Auth user/profile may already exist before the one-time Backy owner bootstrap is run.
+
+**Changed:**
+- Owner bootstrap remains guarded by `BACKY_OWNER_BOOTSTRAP_TOKEN`, database mode, Supabase URL, and server-only service-role env.
+- If no active owner exists and Supabase rejects creating the auth user because the identity already exists, bootstrap now looks up the matching Backy profile by email and promotes that profile to `owner`.
+- The repaired path still upserts the owner profile to active, attaches owner workspace membership, returns a non-secret `authAction`, and still refuses once any active owner exists.
+- Owner bootstrap source smoke now guards both fresh Supabase Auth creation and safe adoption of an existing Supabase-backed Backy profile.
+
+**Validation:**
+- PASS: `npm run test:admin-owner-bootstrap --workspace @backy/public --silent`
+- PASS: `npm run typecheck --workspace @backy/public --silent`
+- PASS: `npm run test:vercel-production-readiness --silent`
+- PASS: `npm run test:admin-auth-supabase --workspace @backy/public --silent`
+- PASS: `npm run test:admin-auth-production-policy --workspace @backy/public --silent`
+- PASS: `npm run test:repo-public-hygiene --silent`
+- PASS: `git diff --check`
+
+**Notes:**
+- `npm run test:admin-auth-supabase-route --workspace @backy/public --silent` was not rerun because the user's local public dev server is already listening on `:3001` and owns `apps/public/.next/dev/lock`; starting a second Next dev instance exits early. The owner-bootstrap source smoke and public typecheck cover this patch directly.
+
 ## Checkpoint: 2026-06-03 14:21 IST - Command Palette Z-Order Execution Proof
 
 **Scope:** Batch 5 editor command-palette polish, focused on proving that layer stacking commands execute through Cmd/Ctrl+K with the same sibling z-order model as toolbar, Inspector, context bar, and keyboard shortcuts.

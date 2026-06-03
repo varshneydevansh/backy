@@ -433,6 +433,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the layer-state command proof slice.
 
+**Newest owner bootstrap hardening:** The one-time owner bootstrap endpoint can now safely adopt an existing Supabase-backed Backy profile when no active owner exists and Supabase rejects duplicate auth-user creation. The path is still guarded by server-only bootstrap token, database mode, Supabase service role, active-owner refusal, and workspace owner membership upsert.
+
+**Newest verification:** Owner-bootstrap source smoke, public typecheck, production-readiness source gate, Supabase auth smoke, production local-auth policy smoke, diff check, and repo-public hygiene are green. The route-level Supabase login smoke was skipped because the user's existing public dev server owns the Next dev lock.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
