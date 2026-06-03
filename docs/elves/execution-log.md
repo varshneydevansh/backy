@@ -3785,6 +3785,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 10:32 IST - Blog Custom Template Draft Canvas Sync
+
+**Scope:** Batch 5 blog/custom-frontend authoring polish, focused on the real author path where a custom frontend blog template should visibly inherit the writer's title and excerpt while the post is being created, not only after the save pipeline rewrites the persisted payload.
+
+**Changed:**
+- `CanvasEditor` now accepts an explicit `externalElementsRevision` signal for parent-owned canvas element changes that should refresh the visible editor without remounting the whole editor surface.
+- Blog creation now updates the visible custom frontend template heading and excerpt blocks as the author edits the title/excerpt form fields.
+- The frontend-template text update helper now preserves canvas element identity when no bound title/excerpt content changed, avoiding full-canvas string comparisons on each keystroke.
+- Blog create source smoke now guards that custom frontend blog template draft text is synced before save through the visible canvas path.
+
+**Validation:**
+- PASS: `BACKY_BLOG_CREATE_SOURCE_ONLY=1 npm run test:blog-create --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This is one part of the requested "new blog should inherit the custom frontend template and only require content edits" path. It does not claim the separate deployed custom frontend DOM proof is done; that still needs `BACKY_CUSTOM_FRONTEND_URL` pointed at the materialized website frontend.
+
 ## Checkpoint: 2026-06-03 09:24 IST - Custom Frontend Scaffold Text Hygiene
 
 **Scope:** Batch 5 custom-frontend launch polish, focused on the real-site separate frontend scaffold path after proving it against production Backy.

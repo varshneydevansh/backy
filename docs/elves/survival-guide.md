@@ -375,6 +375,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest Dashboard launch-route polish:** Dashboard custom frontend content creation now emits page/blog create routes with `frontendDesignTemplateId`, `frontendTemplate`, and legacy `designTemplate` together, so dashboard buttons and copied agent briefs match the alias-preserving `/pages/new` and `/blog/new` route state. Dashboard source smoke, admin typecheck, diff check, and repo-public hygiene are green.
 
+**Newest blog authoring polish:** Blog creation now syncs custom frontend template title/excerpt edits into the visible canvas before save via an explicit `CanvasEditor.externalElementsRevision` refresh signal. The update path preserves element identity when no bound content changed, and the blog-create source guard, admin typecheck, diff check, and repo-public hygiene are green.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute

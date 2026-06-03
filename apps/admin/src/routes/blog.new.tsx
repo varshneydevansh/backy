@@ -955,13 +955,15 @@ function updateFrontendBlogTemplateText(
     const excerptId = `frontend-blog-template-${template.id}-excerpt`;
     const nextTitle = input.title.trim();
     const nextExcerpt = input.excerpt.trim();
+    let didUpdate = false;
 
     const updateElement = (element: CanvasElement): CanvasElement => {
         const nextChildren = Array.isArray(element.children)
             ? element.children.map(updateElement)
             : element.children;
 
-        if (element.id === headingId && nextTitle) {
+        if (element.id === headingId && nextTitle && element.props?.content !== nextTitle) {
+            didUpdate = true;
             return {
                 ...element,
                 props: {
@@ -972,7 +974,8 @@ function updateFrontendBlogTemplateText(
             };
         }
 
-        if (element.id === excerptId && nextExcerpt) {
+        if (element.id === excerptId && nextExcerpt && element.props?.content !== nextExcerpt) {
+            didUpdate = true;
             return {
                 ...element,
                 props: {
@@ -983,10 +986,16 @@ function updateFrontendBlogTemplateText(
             };
         }
 
-        return nextChildren === element.children ? element : { ...element, children: nextChildren };
+        if (nextChildren === element.children) {
+            return element;
+        }
+
+        didUpdate = true;
+        return { ...element, children: nextChildren };
     };
 
-    return elements.map(updateElement);
+    const nextElements = elements.map(updateElement);
+    return didUpdate ? nextElements : elements;
 }
 
 function hasFrontendBlogTemplateRoot(elements: CanvasElement[], template: SiteFrontendDesignTemplate): boolean {
@@ -1668,6 +1677,7 @@ function NewBlogPostPage() {
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
     const [canvasSeedKey, setCanvasSeedKey] = useState('default-blog-template');
+    const [canvasExternalRevision, setCanvasExternalRevision] = useState(0);
     const interactiveReadinessIssues = useMemo(
         () => collectInteractiveReadinessIssues(canvasElements),
         [canvasElements],
@@ -1759,6 +1769,19 @@ function NewBlogPostPage() {
     );
     const effectiveCanvasSource = effectiveFrontendTemplate ? 'frontend-design' : 'backy-starter';
     const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);
+    const syncFrontendTemplateDraftText = useCallback((input: { title: string; excerpt: string }) => {
+        if (!effectiveFrontendTemplate || !hasFrontendBlogTemplateRoot(canvasElements, effectiveFrontendTemplate)) {
+            return;
+        }
+
+        const nextElements = updateFrontendBlogTemplateText(canvasElements, effectiveFrontendTemplate, input);
+        if (nextElements === canvasElements) {
+            return;
+        }
+
+        setCanvasElements(nextElements);
+        setCanvasExternalRevision((value) => value + 1);
+    }, [canvasElements, effectiveFrontendTemplate]);
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? effectiveFrontendTemplate
             ? selectedFrontendTemplateMatchMode === 'starter-matched'
@@ -3444,11 +3467,13 @@ function NewBlogPostPage() {
                                 type="text"
                                 value={title}
                                 onChange={(e) => {
+                                    const nextTitle = e.target.value;
                                     clearCreationFeedback();
-                                    setTitle(e.target.value);
+                                    setTitle(nextTitle);
                                     if (!slug) {
-                                        setSlug(slugify(e.target.value));
+                                        setSlug(slugify(nextTitle));
                                     }
+                                    syncFrontendTemplateDraftText({ title: nextTitle, excerpt });
                                 }}
                                 placeholder="Untitled post"
                                 disabled={createFormDisabled}
@@ -3506,8 +3531,10 @@ function NewBlogPostPage() {
                                 id="blog-create-excerpt"
                                 value={excerpt}
                                 onChange={(e) => {
+                                    const nextExcerpt = e.target.value;
                                     clearCreationFeedback();
-                                    setExcerpt(e.target.value);
+                                    setExcerpt(nextExcerpt);
+                                    syncFrontendTemplateDraftText({ title, excerpt: nextExcerpt });
                                 }}
                                 rows={3}
                                 disabled={createFormDisabled}
@@ -4080,6 +4107,7 @@ function NewBlogPostPage() {
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
                                     initialCanvasFocusMode={isWorkspaceFocus}
+                                    externalElementsRevision={canvasExternalRevision}
                                     theme={selectedSite?.theme}
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {

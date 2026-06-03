@@ -2056,6 +2056,7 @@ export interface CanvasEditorProps {
   initialCanvasFocusMode?: boolean;
   initialSize?: CanvasSize;
   initialSelectedElementId?: string;
+  externalElementsRevision?: string | number | null;
   theme?: ThemeConfig;
   mediaContext?: MediaContext;
   onChange?: (
@@ -2297,6 +2298,7 @@ export function CanvasEditor({
   initialCanvasFocusMode = false,
   initialSize,
   initialSelectedElementId,
+  externalElementsRevision,
   theme,
   mediaContext,
   onChange,
@@ -2436,6 +2438,7 @@ export function CanvasEditor({
   // Canvas state
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);
   const elementsRef = useRef<CanvasElement[]>(initialElements);
+  const lastExternalElementsRevisionRef = useRef<string | number | null | undefined>(externalElementsRevision);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedIdRef = useRef<string | null>(null);
@@ -3406,6 +3409,23 @@ export function CanvasEditor({
 
     return null;
   }, []);
+
+  useEffect(() => {
+    if (externalElementsRevision === undefined || externalElementsRevision === lastExternalElementsRevisionRef.current) {
+      return;
+    }
+
+    lastExternalElementsRevisionRef.current = externalElementsRevision;
+    const nextElements = cloneElements(initialElements);
+    if (historyElementsEqual(nextElements, elementsRef.current)) {
+      return;
+    }
+
+    elementsRef.current = nextElements;
+    setElements(nextElements);
+    setSelectedId((current) => (current && findElementById(nextElements, current) ? current : null));
+    setSelectedIds((current) => current.filter((id) => Boolean(findElementById(nextElements, id))));
+  }, [cloneElements, externalElementsRevision, findElementById, initialElements]);
 
   useEffect(() => {
     if (!initialSelectedElementId) {

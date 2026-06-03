@@ -135,6 +135,16 @@ const assertBlogCreateSourceContract = () => {
     'Blog create frontend template seeding must preserve custom JS, content document, assets, animations, interactions, data bindings, editable map, and metadata in content plus meta provenance',
   );
   assert(
+    source.includes('const [canvasExternalRevision, setCanvasExternalRevision] = useState(0)') &&
+      source.includes('const syncFrontendTemplateDraftText = useCallback') &&
+      source.includes('updateFrontendBlogTemplateText(canvasElements, effectiveFrontendTemplate, input)') &&
+      source.includes('setCanvasExternalRevision((value) => value + 1)') &&
+      source.includes('syncFrontendTemplateDraftText({ title: nextTitle, excerpt })') &&
+      source.includes('syncFrontendTemplateDraftText({ title, excerpt: nextExcerpt })') &&
+      source.includes('externalElementsRevision={canvasExternalRevision}'),
+    'Blog create custom frontend template canvas must update visible title/excerpt draft text before save, not only at persistence time',
+  );
+  assert(
     source.includes('getScheduledBlogPostDateError') &&
       source.includes('Date.parse(scheduledAt)') &&
       source.includes('scheduledAtMs <= Date.now()') &&
