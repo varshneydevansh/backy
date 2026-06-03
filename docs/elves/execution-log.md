@@ -3680,6 +3680,20 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 - Before this patch, the real-site scaffold/build/local-frontend proof passed against production Backy: scaffolded `devanshvarshney.com`, built the generated Next.js frontend, started it locally, and ran `BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 npm run test:custom-frontend-connection --silent` with 112 checks passing.
 - No public repo file records personal generated output or temporary `/tmp` scaffold contents.
 
+## Checkpoint: 2026-06-03 09:34 IST - Starter Text Hygiene Deployment Proof
+
+**Scope:** Deployment verification for `ff7c6731`.
+
+**Verification:**
+- PASS: `vercel inspect <latest backy-admin production deployment> --wait` -> Ready.
+- PASS: `vercel inspect <latest backy-public production deployment> --wait --logs` -> Ready; build cloned commit `ff7c673`.
+- PASS: `BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney npm run test:vercel-production-readiness --silent` -> 47 checks, live admin auth skipped because credentials were not supplied.
+- PASS: `BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api BACKY_CUSTOM_FRONTEND_SITE_ID=devanshvarshney BACKY_CUSTOM_FRONTEND_PUBLIC_HOST=devanshvarshney.com npm run test:custom-frontend-connection --silent` -> 94 checks, deployed frontend DOM proof skipped because `BACKY_CUSTOM_FRONTEND_URL` was not supplied.
+- PASS: `BACKY_ADMIN_BASE_URL=https://backy-admin.vercel.app BACKY_PUBLIC_API_BASE_URL=https://backy-public.vercel.app/api npm run test:login-production-shell --workspace @backy-cms/admin --silent` -> hosted login shell has no demo credentials, no admin/editor seed text, and no dev MFA phrase.
+
+**Notes:**
+- This deployment proof does not expose generated Vercel deployment URLs in user-facing product contracts; the stable public aliases remain the supported operator URLs.
+
 ## Checkpoint: 2026-06-03 01:38 IST - Starter Blog Probe Deploy Verification
 
 **Scope:** Batch 5 custom-frontend release proof, focused on proving the pushed starter `/api/backy-connection` blog child-template probe pointers are live on the protected/public Vercel topology.

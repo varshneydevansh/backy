@@ -363,6 +363,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest starter hygiene polish:** CLI scaffold and protected admin starter export now write generated `.env.example` plus `BACKY_FRONTEND_STARTER.md` with trailing newlines, and `npm run test:custom-frontend-starter` guards that copy-friendly behavior. Release doctor, public typecheck, scaffold newline proof, diff check, and repo-public hygiene are green.
 
+**Newest deploy verification:** `ff7c6731` is pushed. Fresh `backy-public` and `backy-admin` production deployments are Ready, production readiness passes 47 checks, the real-site custom frontend API gate passes 94 checks, and the hosted admin login shell remains clean of demo/dev credentials. Deployed separate frontend DOM proof still requires `BACKY_CUSTOM_FRONTEND_URL`.
+
 **Single next action:** Grant the Vercel GitHub App access to the private separate frontend repo or connect it from the Vercel dashboard, add Preview env once Git is connected, attach the public website domain only when ready to move DNS from the current host, then continue highest-friction Backy UX/editor polish.
 
 ## Active Compute
