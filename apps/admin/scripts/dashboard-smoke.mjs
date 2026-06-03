@@ -259,9 +259,55 @@ const loginAdminApi = async () => {
   return payload.data;
 };
 
-const createSite = async ({ name, slug }) => {
+const listSites = async () => {
+  const payload = await requestApi('/api/admin/sites?includeUnpublished=true');
+  return payload.data?.sites || payload.sites || [];
+};
+
+const getSettings = async () => {
+  const payload = await requestApi('/api/admin/settings');
+  return payload.data?.settings || payload.settings;
+};
+
+const updateSettings = async (input) => {
+  const payload = await requestApi('/api/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.data?.settings || payload.settings;
+};
+
+const temporarilyAllowSiteCreationQuota = async (extraSites = 1) => {
+  const settings = await getSettings();
+  const existingSites = await listSites();
+  const originalIntegrations = settings.integrations || {};
+  const originalCommerce = originalIntegrations.commerce || {};
+  const currentSiteLimit = Number(originalCommerce.siteLimit || 0);
+
+  if (originalCommerce.overageMode !== 'block') {
+    return null;
+  }
+
+  const requiredSiteLimit = Math.max(currentSiteLimit, existingSites.length) + extraSites + 5;
+
+  await updateSettings({
+    integrations: {
+      ...originalIntegrations,
+      commerce: {
+        ...originalCommerce,
+        siteLimit: requiredSiteLimit,
+        overageMode: 'warn',
+      },
+    },
+  });
+
+  return originalIntegrations;
+};
+
+const createSite = async ({ name, slug }, sessionToken = apiAdminSessionToken) => {
   const payload = await requestApi('/api/admin/sites', {
     method: 'POST',
+    headers: sessionToken && sessionToken !== apiAdminSessionToken ? { authorization: `Bearer ${sessionToken}` } : {},
     body: JSON.stringify({
       name,
       slug,
@@ -274,9 +320,29 @@ const createSite = async ({ name, slug }) => {
   return site;
 };
 
-const deleteSite = async (siteId) => {
+const deleteSite = async (siteId, sessionToken = apiAdminSessionToken) => {
   if (!siteId) return;
-  await requestApi(`/api/admin/sites/${siteId}`, { method: 'DELETE' });
+  await requestApi(`/api/admin/sites/${siteId}`, {
+    method: 'DELETE',
+    headers: sessionToken ? { authorization: `Bearer ${sessionToken}` } : {},
+  });
+};
+
+const tryDeleteSite = async (siteId, sessionToken = apiAdminSessionToken) => {
+  if (!siteId) {
+    return { attempted: false, deleted: false };
+  }
+
+  try {
+    await deleteSite(siteId, sessionToken);
+    return { attempted: true, deleted: true };
+  } catch (error) {
+    return {
+      attempted: true,
+      deleted: false,
+      reason: String(error?.message || error).slice(0, 240),
+    };
+  }
 };
 
 const fetchJson = async (endpoint) => {
@@ -1978,7 +2044,7 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
-const cleanup = async ({ client, childProcess, userDataDir, siteId, userId }) => {
+const cleanup = async ({ client, childProcess, userDataDir, siteId, siteSessionToken, userIds = [] }) => {
   if (client) {
     try {
       await client.send('Browser.close');
@@ -1999,19 +2065,16 @@ const cleanup = async ({ client, childProcess, userDataDir, siteId, userId }) =>
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }
 
-  if (siteId) {
-    try {
-      await deleteSite(siteId);
-    } catch {
-      // The dashboard smoke creates a temporary site only for selector coverage.
-    }
-  }
+  await tryDeleteSite(siteId, siteSessionToken);
 
-  if (userId) {
+  for (const userId of userIds) {
+    if (!userId) {
+      continue;
+    }
     try {
       await deleteUser(userId);
     } catch {
-      // The RBAC smoke creates a temporary viewer account only for scoped dashboard coverage.
+      // The smoke creates temporary accounts only for scoped dashboard coverage.
     }
   }
 };
@@ -2027,16 +2090,31 @@ const main = async () => {
   let childProcess;
   let userDataDir;
   let siteId;
+  let ownerUserId;
+  let ownerSessionToken;
   let viewerUserId;
+  let restoredQuotaIntegrations = null;
   const suffix = Date.now().toString(36);
   const siteName = `Dashboard Smoke ${suffix}`;
   const slug = `dashboard-smoke-${suffix}`;
+  const ownerEmail = `dashboard-owner-${suffix}@example.com`;
   const viewerEmail = `dashboard-viewer-${suffix}@example.com`;
 
   try {
     assertDashboardSourceContracts();
     await loginAdminApi();
-    const created = await createSite({ name: siteName, slug });
+    restoredQuotaIntegrations = await temporarilyAllowSiteCreationQuota(1);
+    const owner = await createUser({
+      fullName: `Dashboard Owner ${suffix}`,
+      email: ownerEmail,
+      role: 'owner',
+      status: 'invited',
+    });
+    ownerUserId = owner.id;
+    const ownerInvite = await createInviteToken(owner.id);
+    const ownerSession = await acceptInviteToken(ownerInvite.token);
+    ownerSessionToken = ownerSession.session.token;
+    const created = await createSite({ name: siteName, slug }, ownerSessionToken);
     siteId = created.publicSiteId || created.id;
     const viewer = await createUser({
       fullName: `Dashboard Viewer ${suffix}`,
@@ -2095,10 +2173,14 @@ const main = async () => {
     const mobileVisualState = await assertDashboardVisualState(client, 'mobile', MOBILE_SCREENSHOT_PATH, siteName);
     await assertDashboardRbacFiltering(client, viewerSession, siteName, authPreload.identifier);
 
-    await deleteSite(siteId);
-    siteId = null;
+    const siteCleanup = await tryDeleteSite(siteId, ownerSessionToken);
+    if (siteCleanup.deleted) {
+      siteId = null;
+    }
     await deleteUser(viewerUserId);
     viewerUserId = null;
+    await deleteUser(ownerUserId);
+    ownerUserId = null;
 
     console.log(JSON.stringify({
       ok: true,
@@ -2106,9 +2188,22 @@ const main = async () => {
       slug,
       screenshot: desktopVisualState.screenshotPath,
       mobileScreenshot: mobileVisualState.screenshotPath,
+      cleanup: {
+        site: siteCleanup,
+      },
     }, null, 2));
   } finally {
-    await cleanup({ client, childProcess, userDataDir, siteId, userId: viewerUserId });
+    if (restoredQuotaIntegrations) {
+      await updateSettings({ integrations: restoredQuotaIntegrations }).catch(() => {});
+    }
+    await cleanup({
+      client,
+      childProcess,
+      userDataDir,
+      siteId,
+      siteSessionToken: ownerSessionToken,
+      userIds: [viewerUserId, ownerUserId],
+    });
   }
 };
 
