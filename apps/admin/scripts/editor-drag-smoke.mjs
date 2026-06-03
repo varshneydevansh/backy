@@ -652,6 +652,8 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes("'send-backward'") &&
       smokeSource.includes("'bring-forward'") &&
       smokeSource.includes("'bring-to-front'") &&
+      smokeSource.includes("'toggle-selection-visibility'") &&
+      smokeSource.includes("'toggle-selection-lock'") &&
       smokeSource.includes("'duplicate-selection'") &&
       smokeSource.includes("'delete-selection'") &&
       smokeSource.includes('copyCommand') &&
@@ -666,10 +668,14 @@ const assertCanvasEditorShortcutSource = () => {
       smokeSource.includes('sendBackwardCommand') &&
       smokeSource.includes('bringForwardCommand') &&
       smokeSource.includes('bringToFrontCommand') &&
+      smokeSource.includes('toggleVisibilityCommand') &&
+      smokeSource.includes('toggleVisibilityRestoreCommand') &&
+      smokeSource.includes('toggleLockCommand') &&
+      smokeSource.includes('toggleUnlockCommand') &&
       smokeSource.includes('duplicateCommand') &&
       smokeSource.includes('deleteDuplicateCommand') &&
       smokeSource.includes('pageSettingsDialogOpen'),
-    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard, hierarchy selection, z-order, and safe mutation commands',
+    'Editor toolbar must expose a Cmd/Ctrl+K command palette backed by the command registry and covered by rendered smoke, including clipboard, hierarchy selection, z-order, layer-state, and safe mutation commands',
   );
   assert(
     source.includes('const runCanvasZoomShortcut = (e: KeyboardEvent) =>') &&
@@ -12548,6 +12554,103 @@ const testEditorCommandPalette = async (client) => {
     })}`,
   );
 
+  const visibilityTargetId = 'smoke-form';
+  await setLayerHiddenState(client, visibilityTargetId, false);
+  await setLayerLockedState(client, visibilityTargetId, false);
+  await selectLayerIds(client, [visibilityTargetId]);
+  const beforeVisibilityState = await readLayerActionState(client, visibilityTargetId);
+  const beforeVisibilityPalette = await readEditorCommandPaletteState(client);
+  assert(
+    beforeVisibilityState.hidden === false &&
+      beforeVisibilityState.locked === false &&
+      beforeVisibilityPalette.selectedIds.split(',').includes(visibilityTargetId),
+    `Command palette visibility setup did not select a visible unlocked layer: ${JSON.stringify({ beforeVisibilityState, beforeVisibilityPalette })}`,
+  );
+  const toggleVisibilityCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-selection-visibility',
+    'toggle-selection-visibility',
+    'hide selected layer',
+    (state) => (
+      state.canvasUniqueCount === beforeVisibilityPalette.canvasUniqueCount &&
+      state.selectedIds.split(',').includes(visibilityTargetId)
+    ),
+  );
+  const afterVisibilityHidden = await readLayerActionState(client, visibilityTargetId);
+  assert(
+    afterVisibilityHidden.hidden === true,
+    `Command palette toggle-selection-visibility did not hide ${visibilityTargetId}: ${JSON.stringify({
+      beforeVisibilityState,
+      afterVisibilityHidden,
+      toggleVisibilityCommand: toggleVisibilityCommand.after,
+    })}`,
+  );
+
+  const toggleVisibilityRestoreCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-selection-visibility',
+    'toggle-selection-visibility',
+    'show selected layer',
+    (state) => state.selectedIds.split(',').includes(visibilityTargetId),
+  );
+  const afterVisibilityRestored = await readLayerActionState(client, visibilityTargetId);
+  assert(
+    afterVisibilityRestored.hidden === false,
+    `Command palette toggle-selection-visibility did not show ${visibilityTargetId}: ${JSON.stringify({
+      afterVisibilityHidden,
+      afterVisibilityRestored,
+      toggleVisibilityRestoreCommand: toggleVisibilityRestoreCommand.after,
+    })}`,
+  );
+
+  const lockTargetId = 'smoke-icon';
+  await setLayerHiddenState(client, lockTargetId, false);
+  await setLayerLockedState(client, lockTargetId, false);
+  await selectLayerIds(client, [lockTargetId]);
+  const beforeLockState = await readLayerActionState(client, lockTargetId);
+  const beforeLockPalette = await readEditorCommandPaletteState(client);
+  assert(
+    beforeLockState.locked === false &&
+      beforeLockPalette.selectedIds.split(',').includes(lockTargetId),
+    `Command palette lock setup did not select an unlocked layer: ${JSON.stringify({ beforeLockState, beforeLockPalette })}`,
+  );
+  const toggleLockCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-selection-lock',
+    'toggle-selection-lock',
+    'lock selected layer',
+    (state) => (
+      state.canvasUniqueCount === beforeLockPalette.canvasUniqueCount &&
+      state.selectedIds.split(',').includes(lockTargetId)
+    ),
+  );
+  const afterLockState = await readLayerActionState(client, lockTargetId);
+  assert(
+    afterLockState.locked === true,
+    `Command palette toggle-selection-lock did not lock ${lockTargetId}: ${JSON.stringify({
+      beforeLockState,
+      afterLockState,
+      toggleLockCommand: toggleLockCommand.after,
+    })}`,
+  );
+
+  const toggleUnlockCommand = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-selection-lock',
+    'toggle-selection-lock',
+    'unlock selected layer',
+    (state) => state.selectedIds.split(',').includes(lockTargetId),
+  );
+  const afterUnlockState = await readLayerActionState(client, lockTargetId);
+  assert(
+    afterUnlockState.locked === false,
+    `Command palette toggle-selection-lock did not unlock ${lockTargetId}: ${JSON.stringify({
+      afterLockState,
+      afterUnlockState,
+      toggleUnlockCommand: toggleUnlockCommand.after,
+    })}`,
+  );
+
   return {
     openedFromShortcut,
     fitFiltered,
@@ -12628,6 +12731,32 @@ const testEditorCommandPalette = async (client) => {
       bringToFrontCommand: {
         filtered: bringToFrontCommand.filtered,
         after: bringToFrontCommand.after,
+      },
+    },
+    layerStateCommand: {
+      visibilityTargetId,
+      beforeVisibilityState,
+      afterVisibilityHidden,
+      afterVisibilityRestored,
+      toggleVisibilityCommand: {
+        filtered: toggleVisibilityCommand.filtered,
+        after: toggleVisibilityCommand.after,
+      },
+      toggleVisibilityRestoreCommand: {
+        filtered: toggleVisibilityRestoreCommand.filtered,
+        after: toggleVisibilityRestoreCommand.after,
+      },
+      lockTargetId,
+      beforeLockState,
+      afterLockState,
+      afterUnlockState,
+      toggleLockCommand: {
+        filtered: toggleLockCommand.filtered,
+        after: toggleLockCommand.after,
+      },
+      toggleUnlockCommand: {
+        filtered: toggleUnlockCommand.filtered,
+        after: toggleUnlockCommand.after,
       },
     },
     undoFiltered,

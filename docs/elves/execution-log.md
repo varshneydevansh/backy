@@ -4091,6 +4091,25 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 14:31 IST - Command Palette Layer-State Execution Proof
+
+**Scope:** Batch 5 editor command reliability, focused on proving the Cmd/Ctrl+K command palette performs real hide/show and lock/unlock layer mutations instead of only listing those controls.
+
+**Changed:**
+- Rendered command-palette smoke now selects `smoke-form`, executes `toggle-selection-visibility`, and proves the Layers panel state changes from visible to hidden and back to visible.
+- Rendered command-palette smoke now selects `smoke-icon`, executes `toggle-selection-lock`, and proves the Layers panel state changes from unlocked to locked and back to unlocked.
+- Command-palette source guard now requires the layer-state command ids and rendered smoke variables alongside clipboard, selection, layout, and z-order command coverage.
+
+**Validation:**
+- PASS: `npm run test:editor-command-palette --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This keeps closing the visible editor execution surface one command family at a time. It does not touch the external Settings/Commerce live provider certification partials.
+
 ## Checkpoint: 2026-06-03 14:21 IST - Command Palette Z-Order Execution Proof
 
 **Scope:** Batch 5 editor command-palette polish, focused on proving that layer stacking commands execute through Cmd/Ctrl+K with the same sibling z-order model as toolbar, Inspector, context bar, and keyboard shortcuts.

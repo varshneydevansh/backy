@@ -429,6 +429,10 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the z-order command proof slice.
 
+**Newest command-palette layer-state proof:** The rendered command-palette smoke now executes hide/show and lock/unlock through Cmd/Ctrl+K. It selects `smoke-form`, runs `toggle-selection-visibility` twice, and proves the layer changes visible -> hidden -> visible; then selects `smoke-icon`, runs `toggle-selection-lock` twice, and proves unlocked -> locked -> unlocked.
+
+**Newest verification:** Rendered command-palette smoke, editor smoke coverage, admin typecheck, diff check, and repo-public hygiene are green for the layer-state command proof slice.
+
 **Single next action:** Continue highest-friction Backy UX/editor polish, especially rendered authoring behavior that affects real page/blog creation. Vercel GitHub App access for the private separate frontend repository is useful for automation but is not the current Backy backend release blocker.
 
 ## Active Compute
