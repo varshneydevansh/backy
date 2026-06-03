@@ -3785,6 +3785,32 @@ Newest entries go at the top. Keep reusable lessons in `docs/elves/learnings.md`
 **Next:**
 - Run repo public hygiene, commit, push, re-read the survival guide, then continue the next highest-friction Backy UX/editor gap.
 
+## Checkpoint: 2026-06-03 11:22 IST - Command Palette Execution Coverage
+
+**Scope:** Batch 5 editor reliability polish, focused on proving visible command-palette actions execute instead of only appearing wired in metadata.
+
+**Changed:**
+- Expanded the rendered command-palette smoke to read live editor shell/view state after palette execution.
+- Added a reusable palette execution helper that filters by command id, verifies the result is ready, presses Enter, and waits for a concrete editor state mutation.
+- The smoke now executes non-destructive commands through the actual command palette: `toggle-grid`, `toggle-snap`, `toggle-pan`, `toggle-component-panel`, `toggle-layers-panel`, `toggle-inspector-panel`, and `toggle-focus-mode`.
+- Existing command-palette checks remain intact for `Cmd/Ctrl+K` dialog semantics, zero registered-but-unwired commands, `zoom-fit`, and blocked `undo` status.
+
+**Validation:**
+- PASS: `node --check apps/admin/scripts/editor-drag-smoke.mjs`
+- PASS: `BACKY_EDITOR_SOURCE_ONLY=1 npm run test:editor-drag --workspace @backy-cms/admin --silent`
+- PASS: `BACKY_ADMIN_BASE_URL=http://127.0.0.1:5173 BACKY_PUBLIC_API_BASE_URL=http://127.0.0.1:3001 BACKY_ADMIN_MFA_CODE=backy-dev-mfa BACKY_ADMIN_2FA_CODE=backy-dev-mfa npm run test:editor-command-palette --workspace @backy-cms/admin --silent`
+- PASS: `npm run test:editor-smoke-coverage --workspace @backy-cms/admin --silent`
+- PASS: `npm run typecheck --workspace @backy-cms/admin --silent`
+- PASS: `git diff --check`
+- PASS: `npm run test:repo-public-hygiene --silent`
+
+**Notes:**
+- This closes a real part of the command-coverage backlog without claiming every destructive/selection command is newly covered by this one smoke. Those remain covered by their focused workflow smokes or future command-palette expansion.
+- The first rendered attempt failed because no local API/admin server was listening. After starting `dev:smoke:public` and `dev:smoke:admin`, the API needed the dev MFA verifier env before the rendered check could authenticate.
+
+**Next:**
+- Commit and push this command-palette coverage slice, re-read the survival guide, then continue Batch 5 with the next editor/admin friction point.
+
 ## Checkpoint: 2026-06-03 11:10 IST - Blog List Newsletter Issue Handoff
 
 **Scope:** Batch 5 Blog/Newsletter authoring polish, focused on making report-to-newsletter publishing discoverable from the Blog command surface without exposing subscriber exports, provider secrets, database credentials, or admin sessions.

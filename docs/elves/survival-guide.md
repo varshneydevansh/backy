@@ -219,6 +219,8 @@ PR is not opened yet because this workspace is already carrying local release co
 
 **Newest production site readiness:** The real production `devanshvarshney`/`devanshvarshney.com` Backy site has been created and published through the server-side operator path, a published homepage exists, and the current signed-in Gmail profile is owner on the resolved team. Public discovery, manifest, home render, verify-only ensure-site, no-browser scaffold, and the live custom frontend connection gate now pass for the real site. The separate website frontend project itself still needs to be materialized/deployed and then verified with DOM/probe checks.
 
+**Newest editor command coverage:** The rendered command-palette smoke now executes non-destructive shell/view commands through the actual palette, not only toolbar metadata: grid, snap, pan, component panel, layers panel, inspector panel, and focus mode all prove concrete editor state changes, while existing zero-unwired, `zoom-fit`, and blocked `undo` checks remain green.
+
 **Newest verification:** Source connection smoke, Help source/rendered smokes, Site Detail rendered smoke, admin typecheck, public typecheck, production API connection smoke against `https://backy-public.vercel.app/api`, and diff check are green for the in-admin custom frontend verifier slice.
 
 **Newest verification:** Starter source smoke, starter typecheck, production API connection smoke, Help source/rendered smokes, Site Detail smoke, admin typecheck, public typecheck, SDK typecheck, diff check, env-backed starter production build, and a full 49-check local starter connection proof against production Backy are green. The full proof uses `BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1` and `BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1`.

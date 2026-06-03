@@ -66,6 +66,7 @@ Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, r
 **Current evidence:**
 - Marquee origin, reverse marquee, and root-surface marquee are guarded by `BACKY_EDITOR_MARQUEE_ORIGIN_SMOKE`.
 - Canvas zoom, preview scroll, rendered long-page media drops, component drag image isolation, section flow, resize auto-growth, and navigation child-link layer controls are guarded in `apps/admin/scripts/editor-drag-smoke.mjs` and related editor smoke scripts.
+- Command palette coverage now proves zero registered-but-unwired commands, `zoom-fit` execution, blocked `undo` status, plus rendered execution for non-destructive shell/view commands: grid, snap, pan, component panel, layers panel, inspector panel, and focus mode.
 - The remaining editor work is now less about missing primitives and more about proving every visible command and template workflow stays executable as the editor grows.
 
 **Docs likely touched:**

@@ -11954,6 +11954,13 @@ const readEditorCommandPaletteState = async (client) => evaluate(client, `(() =>
     unwiredCommandIds: palette?.getAttribute('data-unwired-command-ids') || '',
     resultIds: results.map((result) => result.commandId),
     results,
+    gridVisible: document.querySelector('[data-testid="editor-grid-snap-controls"]')?.getAttribute('data-grid-visible') || '',
+    snapEnabled: document.querySelector('[data-testid="editor-grid-snap-controls"]')?.getAttribute('data-snap-enabled') || '',
+    panMode: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-pan-mode') || '',
+    focusMode: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-focus-mode') || '',
+    componentPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-component-panel-visible') || '',
+    inspectorPanelVisible: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-inspector-panel-visible') || '',
+    rightPanel: document.querySelector('[data-testid="editor-shell-layout"]')?.getAttribute('data-right-panel') || '',
     autoFit: document.querySelector('[data-testid="editor-zoom-controls"]')?.getAttribute('data-auto-fit') || '',
     notice: normalize(document.querySelector('[data-testid="editor-notice"]')?.textContent || ''),
   };
@@ -11970,6 +11977,30 @@ const waitForEditorCommandPaletteState = async (client, predicate, label) => {
   }
 
   throw new Error(`${label}: command palette state did not match expectation: ${JSON.stringify(lastState)}`);
+};
+
+const executeReadyEditorCommandFromPalette = async (client, query, commandId, label, predicate) => {
+  await clickEnabledControlByTestId(client, 'editor-command-palette-trigger', `${label} command palette trigger`);
+  await setFormControlByTestId(client, 'editor-command-palette-input', query);
+  const filtered = await waitForEditorCommandPaletteState(
+    client,
+    (state) => state.open && state.resultIds.includes(commandId),
+    `${label} filter`,
+  );
+  const command = filtered.results.find((result) => result.commandId === commandId);
+  assert(command?.actionState === 'ready', `${label} command should be ready before execution: ${JSON.stringify(filtered)}`);
+
+  await pressKey(client, 'Enter');
+  const after = await waitForEditorCommandPaletteState(
+    client,
+    (state) => !state.open && predicate(state),
+    `${label} execute`,
+  );
+
+  return {
+    filtered,
+    after,
+  };
 };
 
 const testEditorCommandPalette = async (client) => {
@@ -12023,6 +12054,69 @@ const testEditorCommandPalette = async (client) => {
     `Command palette trigger closed action metadata mismatch: ${JSON.stringify(afterFit)}`,
   );
 
+  const beforeGrid = await readEditorCommandPaletteState(client);
+  const toggleGrid = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-grid',
+    'toggle-grid',
+    'toggle grid',
+    (state) => state.gridVisible && state.gridVisible !== beforeGrid.gridVisible,
+  );
+
+  const beforeSnap = await readEditorCommandPaletteState(client);
+  const toggleSnap = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-snap',
+    'toggle-snap',
+    'toggle snap',
+    (state) => state.snapEnabled && state.snapEnabled !== beforeSnap.snapEnabled,
+  );
+
+  const beforePan = await readEditorCommandPaletteState(client);
+  const togglePan = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-pan',
+    'toggle-pan',
+    'toggle pan',
+    (state) => state.panMode && state.panMode !== beforePan.panMode,
+  );
+
+  const beforeComponents = await readEditorCommandPaletteState(client);
+  const toggleComponents = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-component-panel',
+    'toggle-component-panel',
+    'toggle component panel',
+    (state) => state.componentPanelVisible && state.componentPanelVisible !== beforeComponents.componentPanelVisible,
+  );
+
+  const beforeLayers = await readEditorCommandPaletteState(client);
+  const toggleLayers = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-layers-panel',
+    'toggle-layers-panel',
+    'toggle layers panel',
+    (state) => state.rightPanel && state.rightPanel !== beforeLayers.rightPanel && state.inspectorPanelVisible === 'true',
+  );
+
+  const beforeInspector = await readEditorCommandPaletteState(client);
+  const toggleInspector = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-inspector-panel',
+    'toggle-inspector-panel',
+    'toggle inspector panel',
+    (state) => state.inspectorPanelVisible && state.inspectorPanelVisible !== beforeInspector.inspectorPanelVisible,
+  );
+
+  const beforeFocus = await readEditorCommandPaletteState(client);
+  const toggleFocus = await executeReadyEditorCommandFromPalette(
+    client,
+    'toggle-focus-mode',
+    'toggle-focus-mode',
+    'toggle focus mode',
+    (state) => state.focusMode && state.focusMode !== beforeFocus.focusMode,
+  );
+
   await clickEnabledControlByTestId(client, 'editor-command-palette-trigger', 'command palette trigger');
   await setFormControlByTestId(client, 'editor-command-palette-input', 'undo');
   const undoFiltered = await waitForEditorCommandPaletteState(
@@ -12051,6 +12145,13 @@ const testEditorCommandPalette = async (client) => {
     openedFromShortcut,
     fitFiltered,
     afterFit,
+    toggleGrid,
+    toggleSnap,
+    togglePan,
+    toggleComponents,
+    toggleLayers,
+    toggleInspector,
+    toggleFocus,
     undoFiltered,
     afterBlockedClick,
   };
