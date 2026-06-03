@@ -364,6 +364,20 @@ export async function POST(request: NextRequest) {
             status: user.status,
           }, 'supabase', authSettings, { persist: !repositories }), repositories, authSettings, twoFactorCode, persistSuccessfulSession);
         }
+        if (user) {
+          return errorResponse(
+            403,
+            'ADMIN_ACCOUNT_NOT_ACTIVE',
+            'Supabase login succeeded, but this Backy admin profile is not active. Ask a workspace owner to activate the account, or run the one-time owner bootstrap if this is the first production owner.',
+            requestId,
+          );
+        }
+        return errorResponse(
+          403,
+          'BACKY_PROFILE_NOT_FOUND',
+          'Supabase login succeeded, but Backy has no admin profile for this email. Invite the account from Backy Users, or run the one-time owner bootstrap for the first production owner.',
+          requestId,
+        );
       }
     } catch (error) {
       if (error instanceof SupabaseAdminAuthUnavailableError) {

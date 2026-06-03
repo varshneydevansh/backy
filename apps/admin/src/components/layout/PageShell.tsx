@@ -56,9 +56,9 @@ export function PageShell({
 
             {/* Main Content */}
             <div
-                className={cn("min-w-0 w-full max-w-full overflow-x-clip", contentClassName)}
+                className={cn("min-w-0 w-full max-w-full overflow-x-visible", contentClassName)}
                 data-testid="admin-page-shell-content"
-                data-layout-contract="route-content-overflow-contained"
+                data-layout-contract="route-content-can-layer-actions-with-contained-page-scroll"
             >
                 {children}
             </div>

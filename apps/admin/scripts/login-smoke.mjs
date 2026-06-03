@@ -499,16 +499,16 @@ const assertAuthRecoverySource = () => {
     pageShellSource.includes('data-testid="admin-page-shell"') &&
       pageShellSource.includes('data-layout-contract="ordinary-admin-page-contained"') &&
       pageShellSource.includes('data-testid="admin-page-shell-content"') &&
-      pageShellSource.includes('data-layout-contract="route-content-overflow-contained"') &&
+      pageShellSource.includes('data-layout-contract="route-content-can-layer-actions-with-contained-page-scroll"') &&
       pageShellSource.includes('"min-w-0 max-w-full"') &&
-      pageShellSource.includes('"min-w-0 w-full max-w-full overflow-x-clip"') &&
+      pageShellSource.includes('"min-w-0 w-full max-w-full overflow-x-visible"') &&
       panelSource.includes("'flex min-w-0 flex-wrap items-start justify-between gap-3 p-5'") &&
       panelSource.includes('className="flex min-w-0 flex-1 items-start gap-3"') &&
       panelSource.includes('className="min-w-0 max-w-full"') &&
       panelSource.includes("'min-w-0 max-w-full p-5 pt-0'") &&
       dataGridSource.includes("maxInlineSize: '100%'") &&
       dataGridSource.includes('data-overflow-containment="inline-size"'),
-    'Shared admin route wrappers must contain ordinary pages, panel chrome, and dense tables so no route leaks horizontal/body overflow into the global shell.',
+    'Shared admin route wrappers must contain ordinary pages, panel chrome, and dense tables while still allowing local action menus to layer above route content.',
   );
 
   assert(
@@ -4303,7 +4303,7 @@ const assertOrdinaryAdminRouteViewportContracts = async (client) => {
     if (state.pageShellExists) {
       assert(
         state.pageShellContract === 'ordinary-admin-page-contained' &&
-          state.pageShellContentContract === 'route-content-overflow-contained' &&
+          state.pageShellContentContract === 'route-content-can-layer-actions-with-contained-page-scroll' &&
           state.pageShellWidth <= state.frameWidth + 2,
         `${contract.label} PageShell must inherit the shared route containment contract: ${JSON.stringify(state)}`,
       );

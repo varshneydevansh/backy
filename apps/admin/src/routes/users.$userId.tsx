@@ -842,6 +842,23 @@ function EditUserPage() {
     };
   }, [canSubmit, canTransferOwnership, currentAdmin?.role, formData.role, formData.status, hasUnsavedChanges, isCurrentUser, notice, pendingChanges, selectedRole.label, user, userMfa]);
 
+  useEffect(() => {
+    if (!showDeleteConfirm) return;
+
+    const handleDeleteDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isUserDetailBusy) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setShowDeleteConfirm(false);
+    };
+
+    document.addEventListener('keydown', handleDeleteDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDeleteDialogKeyDown, true);
+  }, [isUserDetailBusy, showDeleteConfirm]);
+
   if (!isCurrentAdminPermissionMatrixPending && (!canViewUsers || isUserAccessDenied)) {
     return (
       <PageShell title="User unavailable" description={notice || viewPermissionTitle || 'Your account cannot view users.'}>
@@ -993,23 +1010,6 @@ function EditUserPage() {
       setShowDeleteConfirm(false);
     }
   };
-
-  useEffect(() => {
-    if (!showDeleteConfirm) return;
-
-    const handleDeleteDialogKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || isUserDetailBusy) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      setShowDeleteConfirm(false);
-    };
-
-    document.addEventListener('keydown', handleDeleteDialogKeyDown, true);
-    return () => document.removeEventListener('keydown', handleDeleteDialogKeyDown, true);
-  }, [isUserDetailBusy, showDeleteConfirm]);
 
   const handleLifecycleAction = async (status: UserStatus) => {
     if (isUserDetailBusy || status === formData.status) return;

@@ -11,6 +11,10 @@ const routeSource = readFileSync(
   path.join(publicRoot, 'src/app/api/admin/auth/bootstrap-owner/route.ts'),
   'utf8',
 );
+const loginRouteSource = readFileSync(
+  path.join(publicRoot, 'src/app/api/admin/auth/login/route.ts'),
+  'utf8',
+);
 const sitesRouteSource = readFileSync(
   path.join(publicRoot, 'src/app/api/admin/sites/route.ts'),
   'utf8',
@@ -66,6 +70,14 @@ assert(
   routeSource.includes("nextStep: 'Sign in through backy-admin with this owner email and password.") &&
     !routeSource.includes('bootstrapToken:'),
   'Owner bootstrap response must guide sign-in without echoing the bootstrap token.',
+);
+
+assert(
+  loginRouteSource.includes('ADMIN_ACCOUNT_NOT_ACTIVE') &&
+    loginRouteSource.includes('BACKY_PROFILE_NOT_FOUND') &&
+    loginRouteSource.includes('Supabase login succeeded, but this Backy admin profile is not active') &&
+    loginRouteSource.includes('run the one-time owner bootstrap for the first production owner'),
+  'Supabase-backed admin login must distinguish valid Supabase credentials from missing or inactive Backy admin profiles.',
 );
 
 assert(
