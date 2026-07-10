@@ -11,7 +11,7 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 | Launch capability | Current state | Evidence / remaining gate |
 | --- | --- | --- |
 | Protected Backy admin | Ready | `https://backy-admin.vercel.app/login` is live; the production login-shell smoke exposes no demo credentials or development MFA phrase. |
-| Backy public/API runtime | Ready | `https://backy-public.vercel.app` is live on Supabase/Postgres-backed database mode; production readiness passes 47 checks for discovery, handoff, manifest, OpenAPI, and render. |
+| Backy public/API runtime | Ready | `https://backy-public.vercel.app` is live on Supabase/Postgres-backed database mode; production readiness passes 47 checks for discovery, handoff, manifest, OpenAPI, and render. Exact production CORS origins are configured for Backy admin, the deployed custom frontend, and the apex/`www` website hosts. |
 | Production owner access | Ready | Production Supabase contains two active Backy owner profiles and owner team memberships. The prior "created as editor" blocker is closed. The one-time owner bootstrap token is absent from production after use. |
 | Real website site record | Ready for authoring | `devanshvarshney` / `devanshvarshney.com` exists as a published Backy site with a published homepage. DNS/domain status remains pending until the live domain is moved and verified. |
 | Separate custom frontend | Ready on Vercel | `https://devanshvarshney-frontend.vercel.app` is deployed separately. The strict production connection gate passes 113 checks using canonical site id `f766b8f8-6480-40bb-abec-775b75e09c07`, including public API, DOM control attributes, `/api/backy-connection`, editable-map, responsive, template registry, blog inheritance, and frontend-design pointers. |
@@ -23,7 +23,8 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 ### Remaining launch actions
 
 - [ ] Sign in with one of the active owner accounts and author the first real pages, posts, media, newsletter form, products, and policies.
-- [ ] Attach `devanshvarshney.com` to the separate frontend Vercel project, update DNS, verify the Backy domain mapping, and include the exact browser origin in `BACKY_CORS_ALLOWED_ORIGINS`.
+- [x] Configure exact `BACKY_CORS_ALLOWED_ORIGINS` entries for Backy admin, the deployed custom frontend, and the future apex/`www` website hosts; redeploy `backy-public` and rerun the 47-check production and 113-check custom-frontend gates.
+- [ ] Attach `devanshvarshney.com` to the separate frontend Vercel project, update DNS, and verify the Backy domain mapping without interrupting the current Hostinger site.
 - [ ] Select and configure the payment provider used for real checkout, then run Commerce provider certification and save the redacted artifact.
 - [ ] Configure the chosen outbound email provider when newsletter delivery is needed; subscriber capture and export do not depend on it.
 - [ ] Run the optional credential-redacted live admin login/session/logout proof from a private shell before final launch promotion.
