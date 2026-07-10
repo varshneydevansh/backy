@@ -10,7 +10,7 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 
 | Launch capability | Current state | Evidence / remaining gate |
 | --- | --- | --- |
-| Protected Backy admin | Ready | `https://backy-admin.vercel.app/login` is live; the production login-shell smoke exposes no demo credentials or development MFA phrase. |
+| Protected Backy admin | Ready | `https://backy-admin.vercel.app/login` is live; the production login-shell smoke exposes no demo credentials or development MFA phrase. Production Forgot Password now queues recovery through Supabase Auth, accepts the provider recovery fragment on the Backy reset screen, removes it from browser history, and requires a fresh sign-in after the password changes. |
 | Backy public/API runtime | Ready | `https://backy-public.vercel.app` is live on Supabase/Postgres-backed database mode; production readiness passes 47 checks for discovery, handoff, manifest, OpenAPI, and render. Exact production CORS origins are configured for Backy admin, the deployed custom frontend, and the apex/`www` website hosts. |
 | Production owner access | Ready | Production Supabase contains two active Backy owner profiles and owner team memberships. The prior "created as editor" blocker is closed. The one-time owner bootstrap token is absent from production after use. |
 | Real website site record | Ready for authoring | `devanshvarshney` / `devanshvarshney.com` exists as a published Backy site with a published homepage. DNS/domain status remains pending until the live domain is moved and verified. |
@@ -27,6 +27,7 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 - [x] Configure exact `BACKY_CORS_ALLOWED_ORIGINS` entries for Backy admin, the deployed custom frontend, and the future apex/`www` website hosts; redeploy `backy-public` and rerun the 47-check production and 113-check custom-frontend gates.
 - [x] Deploy the custom frontend catalog/order client and safe checkout bridge; initialize the public Products and private Orders schemas without creating fake products or orders.
 - [x] Deploy the secure buyer checkout flow with success/cancel recovery, server-enforced idempotency, HttpOnly status state, raw-payment rejection, and live production route/security proof.
+- [x] Connect production admin password recovery to Supabase Auth and route both exact reset callbacks and Supabase root fallbacks into Backy's protected reset screen.
 - [ ] Attach `devanshvarshney.com` to the separate frontend Vercel project, update DNS, and verify the Backy domain mapping without interrupting the current Hostinger site.
 - [ ] Select and configure the payment provider used for real checkout, then run Commerce provider certification and save the redacted artifact.
 - [ ] Before unrelated customer sites share one `backy-public` instance, replace the global checkout-origin allowlist with site-scoped allowed origins. The current exact allowlist is sufficient for the single `devanshvarshney.com` launch but is not the final multi-tenant policy.
@@ -51,7 +52,7 @@ BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 \
 npm run test:custom-frontend-connection
 ```
 
-Latest production proof on 2026-07-10: both production deployments reached Vercel `Ready`; the storefront checkout, success, and cancel routes returned `200`; the bridge contract returned `200` with `Cache-Control: no-store`; URL-carried status tokens and raw card-shaped payloads returned `400`; the 47-check production-readiness gate and 113-check custom-frontend gate passed. No fake production product or order was created.
+Latest production proof on 2026-07-10: both production deployments reached Vercel `Ready`; the storefront checkout, success, and cancel routes returned `200`; the bridge contract returned `200` with `Cache-Control: no-store`; URL-carried status tokens and raw card-shaped payloads returned `400`; production password recovery returned Supabase `queued` with status `200`; the protected login shell, 47-check production-readiness gate, and 113-check custom-frontend gate passed. No fake production product or order was created.
 
 ## Scope
 
