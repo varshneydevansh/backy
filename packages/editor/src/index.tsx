@@ -3,13 +3,13 @@ import { Element as SlateElement, Editor, Node, Range as SlateRange, Transforms 
 import { ReactEditor } from 'slate-react';
 import { Plate, PlateContent, ParagraphPlugin, usePlateEditor } from '@udecode/plate/react';
 import type { PlateEditor } from '@udecode/plate/react';
+import { createSlatePlugin, KEYS } from '@udecode/plate';
 import { BaseBoldPlugin, BaseItalicPlugin, BaseUnderlinePlugin, BaseCodePlugin, BaseStrikethroughPlugin } from '@udecode/plate-basic-marks';
 import { BaseBlockquotePlugin } from '@udecode/plate-block-quote';
 import { BaseCodeBlockPlugin } from '@udecode/plate-code-block';
 import { BaseHeadingPlugin } from '@udecode/plate-heading';
 import { BaseLinkPlugin } from '@udecode/plate-link';
 import { BaseListPlugin } from '@udecode/plate-list';
-import { BaseImagePlugin, BaseMediaEmbedPlugin } from '@udecode/plate-media';
 import { BaseEquationPlugin } from '@udecode/plate-math';
 
 import { BaseTextAlignPlugin } from '@udecode/plate-alignment';
@@ -24,6 +24,23 @@ import { applyInlineMarkdownShortcut, applyInlineMarkdownShortcutOnInput } from 
 import { normalizeNestedRichTextLists, normalizeRichTextListIndent } from './listNormalization';
 
 import { cn } from './utils';
+
+const BackyImagePlugin = createSlatePlugin({
+    key: KEYS.img,
+    node: {
+        dangerouslyAllowAttributes: ['alt', 'width', 'height'],
+        isElement: true,
+        isVoid: true,
+    },
+});
+
+const BackyMediaEmbedPlugin = createSlatePlugin({
+    key: KEYS.mediaEmbed,
+    node: {
+        isElement: true,
+        isVoid: true,
+    },
+});
 
 // Re-export for use in PropertyPanel
 export { AdvancedToolbar } from './ui/AdvancedToolbar';
@@ -102,8 +119,8 @@ export const BackyEditor = ({
         BaseHeadingPlugin,
         BaseLinkPlugin,
         BaseListPlugin,
-        BaseImagePlugin,
-        BaseMediaEmbedPlugin,
+        BackyImagePlugin,
+        BackyMediaEmbedPlugin,
         BaseEquationPlugin,
 
         // Advanced

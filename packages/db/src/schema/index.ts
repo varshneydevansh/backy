@@ -457,7 +457,7 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
         table.updatedAt,
     ),
     siteCollectionSlugIdx: uniqueIndex('content_collection_records_site_collection_slug_idx').on(table.siteId, table.collectionId, table.slug),
-    valuesGinIdx: index('idx_content_collection_records_values_gin').on(table.values).using(sql`gin`),
+    valuesGinIdx: index('idx_content_collection_records_values_gin').using('gin', table.values),
     publicUpdatedIdx: index('content_collection_records_public_updated_idx')
         .on(table.siteId, table.collectionId, table.updatedAt)
         .where(sql`${table.status} = 'published'`),

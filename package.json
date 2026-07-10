@@ -41,6 +41,7 @@
     "test:custom-frontend-connection": "node scripts/custom-frontend-connection-smoke.mjs",
     "test:custom-frontend-control-plane": "npm run test:custom-frontend-starter && npm run test:custom-frontend-connection && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene",
     "test:repo-public-hygiene": "node scripts/repo-public-hygiene-smoke.mjs",
+    "test:dependency-security": "node scripts/dependency-security-audit.mjs",
     "build:vercel:public": "node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public",
     "build:vercel:admin": "npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy-cms/admin",
     "doctor:release-certification": "node scripts/backy-release-certification-doctor.mjs",
@@ -70,12 +71,18 @@
   "devDependencies": {
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@libsql/client": "^0.4.0",
+    "@libsql/client": "^0.17.4",
     "@types/node": "^20.0.0",
     "@udecode/plate-paragraph": "latest",
     "postgres": "^3.4.9",
     "turbo": "^2.0.0",
     "typescript": "^5.3.0"
+  },
+  "overrides": {
+    "form-data": "4.0.6",
+    "lodash": "4.18.1",
+    "postcss": "8.5.16",
+    "ws": "8.21.0"
   },
   "engines": {
     "node": ">=20.0.0"

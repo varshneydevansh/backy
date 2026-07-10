@@ -50,7 +50,7 @@
         "@backy/db": "*",
         "@backy/storage": "*",
         "gsap": "^3.12.0",
-        "next": "^16.1.6",
+        "next": "16.2.10",
         "postgres": "^3.4.9",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",

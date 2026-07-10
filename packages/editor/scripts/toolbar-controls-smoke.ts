@@ -17,6 +17,7 @@ const fixedToolbar = read('../src/ui/FixedToolbar.tsx');
 const floatingToolbar = read('../src/ui/FloatingToolbar.tsx');
 const portalToolbar = read('../src/ui/PortalToolbar.tsx');
 const fontDropdown = read('../src/ui/FontDropdown.tsx');
+const editorSource = read('../src/index.tsx');
 const toolbarSources = [
   ['AdvancedToolbar', advancedToolbar],
   ['FixedToolbar', fixedToolbar],
@@ -24,6 +25,17 @@ const toolbarSources = [
   ['PortalToolbar', portalToolbar],
   ['FontDropdown', fontDropdown],
 ] as const;
+
+assert(
+  editorSource.includes('const BackyImagePlugin = createSlatePlugin({') &&
+    editorSource.includes('key: KEYS.img') &&
+    editorSource.includes('const BackyMediaEmbedPlugin = createSlatePlugin({') &&
+    editorSource.includes('key: KEYS.mediaEmbed') &&
+    editorSource.includes('BackyImagePlugin,') &&
+    editorSource.includes('BackyMediaEmbedPlugin,') &&
+    !editorSource.includes('@udecode/plate-media'),
+  'Rich-text image and legacy media nodes must remain registered without the vulnerable generic media URL parser.',
+);
 
 assert(
   advancedToolbar.includes("import { ColorPicker } from './ColorPicker';") &&

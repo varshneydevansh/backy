@@ -58,11 +58,10 @@
   },
   "dependencies": {
     "@backy-cms/core": "*",
-    "drizzle-orm": "^0.29.0",
-    "next": "16.1.6"
+    "drizzle-orm": "0.45.2"
   },
   "peerDependencies": {
-    "@libsql/client": "^0.4.0",
+    "@libsql/client": ">=0.10.0",
     "better-sqlite3": "^9.0.0",
     "mysql2": "^3.0.0",
     "postgres": "^3.4.0"
@@ -82,7 +81,7 @@
     }
   },
   "devDependencies": {
-    "@libsql/client": "^0.4.0",
+    "@libsql/client": "^0.17.4",
     "@types/node": "^20.10.0",
     "drizzle-kit": "^0.31.9",
     "tsup": "^8.0.0",
