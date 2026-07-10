@@ -18,6 +18,7 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 | Pages and blog publishing | Ready for use | Backy page/blog creation, templates, canvas persistence, public render, long-page growth, audio/transcript starter, custom-frontend template inheritance, and publish APIs are implemented and smoke-guarded. The separate frontend now serves a searchable `/blog` archive from the public blog API even before an authored index page exists; future published posts populate it automatically, while an authored Backy `/blog` page takes precedence. Real authored content still needs to be entered by the owner. |
 | Media, files, fonts, forms, newsletter | Ready for use | Media/file/font records, upload contracts, form submission, contacts, newsletter consent/subscriber management, issue-draft handoff, and public frontend bridges are implemented. Outbound email delivery remains provider-backed by design. |
 | Products and orders | Catalog/order intake ready; paid checkout externally gated | Production now has a published public Products schema with 40 commerce fields and a published private Orders schema with 60 operational fields. Public catalog and checkout discovery return `200`; the empty catalog is ready for owner-authored products. Taking real card payments still requires configured provider credentials and fresh Commerce certification evidence. |
+| Dependency security | Hardened; 0 high / 0 critical | The production dependency audit was reduced from 6 high / 7 moderate to 0 high / 2 moderate / 1 low. Next is pinned to `16.2.10`, Drizzle ORM to `0.45.2`, misplaced admin/database runtime dependencies were removed, and the unused vulnerable generic Plate media URL parser was replaced by Backy-owned image/legacy-media node registration. The remaining production advisories are Next's bundled build-time PostCSS copy and an esbuild development-server advisory; neither is an exposed Backy request handler. |
 | Release audit | 41 Ready / 4 Partial | `/settings`, Settings admin APIs, `/products`, and `/orders` remain Partial only because fresh live Settings/Commerce provider artifacts are not present. Artifact-accepted mode is `45 Ready / 0 Partial`. |
 
 ### Remaining launch actions
@@ -204,6 +205,7 @@ npm run test:custom-frontend-connection
 - **Settings gate:** `npm run test:settings --workspace @backy-cms/admin`
 - **Help/handoff gate:** `npm run test:help --workspace @backy-cms/admin`
 - **Release gate:** `npm run doctor:release-certification`
+- **Production dependency gate:** `npm run test:dependency-security`
 - **Diff hygiene:** `git diff --check`
 
 ## Notes
