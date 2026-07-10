@@ -100,6 +100,8 @@ const forbiddenEnvNames = [
   'SUPABASE_SECRET_KEY',
   'BACKY_ADMIN_API_KEY',
   'BACKY_ADMIN_SECRET_KEY',
+  'BACKY_OWNER_BOOTSTRAP_TOKEN',
+  'BACKY_ADMIN_BOOTSTRAP_TOKEN',
   'BACKY_BOOTSTRAP_TOKEN',
   'CRON_SECRET',
   'SMTP_PASSWORD',
@@ -115,6 +117,8 @@ if (!files.env.includes('admin') && !files.env.includes('secret')) {
 assertIncludes(files.backy, 'resolveBackyCustomFrontendConfig', 'Starter resolves safe Backy custom frontend config');
 assertIncludes(files.backy, 'createBackyCustomFrontendClient', 'Starter creates Backy custom frontend client');
 assertIncludes(files.client, 'BACKY_CUSTOM_FRONTEND_FORBIDDEN_ENV', 'Starter local client carries forbidden env boundary');
+assertIncludes(files.client, 'BACKY_OWNER_BOOTSTRAP_TOKEN', 'Starter local client blocks owner bootstrap tokens from custom frontend env');
+assertIncludes(files.client, 'BACKY_ADMIN_BOOTSTRAP_TOKEN', 'Starter local client blocks admin bootstrap tokens from custom frontend env');
 assertIncludes(files.client, 'normalizeBackyBaseUrl', 'Starter local client normalizes /api public base URLs');
 assertIncludes(files.client, 'domain:', 'Starter local client passes host context as domain');
 assertIncludes(files.page, 'backy.render<BackyRenderPayload>', 'Catch-all route renders Backy payloads through the public client');
@@ -187,12 +191,16 @@ assertIncludes(files.scaffold, 'custom-frontend:materialize', 'Starter scaffold 
 assertIncludes(files.scaffold, 'NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST', 'Starter scaffold writes browser-safe public host env');
 assertIncludes(files.scaffold, 'BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1', 'Starter scaffold writes strict deployed-frontend verification command');
 assertIncludes(files.scaffold, 'forbiddenPrivateEnv', 'Starter scaffold carries forbidden private env boundaries');
+assertIncludes(files.scaffold, 'BACKY_OWNER_BOOTSTRAP_TOKEN', 'Starter scaffold marks owner bootstrap tokens as forbidden private env');
+assertIncludes(files.scaffold, 'BACKY_ADMIN_BOOTSTRAP_TOKEN', 'Starter scaffold marks admin bootstrap tokens as forbidden private env');
 assertIncludes(files.scaffold, '/sites?identifier=', 'Starter scaffold verifies public site discovery before writing');
 assertIncludes(files.scaffold, '/render?path=/', 'Starter scaffold verifies the home render payload before writing');
 assertIncludes(files.scaffold, '--skip-site-verify', 'Starter scaffold keeps an explicit offline escape hatch for fixture manifests');
 assertIncludes(files.scaffold, 'publicSiteVerification', 'Starter scaffold records public site verification metadata');
 assertIncludes(files.generatedTemplate, 'agent-handoff.contentCreation.blogChildStarterTemplates', 'Generated starter template carries blog child template discovery');
 assertIncludes(files.generatedTemplate, 'blogChildStarterTemplateCount', 'Generated starter template carries blog child starter count reporting');
+assertIncludes(files.generatedTemplate, 'BACKY_OWNER_BOOTSTRAP_TOKEN', 'Generated starter template blocks owner bootstrap tokens from custom frontend env');
+assertIncludes(files.generatedTemplate, 'BACKY_ADMIN_BOOTSTRAP_TOKEN', 'Generated starter template blocks admin bootstrap tokens from custom frontend env');
 assertIncludes(files.ensureSite, 'backy.custom-frontend-site-readiness.v1', 'Ensure-site command emits a custom frontend site readiness schema');
 assertIncludes(files.ensureSite, 'Refusing --admin-key', 'Ensure-site command refuses admin keys in command-line history');
 assertIncludes(files.ensureSite, 'Refusing --service-role-key', 'Ensure-site command refuses service-role keys in command-line history');

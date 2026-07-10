@@ -386,6 +386,16 @@ const assertAuthRecoverySource = () => {
   );
 
   assert(
+    loginSource.includes('data-testid="login-owner-bootstrap-guidance"') &&
+      loginSource.includes('shouldShowOwnerBootstrapGuidance') &&
+      loginSource.includes('BACKY_OWNER_BOOTSTRAP_TOKEN') &&
+      loginSource.includes('/api/admin/auth/bootstrap-owner') &&
+      loginSource.includes('Never put service-role, admin, database, or bootstrap secrets') &&
+      loginSource.includes('Authorization: Bearer &lt;token&gt;'),
+    'Production login must explain the secure one-time owner bootstrap path for missing or inactive Backy profiles without asking users to paste private secrets into the browser.',
+  );
+
+  assert(
     viteConfigSource.includes("sourcemap: process.env.BACKY_ADMIN_ENABLE_SOURCEMAPS === '1'"),
     'Hosted production admin builds must not publish source maps by default because they can expose local/demo source constants.',
   );

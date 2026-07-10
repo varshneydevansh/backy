@@ -344,6 +344,7 @@ const HELP_TOPICS: HelpTopic[] = [
       'If the permission matrix cannot be fetched, Backy keeps role-default navigation active, shows the sync state, and keeps privileged actions blocked until backend permissions verify.',
       'Hosted login validates the identity provider first, then Backy checks profile status, role, invite state, and activity state. A Supabase/Auth identity by itself is not the permission source.',
       'New provider-created identities start invited and inactive until an owner or admin activates them through Users, an invite flow, or the owner-bootstrap path.',
+      'For the first production owner, configure BACKY_OWNER_BOOTSTRAP_TOKEN only on the protected backy-public runtime, POST to /api/admin/auth/bootstrap-owner from a private terminal, sign in, then remove that token.',
       'If Settings unavailable appears, the active session is signed in as a role without settings.view, the account is inactive/invited, or the permission matrix does not allow that capability; refresh or sign out/in after a role change.',
       'Public visitors, leads, members, and customers should be captured through Forms, Contacts, Collections, and commerce records.',
       'Protected API and settings features expose readiness states before they become release-critical.',

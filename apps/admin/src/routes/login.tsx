@@ -25,6 +25,28 @@ const DEMO_ACCOUNTS = SHOW_DEMO_ACCESS ? [
 ] : [];
 const DEMO_MFA_CODE = SHOW_DEMO_ACCESS ? 'backy-dev-mfa' : '';
 
+const ownerBootstrapErrorNeedles = [
+  'owner bootstrap',
+  'backy admin profile',
+  'not active',
+  'backy_profile_not_found',
+  'admin_account_not_active',
+];
+
+const shouldShowOwnerBootstrapGuidance = (value: string | null): boolean => {
+  const message = (value || '').toLowerCase();
+  return ownerBootstrapErrorNeedles.some((needle) => message.includes(needle));
+};
+
+const normalizePublicRuntimeBase = (value: unknown): string => {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return 'https://backy-public.vercel.app';
+  return text
+    .replace(/\/api\/admin\/?$/u, '')
+    .replace(/\/api\/?$/u, '')
+    .replace(/\/$/u, '');
+};
+
 const AUTH_WORKSPACE_ITEMS = [
   {
     label: 'Multi-site control',
@@ -109,6 +131,10 @@ function LoginPage() {
       : loginReady
         ? 'Sign in available.'
         : 'Enter a valid email and password to sign in.';
+  const showOwnerBootstrapGuidance = shouldShowOwnerBootstrapGuidance(error);
+  const ownerBootstrapEndpoint = `${normalizePublicRuntimeBase(
+    import.meta.env.VITE_BACKY_PUBLIC_API_BASE_URL || import.meta.env.VITE_BACKY_ADMIN_API_BASE_URL,
+  )}/api/admin/auth/bootstrap-owner`;
 
   /**
    * Validate form inputs
@@ -430,6 +456,26 @@ function LoginPage() {
               {error && (
                 <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {error}
+                </div>
+              )}
+
+              {showOwnerBootstrapGuidance && (
+                <div
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900"
+                  data-testid="login-owner-bootstrap-guidance"
+                >
+                  <div className="font-semibold">First production owner setup</div>
+                  <div className="mt-1 leading-6">
+                    Create the first Backy owner through the server-only owner bootstrap endpoint, then remove the bootstrap token.
+                  </div>
+                  <div className="mt-2 rounded-md border border-amber-200 bg-white/70 px-2 py-1.5 font-mono text-xs text-amber-950">
+                    POST {ownerBootstrapEndpoint}
+                  </div>
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5">
+                    <li>Set <span className="font-mono">BACKY_OWNER_BOOTSTRAP_TOKEN</span> only on the protected <span className="font-mono">backy-public</span> production project.</li>
+                    <li>Send the token from a private terminal as <span className="font-mono">Authorization: Bearer &lt;token&gt;</span> with owner email, password, and full name.</li>
+                    <li>Never put service-role, admin, database, or bootstrap secrets in <span className="font-mono">backy-admin</span> client env or any custom frontend repo.</li>
+                  </ul>
                 </div>
               )}
 
