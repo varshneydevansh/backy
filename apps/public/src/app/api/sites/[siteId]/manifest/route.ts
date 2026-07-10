@@ -2708,7 +2708,7 @@ const buildManifestCommerceDiscovery = (
     productDetail: `/api/sites/${siteId}/commerce/catalog?slug={slug}`,
     orderContract: `/api/sites/${siteId}/commerce/orders`,
     createOrder: `/api/sites/${siteId}/commerce/orders`,
-    publicOrderStatus: `/api/sites/${siteId}/commerce/orders?orderId={orderId}&statusToken={statusToken}`,
+    publicOrderStatus: `/api/sites/${siteId}/commerce/orders?orderId={orderId}`,
     providerWebhook: `/api/sites/${siteId}/commerce/webhook`,
     productCollectionRecords: `/api/sites/${siteId}/collections/${PRODUCT_COLLECTION_SLUG}/records`,
   },

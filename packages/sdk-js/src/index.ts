@@ -2270,6 +2270,8 @@ export type BackyCommerceOrderInput = {
   checkoutSessionId?: string;
   checkoutSession?: string | { id?: string; [key: string]: unknown };
   requestId?: string;
+  checkoutOrigin?: string;
+  idempotencyKey: string;
 };
 
 export type BackyCommerceOrderInputSource = Omit<
@@ -2301,6 +2303,8 @@ export type BackyCommerceOrderInputSource = Omit<
 export interface BackyCommerceOrderInputBuildOptions {
   defaultQuantity?: number | string;
   requestId?: string;
+  checkoutOrigin?: string;
+  idempotencyKey: string;
 }
 
 export interface BackyCommerceOrderSummary {
@@ -3678,7 +3682,7 @@ const setBackyCommerceTextField = <TKey extends keyof BackyCommerceOrderInput>(
 
 export function buildBackyCommerceOrderInput(
   source: BackyCommerceOrderInputSource | undefined | null,
-  options: BackyCommerceOrderInputBuildOptions = {},
+  options: BackyCommerceOrderInputBuildOptions,
 ): BackyCommerceOrderInput {
   const body = backyCommerceRecord(source);
   const cart = backyCommerceRecord(body.cart);
@@ -3699,6 +3703,10 @@ export function buildBackyCommerceOrderInput(
   );
 
   const input: BackyCommerceOrderInput = {
+    idempotencyKey: backyCommerceText(
+      options.idempotencyKey,
+      body.idempotencyKey,
+    ),
     items: rawItems.map((item) => {
       const record = backyCommerceRecord(item);
       const normalized: BackyCommerceLineItemInput = {
@@ -3790,7 +3798,11 @@ export function buildBackyCommerceOrderInput(
     "requestId",
     backyCommerceText(options.requestId, body.requestId),
   );
-
+  setBackyCommerceTextField(
+    input,
+    "checkoutOrigin",
+    backyCommerceText(options.checkoutOrigin, body.checkoutOrigin),
+  );
   return input;
 }
 
@@ -18277,8 +18289,8 @@ export class BackyClient {
       {
         query: {
           [lookupBy]: orderIdOrSlug,
-          statusToken,
         },
+        headers: { authorization: `Bearer ${statusToken}` },
         requestId: options.requestId,
       },
     );

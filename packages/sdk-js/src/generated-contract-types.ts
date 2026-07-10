@@ -4863,6 +4863,8 @@ export type GeneratedBackyOpenApiCommerceOrderCreateRequest = {
   promoCode?: string;
   paymentProvider?: string;
   paymentReference?: string;
+  checkoutOrigin?: string;
+  idempotencyKey: string;
   payment?: {
     provider?: string;
     reference?: string;

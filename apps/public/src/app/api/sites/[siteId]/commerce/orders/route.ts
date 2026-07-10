@@ -43,6 +43,10 @@ import {
   type CommerceOrderNotificationOrder,
   type CommerceProductNotificationProduct,
 } from "@/lib/commerceOrderDelivery";
+import {
+  isAllowedPublicOrigin,
+  normalizePublicOrigin,
+} from "@/lib/publicOriginPolicy";
 
 interface RouteParams {
   params: Promise<{
@@ -74,6 +78,8 @@ interface CheckoutOrderInput {
   paymentProvider?: string;
   paymentReference?: string;
   checkoutSessionId?: string;
+  checkoutOrigin?: string;
+  idempotencyKey?: string;
 }
 
 interface CheckoutSessionHandoff {
@@ -117,6 +123,7 @@ const ORDER_STATUS_ACCESS_TOKEN_BYTES = 32;
 const ORDER_STATUS_ACCESS_TOKEN_TTL_DAYS = 90;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_CHECKOUT_ITEM_QUANTITY = 999;
+const CHECKOUT_IDEMPOTENCY_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
 type OrderRiskLevel = "low" | "medium" | "high";
 type OrderStatusHandoffStatus = "ready" | "attention" | "blocked";
 type OrderWorkflowStatus =
@@ -498,11 +505,27 @@ const normalizeCheckoutInput = (
     checkoutSessionId: textValue(
       body.checkoutSessionId || checkoutSession.id || body.checkoutSession,
     ),
+    checkoutOrigin: textValue(body.checkoutOrigin),
+    idempotencyKey: textValue(body.idempotencyKey),
   };
 };
 
-const buildOrderNumber = () =>
-  `ORD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+const checkoutOrderIdentity = (siteId: string, idempotencyKey: string) => {
+  const digest = createHash("sha256")
+    .update(`${siteId}:${idempotencyKey}`)
+    .digest("hex");
+  return {
+    orderNumber: `ORD-${digest.slice(0, 16).toUpperCase()}`,
+    slug: `order-${digest.slice(0, 32)}`,
+    checkoutSessionId: `cs_${digest.slice(0, 24)}`,
+  };
+};
+
+const isUniqueConstraintError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  return record.code === "23505" || isUniqueConstraintError(record.cause);
+};
 
 const notifyOrderCreated = async (params: {
   repositories?: Awaited<
@@ -534,12 +557,22 @@ const buildAbsoluteUrl = (
   request: NextRequest,
   path: string,
   params: Record<string, string> = {},
+  origin = request.nextUrl.origin,
 ): string => {
-  const url = new URL(path.startsWith("/") ? path : `/${path}`, request.url);
+  const url = new URL(path.startsWith("/") ? path : `/${path}`, origin);
   Object.entries(params).forEach(([key, value]) => {
     if (value) url.searchParams.set(key, value);
   });
   return url.toString();
+};
+
+const resolveCheckoutOrigin = (
+  request: NextRequest,
+  input: CheckoutOrderInput,
+): string | null => {
+  if (!input.checkoutOrigin) return request.nextUrl.origin;
+  const requested = normalizePublicOrigin(input.checkoutOrigin);
+  return requested && isAllowedPublicOrigin(requested) ? requested : null;
 };
 
 const normalizeSlug = (value: unknown): string =>
@@ -789,6 +822,8 @@ const orderContract = (siteId: string) => ({
       discountCode: "Optional product discount code",
       paymentProvider: "manual",
       paymentReference: "optional-provider-reference",
+      checkoutOrigin: "https://custom-frontend.example.com",
+      idempotencyKey: "required-client-generated-unique-key",
     },
     aliases: {
       itemArrays: ["items", "lineItems", "cartItems", "cart.items"],
@@ -860,6 +895,9 @@ const validateCheckoutInput = (input: CheckoutOrderInput): string[] => {
     errors.push("customer.email must be a valid email");
   if (!input.items || input.items.length === 0)
     errors.push("At least one item is required");
+  if (!input.idempotencyKey || !CHECKOUT_IDEMPOTENCY_PATTERN.test(input.idempotencyKey)) {
+    errors.push("idempotencyKey must be 16 to 128 URL-safe characters");
+  }
   input.items?.forEach((item, index) => {
     if (!textValue(item.productId) && !textValue(item.slug)) {
       errors.push(`items[${index}] requires productId or slug`);
@@ -2344,6 +2382,7 @@ const applyCheckoutQuoteProviders = async ({
 
 const buildCheckoutSessionHandoff = ({
   request,
+  checkoutOrigin,
   siteId,
   commerce,
   input,
@@ -2355,6 +2394,7 @@ const buildCheckoutSessionHandoff = ({
   createdAt,
 }: {
   request: NextRequest;
+  checkoutOrigin: string;
   siteId: string;
   commerce: CommerceStorefrontContract;
   input: CheckoutOrderInput;
@@ -2374,24 +2414,37 @@ const buildCheckoutSessionHandoff = ({
         : "manual";
   const id =
     input.checkoutSessionId ||
-    `cs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    checkoutOrderIdentity(siteId, input.idempotencyKey || requestId)
+      .checkoutSessionId;
+  const stableRequestId = input.idempotencyKey || requestId;
   const metadata = {
     siteId,
     orderNumber,
     orderSlug,
-    requestId,
+    requestId: stableRequestId,
+    idempotencyKey: stableRequestId,
   };
   const successSessionId = provider === "stripe" ? "{CHECKOUT_SESSION_ID}" : id;
-  const successUrl = buildAbsoluteUrl(request, commerce.checkout.successPath, {
-    order: orderNumber,
-    session: successSessionId,
-    request: requestId,
-  }).replace("%7BCHECKOUT_SESSION_ID%7D", "{CHECKOUT_SESSION_ID}");
-  const cancelUrl = buildAbsoluteUrl(request, commerce.checkout.cancelPath, {
-    order: orderNumber,
-    session: id,
-    request: requestId,
-  });
+  const successUrl = buildAbsoluteUrl(
+    request,
+    commerce.checkout.successPath,
+    {
+      order: orderNumber,
+      session: successSessionId,
+      request: stableRequestId,
+    },
+    checkoutOrigin,
+  ).replace("%7BCHECKOUT_SESSION_ID%7D", "{CHECKOUT_SESSION_ID}");
+  const cancelUrl = buildAbsoluteUrl(
+    request,
+    commerce.checkout.cancelPath,
+    {
+      order: orderNumber,
+      session: id,
+      request: stableRequestId,
+    },
+    checkoutOrigin,
+  );
   const expiresAt = new Date(
     Date.parse(createdAt) + commerce.inventory.reservationMinutes * 60_000,
   ).toISOString();
@@ -2710,6 +2763,9 @@ const executeStripeCheckoutSession = async ({
       authorization: `Bearer ${secretKey}`,
       "content-type": "application/x-www-form-urlencoded",
       ...(handoff.accountId ? { "stripe-account": handoff.accountId } : {}),
+      ...(handoff.metadata.idempotencyKey
+        ? { "idempotency-key": handoff.metadata.idempotencyKey }
+        : {}),
       ...(envValue(["BACKY_STRIPE_API_VERSION", "STRIPE_API_VERSION"])
         ? {
             "stripe-version": envValue([
@@ -4144,12 +4200,14 @@ const getOrderStatusLookupRequest = (request: NextRequest) => {
 
   if (!lookupId) return null;
 
+  const authorization = request.headers.get("authorization") || "";
+  const bearerToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+
   return {
     lookupId,
     statusToken: firstText(
-      searchParams.get("statusToken"),
-      searchParams.get("orderStatusToken"),
-      searchParams.get("token"),
+      request.headers.get("x-backy-order-status-token"),
+      bearerToken,
     ),
   };
 };
@@ -4226,6 +4284,73 @@ const publicOrderStatusHandoffResponse = ({
       cache: "private",
       schemaVersion: ORDER_STATUS_HANDOFF_SCHEMA_VERSION,
       siteId,
+    },
+  );
+};
+
+const idempotentCheckoutReplayResponse = ({
+  request,
+  requestId,
+  siteId,
+  collection,
+  order,
+}: {
+  request: NextRequest;
+  requestId: string;
+  siteId: string;
+  collection: OrderStatusHandoffCollection;
+  order: OrderStatusHandoffOrder;
+}) => {
+  const values = toRecord(order.values);
+  const statusHandoff = buildCheckoutStatusHandoff({
+    origin: request.nextUrl.origin,
+    siteId,
+    collection,
+    order,
+    customerProfile: null,
+  });
+  const statusAccess = buildOrderStatusAccess({
+    origin: request.nextUrl.origin,
+    siteId,
+    order,
+  });
+  const provider = textValue(readOrderValue(values, "paymentprovider")) === "stripe"
+    ? "stripe"
+    : "manual";
+
+  return publicContractJson(
+    {
+      success: true,
+      requestId,
+      data: {
+        schemaVersion: ORDER_CONTRACT_VERSION,
+        order: statusHandoff.order,
+        customer: null,
+        checkoutSession: {
+          id: textValue(readOrderValue(values, "checkoutsessionid")),
+          provider,
+          status: textValue(readOrderValue(values, "checkoutsessionstatus")) || "requires_action",
+          handoffMode: textValue(readOrderValue(values, "checkoutsessionmode")) || (provider === "stripe" ? "provider" : "manual"),
+          url: textValue(readOrderValue(values, "checkoutsessionurl")) || null,
+          successUrl: textValue(readOrderValue(values, "checkoutsuccessurl")),
+          cancelUrl: textValue(readOrderValue(values, "checkoutcancelurl")),
+          providerPayload: null,
+        },
+        statusHandoff,
+        statusAccess,
+        idempotency: {
+          replayed: true,
+          key: textValue(readOrderValue(values, "idempotencykey")),
+        },
+      },
+    },
+    {
+      status: 200,
+      requestId,
+      request,
+      cache: "private",
+      siteId,
+      schemaVersion: ORDER_CONTRACT_VERSION,
     },
   );
 };
@@ -4525,6 +4650,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const checkoutOrigin = resolveCheckoutOrigin(request, input);
+    if (!checkoutOrigin) {
+      return errorResponse(
+        400,
+        "CHECKOUT_ORIGIN_NOT_ALLOWED",
+        "Checkout return origin must exactly match an allowed custom frontend origin",
+        requestId,
+      );
+    }
+
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site =
@@ -4576,6 +4711,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           "Orders collection must remain private before public checkout intake is enabled",
           requestId,
         );
+      }
+      const orderIdentity = checkoutOrderIdentity(
+        site.id,
+        input.idempotencyKey as string,
+      );
+      const existingOrder = await repositories.collections.getRecordBySlug(
+        site.id,
+        ordersCollection.id,
+        orderIdentity.slug,
+      );
+      if (existingOrder) {
+        return idempotentCheckoutReplayResponse({
+          request,
+          requestId,
+          siteId: site.id,
+          collection: ordersCollection as OrderStatusHandoffCollection,
+          order: existingOrder as OrderStatusHandoffOrder,
+        });
       }
       const monthlyOrderCount = await countRepositoryMonthlyOrders({
         siteId: site.id,
@@ -4718,25 +4871,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           },
         );
       }
-      const orderNumber = buildOrderNumber();
-      let slug = orderNumber.toLowerCase();
-      let suffix = 2;
-      while (
-        await repositories.collections.getRecordBySlug(
-          site.id,
-          ordersCollection.id,
-          slug,
-        )
-      ) {
-        slug = `${orderNumber.toLowerCase()}-${suffix}`;
-        suffix += 1;
-      }
+      const { orderNumber, slug } = orderIdentity;
       const orderCreatedAt = new Date().toISOString();
       const statusAccessToken = createOrderStatusAccessToken();
       const statusAccessTokenIssuedAt = orderCreatedAt;
       const checkoutSession = await executeStripeCheckoutSession({
         handoff: buildCheckoutSessionHandoff({
           request,
+          checkoutOrigin,
           siteId: site.id,
           commerce,
           input,
@@ -4779,7 +4921,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         currency,
         items: JSON.stringify(lineItems, null, 2),
         ordersource: "web",
+        idempotencykey: input.idempotencyKey || "",
         checkoutsessionid: checkoutSession.id,
+        checkoutsessionstatus: checkoutSession.status,
+        checkoutsessionmode: checkoutSession.handoffMode,
+        checkoutsessionurl: checkoutSession.url || "",
+        checkoutsuccessurl: checkoutSession.successUrl,
+        checkoutcancelurl: checkoutSession.cancelUrl,
         customerid: customerProfile?.record.id || "",
         statusaccesstokenhash: orderStatusAccessTokenHash(
           site.id,
@@ -4842,6 +4990,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ).item;
       } catch (error) {
         await rollbackInventoryReservations();
+        if (isUniqueConstraintError(error)) {
+          const existingOrder = await repositories.collections.getRecordBySlug(
+            site.id,
+            ordersCollection.id,
+            slug,
+          );
+          if (existingOrder) {
+            return idempotentCheckoutReplayResponse({
+              request,
+              requestId,
+              siteId: site.id,
+              collection: ordersCollection as OrderStatusHandoffCollection,
+              order: existingOrder as OrderStatusHandoffOrder,
+            });
+          }
+        }
         throw error;
       }
       customerProfile = await updateRepositoryCheckoutCustomerOrderLink({
@@ -4987,6 +5151,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
     }
+    const orderIdentity = checkoutOrderIdentity(
+      site.id,
+      input.idempotencyKey as string,
+    );
+    const existingOrder = getCollectionRecordByIdOrSlug(
+      site.id,
+      ordersCollection.id,
+      orderIdentity.slug,
+      { includeUnpublished: true },
+    );
+    if (existingOrder) {
+      return idempotentCheckoutReplayResponse({
+        request,
+        requestId,
+        siteId: site.id,
+        collection: ordersCollection as OrderStatusHandoffCollection,
+        order: existingOrder as OrderStatusHandoffOrder,
+      });
+    }
     const adminSettings = getAdminSettings();
     const orderLimitResponse = enforceMonthlyOrderBillingLimit(
       adminSettings.integrations?.commerce,
@@ -5114,23 +5297,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       );
     }
-    const orderNumber = buildOrderNumber();
-    let slug = orderNumber.toLowerCase();
-    let suffix = 2;
-    while (
-      getCollectionRecordByIdOrSlug(site.id, ordersCollection.id, slug, {
-        includeUnpublished: true,
-      })
-    ) {
-      slug = `${orderNumber.toLowerCase()}-${suffix}`;
-      suffix += 1;
-    }
+    const { orderNumber, slug } = orderIdentity;
     const orderCreatedAt = new Date().toISOString();
     const statusAccessToken = createOrderStatusAccessToken();
     const statusAccessTokenIssuedAt = orderCreatedAt;
     const checkoutSession = await executeStripeCheckoutSession({
       handoff: buildCheckoutSessionHandoff({
         request,
+        checkoutOrigin,
         siteId: site.id,
         commerce,
         input,
@@ -5178,7 +5352,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       currency,
       items: JSON.stringify(lineItems, null, 2),
       ordersource: "web",
+      idempotencykey: input.idempotencyKey || "",
       checkoutsessionid: checkoutSession.id,
+      checkoutsessionstatus: checkoutSession.status,
+      checkoutsessionmode: checkoutSession.handoffMode,
+      checkoutsessionurl: checkoutSession.url || "",
+      checkoutsuccessurl: checkoutSession.successUrl,
+      checkoutcancelurl: checkoutSession.cancelUrl,
       customerid: customerProfile?.record.id || "",
       statusaccesstokenhash: orderStatusAccessTokenHash(
         site.id,

@@ -185,6 +185,8 @@ export type BackyCommerceOrderInput = {
   notes?: string;
   discountCode?: string;
   requestId?: string;
+  checkoutOrigin?: string;
+  idempotencyKey: string;
 };
 
 export type BackyBlogPost = {
@@ -447,7 +449,8 @@ export class BackyCustomFrontendClient {
     statusToken: string,
   ): Promise<BackyEnvelope<Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/orders`, {
-      query: { orderId, statusToken },
+      query: { orderId },
+      headers: { authorization: `Bearer ${statusToken}` },
     });
   }
 
@@ -476,6 +479,7 @@ export class BackyCustomFrontendClient {
       method?: string;
       query?: Record<string, string | undefined>;
       body?: unknown;
+      headers?: Record<string, string>;
     } = {},
   ): Promise<TData> {
     const url = new URL(`${this.config.baseUrl}${pathname}`);
@@ -487,6 +491,7 @@ export class BackyCustomFrontendClient {
       method: options.method || "GET",
       headers: {
         "content-type": "application/json",
+        ...(options.headers || {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       cache: options.method ? "no-store" : "force-cache",

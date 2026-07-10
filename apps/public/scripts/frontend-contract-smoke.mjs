@@ -35,6 +35,7 @@ const routeResolverLib = read('../src/lib/routeResolver.ts');
 const repositoryRouteResolverLib = read('../src/lib/repositoryRouteResolver.ts');
 const renderPayloadLib = read('../src/lib/renderPayload.ts');
 const publicProxy = read('../src/proxy.ts');
+const publicOriginPolicy = read('../src/lib/publicOriginPolicy.ts');
 const adminSitesRoute = read('../src/app/api/admin/sites/route.ts');
 const adminSiteDetailRoute = read('../src/app/api/admin/sites/[siteId]/route.ts');
 const adminSiteSettingsRoute = read('../src/app/api/admin/sites/[siteId]/settings/route.ts');
@@ -576,10 +577,11 @@ assert(
 
 assert(
   publicProxy.includes('BACKY_CORS_EXPOSED_HEADERS') &&
-    publicProxy.includes('normalizeCorsOrigin') &&
-    publicProxy.includes("trimmed === '*'") &&
-    publicProxy.includes('new URL(trimmed).origin') &&
-    publicProxy.includes('process.env.BACKY_CORS_ALLOWED_ORIGINS') &&
+    publicProxy.includes('isAllowedPublicOrigin') &&
+    publicOriginPolicy.includes('normalizePublicOrigin') &&
+    publicOriginPolicy.includes("trimmed === '*'") &&
+    publicOriginPolicy.includes('new URL(trimmed)') &&
+    publicOriginPolicy.includes('process.env.BACKY_CORS_ALLOWED_ORIGINS') &&
     publicProxy.includes("headers.set('Access-Control-Allow-Origin', origin as string)") &&
     publicProxy.includes("headers.set('Access-Control-Expose-Headers', BACKY_CORS_EXPOSED_HEADERS)") &&
     publicProxy.includes("'x-backy-request-id'") &&
@@ -2240,6 +2242,8 @@ assert(
     openApiRoute.includes('"backy.commerce-management.v1"') &&
     openApiRoute.includes('lineItems: {') &&
     openApiRoute.includes('customerName: { type: "string" }') &&
+    openApiRoute.includes('checkoutOrigin: {') &&
+    openApiRoute.includes('It must match BACKY_CORS_ALLOWED_ORIGINS') &&
     publicCommerceOrdersRoute.includes('const buildCheckoutStatusHandoff =') &&
     publicCommerceOrdersRoute.includes('ORDER_STATUS_ACCESS_SCHEMA_VERSION = "backy.order-status-access.v1"') &&
     publicCommerceOrdersRoute.includes('const createOrderStatusAccessToken =') &&
@@ -2256,6 +2260,15 @@ assert(
     publicCommerceOrdersRoute.includes('"post-checkout-response"') &&
     publicCommerceOrdersRoute.includes('"post-checkout-status-token"') &&
     publicCommerceOrdersRoute.includes('safeBindingPaths') &&
+    publicCommerceOrdersRoute.includes('checkoutOrigin?: string') &&
+    publicCommerceOrdersRoute.includes('CHECKOUT_ORIGIN_NOT_ALLOWED') &&
+    publicCommerceOrdersRoute.includes('isAllowedPublicOrigin(requested)') &&
+    publicCommerceOrdersRoute.includes('checkoutOrigin,') &&
+    publicCommerceOrdersRoute.includes('CHECKOUT_IDEMPOTENCY_PATTERN') &&
+    publicCommerceOrdersRoute.includes('idempotentCheckoutReplayResponse') &&
+    publicCommerceOrdersRoute.includes('"idempotency-key"') &&
+    publicCommerceOrdersRoute.includes('request.headers.get("x-backy-order-status-token")') &&
+    !publicCommerceOrdersRoute.includes('searchParams.get("statusToken")') &&
     sdkSmoke.includes('manifest() missing commerce runtime discovery module') &&
     sdkSmoke.includes('manifest() commerce runtime missing lineItems order alias') &&
     sdkSmoke.includes('manifest() commerce management missing product provider sync helper') &&

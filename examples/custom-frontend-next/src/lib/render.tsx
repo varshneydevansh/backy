@@ -454,6 +454,9 @@ export function BackyElementView({
             const checkoutUrl = asText(repeaterValue(record, props.checkoutField, ["checkoutUrl", "checkout.url", "links.checkout"]));
             const price = repeaterValue(record, props.priceField, ["price"]);
             const currency = asText(repeaterValue(record, props.currencyField, ["currency"]));
+            const orderIntakeUrl = price !== undefined && !checkoutUrl
+              ? `/checkout?product=${encodeURIComponent(asText(record.slug, record.id) || id)}`
+              : "";
             return (
               <article key={id} data-backy-repeater-record={id}>
                 {image ? <img src={image} alt="" /> : null}
@@ -461,6 +464,7 @@ export function BackyElementView({
                 {description ? <p>{description}</p> : null}
                 {price !== undefined ? <p>{currency ? `${currency} ` : ""}{String(price)}</p> : null}
                 {checkoutUrl ? <a href={checkoutUrl} data-backy-checkout-mode="direct-checkout-url">Buy</a> : null}
+                {orderIntakeUrl ? <a href={orderIntakeUrl} data-backy-checkout-mode="order-intake">Buy</a> : null}
               </article>
             );
           })}

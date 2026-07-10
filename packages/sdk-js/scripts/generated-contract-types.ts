@@ -13307,6 +13307,7 @@ const commerceCatalogEnvelope = {
 } satisfies GeneratedBackyOpenApiCommerceCatalogEnvelope;
 
 const commerceOrderCreateRequest = {
+  idempotencyKey: "generated-commerce-order-idempotency",
   customerName: "Jane Customer",
   customerEmail: "jane@example.com",
   customerPhone: "+15555550100",
@@ -13350,7 +13351,10 @@ const sdkCommerceOrderInput = buildBackyCommerceOrderInput(
       id: "cs_demo",
     },
   },
-  { requestId: "sdk-commerce-order-builder" },
+  {
+    requestId: "sdk-commerce-order-builder",
+    idempotencyKey: "sdk-commerce-order-builder-idempotency",
+  },
 );
 const sdkCommerceOrderInputContract =
   sdkCommerceOrderInput satisfies BackyCommerceOrderInput;

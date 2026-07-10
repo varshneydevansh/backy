@@ -544,9 +544,22 @@ const normalizeReconciliationMode = (value: unknown): CommerceStorefrontContract
   return mode === 'webhook' || mode === 'scheduled' ? mode : 'manual';
 };
 
-const normalizeRelativePath = (value: unknown, fallback: string): string => {
+export const normalizeCommerceReturnPath = (value: unknown, fallback: string): string => {
   const path = normalizeText(value);
-  return path.startsWith('/') ? path : fallback;
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    /[\\\u0000-\u001f\u007f]/.test(path)
+  ) {
+    return fallback;
+  }
+  try {
+    const base = new URL('https://backy.invalid');
+    const resolved = new URL(path, base);
+    return resolved.origin === base.origin ? `${resolved.pathname}${resolved.search}${resolved.hash}` : fallback;
+  } catch {
+    return fallback;
+  }
 };
 
 const normalizePercent = (value: unknown, fallback: number): number => (
@@ -719,8 +732,8 @@ export const buildCommerceStorefrontContract = ({
     checkout: {
       catalogUrl: `/api/sites/${siteId}/commerce/catalog`,
       orderIntakeUrl: `/api/sites/${siteId}/commerce/orders`,
-      successPath: normalizeRelativePath(commerce.checkoutSuccessPath, '/checkout/success'),
-      cancelPath: normalizeRelativePath(commerce.checkoutCancelPath, '/checkout/cancel'),
+      successPath: normalizeCommerceReturnPath(commerce.checkoutSuccessPath, '/checkout/success'),
+      cancelPath: normalizeCommerceReturnPath(commerce.checkoutCancelPath, '/checkout/cancel'),
       guestCheckout: normalizeBoolean(commerce.guestCheckout, true),
     },
     pricing: {

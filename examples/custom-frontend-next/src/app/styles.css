@@ -45,6 +45,139 @@ button {
   font: inherit;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.backy-checkout-shell {
+  width: min(76rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 4rem 0;
+}
+
+.backy-checkout-header {
+  max-width: 44rem;
+  margin-bottom: 2.5rem;
+}
+
+.backy-checkout-header h1,
+.backy-checkout-result h1 {
+  margin: 0.25rem 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.backy-eyebrow {
+  margin: 0;
+  color: #0f766e;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.backy-checkout-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+  gap: 2rem;
+  align-items: start;
+}
+
+.backy-checkout-products {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.backy-checkout-products article,
+.backy-checkout-order,
+.backy-checkout-empty,
+.backy-checkout-result {
+  border: 1px solid #dbe3ed;
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 1.25rem;
+}
+
+.backy-checkout-products article {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.backy-checkout-products article img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.backy-checkout-products h3,
+.backy-checkout-products p {
+  margin: 0 0 0.5rem;
+}
+
+.backy-checkout-order {
+  position: sticky;
+  top: 1rem;
+}
+
+.backy-checkout-order ul {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.backy-checkout-order li,
+.backy-checkout-total,
+.backy-checkout-result dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.backy-checkout-total {
+  border-top: 1px solid #dbe3ed;
+  padding-top: 1rem;
+}
+
+.backy-checkout-order label span {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.backy-checkout-error {
+  color: #b91c1c;
+}
+
+.backy-checkout-result {
+  max-width: 42rem;
+  margin: 4rem auto;
+}
+
+.backy-checkout-result dl {
+  display: grid;
+  gap: 0.75rem;
+  margin: 2rem 0;
+}
+
+.backy-checkout-result dt {
+  color: #64748b;
+}
+
+@media (max-width: 850px) {
+  .backy-checkout-layout,
+  .backy-checkout-products {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .backy-checkout-order {
+    position: static;
+  }
+}
+
 label {
   display: grid;
   gap: 0.375rem;

@@ -4349,11 +4349,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                   { type: "string" },
                   "Order number for a tokenized customer-safe status refresh",
                 ),
-                queryParameter(
-                  "statusToken",
-                  { type: "string" },
-                  "One-time returned public order status token; Backy stores only its hash",
-                ),
+                {
+                  name: "Authorization",
+                  in: "header",
+                  required: false,
+                  schema: { type: "string" },
+                  description:
+                    "Bearer order-status token returned once at checkout; Backy stores only its hash and the token must not be placed in a URL.",
+                },
               ],
               responses: {
                 "200": {
@@ -16426,6 +16429,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }),
             CommerceOrderCreateRequest: {
               type: "object",
+              required: ["idempotencyKey"],
               additionalProperties: true,
               description:
                 "Create a storefront order. Canonical payloads use customer and items; custom frontends may also send lineItems, cartItems, cart.items, top-level customerName/customerEmail/customerPhone or name/email/phone, couponCode/promoCode, and checkoutSession.id aliases.",
@@ -16548,6 +16552,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 },
                 paymentProvider: { type: "string" },
                 paymentReference: { type: "string" },
+                checkoutOrigin: {
+                  type: "string",
+                  format: "uri",
+                  description:
+                    "Exact custom frontend origin used for checkout success and cancel returns. It must match BACKY_CORS_ALLOWED_ORIGINS.",
+                },
+                idempotencyKey: {
+                  type: "string",
+                  minLength: 16,
+                  maxLength: 128,
+                  pattern: "^[A-Za-z0-9._:-]+$",
+                  description:
+                    "Client-generated key reused for retries so Backy returns the existing order instead of creating a duplicate.",
+                },
                 payment: {
                   type: "object",
                   additionalProperties: true,

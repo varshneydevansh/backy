@@ -4,11 +4,14 @@ import type { BackyApiError, BackyRenderPayload } from "../../lib/backy-client";
 
 import { backy, sitePublicHost } from "../../lib/backy";
 import { BackyBlogArchive } from "../../lib/blog";
+import { BackyCheckout, BackyCheckoutResult } from "../../lib/checkout";
 import { BackyPage } from "../../lib/render";
 
 type PageParams = {
   path?: string[];
 };
+
+const checkoutPaths = new Set(["/checkout", "/checkout/success", "/checkout/cancel"]);
 
 function routePath(params: PageParams): string {
   const parts = params.path || [];
@@ -17,6 +20,13 @@ function routePath(params: PageParams): string {
 
 export async function generateMetadata({ params }: { params: Promise<PageParams> }) {
   const path = routePath(await params);
+  if (checkoutPaths.has(path)) {
+    const manifest = await backy.manifest();
+    return {
+      title: `${path === "/checkout" ? "Checkout" : "Order status"} | ${manifest.data.site.name || "Backy site"}`,
+      description: "Secure product order intake powered by Backy.",
+    };
+  }
   try {
     const rendered = await backy.render<BackyRenderPayload>(path, {
       sitePublicHost,
@@ -48,6 +58,21 @@ export default async function CustomBackyPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const path = routePath(await params);
+
+  if (checkoutPaths.has(path)) {
+    const search = await searchParams;
+    const orderReference = typeof search.order === "string" ? search.order : undefined;
+    if (path === "/checkout/success" || path === "/checkout/cancel") {
+      return <BackyCheckoutResult state={path.endsWith("success") ? "success" : "cancel"} orderReference={orderReference} />;
+    }
+    const initialProduct = typeof search.product === "string" ? search.product : undefined;
+    const [catalog, contract, manifest] = await Promise.all([
+      backy.commerceCatalog(),
+      backy.commerceOrderContract(),
+      backy.manifest(),
+    ]);
+    return <BackyCheckout catalog={catalog.data} contract={contract.data} initialProduct={initialProduct} siteName={manifest.data.site.name || "Store"} />;
+  }
 
   try {
     const rendered = await backy.render<BackyRenderPayload>(path, {

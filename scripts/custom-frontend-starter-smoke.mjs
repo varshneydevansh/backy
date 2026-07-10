@@ -48,6 +48,7 @@ const files = {
   newsletter: read('src/app/api/newsletter/route.ts'),
   form: read('src/app/api/backy-form/route.ts'),
   checkout: read('src/app/api/backy-checkout/route.ts'),
+  checkoutUi: read('src/lib/checkout.tsx'),
   connection: read('src/app/api/backy-connection/route.ts'),
   client: read('src/lib/backy-client.ts'),
   generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
@@ -183,6 +184,22 @@ assertIncludes(files.form, 'buildBackyFormSubmissionInput', 'Starter normalizes 
 assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form submissions');
 assertIncludes(files.checkout, 'containsRawPaymentData', 'Starter checkout rejects raw card data');
 assertIncludes(files.checkout, 'backy.createCommerceOrder', 'Starter checkout sends customer and cart data to Backy order intake');
+assertIncludes(files.checkout, 'cache-control', 'Starter checkout bridge preserves private no-store responses');
+assertIncludes(files.checkout, 'checkoutOrigin: new URL(request.url).origin', 'Starter checkout sends its exact return origin for allowlist validation');
+assertIncludes(files.checkout, 'idempotencyKey: text(payload.idempotencyKey)', 'Starter checkout forwards a durable idempotency key');
+assertIncludes(files.checkoutUi, 'data-backy-checkout="order-intake"', 'Starter renders a customer checkout and order-intake surface');
+assertIncludes(files.checkoutUi, 'checkoutSession.status === "provider_created"', 'Starter only redirects after provider checkout creation');
+assertIncludes(files.checkoutUi, 'checkoutSession.provider === "stripe"', 'Starter scopes provider redirects to Stripe');
+assertIncludes(files.checkoutUi, 'checkout.stripe.com', 'Starter allowlists the Stripe checkout host before redirecting');
+assertIncludes(files.checkout, 'httpOnly: true', 'Starter keeps one-time order status access in an HttpOnly cookie');
+assertIncludes(files.checkout, 'status_token_in_url_not_allowed', 'Starter rejects order status bearer tokens in URLs');
+assertIncludes(files.checkoutUi, '/api/backy-checkout?status=latest', 'Starter verifies checkout return status through the protected session');
+assertIncludes(files.checkoutUi, 'submissionInFlight.current', 'Starter blocks duplicate client order submissions');
+assertIncludes(files.checkoutUi, 'crypto.randomUUID()', 'Starter generates a stable checkout idempotency key');
+assertIncludes(files.checkoutUi, 'secure payment session is not available yet', 'Starter reports provider-session failures truthfully after recording an order');
+assertIncludes(files.page, 'path === "/checkout/success"', 'Starter provides a stable checkout success fallback');
+assertIncludes(files.page, 'path === "/checkout/cancel"', 'Starter provides a stable checkout cancel fallback');
+assertIncludes(files.render, 'data-backy-checkout-mode="order-intake"', 'Starter product repeaters link to order intake without a provider URL');
 assertIncludes(files.render, 'data-backy-repeater-record', 'Starter renderer materializes hydrated repeater records');
 assertIncludes(files.render, 'BackyFormField', 'Starter renderer materializes Backy form schemas');
 assertIncludes(files.render, 'data-backy-code-language', 'Starter renderer preserves technical code block language metadata');
@@ -243,6 +260,11 @@ assertIncludes(files.generatedTemplate, 'export async function DELETE', 'Generat
 assertIncludes(files.generatedTemplate, 'submitForm', 'Generated starter bundle includes public form submission support');
 assertIncludes(files.generatedTemplate, 'createCommerceOrder', 'Generated starter bundle includes public checkout order intake');
 assertIncludes(files.generatedTemplate, 'src/app/api/backy-checkout/route.ts', 'Generated starter bundle includes the safe checkout bridge');
+assertIncludes(files.generatedTemplate, 'src/lib/checkout.tsx', 'Generated starter bundle includes the customer checkout UI');
+assertIncludes(files.generatedTemplate, 'checkoutSession.status === \\"provider_created\\"', 'Generated starter bundle preserves strict provider redirect state');
+assertIncludes(files.generatedTemplate, 'checkoutOrigin: new URL(request.url).origin', 'Generated starter bundle preserves allowlisted checkout return origins');
+assertIncludes(files.generatedTemplate, 'idempotencyKey: idempotencyKey.current', 'Generated starter bundle preserves checkout idempotency');
+assertIncludes(files.generatedTemplate, 'httpOnly: true', 'Generated starter bundle preserves HttpOnly order status sessions');
 assertIncludes(files.generatedTemplate, 'data-backy-repeater-record', 'Generated starter bundle renders hydrated repeater records');
 assertIncludes(files.generatedTemplate, 'src/lib/blog.tsx', 'Generated starter bundle includes the public blog archive');
 assertIncludes(files.generatedTemplate, 'data-backy-blog-archive', 'Generated starter bundle includes blog archive route metadata');

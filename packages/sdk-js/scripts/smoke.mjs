@@ -3316,18 +3316,20 @@ try {
     },
   }, {
     requestId: 'sdk-commerce-order-builder',
+    idempotencyKey: 'sdk-commerce-order-builder-idem',
   });
   assert(canonicalOrderInput.customer?.email === 'sdk-customer@example.com', 'buildBackyCommerceOrderInput() did not normalize customer email');
   assert(canonicalOrderInput.items?.[0]?.slug === 'starter-template', 'buildBackyCommerceOrderInput() did not normalize product slug');
   assert(canonicalOrderInput.items?.[0]?.quantity === 2, 'buildBackyCommerceOrderInput() did not normalize quantity');
   assert(canonicalOrderInput.discountCode === 'LAUNCH', 'buildBackyCommerceOrderInput() did not normalize discount code');
   assert(canonicalOrderInput.checkoutSessionId === 'cs_sdk', 'buildBackyCommerceOrderInput() did not normalize checkout session id');
+  assert(canonicalOrderInput.idempotencyKey === 'sdk-commerce-order-builder-idem', 'buildBackyCommerceOrderInput() did not preserve idempotency key');
 
   const manifestCommerceRuntime = manifest.data.modules?.commerceRuntime;
   assert(manifestCommerceRuntime?.schemaVersion === 'backy.commerce-discovery.v1', 'manifest() missing commerce runtime discovery module');
   assert(manifestCommerceRuntime.endpoints?.catalog === manifest.data.endpoints.commerceCatalog, 'manifest() commerce runtime catalog endpoint drifted');
   assert(manifestCommerceRuntime.endpoints?.orderContract === manifest.data.endpoints.commerceOrders, 'manifest() commerce runtime order contract endpoint drifted');
-  assert(manifestCommerceRuntime.endpoints?.publicOrderStatus?.includes?.('statusToken={statusToken}'), 'manifest() commerce runtime missing public order status endpoint template');
+  assert(manifestCommerceRuntime.endpoints?.publicOrderStatus?.includes?.('orderId={orderId}') && !manifestCommerceRuntime.endpoints?.publicOrderStatus?.includes?.('statusToken='), 'manifest() commerce runtime must keep order status tokens out of endpoint URLs');
   assert(manifestCommerceRuntime.methods?.createOrder === 'POST', 'manifest() commerce runtime create order method drifted');
   assert(manifestCommerceRuntime.methods?.publicOrderStatus === 'GET', 'manifest() commerce runtime public order status method drifted');
   assert(manifestCommerceRuntime.capabilities?.productFilters === true, 'manifest() commerce runtime missing product filters capability');

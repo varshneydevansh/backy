@@ -20,8 +20,11 @@ const starterFiles = [
   { path: 'src/app/api/backy-connection/route.ts', role: 'connection-probe' },
   { path: 'src/app/api/newsletter/route.ts', role: 'newsletter-bridge' },
   { path: 'src/app/api/backy-form/route.ts', role: 'form-bridge' },
+  { path: 'src/app/api/backy-checkout/route.ts', role: 'checkout-bridge' },
   { path: 'src/lib/backy-client.ts', role: 'backy-public-client' },
   { path: 'src/lib/backy.ts', role: 'backy-client-bootstrap' },
+  { path: 'src/lib/blog.tsx', role: 'blog-archive' },
+  { path: 'src/lib/checkout.tsx', role: 'checkout-ui' },
   { path: 'src/lib/render.tsx', role: 'backy-renderer' },
 ];
 

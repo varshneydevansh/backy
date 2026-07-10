@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const DEFAULT_ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:4173',
-  'http://127.0.0.1:4173',
-];
+import { isAllowedPublicOrigin } from '@/lib/publicOriginPolicy';
 
 const BACKY_ADMIN_CONTRACT_VERSION = 'backy.admin.v1';
 const BACKY_ADMIN_SETTINGS_SCHEMA_VERSION = 'backy.admin-settings.v1';
@@ -27,40 +19,6 @@ const BACKY_CORS_EXPOSED_HEADERS = [
 ].join(', ');
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-const normalizeCorsOrigin = (origin: string | null | undefined) => {
-  const trimmed = origin?.trim();
-  if (!trimmed || trimmed === '*') {
-    return null;
-  }
-
-  try {
-    return new URL(trimmed).origin;
-  } catch {
-    return null;
-  }
-};
-
-const getAllowedOrigins = () => {
-  const configured = process.env.BACKY_CORS_ALLOWED_ORIGINS
-    ?.split(',')
-    .map(normalizeCorsOrigin)
-    .filter((origin): origin is string => Boolean(origin)) ?? [];
-
-  return new Set([
-    ...DEFAULT_ALLOWED_ORIGINS.map(normalizeCorsOrigin).filter((origin): origin is string => Boolean(origin)),
-    ...configured,
-  ]);
-};
-
-const isAllowedOrigin = (origin: string | null) => {
-  const normalizedOrigin = normalizeCorsOrigin(origin);
-  if (!normalizedOrigin) {
-    return false;
-  }
-
-  return getAllowedOrigins().has(normalizedOrigin);
-};
 
 const isAdminApiRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/');
 const isAdminAuthRequest = (request: NextRequest) => request.nextUrl.pathname.startsWith('/api/admin/auth/');
@@ -131,7 +89,7 @@ const adminAuthError = (
 };
 
 const applyCorsHeaders = (headers: Headers, origin: string | null) => {
-  if (!isAllowedOrigin(origin)) {
+  if (!isAllowedPublicOrigin(origin)) {
     return;
   }
 
