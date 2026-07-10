@@ -14,10 +14,10 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 | Backy public/API runtime | Ready | `https://backy-public.vercel.app` is live on Supabase/Postgres-backed database mode; production readiness passes 47 checks for discovery, handoff, manifest, OpenAPI, and render. Exact production CORS origins are configured for Backy admin, the deployed custom frontend, and the apex/`www` website hosts. |
 | Production owner access | Ready | Production Supabase contains two active Backy owner profiles and owner team memberships. The prior "created as editor" blocker is closed. The one-time owner bootstrap token is absent from production after use. |
 | Real website site record | Ready for authoring | `devanshvarshney` / `devanshvarshney.com` exists as a published Backy site with a published homepage. DNS/domain status remains pending until the live domain is moved and verified. |
-| Separate custom frontend | Ready on Vercel | `https://devanshvarshney-frontend.vercel.app` is deployed separately. The strict production connection gate passes 113 checks using canonical site id `f766b8f8-6480-40bb-abec-775b75e09c07`, including public API, DOM control attributes, `/api/backy-connection`, editable-map, responsive, template registry, blog inheritance, and frontend-design pointers. The deployed runtime also renders hydrated blog/catalog repeaters, schema-driven forms, audio/video/code blocks, newsletter unsubscribe, and a customer/cart-only checkout bridge that rejects raw card data. |
+| Separate custom frontend | Ready on Vercel | `https://devanshvarshney-frontend.vercel.app` is deployed separately. The strict production connection gate passes 113 checks using canonical site id `f766b8f8-6480-40bb-abec-775b75e09c07`, including public API, DOM control attributes, `/api/backy-connection`, editable-map, responsive, template registry, blog inheritance, and frontend-design pointers. The deployed runtime also renders hydrated blog/catalog repeaters, schema-driven forms, audio/video/code blocks, newsletter unsubscribe, and `/checkout`, `/checkout/success`, and `/checkout/cancel`. Its checkout bridge rejects raw card data and URL-carried status tokens, keeps order status tokens in an HttpOnly same-site cookie, and returns no-store responses. |
 | Pages and blog publishing | Ready for use | Backy page/blog creation, templates, canvas persistence, public render, long-page growth, audio/transcript starter, custom-frontend template inheritance, and publish APIs are implemented and smoke-guarded. The separate frontend now serves a searchable `/blog` archive from the public blog API even before an authored index page exists; future published posts populate it automatically, while an authored Backy `/blog` page takes precedence. Real authored content still needs to be entered by the owner. |
 | Media, files, fonts, forms, newsletter | Ready for use | Media/file/font records, upload contracts, form submission, contacts, newsletter consent/subscriber management, issue-draft handoff, and public frontend bridges are implemented. Outbound email delivery remains provider-backed by design. |
-| Products and orders | Catalog/order intake ready; paid checkout externally gated | Production now has a published public Products schema with 40 commerce fields and a published private Orders schema with 60 operational fields. Public catalog and checkout discovery return `200`; the empty catalog is ready for owner-authored products. Taking real card payments still requires configured provider credentials and fresh Commerce certification evidence. |
+| Products and orders | Buyer checkout ready; paid settlement externally gated | Production has a published public Products schema with 40 commerce fields and a published private Orders schema with 60 operational fields. The order API enforces exact checkout origins, required idempotency keys, deterministic duplicate replay, protected status lookup, and provider-safe return paths. Public catalog and checkout discovery return `200`; the empty catalog is ready for owner-authored products. Taking and settling real card payments still requires configured provider credentials and fresh Commerce certification evidence. |
 | Dependency security | Hardened; 0 high / 0 critical | The production dependency audit was reduced from 6 high / 7 moderate to 0 high / 2 moderate / 1 low. Next is pinned to `16.2.10`, Drizzle ORM to `0.45.2`, misplaced admin/database runtime dependencies were removed, and the unused vulnerable generic Plate media URL parser was replaced by Backy-owned image/legacy-media node registration. The remaining production advisories are Next's bundled build-time PostCSS copy and an esbuild development-server advisory; neither is an exposed Backy request handler. |
 | Release audit | 41 Ready / 4 Partial | `/settings`, Settings admin APIs, `/products`, and `/orders` remain Partial only because fresh live Settings/Commerce provider artifacts are not present. Artifact-accepted mode is `45 Ready / 0 Partial`. |
 
@@ -26,8 +26,10 @@ Last refreshed: 2026-07-10 IST. This section is the current operational launch t
 - [ ] Sign in with one of the active owner accounts and author the first real pages, posts, media, newsletter form, products, and policies.
 - [x] Configure exact `BACKY_CORS_ALLOWED_ORIGINS` entries for Backy admin, the deployed custom frontend, and the future apex/`www` website hosts; redeploy `backy-public` and rerun the 47-check production and 113-check custom-frontend gates.
 - [x] Deploy the custom frontend catalog/order client and safe checkout bridge; initialize the public Products and private Orders schemas without creating fake products or orders.
+- [x] Deploy the secure buyer checkout flow with success/cancel recovery, server-enforced idempotency, HttpOnly status state, raw-payment rejection, and live production route/security proof.
 - [ ] Attach `devanshvarshney.com` to the separate frontend Vercel project, update DNS, and verify the Backy domain mapping without interrupting the current Hostinger site.
 - [ ] Select and configure the payment provider used for real checkout, then run Commerce provider certification and save the redacted artifact.
+- [ ] Before unrelated customer sites share one `backy-public` instance, replace the global checkout-origin allowlist with site-scoped allowed origins. The current exact allowlist is sufficient for the single `devanshvarshney.com` launch but is not the final multi-tenant policy.
 - [ ] Configure the chosen outbound email provider when newsletter delivery is needed; subscriber capture and export do not depend on it.
 - [ ] Run the optional credential-redacted live admin login/session/logout proof from a private shell before final launch promotion.
 
@@ -48,6 +50,8 @@ BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 \
 BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 \
 npm run test:custom-frontend-connection
 ```
+
+Latest production proof on 2026-07-10: both production deployments reached Vercel `Ready`; the storefront checkout, success, and cancel routes returned `200`; the bridge contract returned `200` with `Cache-Control: no-store`; URL-carried status tokens and raw card-shaped payloads returned `400`; the 47-check production-readiness gate and 113-check custom-frontend gate passed. No fake production product or order was created.
 
 ## Scope
 
@@ -132,9 +136,10 @@ npm run test:custom-frontend-connection
 - [x] Handoff docs do not expose secrets or admin-only payloads in public endpoints.
 
 **Current evidence:**
-- The strict deployed custom frontend gate passes 113 checks for the real production site and separate Vercel frontend, including component properties, editable maps, responsive metadata, template reuse, blog inheritance, and the secret-free connection probe.
+- The strict deployed custom frontend gate passes 113 checks for the real production site and separate Vercel frontend, including component properties, editable maps, responsive metadata, template reuse, blog inheritance, the secret-free connection probe, and the deployed buyer checkout routes.
 - Help, Site Detail, Newsletter, manifest, OpenAPI, SDK, and starter source contracts are covered by the custom frontend control-plane gate and focused admin/public smokes.
 - Public-repo hygiene and frontend forbidden-env checks keep database, Supabase service-role, admin, bootstrap, cron, SMTP, and payment secrets out of the custom frontend contract.
+- Checkout security has behavioral coverage for return-path normalization, exact origin admission, raw-payment rejection, URL-token rejection, protected status lookup, and duplicate-order replay. The canonical starter, SDK, OpenAPI, manifest, and generated frontend source share the same contract.
 
 **Docs likely touched:**
 - `AGENTS.md`
