@@ -44,11 +44,14 @@ assert(
     routeSource.includes("'/auth/v1/admin/users'") &&
     routeSource.includes('findSupabaseAuthUserByEmail') &&
     routeSource.includes("`/auth/v1/admin/users?page=${page}&per_page=100`") &&
+    routeSource.includes('setSupabaseAuthUserPassword') &&
+    routeSource.includes("method: 'PATCH'") &&
+    routeSource.includes('SUPABASE_OWNER_PASSWORD_UPDATE_FAILED') &&
     routeSource.includes("'/rest/v1/profiles?on_conflict=id'") &&
     routeSource.includes('findExistingBackyProfileByEmail') &&
-    routeSource.includes('adopted-existing-backy-profile') &&
-    routeSource.includes('adopted-existing-supabase-auth-user'),
-  'Owner bootstrap must run only in database mode and create or safely adopt a Supabase-backed Backy owner profile or existing Supabase Auth identity.',
+    routeSource.includes('adopted-existing-backy-profile-and-reset-password') &&
+    routeSource.includes('adopted-existing-supabase-auth-user-and-reset-password'),
+  'Owner bootstrap must run only in database mode and create or safely adopt a Supabase-backed Backy owner profile, resetting an adopted identity password before activation.',
 );
 
 assert(

@@ -243,6 +243,34 @@ async function createSupabaseAuthUser(input: {
   return { ok: true as const, status: response.status, userId: getCreatedUserId(response.json) };
 }
 
+async function setSupabaseAuthUserPassword(input: {
+  url: string;
+  serviceKey: string;
+  userId: string;
+  password: string;
+  fullName: string;
+}) {
+  const response = await fetchSupabaseJson(
+    input.url,
+    input.serviceKey,
+    `/auth/v1/admin/users/${encodeURIComponent(input.userId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        password: input.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: input.fullName,
+          source: 'backy-owner-bootstrap',
+        },
+      }),
+    },
+  );
+
+  return { ok: response.ok, status: response.status };
+}
+
 async function upsertOwnerProfile(input: {
   url: string;
   serviceKey: string;
@@ -420,11 +448,30 @@ export async function POST(request: NextRequest) {
       const existingProfile = await findExistingBackyProfileByEmail(supabase.url, supabase.serviceKey, email);
       if (existingProfile) {
         ownerUserId = existingProfile.id as string;
-        authAction = 'adopted-existing-backy-profile';
+        authAction = 'adopted-existing-backy-profile-and-reset-password';
       } else {
         ownerUserId = await findSupabaseAuthUserByEmail(supabase.url, supabase.serviceKey, email);
         if (ownerUserId) {
-          authAction = 'adopted-existing-supabase-auth-user';
+          authAction = 'adopted-existing-supabase-auth-user-and-reset-password';
+        }
+      }
+
+      if (ownerUserId) {
+        // The one-time server-only bootstrap token authorizes this password.
+        // An adopted identity must be able to sign in with the supplied value.
+        const passwordUpdate = await setSupabaseAuthUserPassword({
+          ...supabase,
+          userId: ownerUserId,
+          password,
+          fullName,
+        });
+        if (!passwordUpdate.ok) {
+          return errorResponse(
+            502,
+            'SUPABASE_OWNER_PASSWORD_UPDATE_FAILED',
+            'Supabase rejected the owner password update. No Backy owner profile was activated.',
+            requestId,
+          );
         }
       }
     }
