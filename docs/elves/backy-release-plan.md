@@ -4,6 +4,48 @@
 
 Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, releaseable product experience for secure multi-site website backends, custom frontend handoff, and Canva/Wix-style page editing. The remaining audit partials are external live Settings/Commerce provider certification artifacts; product work during this run should focus on the admin UX, canvas editor reliability, custom frontend discoverability, and release verification around those known external gates.
 
+## Canonical Launch-Critical Status
+
+Last refreshed: 2026-07-10 IST. This section is the current operational launch tracker. The page-surface audit remains canonical for the separate `41 Ready / 4 Partial` product count.
+
+| Launch capability | Current state | Evidence / remaining gate |
+| --- | --- | --- |
+| Protected Backy admin | Ready | `https://backy-admin.vercel.app/login` is live; the production login-shell smoke exposes no demo credentials or development MFA phrase. |
+| Backy public/API runtime | Ready | `https://backy-public.vercel.app` is live on Supabase/Postgres-backed database mode; production readiness passes 47 checks for discovery, handoff, manifest, OpenAPI, and render. |
+| Production owner access | Ready | Production Supabase contains two active Backy owner profiles and owner team memberships. The prior "created as editor" blocker is closed. The one-time owner bootstrap token is absent from production after use. |
+| Real website site record | Ready for authoring | `devanshvarshney` / `devanshvarshney.com` exists as a published Backy site with a published homepage. DNS/domain status remains pending until the live domain is moved and verified. |
+| Separate custom frontend | Ready on Vercel | `https://devanshvarshney-frontend.vercel.app` is deployed separately. The strict production connection gate passes 113 checks using canonical site id `f766b8f8-6480-40bb-abec-775b75e09c07`, including public API, DOM control attributes, `/api/backy-connection`, editable-map, responsive, template registry, blog inheritance, and frontend-design pointers. |
+| Pages and blog publishing | Ready for use | Backy page/blog creation, templates, canvas persistence, public render, long-page growth, audio/transcript starter, custom-frontend template inheritance, and publish APIs are implemented and smoke-guarded. Real authored content still needs to be entered by the owner. |
+| Media, files, fonts, forms, newsletter | Ready for use | Media/file/font records, upload contracts, form submission, contacts, newsletter consent/subscriber management, issue-draft handoff, and public frontend bridges are implemented. Outbound email delivery remains provider-backed by design. |
+| Products and orders | Core ready; paid checkout externally gated | Product/catalog/order records and public APIs are implemented. Taking real card payments requires configured provider credentials and fresh Commerce certification evidence. |
+| Release audit | 41 Ready / 4 Partial | `/settings`, Settings admin APIs, `/products`, and `/orders` remain Partial only because fresh live Settings/Commerce provider artifacts are not present. Artifact-accepted mode is `45 Ready / 0 Partial`. |
+
+### Remaining launch actions
+
+- [ ] Sign in with one of the active owner accounts and author the first real pages, posts, media, newsletter form, products, and policies.
+- [ ] Attach `devanshvarshney.com` to the separate frontend Vercel project, update DNS, verify the Backy domain mapping, and include the exact browser origin in `BACKY_CORS_ALLOWED_ORIGINS`.
+- [ ] Select and configure the payment provider used for real checkout, then run Commerce provider certification and save the redacted artifact.
+- [ ] Configure the chosen outbound email provider when newsletter delivery is needed; subscriber capture and export do not depend on it.
+- [ ] Run the optional credential-redacted live admin login/session/logout proof from a private shell before final launch promotion.
+
+### Current proof commands
+
+```bash
+BACKY_VERCEL_PRODUCTION_URL=https://backy-public.vercel.app \
+BACKY_VERCEL_PRODUCTION_SITE_ID=devanshvarshney \
+BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION=1 \
+npm run test:vercel-production-readiness
+
+BACKY_CUSTOM_FRONTEND_API_BASE_URL=https://backy-public.vercel.app/api \
+BACKY_CUSTOM_FRONTEND_SITE_ID=f766b8f8-6480-40bb-abec-775b75e09c07 \
+BACKY_CUSTOM_FRONTEND_SITE_PUBLIC_HOST=devanshvarshney.com \
+BACKY_CUSTOM_FRONTEND_URL=https://devanshvarshney-frontend.vercel.app \
+BACKY_CUSTOM_FRONTEND_REQUIRE_LIVE=1 \
+BACKY_CUSTOM_FRONTEND_REQUIRE_FRONTEND=1 \
+BACKY_CUSTOM_FRONTEND_REQUIRE_PROBE=1 \
+npm run test:custom-frontend-connection
+```
+
 ## Scope
 
 ### In Scope
@@ -77,14 +119,19 @@ Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, r
 ### Batch 3: Custom Frontend And Newsletter Handoff Readiness
 
 **Tasks:**
-- [ ] Ensure Help, Site Detail, and Editor composition handoff clearly show where AI/frontend agents read Backy APIs.
-- [ ] Confirm every component/element remains API-addressable through manifest/OpenAPI/SDK/render payloads with properties, bindings, design tokens, fonts, media, animations, and editable maps preserved.
-- [ ] Make newsletter subscriber management and provider-safe sync/export handoff discoverable for publishing/journalism workflows.
+- [x] Ensure Help, Site Detail, and Editor composition handoff clearly show where AI/frontend agents read Backy APIs.
+- [x] Confirm every component/element remains API-addressable through manifest/OpenAPI/SDK/render payloads with properties, bindings, design tokens, fonts, media, animations, and editable maps preserved.
+- [x] Make newsletter subscriber management and provider-safe sync/export handoff discoverable for publishing/journalism workflows.
 
 **Acceptance criteria:**
-- [ ] Help/site/newsletter smokes cover copyable handoff blocks and site-scoped URLs.
-- [ ] Generated SDK contract type checks pass when public contract changes.
-- [ ] Handoff docs do not expose secrets or admin-only payloads in public endpoints.
+- [x] Help/site/newsletter smokes cover copyable handoff blocks and site-scoped URLs.
+- [x] Generated SDK contract type checks pass when public contract changes.
+- [x] Handoff docs do not expose secrets or admin-only payloads in public endpoints.
+
+**Current evidence:**
+- The strict deployed custom frontend gate passes 113 checks for the real production site and separate Vercel frontend, including component properties, editable maps, responsive metadata, template reuse, blog inheritance, and the secret-free connection probe.
+- Help, Site Detail, Newsletter, manifest, OpenAPI, SDK, and starter source contracts are covered by the custom frontend control-plane gate and focused admin/public smokes.
+- Public-repo hygiene and frontend forbidden-env checks keep database, Supabase service-role, admin, bootstrap, cron, SMTP, and payment secrets out of the custom frontend contract.
 
 **Docs likely touched:**
 - `AGENTS.md`
@@ -97,15 +144,21 @@ Bring Backy from the current 41 Ready / 4 Partial audit state into a coherent, r
 ### Batch 4: Release Certification And Vercel Readiness
 
 **Tasks:**
-- [ ] Keep `npm run doctor:release-certification` green in default no-artifact mode.
-- [ ] Keep provider artifact admission commands documented and machine-readable for Settings and Commerce.
-- [ ] Confirm git history no longer contains the previously blocked Stripe sentinel commits and push protection stays clean.
-- [ ] Keep Vercel protected deployment topology documented for Backy admin/public and custom frontend deployments.
+- [x] Keep `npm run doctor:release-certification` green in default no-artifact mode.
+- [x] Keep provider artifact admission commands documented and machine-readable for Settings and Commerce.
+- [x] Confirm git history no longer contains the previously blocked Stripe sentinel commits and push protection stays clean.
+- [x] Keep Vercel protected deployment topology documented for Backy admin/public and custom frontend deployments.
 
 **Acceptance criteria:**
-- [ ] Release certification doctor passes.
-- [ ] Secret scans/contract smokes avoid raw provider-looking keys.
-- [ ] Vercel deployment docs identify backend/admin topology, frontend deployment separation, and domain/subdomain routing expectations.
+- [x] Release certification doctor passes.
+- [x] Secret scans/contract smokes avoid raw provider-looking keys.
+- [x] Vercel deployment docs identify backend/admin topology, frontend deployment separation, and domain/subdomain routing expectations.
+
+**Current evidence:**
+- Default release doctor passes and reports the honest artifact-free `41 Ready / 4 Partial` audit plus the artifact-accepted `45 Ready / 0 Partial` impact.
+- `backy-public`, `backy-admin`, and `devanshvarshney-frontend` production deployments are Ready as separate Vercel projects.
+- Live public production readiness passes 47 checks and the protected production login shell exposes no demo credentials or development MFA phrase.
+- The two commits previously rejected by GitHub push protection are not ancestors of `main`, public-repo hygiene passes, and the current branch pushes cleanly.
 
 **Docs likely touched:**
 - Release docs/specs only if the verified behavior changes.

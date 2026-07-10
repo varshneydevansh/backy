@@ -15,6 +15,8 @@
 Backy is a backend-first, open-source CMS platform with a drag-and-drop editor.  
 The goal is to give non-technical and technical teams a complete website-authoring backend with API-first output for any custom frontend.
 
+Current operational progress, production evidence, and the remaining launch actions are tracked in [`docs/elves/backy-release-plan.md`](docs/elves/backy-release-plan.md). The separate page-surface audit remains in [`specs/page-completion-audit/backy-page-surface-audit.md`](specs/page-completion-audit/backy-page-surface-audit.md).
+
 ---
 
 ## Features
