@@ -17,6 +17,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App';
 import './index.css';
 
+const routeSupabaseRecoveryFragment = () => {
+  if (window.location.pathname !== '/' || !window.location.hash) return;
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (hash.get('type') !== 'recovery' || !hash.get('access_token')) return;
+  window.history.replaceState(window.history.state, '', `/reset-password${window.location.hash}`);
+};
+
+routeSupabaseRecoveryFragment();
+
 // ============================================
 // QUERY CLIENT SETUP
 // ============================================

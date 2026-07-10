@@ -227,6 +227,7 @@ const assertAuthRecoverySource = () => {
   const loginSource = fs.readFileSync(new URL('../src/routes/login.tsx', import.meta.url), 'utf8');
   const forgotSource = fs.readFileSync(new URL('../src/routes/forgot-password.tsx', import.meta.url), 'utf8');
   const resetSource = fs.readFileSync(new URL('../src/routes/reset-password.tsx', import.meta.url), 'utf8');
+  const mainSource = fs.readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
   const localBackendOriginSource = fs.readFileSync(new URL('../src/lib/localBackendOrigin.ts', import.meta.url), 'utf8');
   const adminSessionTokenSource = fs.readFileSync(new URL('../src/lib/adminSessionToken.ts', import.meta.url), 'utf8');
   const adminAuthApiSource = fs.readFileSync(new URL('../src/lib/adminAuthApi.ts', import.meta.url), 'utf8');
@@ -294,6 +295,14 @@ const assertAuthRecoverySource = () => {
       forgotSource.includes('disabled={isSubmitting}') &&
       !forgotSource.includes('disabled={!emailIsValid || isSubmitting}'),
     'Forgot password page must expose custom inline email validation and keep the recovery action reachable for invalid submissions',
+  );
+
+  assert(
+    mainSource.includes('routeSupabaseRecoveryFragment') &&
+      mainSource.includes("window.location.pathname !== '/'") &&
+      mainSource.includes("hash.get('type') !== 'recovery'") &&
+      mainSource.includes('`/reset-password${window.location.hash}`'),
+    'Admin entry must route Supabase recovery fragments from the configured root site URL to the reset screen without exposing or dropping the token.',
   );
 
   assert(
