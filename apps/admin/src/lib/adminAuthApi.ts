@@ -112,8 +112,10 @@ interface AdminPasswordResetAcceptResponse {
   data?: {
     reset: boolean;
     user: User;
-    session: AdminSession;
-    resetToken: {
+    session: AdminSession | null;
+    requiresSignIn?: boolean;
+    provider?: 'local' | 'supabase';
+    resetToken?: {
       id: string;
       email: string;
       createdAt: string;
@@ -185,7 +187,7 @@ interface AdminPasswordRecoveryResponse {
     deliveryConfigured: boolean;
     resetDelivery?: {
       attempted: boolean;
-      provider: 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
+      provider: 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp' | 'supabase';
       status: 'queued' | 'failed' | 'not_configured';
       deliveryConfigured: boolean;
       statusCode?: number;
@@ -479,14 +481,14 @@ export async function acceptAdminInvite(token: string) {
   return payload.data;
 }
 
-export async function resetAdminPassword(token: string, password: string) {
+export async function resetAdminPassword(token: string, password: string, provider: 'local' | 'supabase' = 'local') {
   const response = await fetch(`${getAdminApiBase()}/auth/reset-password`, {
     method: 'POST',
     credentials: 'include',
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ token, password }),
+    body: JSON.stringify({ token, password, provider }),
   });
   const payload = await readJson<AdminPasswordResetAcceptResponse>(response);
 

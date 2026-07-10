@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import type { BackyJsonObject } from '@backy-cms/core';
 import { checkPersistedAdminAuthRateLimit, resetAdminPasswordToken } from '@/lib/admin-auth/sessionStore';
 import { validateAdminPasswordPolicy } from '@/lib/admin-auth/passwordPolicy';
@@ -15,6 +16,11 @@ import {
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminSettings, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import {
+  isSupabaseAdminAuthConfigured,
+  SupabaseAdminAuthUnavailableError,
+  updateSupabaseAdminPassword,
+} from '@/lib/admin-auth/supabaseAuth';
 
 export const runtime = 'nodejs';
 
@@ -78,18 +84,10 @@ export async function POST(request: NextRequest) {
   const body = await parseJsonBody(request);
   const token = typeof body.token === 'string' ? body.token.trim() : '';
   const password = typeof body.password === 'string' ? body.password : '';
+  const supabaseRecovery = body.provider === 'supabase';
 
   if (!token) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Password reset token is required.', requestId);
-  }
-
-  if (!isProductionAdminLocalAuthAllowed()) {
-    return errorResponse(
-      503,
-      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
-      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
-      requestId,
-    );
   }
 
   const repositories = !shouldUseDemoStoreFallback()
@@ -127,12 +125,77 @@ export async function POST(request: NextRequest) {
   const principalLimit = checkPersistedAdminAuthRateLimit({
     auth: authSettings,
     scope: 'password-reset',
-    identifier: `token:${token}`,
+    identifier: `token:${createHash('sha256').update(token).digest('hex')}`,
     bucket: 'principal',
   });
   await persistAuthSettings(principalLimit.auth);
   if (!principalLimit.limit.allowed) {
     return rateLimitResponse(requestId, principalLimit.limit.retryAfterSeconds);
+  }
+
+  if (supabaseRecovery) {
+    if (!isSupabaseAdminAuthConfigured()) {
+      return errorResponse(503, 'ADMIN_AUTH_PROVIDER_UNAVAILABLE', 'Supabase Auth is not configured.', requestId);
+    }
+
+    let identity;
+    try {
+      identity = await updateSupabaseAdminPassword(token, password);
+    } catch (error) {
+      if (error instanceof SupabaseAdminAuthUnavailableError) {
+        return errorResponse(503, 'ADMIN_AUTH_PROVIDER_UNAVAILABLE', 'Supabase Auth could not complete this password reset.', requestId);
+      }
+      throw error;
+    }
+
+    if (!identity) {
+      return errorResponse(401, 'INVALID_RECOVERY_TOKEN', 'This Supabase recovery link is invalid or expired.', requestId);
+    }
+
+    const user = repositories
+      ? await repositories.users.getByEmail(identity.email)
+      : null;
+    if (!user || user.status !== 'active') {
+      return errorResponse(403, 'ADMIN_ACCOUNT_NOT_ACTIVE', 'The recovered Supabase account does not have an active Backy admin profile.', requestId);
+    }
+
+    await recordAdminAudit({
+      repositories,
+      actorId: user.id,
+      entity: 'user',
+      entityId: user.id,
+      action: 'user.password_reset.accept',
+      before: { status: user.status },
+      after: { status: user.status },
+      metadata: {
+        email: user.email,
+        role: user.role,
+        credentialUpdated: true,
+        credentialMode: 'supabase',
+      },
+      requestId,
+    });
+
+    return NextResponse.json({
+      success: true,
+      requestId,
+      data: {
+        reset: true,
+        user,
+        session: null,
+        requiresSignIn: true,
+        provider: 'supabase',
+      },
+    });
+  }
+
+  if (!isProductionAdminLocalAuthAllowed()) {
+    return errorResponse(
+      503,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_CODE,
+      PRODUCTION_ADMIN_LOCAL_AUTH_ERROR_MESSAGE,
+      requestId,
+    );
   }
 
   const result = await resetAdminPasswordToken(token, password, repositories

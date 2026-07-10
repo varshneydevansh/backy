@@ -10,6 +10,10 @@ import { addPersistedPasswordResetToken } from '@/lib/adminAuthTokenPersistence'
 import { deliverAdminPasswordResetEmail, type AdminUserDeliveryResult } from '@/lib/adminUserEmailDelivery';
 import { getEmailDeliveryConfig, isExternalEmailDeliveryConfigured } from '@/lib/formEmailDelivery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import {
+  isSupabaseAdminAuthConfigured,
+  requestSupabaseAdminPasswordRecovery,
+} from '@/lib/admin-auth/supabaseAuth';
 
 export const runtime = 'nodejs';
 
@@ -42,7 +46,20 @@ const asAuthSettings = (value: unknown): BackyJsonObject | undefined => (
     : undefined
 );
 
-const buildPublicResetDelivery = (): AdminUserDeliveryResult => {
+type PasswordRecoveryDeliveryResult = Omit<AdminUserDeliveryResult, 'provider'> & {
+  provider: AdminUserDeliveryResult['provider'] | 'supabase';
+};
+
+const buildPublicResetDelivery = (): PasswordRecoveryDeliveryResult => {
+  if (isSupabaseAdminAuthConfigured()) {
+    return {
+      attempted: true,
+      provider: 'supabase',
+      status: 'queued',
+      deliveryConfigured: true,
+    };
+  }
+
   const deliveryConfig = getEmailDeliveryConfig();
   const deliveryConfigured = isExternalEmailDeliveryConfigured(deliveryConfig);
 
@@ -55,6 +72,22 @@ const buildPublicResetDelivery = (): AdminUserDeliveryResult => {
       ? {}
       : { metadata: { reason: 'external-email-provider-required' } }),
   };
+};
+
+const getAdminResetUrl = (request: NextRequest) => {
+  const configuredAdminUrl = (
+    process.env.BACKY_ADMIN_APP_URL
+    || process.env.NEXT_PUBLIC_BACKY_ADMIN_APP_URL
+    || request.headers.get('origin')
+    || ''
+  ).trim();
+  const fallbackOrigin = request.nextUrl.origin;
+
+  try {
+    return new URL('/reset-password', configuredAdminUrl || fallbackOrigin).toString();
+  } catch {
+    return new URL('/reset-password', fallbackOrigin).toString();
+  }
 };
 
 const rateLimitResponse = (requestId: string, retryAfterSeconds: number) => {
@@ -130,17 +163,28 @@ export async function POST(request: NextRequest) {
     return rateLimitResponse(requestId, principalLimit.limit.retryAfterSeconds);
   }
 
-  let resetDelivery: AdminUserDeliveryResult | null = null;
+  let resetDelivery: PasswordRecoveryDeliveryResult | null = null;
   let localRecovery: { resetUrl: string; expiresAt: string } | undefined;
   const publicResetDelivery = buildPublicResetDelivery();
   const shouldExposeLocalRecovery = exposeLocalRecoveryToken();
   const canIssueRecoveryToken = publicResetDelivery.deliveryConfigured || shouldExposeLocalRecovery;
 
   try {
+    if (isSupabaseAdminAuthConfigured()) {
+      const recovery = await requestSupabaseAdminPasswordRecovery(email, getAdminResetUrl(request));
+      resetDelivery = {
+        attempted: true,
+        provider: 'supabase',
+        status: recovery.queued ? 'queued' : 'failed',
+        deliveryConfigured: true,
+        statusCode: recovery.statusCode,
+      };
+    }
+
     const user = repositories
       ? await repositories.users.getByEmail(email)
       : getAdminUserByEmail(email);
-    if (canIssueRecoveryToken && user && user.status !== 'inactive' && user.status !== 'suspended') {
+    if (!isSupabaseAdminAuthConfigured() && canIssueRecoveryToken && user && user.status !== 'inactive' && user.status !== 'suspended') {
       const inviteOnlyPolicy = await validateAdminInviteOnlyActivationPolicy(user.status, 'active');
       if (inviteOnlyPolicy.ok) {
         const reset = createAdminPasswordResetToken({
@@ -172,22 +216,35 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown recovery delivery error';
     const statusCode = resetDelivery?.statusCode;
+    if (isSupabaseAdminAuthConfigured()) {
+      resetDelivery = {
+        attempted: true,
+        provider: 'supabase',
+        status: 'failed',
+        deliveryConfigured: true,
+        ...(statusCode ? { statusCode } : {}),
+        metadata: { reason: 'supabase-recovery-request-failed' },
+      };
+    }
     console.error('Admin password recovery delivery failed:', { message, statusCode, requestId });
   }
 
+  const effectiveResetDelivery = resetDelivery || publicResetDelivery;
   const message = localRecovery
     ? 'Local recovery link generated. Open it to reset the password in this development environment.'
-    : publicResetDelivery.deliveryConfigured
+    : effectiveResetDelivery.status === 'queued'
       ? 'If recovery is available for this account, reset instructions were queued through the configured recovery channel.'
-      : 'No recovery email was sent. If recovery is available for this account, configure an email provider or use an owner-assisted reset.';
+      : effectiveResetDelivery.deliveryConfigured
+        ? 'Recovery delivery could not be queued. Wait before retrying or use an owner-assisted reset.'
+        : 'No recovery email was sent. If recovery is available for this account, configure an email provider or use an owner-assisted reset.';
 
   return NextResponse.json({
     success: true,
     requestId,
     data: {
       accepted: true,
-      deliveryConfigured: publicResetDelivery.deliveryConfigured,
-      resetDelivery: publicResetDelivery,
+      deliveryConfigured: effectiveResetDelivery.deliveryConfigured,
+      resetDelivery: effectiveResetDelivery,
       message,
       ...(localRecovery ? { localRecovery } : {}),
     },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Loader2, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { fetchAdminPasswordPolicy } from '@/lib/adminAuthApi';
+import { fetchAdminPasswordPolicy, resetAdminPassword } from '@/lib/adminAuthApi';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 
@@ -31,7 +31,13 @@ const maskToken = (value: string) => {
 function ResetPasswordPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const token = search.token?.trim() || '';
+  const [supabaseAccessToken] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    return hash.get('type') === 'recovery' ? hash.get('access_token')?.trim() || '' : '';
+  });
+  const token = search.token?.trim() || supabaseAccessToken;
+  const recoveryProvider = supabaseAccessToken && !search.token ? 'supabase' : 'local';
   const resetPassword = useAuthStore((state) => state.resetPassword);
   const isLoading = useAuthStore((state) => state.isLoading);
   const user = useAuthStore((state) => state.user);
@@ -42,6 +48,9 @@ function ResetPasswordPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [minPasswordLength, setMinPasswordLength] = useState(DEFAULT_MIN_PASSWORD_LENGTH);
   const [resetSubmitted, setResetSubmitted] = useState(false);
+  const [supabaseSubmitting, setSupabaseSubmitting] = useState(false);
+  const [recoveredEmail, setRecoveredEmail] = useState('');
+  const busy = isLoading || supabaseSubmitting;
   const passwordIsValid = password.length >= minPasswordLength;
   const passwordsMatch = Boolean(password) && password === confirmPassword;
   const passwordRequirement = `Use at least ${minPasswordLength} characters.`;
@@ -55,8 +64,13 @@ function ResetPasswordPage() {
     ? 'Confirm password must match the new password.'
     : null;
   const readiness = useMemo(() => (
-    Math.round(([Boolean(token), passwordIsValid, passwordsMatch, !isLoading].filter(Boolean).length / 4) * 100)
-  ), [isLoading, passwordIsValid, passwordsMatch, token]);
+    Math.round(([Boolean(token), passwordIsValid, passwordsMatch, !busy].filter(Boolean).length / 4) * 100)
+  ), [busy, passwordIsValid, passwordsMatch, token]);
+
+  useEffect(() => {
+    if (!supabaseAccessToken || !window.location.hash) return;
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}`);
+  }, [supabaseAccessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +93,13 @@ function ResetPasswordPage() {
   }, []);
 
   useEffect(() => {
+    if (recoveredEmail && resetState === 'reset') {
+      const timeout = window.setTimeout(() => {
+        navigate({ to: '/login', search: { email: recoveredEmail }, replace: true });
+      }, 1000);
+      return () => window.clearTimeout(timeout);
+    }
+
     if (user && resetState === 'reset') {
       const timeout = window.setTimeout(() => {
         navigate({ to: '/', replace: true });
@@ -88,11 +109,11 @@ function ResetPasswordPage() {
     }
 
     return undefined;
-  }, [navigate, resetState, user]);
+  }, [navigate, recoveredEmail, resetState, user]);
 
   const handleResetPassword = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (isLoading) return;
+    if (busy) return;
     setResetSubmitted(true);
 
     if (!token || !passwordIsValid || !passwordsMatch) {
@@ -107,12 +128,22 @@ function ResetPasswordPage() {
     setMessage(null);
 
     try {
-      await resetPassword(token, password);
+      if (recoveryProvider === 'supabase') {
+        setSupabaseSubmitting(true);
+        const result = await resetAdminPassword(token, password, 'supabase');
+        setRecoveredEmail(result.user.email);
+      } else {
+        await resetPassword(token, password);
+      }
       setResetState('reset');
-      setMessage('Password updated. Your workspace session is ready.');
+      setMessage(recoveryProvider === 'supabase'
+        ? 'Password updated. Return to sign in with the new password.'
+        : 'Password updated. Your workspace session is ready.');
     } catch (error) {
       setResetState('error');
       setMessage(error instanceof Error ? error.message : 'Unable to reset this password.');
+    } finally {
+      setSupabaseSubmitting(false);
     }
   };
 
@@ -139,7 +170,7 @@ function ResetPasswordPage() {
               Reset the workspace password and return to Backy with a fresh session.
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-              Reset links validate a temporary token, update local-demo credentials, activate invited accounts, and record the recovery event.
+              Reset links validate a temporary provider token, update the protected credential, and record the recovery event.
             </p>
           </div>
         </div>
@@ -194,7 +225,7 @@ function ResetPasswordPage() {
               <div>
                 <h2 className="text-xl font-semibold">Reset Password</h2>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Set a new local-demo password for this workspace account.
+                  Set a new password for this workspace account.
                 </p>
               </div>
             </div>
@@ -296,11 +327,11 @@ function ResetPasswordPage() {
             <div className="mt-6 grid gap-3">
               <Button
                 type="submit"
-                disabled={isLoading || resetState === 'reset'}
-                iconStart={isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                disabled={busy || resetState === 'reset'}
+                iconStart={busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 className="w-full"
               >
-                {isLoading ? 'Saving...' : resetState === 'reset' ? 'Password Updated' : 'Reset Password'}
+                {busy ? 'Saving...' : resetState === 'reset' ? 'Password Updated' : 'Reset Password'}
               </Button>
               <Button
                 type="button"

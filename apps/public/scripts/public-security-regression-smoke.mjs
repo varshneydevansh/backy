@@ -1056,11 +1056,25 @@ for (const needle of [
   "validateAdminInviteOnlyActivationPolicy",
   "getRequiredDatabaseRepositories",
   "BACKY_EXPOSE_LOCAL_RECOVERY_TOKEN",
+  "isSupabaseAdminAuthConfigured",
+  "requestSupabaseAdminPasswordRecovery",
 ]) {
   assertIncludes(
     passwordRecoveryRoute,
     needle,
     "password recovery route must create and deliver reset tokens without account enumeration",
+  );
+}
+for (const needle of [
+  "updateSupabaseAdminPassword",
+  "body.provider === 'supabase'",
+  "createHash('sha256').update(token)",
+  "requiresSignIn: true",
+]) {
+  assertIncludes(
+    resetPasswordRoute,
+    needle,
+    "password reset route must securely accept Supabase recovery tokens without persisting raw tokens",
   );
 }
 const adminUserEmailDelivery = read(

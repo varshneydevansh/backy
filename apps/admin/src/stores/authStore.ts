@@ -132,6 +132,9 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           const data = await resetAdminPassword(token, password);
+          if (!data.session) {
+            throw new Error('Password updated. Sign in with the new password.');
+          }
           clearUserPermissionsCache();
           setActiveAdminSessionToken(data.session.token);
           set({

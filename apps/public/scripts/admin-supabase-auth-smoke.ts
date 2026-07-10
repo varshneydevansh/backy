@@ -3,7 +3,9 @@ import { createServer } from 'node:http';
 import {
   authenticateSupabaseAdminCredentials,
   isSupabaseAdminAuthConfigured,
+  requestSupabaseAdminPasswordRecovery,
   SupabaseAdminAuthUnavailableError,
+  updateSupabaseAdminPassword,
 } from '../src/lib/admin-auth/supabaseAuth';
 
 const user = {
@@ -19,6 +21,30 @@ const readBody = async (request: NodeJS.ReadableStream): Promise<string> => {
 };
 
 const server = createServer(async (request, response) => {
+  if (request.method === 'POST' && request.url?.startsWith('/auth/v1/recover?')) {
+    assert.equal(request.headers.apikey, 'supabase-anon-smoke-key');
+    const url = new URL(request.url, 'http://127.0.0.1');
+    assert.equal(url.searchParams.get('redirect_to'), 'https://admin.example.test/reset-password');
+    const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
+    assert.equal(body.email, user.email);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({}));
+    return;
+  }
+
+  if (request.method === 'PUT' && request.url === '/auth/v1/user') {
+    assert.equal(request.headers.apikey, 'supabase-anon-smoke-key');
+    const body = JSON.parse(await readBody(request)) as Record<string, unknown>;
+    if (request.headers.authorization !== 'Bearer recovery-access-token' || body.password !== 'new-secure-password') {
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'invalid_token' }));
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ id: 'supabase-user-id', email: user.email }));
+    return;
+  }
+
   if (request.method !== 'POST' || request.url !== '/auth/v1/token?grant_type=password') {
     response.writeHead(404, { 'content-type': 'application/json' });
     response.end(JSON.stringify({ error: 'not_found' }));
@@ -84,6 +110,27 @@ const main = async () => {
     );
     assert.equal(invalid, null, 'Invalid Supabase credentials should not verify an admin identity');
 
+    const recovery = await requestSupabaseAdminPasswordRecovery(
+      user.email,
+      'https://admin.example.test/reset-password',
+      { env },
+    );
+    assert.equal(recovery.queued, true, 'Supabase password recovery should be queued');
+
+    const updatedIdentity = await updateSupabaseAdminPassword(
+      'recovery-access-token',
+      'new-secure-password',
+      { env },
+    );
+    assert.equal(updatedIdentity?.email, user.email, 'Recovery token should update and return the Supabase identity');
+
+    const invalidRecovery = await updateSupabaseAdminPassword(
+      'invalid-recovery-token',
+      'new-secure-password',
+      { env },
+    );
+    assert.equal(invalidRecovery, null, 'Invalid recovery tokens must not update a Supabase password');
+
     await assert.rejects(
       () => authenticateSupabaseAdminCredentials(
         user.email,
@@ -114,7 +161,7 @@ const main = async () => {
 
   console.log(JSON.stringify({
     ok: true,
-    cases: 4,
+    cases: 7,
   }));
 };
 

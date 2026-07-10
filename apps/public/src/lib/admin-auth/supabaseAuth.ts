@@ -9,6 +9,11 @@ export type SupabaseAdminAuthIdentity = {
   email: string;
 };
 
+export type SupabaseAdminPasswordRecoveryResult = {
+  queued: boolean;
+  statusCode: number;
+};
+
 export class SupabaseAdminAuthUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -96,4 +101,81 @@ export const authenticateSupabaseAdminCredentials = async (
   }
 
   return { email: normalizedEmail };
+};
+
+export const requestSupabaseAdminPasswordRecovery = async (
+  email: string,
+  redirectTo: string,
+  options: SupabaseAuthOptions = {},
+): Promise<SupabaseAdminPasswordRecoveryResult> => {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { queued: false, statusCode: 400 };
+
+  const config = readSupabaseAuthConfig(options.env || process.env);
+  if (!config.url || !config.key) return { queued: false, statusCode: 503 };
+
+  const endpoint = new URL('/auth/v1/recover', config.url);
+  endpoint.searchParams.set('redirect_to', redirectTo);
+
+  let response: Response;
+  try {
+    response = await (options.fetchImpl || fetch)(endpoint, {
+      method: 'POST',
+      headers: {
+        apikey: config.key,
+        authorization: `Bearer ${config.key}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+  } catch (error) {
+    throw new SupabaseAdminAuthUnavailableError(error instanceof Error ? error.message : 'Supabase recovery request failed');
+  }
+
+  if (!response.ok && response.status !== 400) {
+    throw new SupabaseAdminAuthUnavailableError(`Supabase recovery returned ${response.status}`);
+  }
+
+  return {
+    queued: response.ok,
+    statusCode: response.status,
+  };
+};
+
+export const updateSupabaseAdminPassword = async (
+  accessToken: string,
+  password: string,
+  options: SupabaseAuthOptions = {},
+): Promise<SupabaseAdminAuthIdentity | null> => {
+  const token = accessToken.trim();
+  if (!token || !password) return null;
+
+  const config = readSupabaseAuthConfig(options.env || process.env);
+  if (!config.url || !config.key) return null;
+
+  let response: Response;
+  try {
+    response = await (options.fetchImpl || fetch)(`${config.url}/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        apikey: config.key,
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ password }),
+    });
+  } catch (error) {
+    throw new SupabaseAdminAuthUnavailableError(error instanceof Error ? error.message : 'Supabase password update failed');
+  }
+
+  if (response.status === 400 || response.status === 401 || response.status === 403) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new SupabaseAdminAuthUnavailableError(`Supabase password update returned ${response.status}`);
+  }
+
+  const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+  const email = normalizeEmail(payload?.email);
+  return email ? { email } : null;
 };

@@ -312,9 +312,12 @@ const assertAuthRecoverySource = () => {
       resetSource.includes('data-testid="reset-password-confirm-error"') &&
       resetSource.includes('role={resetState ===') &&
       resetSource.includes('data-testid="reset-password-message"') &&
-      resetSource.includes('disabled={isLoading || resetState ===') &&
+      resetSource.includes("hash.get('type') === 'recovery'") &&
+      resetSource.includes("resetAdminPassword(token, password, 'supabase')") &&
+      resetSource.includes("window.history.replaceState") &&
+      resetSource.includes('disabled={busy || resetState ===') &&
       !resetSource.includes('disabled={!token || !passwordIsValid || !passwordsMatch || isLoading || resetState ==='),
-    'Reset password page must expose token/password/confirmation inline validation and keep reset submission reachable for custom errors',
+    'Reset password page must accept provider recovery fragments, remove the token from browser history, expose inline validation, and keep reset submission reachable for custom errors',
   );
 
   assert(
