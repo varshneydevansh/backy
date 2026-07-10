@@ -113,6 +113,9 @@ export type BackyFormFieldDefinition = {
   key: string;
   label?: string;
   type?: string;
+  required?: boolean;
+  placeholder?: string;
+  options?: Array<string | { label?: string; value?: string }>;
 };
 
 export type BackyFormDefinition = {
@@ -132,6 +135,56 @@ export type BackyFormSubmissionInput = {
   postId?: string;
   honeypot?: string;
   startedAt?: string | number;
+};
+
+export type BackyCommerceProduct = {
+  id: string;
+  slug: string;
+  title: string;
+  description?: string;
+  price: number;
+  currency: string;
+  imageUrl?: string;
+  galleryImages?: string[];
+  category?: string;
+  tags?: string[];
+  featured?: boolean;
+  inventory?: Record<string, unknown>;
+  delivery?: Record<string, unknown>;
+  checkout?: Record<string, unknown>;
+  links?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type BackyCommerceCatalog = {
+  schemaVersion: "backy.commerce-catalog.v1";
+  products: BackyCommerceProduct[];
+  commerce?: Record<string, unknown>;
+  facets?: Record<string, unknown>;
+  readiness?: Record<string, unknown>;
+  pagination?: Record<string, unknown>;
+};
+
+export type BackyCommerceLineItemInput = {
+  productId?: string;
+  slug?: string;
+  variantId?: string;
+  sku?: string;
+  quantity?: number;
+};
+
+export type BackyCommerceOrderInput = {
+  customer: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+  items: BackyCommerceLineItemInput[];
+  shippingAddress?: string;
+  billingAddress?: string;
+  notes?: string;
+  discountCode?: string;
+  requestId?: string;
 };
 
 export type BackyCustomFrontendConfig = {
@@ -335,6 +388,40 @@ export class BackyCustomFrontendClient {
     return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/newsletter/subscribers`, {
       method: "DELETE",
       body: input,
+    });
+  }
+
+  async commerceCatalog(options: {
+    slug?: string;
+    search?: string;
+    category?: string;
+    tag?: string;
+    featured?: string;
+  } = {}): Promise<BackyEnvelope<BackyCommerceCatalog>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/catalog`, {
+      query: options,
+    });
+  }
+
+  async commerceOrderContract(): Promise<BackyEnvelope<Record<string, unknown>>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/orders`);
+  }
+
+  async createCommerceOrder(
+    input: BackyCommerceOrderInput,
+  ): Promise<BackyEnvelope<Record<string, unknown>>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/orders`, {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  async commerceOrderStatus(
+    orderId: string,
+    statusToken: string,
+  ): Promise<BackyEnvelope<Record<string, unknown>>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/orders`, {
+      query: { orderId, statusToken },
     });
   }
 

@@ -46,6 +46,7 @@ const files = {
   page: read('src/app/[[...path]]/page.tsx'),
   newsletter: read('src/app/api/newsletter/route.ts'),
   form: read('src/app/api/backy-form/route.ts'),
+  checkout: read('src/app/api/backy-checkout/route.ts'),
   connection: read('src/app/api/backy-connection/route.ts'),
   client: read('src/lib/backy-client.ts'),
   generator: readRepo('scripts/generate-custom-frontend-starter-template.mjs'),
@@ -171,8 +172,17 @@ assertIncludes(files.newsletter, 'subscribeNewsletter', 'Starter exposes public 
 assertIncludes(files.newsletter, 'export async function DELETE', 'Starter exposes public newsletter unsubscribe route');
 assertIncludes(files.newsletter, 'backy.unsubscribeNewsletter', 'Starter newsletter route calls the public unsubscribe bridge');
 assertIncludes(files.client, 'unsubscribeNewsletter', 'Starter local client exposes public newsletter unsubscribe bridge');
+assertIncludes(files.client, 'commerceCatalog', 'Starter local client exposes public commerce catalog reads');
+assertIncludes(files.client, 'commerceOrderContract', 'Starter local client exposes the public checkout contract');
+assertIncludes(files.client, 'createCommerceOrder', 'Starter local client exposes public checkout order intake');
+assertIncludes(files.client, 'commerceOrderStatus', 'Starter local client exposes tokenized customer order status');
 assertIncludes(files.form, 'buildBackyFormSubmissionInput', 'Starter normalizes Backy form submissions');
 assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form submissions');
+assertIncludes(files.checkout, 'containsRawPaymentData', 'Starter checkout rejects raw card data');
+assertIncludes(files.checkout, 'backy.createCommerceOrder', 'Starter checkout sends customer and cart data to Backy order intake');
+assertIncludes(files.render, 'data-backy-repeater-record', 'Starter renderer materializes hydrated repeater records');
+assertIncludes(files.render, 'BackyFormField', 'Starter renderer materializes Backy form schemas');
+assertIncludes(files.render, 'data-backy-code-language', 'Starter renderer preserves technical code block language metadata');
 assertIncludes(files.readme, 'GET /api/sites/:siteId/agent-handoff', 'Starter README begins with agent handoff read path');
 assertIncludes(files.readme, 'separate custom frontend', 'Starter README documents separate frontend topology');
 assertIncludes(files.readme, '/api/backy-connection', 'Starter README documents the deployed frontend connection probe');
@@ -223,6 +233,9 @@ assertIncludes(files.generatedTemplate, 'subscribeNewsletter', 'Generated starte
 assertIncludes(files.generatedTemplate, 'unsubscribeNewsletter', 'Generated starter bundle includes newsletter unsubscribe support');
 assertIncludes(files.generatedTemplate, 'export async function DELETE', 'Generated starter bundle includes the newsletter unsubscribe route');
 assertIncludes(files.generatedTemplate, 'submitForm', 'Generated starter bundle includes public form submission support');
+assertIncludes(files.generatedTemplate, 'createCommerceOrder', 'Generated starter bundle includes public checkout order intake');
+assertIncludes(files.generatedTemplate, 'src/app/api/backy-checkout/route.ts', 'Generated starter bundle includes the safe checkout bridge');
+assertIncludes(files.generatedTemplate, 'data-backy-repeater-record', 'Generated starter bundle renders hydrated repeater records');
 if (!files.generatedTemplate.includes('"path": ".next')) {
   pass('Generated starter bundle excludes local Next build artifacts');
 } else {

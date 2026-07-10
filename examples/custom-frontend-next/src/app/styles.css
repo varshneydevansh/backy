@@ -36,12 +36,46 @@ form {
 
 input,
 textarea,
+select,
 button {
   min-height: 2.5rem;
   border: 1px solid #cbd5e1;
   border-radius: 0.5rem;
   padding: 0.625rem 0.75rem;
   font: inherit;
+}
+
+label {
+  display: grid;
+  gap: 0.375rem;
+}
+
+[data-backy-repeater] article {
+  min-width: 0;
+  border: 1px solid #dbe3ed;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+[data-backy-repeater] article img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+pre {
+  overflow: auto;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: #111827;
+  color: #f8fafc;
+}
+
+@media (max-width: 767px) {
+  [data-backy-repeater] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
 }
 
 button {

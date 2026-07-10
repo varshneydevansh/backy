@@ -62,13 +62,14 @@ npm run test:custom-frontend-connection
 
 ## Files
 
-- `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, and form APIs.
+- `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, forms, catalog, checkout-intake, and tokenized order-status APIs.
 - `src/lib/backy.ts`: Backy client bootstrap from safe env.
-- `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id`, `data-backy-element-type`, component-contract pointers, prop/style keys, responsive breakpoints, token refs, asset ids, action/binding counts, animation metadata, and editable-map pointers on every element. It also generates tablet/mobile media-query CSS from Backy responsive layout/style overrides so the starter does not silently render every breakpoint from desktop geometry.
+- `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id`, `data-backy-element-type`, component-contract pointers, prop/style keys, responsive breakpoints, token refs, asset ids, action/binding counts, animation metadata, and editable-map pointers on every element. It renders hydrated repeaters for blog/catalog grids, schema-driven forms, audio/video, and code blocks, and generates tablet/mobile media-query CSS from Backy responsive layout/style overrides.
 - `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`.
 - `src/app/api/backy-connection/route.ts`: public, secret-free connection probe for deployed frontend verification.
 - `src/app/api/newsletter/route.ts`: public newsletter signup and unsubscribe bridge. Use `POST` with `email` and `consent` to subscribe, or `DELETE` with `email` plus optional `formId`, `source`, or `signup_source` to unsubscribe without exposing admin credentials.
 - `src/app/api/backy-form/route.ts`: public form-submission bridge.
+- `src/app/api/backy-checkout/route.ts`: customer/cart-only checkout-intake bridge. It rejects raw card fields; card details must go directly to the configured payment provider.
 
 Replace the visual renderer with your own design system as needed, but keep the Backy element ids, element types, component-contract pointers, responsive/style metadata, generated responsive CSS or equivalent breakpoint behavior, token refs, binding/motion/asset metadata, editable-map pointers, and form/newsletter submit boundaries intact. Those attributes let Backy, analytics, and frontend agents map every visible component back to the stored API contract.
 

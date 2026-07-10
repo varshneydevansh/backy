@@ -1,6 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
 
-import type { BackyElement, BackyMediaAsset, BackyRenderPayload } from "./backy-client";
+import type {
+  BackyElement,
+  BackyFormFieldDefinition,
+  BackyMediaAsset,
+  BackyRenderPayload,
+} from "./backy-client";
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -212,6 +217,94 @@ function mediaUrl(element: BackyElement, assets: BackyMediaAsset[]): string {
   return direct || asset?.deliveryUrl || asset?.url || asset?.src || "";
 }
 
+const recordPathValue = (record: Record<string, unknown>, path: string): unknown => {
+  const segments = path.split(".").filter(Boolean);
+  let current: unknown = record;
+  for (const segment of segments) {
+    const next = asRecord(current);
+    if (!(segment in next)) return undefined;
+    current = next[segment];
+  }
+  return current;
+};
+
+const repeaterValue = (
+  record: Record<string, unknown>,
+  field: unknown,
+  fallbacks: string[],
+): unknown => {
+  const values = { ...asRecord(record.values), ...record };
+  const paths = [asText(field), ...fallbacks].filter(Boolean);
+  for (const path of paths) {
+    const value = recordPathValue(values, path);
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+};
+
+const formFields = (
+  element: BackyElement,
+  payload: BackyRenderPayload,
+): BackyFormFieldDefinition[] => {
+  const props = asRecord(element.props);
+  if (Array.isArray(props.fields)) return props.fields.map(asRecord) as BackyFormFieldDefinition[];
+  const formId = asText(props.formId, props.id);
+  const definition = (payload.interactions.forms || []).find((form) => form.id === formId);
+  return definition?.fields || [];
+};
+
+const formOption = (option: string | { label?: string; value?: string }) =>
+  typeof option === "string"
+    ? { label: option, value: option }
+    : { label: option.label || option.value || "Option", value: option.value || option.label || "" };
+
+function BackyFormField({ field }: { field: BackyFormFieldDefinition }) {
+  const type = asText(field.type).toLowerCase() || "text";
+  const label = asText(field.label) || field.key;
+  const placeholder = asText(field.placeholder) || label;
+  const options = (field.options || []).map(formOption);
+
+  if (type === "textarea" || type === "long-text") {
+    return (
+      <label>
+        <span>{label}</span>
+        <textarea name={field.key} placeholder={placeholder} required={field.required} />
+      </label>
+    );
+  }
+
+  if (type === "select") {
+    return (
+      <label>
+        <span>{label}</span>
+        <select name={field.key} required={field.required} defaultValue="">
+          <option value="" disabled>{placeholder}</option>
+          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+    );
+  }
+
+  if (type === "checkbox") {
+    return (
+      <label>
+        <input name={field.key} type="checkbox" value="true" required={field.required} />
+        <span>{label}</span>
+      </label>
+    );
+  }
+
+  const inputType = ["email", "tel", "url", "number", "date", "time", "password"].includes(type)
+    ? type
+    : "text";
+  return (
+    <label>
+      <span>{label}</span>
+      <input name={field.key} type={inputType} placeholder={placeholder} required={field.required} />
+    </label>
+  );
+}
+
 function elementStyle(element: BackyElement): CSSProperties {
   const props = asRecord(element.props);
   const style = asRecord(element.style);
@@ -342,16 +435,61 @@ export function BackyElementView({
     );
   }
 
+  if (element.type === "repeater") {
+    const records = Array.isArray(props.records) ? props.records.map(asRecord) : [];
+    const columns = Math.max(1, Math.min(4, asNumber(props.columns) || 3));
+    const emptyMessage = asText(props.emptyMessage) || "No published items yet.";
+    return (
+      <BackyElementFrame element={element} payload={payload}>
+        <div
+          data-backy-repeater={asText(props.datasetId, props.collectionId) || element.id}
+          style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: asNumber(props.gap) || 20 }}
+        >
+          {records.length === 0 ? <p>{emptyMessage}</p> : records.map((record, index) => {
+            const id = asText(record.id, record.slug) || String(index);
+            const title = asText(repeaterValue(record, props.titleField, ["title", "name", "label", "slug"]));
+            const description = asText(repeaterValue(record, props.descriptionField, ["excerpt", "summary", "description"]));
+            const image = asText(repeaterValue(record, props.imageField, ["imageUrl", "image", "thumbnail", "coverImage"]));
+            const href = asText(repeaterValue(record, props.linkField, ["path", "href", "url", "links.publicPath"]));
+            const checkoutUrl = asText(repeaterValue(record, props.checkoutField, ["checkoutUrl", "checkout.url", "links.checkout"]));
+            const price = repeaterValue(record, props.priceField, ["price"]);
+            const currency = asText(repeaterValue(record, props.currencyField, ["currency"]));
+            return (
+              <article key={id} data-backy-repeater-record={id}>
+                {image ? <img src={image} alt="" /> : null}
+                {title ? <h2>{href ? <a href={href}>{title}</a> : title}</h2> : null}
+                {description ? <p>{description}</p> : null}
+                {price !== undefined ? <p>{currency ? `${currency} ` : ""}{String(price)}</p> : null}
+                {checkoutUrl ? <a href={checkoutUrl} data-backy-checkout-mode="direct-checkout-url">Buy</a> : null}
+              </article>
+            );
+          })}
+        </div>
+      </BackyElementFrame>
+    );
+  }
+
   if (element.type === "form") {
     const formId = asText(props.formId, props.id);
+    const fields = formFields(element, payload);
     return (
       <BackyElementFrame element={element} payload={payload}>
         <form method="post" action="/api/backy-form" data-backy-form-id={formId}>
           <input type="hidden" name="formId" value={formId} />
-          <input name="email" type="email" placeholder="Email" />
-          <textarea name="message" placeholder="Message" />
+          {(fields.length > 0 ? fields : [
+            { key: "email", label: "Email", type: "email", required: true },
+            { key: "message", label: "Message", type: "textarea" },
+          ]).map((field) => <BackyFormField key={field.key} field={field} />)}
           <button type="submit">{asText(props.submitLabel) || "Submit"}</button>
         </form>
+      </BackyElementFrame>
+    );
+  }
+
+  if (element.type === "codeBlock") {
+    return (
+      <BackyElementFrame element={element} payload={payload}>
+        <pre data-backy-code-language={asText(props.language) || "text"}><code>{asText(props.code, props.content, props.text)}</code></pre>
       </BackyElementFrame>
     );
   }
