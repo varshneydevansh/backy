@@ -187,6 +187,32 @@ export type BackyCommerceOrderInput = {
   requestId?: string;
 };
 
+export type BackyBlogPost = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt?: string | null;
+  status?: string;
+  publishedAt?: string | null;
+  updatedAt?: string;
+  featuredImageUrl?: string;
+  author?: { name?: string } | null;
+  categories?: Array<{ id?: string; name?: string; slug?: string }>;
+  tags?: Array<{ id?: string; name?: string; slug?: string }>;
+  [key: string]: unknown;
+};
+
+export type BackyBlogArchive = {
+  posts: BackyBlogPost[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  filters?: Record<string, unknown>;
+};
+
 export type BackyCustomFrontendConfig = {
   baseUrl: string;
   apiBaseUrl: string;
@@ -422,6 +448,25 @@ export class BackyCustomFrontendClient {
   ): Promise<BackyEnvelope<Record<string, unknown>>> {
     return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/commerce/orders`, {
       query: { orderId, statusToken },
+    });
+  }
+
+  async blogPosts(options: {
+    search?: string;
+    limit?: string;
+    offset?: string;
+    categorySlug?: string;
+    tagSlug?: string;
+    authorSlug?: string;
+  } = {}): Promise<BackyEnvelope<BackyBlogArchive>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/blog`, {
+      query: options,
+    });
+  }
+
+  async blogPost(slug: string): Promise<BackyEnvelope<{ post: BackyBlogPost }>> {
+    return this.request(`/api/sites/${encodeURIComponent(this.config.siteId)}/blog`, {
+      query: { slug },
     });
   }
 

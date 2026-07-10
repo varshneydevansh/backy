@@ -78,6 +78,47 @@ pre {
   }
 }
 
+[data-backy-blog-archive] {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 4rem 0;
+}
+
+[data-backy-blog-archive] > header {
+  max-width: 46rem;
+  margin-bottom: 3rem;
+}
+
+[data-backy-blog-archive] > section {
+  display: grid;
+  gap: 1rem;
+}
+
+[data-backy-blog-archive] article {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1.25rem 0;
+  border-top: 1px solid #dbe3ed;
+}
+
+[data-backy-blog-archive] article img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+[data-backy-blog-archive] > nav {
+  justify-content: space-between;
+  margin-top: 2rem;
+}
+
+@media (max-width: 767px) {
+  [data-backy-blog-archive] article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 button {
   cursor: pointer;
   background: #0f766e;

@@ -64,8 +64,9 @@ npm run test:custom-frontend-connection
 
 - `src/lib/backy-client.ts`: tiny public client for Backy render, manifest, newsletter, forms, catalog, checkout-intake, and tokenized order-status APIs.
 - `src/lib/backy.ts`: Backy client bootstrap from safe env.
+- `src/lib/blog.tsx`: public blog archive fallback with search, post cards, and pagination when no authored `/blog` page exists yet.
 - `src/lib/render.tsx`: small renderer that keeps `data-backy-element-id`, `data-backy-element-type`, component-contract pointers, prop/style keys, responsive breakpoints, token refs, asset ids, action/binding counts, animation metadata, and editable-map pointers on every element. It renders hydrated repeaters for blog/catalog grids, schema-driven forms, audio/video, and code blocks, and generates tablet/mobile media-query CSS from Backy responsive layout/style overrides.
-- `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`.
+- `src/app/[[...path]]/page.tsx`: catch-all public page renderer backed by `render(path)`; an authored Backy `/blog` page wins, otherwise the public blog API supplies the archive.
 - `src/app/api/backy-connection/route.ts`: public, secret-free connection probe for deployed frontend verification.
 - `src/app/api/newsletter/route.ts`: public newsletter signup and unsubscribe bridge. Use `POST` with `email` and `consent` to subscribe, or `DELETE` with `email` plus optional `formId`, `source`, or `signup_source` to unsubscribe without exposing admin credentials.
 - `src/app/api/backy-form/route.ts`: public form-submission bridge.
