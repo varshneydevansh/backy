@@ -420,9 +420,8 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
 export async function createSupabaseAdapter(
     config: SupabaseConfig
 ): Promise<StorageAdapter> {
-    const { createClient } = await optionalRuntimeImport<{
-        createClient: typeof import('@supabase/supabase-js').createClient;
-    }>('@supabase/supabase-js').catch(() => {
+    // A literal lazy import lets serverless bundlers trace the selected driver.
+    const { createClient } = await import('@supabase/supabase-js').catch(() => {
         throw new Error(
             '@supabase/supabase-js is required for Supabase storage adapter.'
         );

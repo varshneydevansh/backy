@@ -285,7 +285,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const resolved = await resolveSiteAndComponent();
     if (resolved.response) return resolved.response;
 
-    const storage = await getMediaStorageAdapter();
     const sha256 = createHash('sha256').update(bundle).digest('hex');
     const providedSignature = textValue(body.signature);
     const secret = signingSecret();
@@ -298,6 +297,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'INTERACTIVE_COMPONENT_SIGNATURE_INVALID', 'The supplied signature does not match the uploaded bundle.', requestId);
     }
 
+    const storage = await getMediaStorageAdapter();
     const storagePath = buildStoragePath(resolved.site.id, normalizedKey, normalizedVersion, filename);
     const upload = await storage.upload(bundle, {
       path: storagePath,
