@@ -2389,7 +2389,7 @@ function ReusableSectionsRoute() {
           }
         />
         <PanelContent>
-          <div className="h-[780px] min-h-[680px] overflow-hidden rounded-lg border border-border bg-background" data-testid="reusable-section-canvas-editor">
+          <div className="h-[min(780px,calc(100dvh-12rem))] min-h-[360px] overflow-hidden rounded-lg border border-border bg-background" data-testid="reusable-section-canvas-editor">
             <CanvasEditor
               key={`${selectedSectionId || 'new'}:${visualEditorResetVersion}`}
               mode="section"

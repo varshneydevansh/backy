@@ -10711,7 +10711,7 @@ export function CanvasEditor({
           {isInspectorPanelVisible && (
             <aside
               className={cn(
-                'flex h-full min-h-0 flex-col border-l border-slate-200 bg-white',
+                'flex h-full min-h-0 flex-col overflow-y-auto overflow-x-hidden border-l border-slate-200 bg-white',
                 isCompactEditorShellViewport
                   ? 'absolute inset-y-0 right-0 z-40 w-[min(24rem,calc(100%-1rem))] min-w-0 max-w-full shrink-0 shadow-2xl'
                   : 'w-[clamp(18rem,20vw,24rem)] min-w-[18rem] max-w-[24rem] shrink-0',
@@ -10724,7 +10724,7 @@ export function CanvasEditor({
               data-action-status={editorInspectorActionStatus}
               data-responsive-panel-mode={isCompactEditorShellViewport ? 'overlay' : 'docked'}
             >
-              <div className="border-b border-slate-200 p-3">
+              <div className="shrink-0 border-b border-slate-200 p-3">
                 <div className="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-medium">
                   <button
                     type="button"
@@ -11876,7 +11876,7 @@ export function CanvasEditor({
                 </div>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-hidden">
+              <div className={cn('min-h-0 min-w-0', rightPanel === 'properties' && selectedElement ? 'shrink-0' : 'flex-1 overflow-hidden')}>
                 {rightPanel === 'layers' ? (
                   <LayersPanel
                     elements={displayedElements}

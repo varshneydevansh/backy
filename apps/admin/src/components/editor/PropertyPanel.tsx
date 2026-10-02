@@ -1422,8 +1422,8 @@ export function PropertyPanel({
 
   return (
       <div className={cn(
-        'bg-card flex h-full min-h-0 flex-col',
-        embedded ? 'w-full' : 'w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 border-l border-border',
+        'bg-card flex min-h-0 min-w-0 flex-col',
+        embedded ? 'h-auto w-full' : 'h-full w-[clamp(18rem,24vw,30rem)] min-w-[18rem] max-w-[30rem] shrink-0 border-l border-border',
       )} key={element.id}>
       {/* Header */}
       {!hideHeader && (
@@ -1522,7 +1522,8 @@ export function PropertyPanel({
         disabled={disabled}
         aria-disabled={disabled}
         className={cn(
-          'flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2',
+          'min-w-0 w-full px-2 pb-2',
+          embedded ? 'shrink-0' : 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden',
           disabled && 'cursor-not-allowed opacity-70',
         )}
       >
