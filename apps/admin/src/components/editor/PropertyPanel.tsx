@@ -6478,6 +6478,12 @@ function StyleProperties({
   disabled = false,
   supportsTextStyles = false,
 }: StylePropertiesProps) {
+  // Imported templates may store visual values in styles; explicit editor props win,
+  // matching Canvas rendering without changing the saved template representation.
+  const visualProps = {
+    ...element.styles,
+    ...Object.fromEntries(Object.entries(element.props).filter(([, value]) => value != null)),
+  };
   const media = useStore((state) => state.media);
   const fontFamilies = useMemo(() => getFontFamilyOptions(media), [media]);
   const [isFontLibraryOpen, setIsFontLibraryOpen] = useState(false);
@@ -6592,7 +6598,7 @@ function StyleProperties({
             </label>
             <div className="space-y-2">
               <select
-                value={fontFamilies.some(f => f.value === element.props.fontFamily) ? element.props.fontFamily : 'custom'}
+                value={fontFamilies.some(f => f.value === visualProps.fontFamily) ? visualProps.fontFamily : 'custom'}
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val !== 'custom') {
@@ -6617,10 +6623,10 @@ function StyleProperties({
                 <option value="custom">Custom Google Font...</option>
               </select>
 
-              {(element.props.fontFamily && !fontFamilies.some(f => f.value === element.props.fontFamily) || element.props.fontFamily === 'custom') && (
+              {(visualProps.fontFamily && !fontFamilies.some(f => f.value === visualProps.fontFamily) || visualProps.fontFamily === 'custom') && (
                 <input
                   type="text"
-                  value={element.props.fontFamily === 'inherit' ? '' : element.props.fontFamily}
+                  value={visualProps.fontFamily === 'inherit' ? '' : visualProps.fontFamily}
                   onChange={(e) => onChange({ fontFamily: e.target.value })}
                   placeholder="Enter Google Font Name (e.g. 'Roboto')"
                   data-testid="editor-style-font-family-custom"
@@ -6721,7 +6727,7 @@ function StyleProperties({
               Font Size
             </label>
             <NumberInput
-              value={element.props.fontSize || 16}
+              value={visualProps.fontSize || 16}
               onChange={(value) => onChange({ fontSize: value })}
               suffix="px"
               testId="editor-style-font-size"
@@ -6733,7 +6739,7 @@ function StyleProperties({
               Font Weight
             </label>
             <select
-              value={element.props.fontWeight || 'normal'}
+              value={visualProps.fontWeight || 'normal'}
               onChange={(e) => onChange({ fontWeight: e.target.value })}
               data-testid="editor-style-font-weight"
               className={cn(
@@ -6761,7 +6767,7 @@ function StyleProperties({
             Line Height
           </label>
           <NumberInput
-            value={element.props.lineHeight || 1.5}
+            value={visualProps.lineHeight || 1.5}
             onChange={(value) => onChange({ lineHeight: value })}
             testId="editor-style-line-height"
           />
@@ -6779,7 +6785,7 @@ function StyleProperties({
                   data-testid={`editor-style-text-align-${align}`}
                   className={cn(
                     'flex-1 px-2 py-1 text-xs rounded-md border capitalize',
-                    element.props.textAlign === align
+                    visualProps.textAlign === align
                       ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-background hover:bg-accent'
                   )}
@@ -6795,7 +6801,7 @@ function StyleProperties({
               Text Transform
             </label>
             <select
-              value={element.props.textTransform || 'none'}
+              value={visualProps.textTransform || 'none'}
               onChange={(e) => onChange({ textTransform: e.target.value as ElementProps['textTransform'] })}
               data-testid="editor-style-text-transform"
               className={cn(
@@ -6816,7 +6822,7 @@ function StyleProperties({
                 Letter Spacing (px)
               </label>
               <NumberInput
-                value={toNumber(element.props.letterSpacing)}
+                value={toNumber(visualProps.letterSpacing)}
                 onChange={(value) => onChange({ letterSpacing: value })}
                 suffix="px"
                 testId="editor-style-letter-spacing"
@@ -6827,7 +6833,7 @@ function StyleProperties({
                 Word Spacing (px)
               </label>
               <NumberInput
-                value={toNumber(element.props.wordSpacing)}
+                value={toNumber(visualProps.wordSpacing)}
                 onChange={(value) => onChange({ wordSpacing: value })}
                 suffix="px"
                 testId="editor-style-word-spacing"
@@ -6840,7 +6846,7 @@ function StyleProperties({
               Text Indent (px)
             </label>
             <NumberInput
-              value={toNumber(element.props.textIndent)}
+              value={toNumber(visualProps.textIndent)}
               onChange={(value) => onChange({ textIndent: value })}
               suffix="px"
               testId="editor-style-text-indent"
@@ -6853,7 +6859,7 @@ function StyleProperties({
             </label>
             <input
               type="text"
-              value={element.props.textShadow || ''}
+              value={visualProps.textShadow || ''}
               onChange={(e) => onChange({ textShadow: e.target.value })}
               data-testid="editor-style-text-shadow"
               placeholder="0 0 4px rgba(0,0,0,0.2)"
@@ -6873,7 +6879,7 @@ function StyleProperties({
             Text Color
           </label>
           <ColorInput
-            value={element.props.color || '#000000'}
+            value={visualProps.color || '#000000'}
             onChange={(value) => onChange({ color: value })}
             testId="editor-style-text-color"
           />
@@ -6885,7 +6891,7 @@ function StyleProperties({
           Background Color
         </label>
         <ColorInput
-          value={element.props.backgroundColor || '#ffffff'}
+          value={visualProps.backgroundColor || '#ffffff'}
           onChange={(value) => onChange({ backgroundColor: value })}
           testId="editor-style-background-color"
         />
@@ -6898,7 +6904,7 @@ function StyleProperties({
               Text Decoration
             </label>
             <select
-              value={element.props.textDecoration || 'none'}
+              value={visualProps.textDecoration || 'none'}
               onChange={(e) => onChange({ textDecoration: e.target.value })}
               data-testid="editor-style-text-decoration"
               className={cn(
@@ -6918,7 +6924,7 @@ function StyleProperties({
               Font Style
             </label>
             <select
-              value={element.props.fontStyle || 'normal'}
+              value={visualProps.fontStyle || 'normal'}
               onChange={(e) => onChange({ fontStyle: e.target.value })}
               data-testid="editor-style-font-style"
               className={cn(
