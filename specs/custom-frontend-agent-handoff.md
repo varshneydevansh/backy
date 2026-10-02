@@ -230,6 +230,18 @@ The site-level frontend design contract is the shared bridge between custom fron
 
 Use it for chrome, navigation, footer, fonts, colors, spacing, motion tokens, template provenance, editable maps, and reusable page/blog/form/product/collection templates.
 
+### Registering a frontend built with React or another framework
+
+The frontend builder should start from `apiAlignment` and `componentApiContract.componentTypeContracts`. Keep executable React components in the frontend project and map their editable data to the advertised Backy element types and prop paths. Persist design state rather than compiled markup: `elements`, `contentDocument`, `canvasSize`, `responsive`, token references, assets, bindings, and editable maps are the reusable editor representation. Element breakpoint overrides use `responsive.mobile` and `responsive.tablet`.
+
+Register the resulting site contract using `POST /api/admin/sites/:siteId/frontend-design` with `{ action: "import-frontend-contract", frontendDesign: { schemaVersion: "backy.frontend-design.v1", source, tokens, chrome, templates, editableMap } }`. Include multiple named font tokens in `tokens.fonts`; uploaded font identities come from the font manifest and require working media storage. Read the registered contract back and inspect `/api/admin/sites/:siteId/templates` before creating content.
+
+Create pages and blog posts through their authenticated APIs with the registered `frontendDesignTemplateId`, then reopen their admin detail payloads and the canvas editor. Title-only edits must preserve the element tree, font choices, layout, responsive overrides, shared chrome, and editable fields; canonical document title/version may change with the edit. Use template capture and reusable sections to bring authored content back into the catalog.
+
+For executable custom widgets, use the discovered interactive-component registry, bundle, review, version, and sandbox contracts. Register an explicit property/control schema and fallback; uploading arbitrary React source is not equivalent to registering an editable canvas element. The same public handoff exposes product/collection templates and their authenticated creation routes, so a builder need not invent a separate product content store.
+
+Subdomains are part of the routing contract: use verified `site.settings.domainAliases` for several hosts sharing one site, or separate Backy sites when a subdomain needs independent content, navigation, SEO, or design. Host registration in Backy does not configure the frontend host or prove DNS ownership.
+
 ## Live editing and management
 
 Custom frontends should read live-management discovery from the manifest/OpenAPI before exposing editing controls. The discovery data tells agents which resources are editable, which fields are safe, which endpoints require admin auth, and which payloads intentionally exclude private data.
