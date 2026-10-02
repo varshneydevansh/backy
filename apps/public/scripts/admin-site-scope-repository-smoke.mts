@@ -21,6 +21,8 @@ const coveredSiteRoutePrefixes = [
   'collections',
   'collections/export',
   'collections/import',
+  'custom-frontend/connection',
+  'custom-frontend/starter',
   'commerce',
   'duplicate',
   'editor/collection-binding-presets',
@@ -32,6 +34,8 @@ const coveredSiteRoutePrefixes = [
   'media',
   'media/provider-analytics',
   'navigation',
+  'newsletter/issues/draft',
+  'newsletter/subscribers',
   'pages',
   'readiness',
   'redirects',
@@ -111,6 +115,9 @@ const memberRoles = new Map<string, AdminAuthUser['role']>([
   ['repo-editor', 'editor'],
 ]);
 
+// Match production session persistence: repository auth must contain issued sessions.
+let repositoryAuth: Record<string, unknown> = {};
+
 assertSiteScopeRouteInventoryCovered();
 
 repositoriesRuntime.setPublicRepositoryRuntimeForTests({
@@ -147,8 +154,9 @@ repositoriesRuntime.setPublicRepositoryRuntimeForTests({
     settings: {
       get: async () => ({
         apiKeys: {},
-        auth: {},
+        auth: repositoryAuth,
       }),
+      update: async ({ auth }: { auth: Record<string, unknown> }) => { repositoryAuth = auth; },
     },
   } as never,
 });
@@ -165,7 +173,9 @@ const requestFor = (token: string, path: string): NextRequest => (
 const sessionFor = (userId: string) => {
   const user = users.get(userId);
   assert(user, `Missing test user ${userId}`);
-  return sessions.createAdminSessionForExternalUser(user, 'supabase', { sessionTimeoutMinutes: 120 });
+  const session = sessions.createAdminSessionForExternalUser(user, 'supabase', { sessionTimeoutMinutes: 120 }, { persist: false });
+  repositoryAuth = sessions.upsertAdminSessionAuthRecord(repositoryAuth, session);
+  return session;
 };
 
 const expectForbiddenSiteScope = async (input: {
@@ -204,6 +214,14 @@ const expectAllowed = async (input: {
 };
 
 const main = async () => {
+  for (const path of [
+    `/api/sites/${site.id}/comments`,
+    `/api/sites/${site.slug}/pages/page-home/comments`,
+    `/api/sites/${site.id}/blog/post-welcome/comments/comment-one`,
+  ]) {
+    await expectForbiddenSiteScope({ userId: 'repo-non-member', path, permission: 'comments.manage' });
+    await expectAllowed({ userId: 'repo-editor', path, permission: 'comments.manage' });
+  }
   await expectForbiddenSiteScope({
     userId: 'repo-non-member',
     path: `/api/admin/sites/${site.id}/pages`,
@@ -375,6 +393,8 @@ const main = async () => {
   console.log(JSON.stringify({
     ok: true,
     checks: [
+      'repository non-member public-path comments moderation denied for site id, slug, page and blog',
+      'repository editor public-path comments moderation allowed',
       'repository non-member nested site read denied',
       ...nonMemberNestedChecks.map((check) => check.label),
       'repository non-member nested site settings read denied',

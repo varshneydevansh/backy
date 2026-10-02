@@ -6,6 +6,7 @@ import {
   listComments,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   clearRepositoryCommentReports,
@@ -267,7 +268,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limit = limitFilter.value;
     const offset = offsetFilter.value;
 
-    if (status !== 'approved') {
+    const includePrivateFields = status !== 'approved' || hasCommentCredentials(request);
+    if (includePrivateFields) {
       const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
@@ -301,12 +303,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         requestId: responseRequestId,
         data: {
           siteId: site.id,
-          comments: result.items,
+          comments: result.items.map((comment) => serializeComment(comment, includePrivateFields)),
           count: result.pagination.total,
           pagination: result.pagination,
         },
         siteId: site.id,
-        comments: result.items,
+        comments: result.items.map((comment) => serializeComment(comment, includePrivateFields)),
         count: result.pagination.total,
         pagination: result.pagination,
       }, responseRequestId);
@@ -336,12 +338,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       requestId: responseRequestId,
       data: {
         siteId: site.id,
-        comments: result.comments,
+        comments: result.comments.map((comment) => serializeComment(comment, includePrivateFields)),
         count: result.count,
         pagination: result.pagination,
       },
       siteId: site.id,
-      comments: result.comments,
+      comments: result.comments.map((comment) => serializeComment(comment, includePrivateFields)),
       count: result.count,
       pagination: result.pagination,
     }, responseRequestId);

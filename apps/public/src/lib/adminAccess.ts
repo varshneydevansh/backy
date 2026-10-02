@@ -173,15 +173,12 @@ const nestedAdminSiteIdentifierFromRequest = (request: NextRequest) => {
 
   const segments = pathname.split('/').filter(Boolean);
   const apiIndex = segments.indexOf('api');
-  if (
-    apiIndex < 0 ||
-    segments[apiIndex + 1] !== 'admin' ||
-    segments[apiIndex + 2] !== 'sites'
-  ) {
+  const sitesIndex = apiIndex + (segments[apiIndex + 1] === 'admin' ? 2 : 1);
+  if (apiIndex < 0 || segments[sitesIndex] !== 'sites') {
     return null;
   }
 
-  const siteIdentifier = segments[apiIndex + 3];
+  const siteIdentifier = segments[sitesIndex + 1];
   if (!siteIdentifier) {
     return null;
   }

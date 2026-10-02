@@ -12938,6 +12938,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             },
             Comment: {
               type: "object",
+              description: "Public comment objects omit authorEmail, userId, IP/request identifiers, and moderation metadata. These optional fields are available only to authorized moderation reads. Submission identity is derived from a verified session, never from a caller-supplied userId.",
               additionalProperties: true,
               required: [
                 "id",

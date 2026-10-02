@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
   createComment,
@@ -231,7 +232,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limit = limitFilter.value;
     const offset = offsetFilter.value;
 
-    if (status !== 'approved') {
+    const includePrivateFields = status !== 'approved' || hasCommentCredentials(request);
+    if (includePrivateFields) {
       const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
@@ -267,11 +269,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          comments: result.items,
+          comments: result.items.map((comment) => serializeComment(comment, includePrivateFields)),
           count: result.pagination.total,
           pagination: result.pagination,
         },
-        comments: result.items,
+        comments: result.items.map((comment) => serializeComment(comment, includePrivateFields)),
         count: result.pagination.total,
         pagination: result.pagination,
       }, requestId);
@@ -311,11 +313,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        comments: sorted,
+        comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
         count: comments.count,
         pagination: comments.pagination,
       },
-      comments: sorted,
+      comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
       count: comments.count,
       pagination: comments.pagination,
     }, requestId);
@@ -354,9 +356,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
-      const userId = parseTextInput(
-        (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
-      );
+      const userId = await resolveCommentUserId(request, responseRequestId);
+      if (userId instanceof NextResponse) return userId;
 
       const authorName = parseTextInput(body.authorName);
       const authorEmail = parseTextInput(body.authorEmail);
@@ -506,13 +507,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           success: true,
           requestId: responseRequestId,
           data: {
-            comment,
+            comment: serializeComment(comment),
             message:
               comment.status === 'approved'
                 ? 'Comment submitted and published.'
                 : 'Comment submitted for moderation.',
           },
-          comment,
+          comment: serializeComment(comment),
           message:
             comment.status === 'approved'
               ? 'Comment submitted and published.'
@@ -545,9 +546,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
-    const userId = parseTextInput(
-      (body as { userId?: unknown }).userId || (body as { commentUserId?: unknown }).commentUserId,
-    );
+    const userId = await resolveCommentUserId(request, responseRequestId);
+    if (userId instanceof NextResponse) return userId;
 
     const authorName = parseTextInput(body.authorName);
     const authorEmail = parseTextInput(body.authorEmail);
@@ -679,13 +679,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId: responseRequestId,
         data: {
-          comment,
+          comment: serializeComment(comment),
           message:
             comment.status === 'approved'
               ? 'Comment submitted and published.'
               : 'Comment submitted for moderation.',
         },
-        comment,
+        comment: serializeComment(comment),
         message:
           comment.status === 'approved'
             ? 'Comment submitted and published.'

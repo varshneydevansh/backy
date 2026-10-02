@@ -1,5 +1,5 @@
 import { isAbsolute, join } from 'node:path';
-import { createStorageAdapter, type StorageAdapter, type StorageConfig, type StorageProvider } from '@backy/storage';
+import type { StorageAdapter, StorageConfig, StorageProvider } from '@backy/storage';
 
 const UPLOAD_PUBLIC_PREFIX = '/uploads';
 
@@ -91,6 +91,17 @@ export const resolveMediaStorageConfig = (env: Env = process.env): ResolvedMedia
   }
 
   if (provider === 'local') {
+    if (env.VERCEL === '1') {
+      return {
+        config: null,
+        summary: {
+          provider,
+          configured: false,
+          missing: ['BACKY_STORAGE_PROVIDER=supabase or s3'],
+          error: 'Vercel uploads require persistent Supabase or S3-compatible storage. Local deployment files are not writable durable storage.',
+        },
+      };
+    }
     const basePath = localBasePath(env);
     const publicUrl = envValue(env, ['BACKY_LOCAL_PUBLIC_URL', 'BACKY_MEDIA_PUBLIC_URL']) || UPLOAD_PUBLIC_PREFIX;
     return {
@@ -196,7 +207,8 @@ export const getMediaStorageAdapter = async (): Promise<StorageAdapter> => {
 
   const signature = JSON.stringify(resolved.config);
   if (!mediaStorageAdapterPromise || mediaStorageAdapterSignature !== signature) {
-    mediaStorageAdapterPromise = createStorageAdapter(resolved.config);
+    const config = resolved.config;
+    mediaStorageAdapterPromise = import('@backy/storage').then(({ createStorageAdapter }) => createStorageAdapter(config));
     mediaStorageAdapterSignature = signature;
   }
 

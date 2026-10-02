@@ -85,7 +85,10 @@ export const resolveCommentSubmissionPolicy = (
 
   return {
     ...policy,
-    moderationMode: moderationOverride || policy.moderationMode,
+    // Public block hints may strengthen the site policy, never weaken it.
+    moderationMode: policy.moderationMode === 'manual' || moderationOverride === 'manual'
+      ? 'manual'
+      : 'auto-approve',
     allowGuests: policy.allowGuests && allowGuestsOverride !== false,
     allowReplies: policy.allowReplies && allowRepliesOverride !== false,
     requireName: policy.requireName || requireNameOverride === true,

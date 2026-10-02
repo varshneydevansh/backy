@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { serializeComment } from '@/lib/commentPrivacy';
 import {
   getCommentById,
   getSiteByIdOrSlug,
@@ -215,10 +216,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          comment: updated,
+          comment: serializeComment(updated),
           report: reportPayload(payload),
         },
-        comment: updated,
+        comment: serializeComment(updated),
         report: reportPayload(payload),
       }, requestId, 201);
     }
@@ -268,10 +269,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        comment: updated,
+        comment: serializeComment(updated),
         report: reportPayload(payload),
       },
-      comment: updated,
+      comment: serializeComment(updated),
       report: reportPayload(payload),
     }, requestId, 201);
   } catch (error) {

@@ -461,6 +461,9 @@ Public page payload should include:
 - `GET /api/sites/:siteId/pages/:pageId/comments?status=approved&limit=&cursor=`
 - `GET /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Returns approved comments and count metadata.
+  - Visitor-visible comment objects use an allowlist: identity is limited to author name and website. Author email, user id, IP identifier, request id, reports, and reviewer/block metadata are omitted from public lists, detail, submission receipts, and report receipts. Authenticated moderation reads retain these fields, including when filtering by approved status; supplied invalid credentials are rejected.
+  - Public moderation hints may require manual review but cannot change a site's manual policy to auto-approve. Client `userId`/`commentUserId` values are identity hints, not authentication: stored identity comes from a verified Backy session. Guest-disabled submission requires that verified identity. A frontend-local login object alone is insufficient.
+  - Privileged operations on `/api/sites/:siteId/...` enforce the same team membership boundary as `/api/admin/sites/:siteId/...`.
   - Response uses `{ success, requestId, data: { comments, count, pagination } }`; legacy top-level `comments/count/pagination` remain for compatibility.
   - Invalid page comment pagination filters return explicit `400` errors instead of silently clamping the thread: `INVALID_PAGE_COMMENT_LIMIT` or `INVALID_PAGE_COMMENT_OFFSET`.
   - Invalid page comment list status/sort filters return explicit `400` errors instead of falling back to approved/newest: `INVALID_PAGE_COMMENT_STATUS` or `INVALID_PAGE_COMMENT_SORT`.

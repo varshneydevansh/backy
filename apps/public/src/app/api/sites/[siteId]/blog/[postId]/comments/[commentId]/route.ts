@@ -6,6 +6,7 @@ import {
   updateCommentStatus,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
+import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
@@ -121,7 +122,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
       }
 
-      if (comment.status !== 'approved') {
+      const includePrivateFields = comment.status !== 'approved' || hasCommentCredentials(_request);
+    if (includePrivateFields) {
         const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
         if (access instanceof NextResponse) {
           return access;
@@ -132,9 +134,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          comment,
+          comment: serializeComment(comment, includePrivateFields),
         },
-        comment,
+        comment: serializeComment(comment, includePrivateFields),
       }, requestId);
     }
 
@@ -154,7 +156,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
-    if (comment.status !== 'approved') {
+    const includePrivateFields = comment.status !== 'approved' || hasCommentCredentials(_request);
+    if (includePrivateFields) {
       const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
         return access;
@@ -165,9 +168,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        comment,
+        comment: serializeComment(comment, includePrivateFields),
       },
-      comment,
+      comment: serializeComment(comment, includePrivateFields),
     }, requestId);
   } catch (error) {
     console.error('API Error:', error);

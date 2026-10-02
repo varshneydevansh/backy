@@ -81,7 +81,7 @@
   "overrides": {
     "form-data": "4.0.6",
     "lodash": "4.18.1",
-    "postcss": "8.5.16",
+    "postcss": "8.5.28",
     "ws": "8.21.0"
   },
   "engines": {
