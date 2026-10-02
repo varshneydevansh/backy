@@ -24,7 +24,7 @@
     "test:login-production-shell": "BACKY_LOGIN_PRODUCTION_SHELL_SMOKE=1 node scripts/login-smoke.mjs",
     "test:login-sidebar-create": "BACKY_LOGIN_SIDEBAR_CREATE_SMOKE=1 node scripts/login-smoke.mjs",
     "test:dashboard": "node scripts/dashboard-smoke.mjs",
-    "test:editor-drag": "node scripts/editor-drag-smoke.mjs",
+    "test:editor-drag": "node scripts/editor-element-type-smoke.mjs && node scripts/editor-drag-smoke.mjs",
     "test:editor-smoke-coverage": "node scripts/editor-smoke-script-coverage.mjs",
     "test:editor-inspector": "BACKY_EDITOR_INSPECTOR_SMOKE=1 node scripts/editor-drag-smoke.mjs",
     "test:editor-reusable-section": "BACKY_EDITOR_REUSABLE_SECTION_SMOKE=1 node scripts/editor-drag-smoke.mjs",

@@ -2163,9 +2163,7 @@ const normalizeElementType = (value: string): CanvasElement['type'] => {
     return 'checkbox';
   }
 
-  return KNOWN_CANVAS_ELEMENT_TYPES.includes(normalized as CanvasElement['type'])
-    ? (normalized as CanvasElement['type'])
-    : 'text';
+  return KNOWN_CANVAS_ELEMENT_TYPES.find((type) => normalizeTypeToken(type) === normalized) || 'text';
 };
 
 const isEditorGroupElement = (element: CanvasElement | null | undefined): boolean => (
