@@ -8866,6 +8866,21 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     unknownComponentBehavior: {
                       const: "render-static-fallback",
                     },
+                    bundleModule: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["schemaVersion", "format", "requiredExport", "optionalExport", "contextFields", "cleanup", "integrity", "networkImports"],
+                      properties: {
+                        schemaVersion: { const: "backy.interactive-component-module.v1" },
+                        format: { const: "self-contained-es-module" },
+                        requiredExport: { const: "mount" },
+                        optionalExport: { const: "update" },
+                        contextFields: { type: "array", items: { type: "string" } },
+                        cleanup: { type: "string" },
+                        integrity: { type: "string" },
+                        networkImports: { const: false },
+                      },
+                    },
                   },
                 },
                 dataBindingScopes: {

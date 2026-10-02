@@ -4,7 +4,7 @@
  * POST /api/admin/sites/[siteId]/interactive-components/[componentKey]/[version]/bundle
  */
 
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { extname } from 'node:path';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -289,9 +289,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const sha256 = createHash('sha256').update(bundle).digest('hex');
     const providedSignature = textValue(body.signature);
     const secret = signingSecret();
-    const signature = providedSignature || (secret ? hmacSignature(sha256, secret) : '');
-    if (!signature) {
-      return errorResponse(400, 'INTERACTIVE_COMPONENT_SIGNATURE_REQUIRED', 'Provide a signature or configure BACKY_COMPONENT_REGISTRY_SIGNING_KEY before storing custom component bundles.', requestId);
+    if (!secret) {
+      return errorResponse(400, 'INTERACTIVE_COMPONENT_SIGNATURE_REQUIRED', 'Configure BACKY_COMPONENT_REGISTRY_SIGNING_KEY before verifying or storing custom component bundles.', requestId);
+    }
+    const signature = hmacSignature(sha256, secret);
+    if (providedSignature && (Buffer.byteLength(providedSignature) !== Buffer.byteLength(signature)
+      || !timingSafeEqual(Buffer.from(providedSignature), Buffer.from(signature)))) {
+      return errorResponse(400, 'INTERACTIVE_COMPONENT_SIGNATURE_INVALID', 'The supplied signature does not match the uploaded bundle.', requestId);
     }
 
     const storagePath = buildStoragePath(resolved.site.id, normalizedKey, normalizedVersion, filename);
@@ -352,6 +356,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     };
     const update = {
+      status: 'disabled' as const,
+      reviewStatus: 'draft' as const,
+      reviewedBy: null,
+      reviewedAt: null,
       runtime,
       integrity,
       dependencyMetadata,

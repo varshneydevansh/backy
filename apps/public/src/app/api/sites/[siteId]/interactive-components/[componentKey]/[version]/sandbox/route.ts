@@ -1,15 +1,19 @@
 /**
  * Site-scoped sandbox bootstrap for public interactive code components.
  *
- * This route intentionally serves a constrained HTML shell. Fully custom
- * uploaded bundles still need the governed registry/review/signing pipeline;
- * this shell gives the renderer a safe postMessage target and static fallback.
+ * Reviewed uploaded modules execute only after signature and stored-byte
+ * verification, inside an opaque iframe with the public message contract.
  */
 
 import { getSiteByIdOrSlug, listInteractiveComponents } from '@/lib/backyStore';
 import { buildPublicInteractiveComponentRegistry, type BackyInteractiveComponentRegistryEntry } from '@/lib/interactiveComponentRegistry';
 import { publicContractResponse } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { InteractiveComponentBundleError, loadVerifiedInteractiveComponentBundle } from '@/lib/interactiveComponentBundle';
+import type { BackyInteractiveComponentIntegrity } from '@backy-cms/core';
+import { normalizePublicOrigin } from '@/lib/publicOriginPolicy';
+
+export const runtime = 'nodejs';
 
 interface RouteParams {
   params: Promise<{
@@ -25,6 +29,8 @@ const escapeHtml = (value: unknown): string => String(value ?? '')
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+const scriptJson = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 
 const SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1';
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -116,6 +122,7 @@ type PublicRegistryComponent = {
   displayName: string;
   type: BackyInteractiveComponentRegistryEntry['type'];
   status: 'active' | 'disabled' | 'archived' | string;
+  reviewStatus?: string;
   version: string;
   renderMode: BackyInteractiveComponentRegistryEntry['renderMode'];
   source: BackyInteractiveComponentRegistryEntry['source'];
@@ -124,7 +131,7 @@ type PublicRegistryComponent = {
   requiredFields?: string[];
   controls?: Array<Record<string, unknown>>;
   fallback?: BackyInteractiveComponentRegistryEntry['fallback'];
-  integrity?: BackyInteractiveComponentRegistryEntry['integrity'];
+  integrity?: BackyInteractiveComponentIntegrity;
   runtime?: BackyInteractiveComponentRegistryEntry['runtime'];
 };
 
@@ -168,11 +175,13 @@ const buildSandboxHtml = ({
   displayName,
   version,
   protocol,
+  bundleBase64,
 }: {
   componentKey: string;
   displayName: string;
   version: string;
   protocol: string;
+  bundleBase64?: string;
 }) => `<!doctype html>
 <html lang="en">
 <head>
@@ -191,19 +200,37 @@ const buildSandboxHtml = ({
 </head>
 <body>
   <main aria-live="polite">
-    <strong id="title">${escapeHtml(displayName)}</strong>
-    <p id="description">Waiting for Backy component payload.</p>
-    <p><code>${escapeHtml(componentKey)}@${escapeHtml(version)}</code></p>
-    <pre id="payload" hidden></pre>
+    <div id="fallback">
+      <strong id="title">${escapeHtml(displayName)}</strong>
+      <p id="description">Waiting for Backy component payload.</p>
+      <pre id="payload" hidden></pre>
+    </div>
+    <div id="component-root" hidden></div>
   </main>
   <script>
     (function () {
-      var protocol = ${JSON.stringify(protocol)};
-      var componentKey = ${JSON.stringify(componentKey)};
-      var version = ${JSON.stringify(version)};
+      var protocol = ${scriptJson(protocol)};
+      var componentKey = ${scriptJson(componentKey)};
+      var version = ${scriptJson(version)};
       var title = document.getElementById('title');
       var description = document.getElementById('description');
       var payloadNode = document.getElementById('payload');
+      var bundleBase64 = ${JSON.stringify(bundleBase64 || '')};
+      var root = document.getElementById('component-root');
+      var fallbackNode = document.getElementById('fallback');
+      var mounted = false;
+      var cleanup;
+      var updates = Promise.resolve();
+      var modulePromise = bundleBase64 ? (async function () {
+        var bytes = Uint8Array.from(atob(bundleBase64), function (character) { return character.charCodeAt(0); });
+        var url = URL.createObjectURL(new Blob([bytes], { type: 'application/javascript' }));
+        try {
+          var module = await import(url);
+          if (typeof module.mount !== 'function') throw new Error('Component bundle must export mount(context).');
+          return module;
+        } finally { URL.revokeObjectURL(url); }
+      }()) : Promise.resolve(null);
+      modulePromise.catch(reportError);
 
       function resize() {
         parent.postMessage({
@@ -228,7 +255,8 @@ const buildSandboxHtml = ({
       window.addEventListener('message', function (event) {
         try {
           var data = event.data || {};
-          if (data.type !== 'backy.interactive-component.init' || data.protocol !== protocol) {
+          if (event.source !== parent || data.type !== 'backy.interactive-component.init' || data.protocol !== protocol
+            || data.componentKey !== componentKey || data.version !== version) {
             return;
           }
 
@@ -241,7 +269,28 @@ const buildSandboxHtml = ({
             props: data.props || {},
             controls: data.controls || []
           }, null, 2);
-          payloadNode.hidden = false;
+          payloadNode.hidden = Boolean(bundleBase64);
+          if (bundleBase64) {
+            updates = updates.then(async function () {
+              var module = await modulePromise;
+              var context = { root: root, props: data.props || {}, controls: data.controls || [], dataBindings: data.dataBindings || {}, componentKey: componentKey, version: version, resize: resize };
+              root.hidden = false;
+              if (mounted && typeof module.update === 'function') {
+                await module.update(context);
+              } else {
+                if (typeof cleanup === 'function') await cleanup();
+                root.replaceChildren();
+                cleanup = await module.mount(context);
+                mounted = true;
+              }
+              fallbackNode.hidden = true;
+              resize();
+            }).catch(function (error) {
+              root.hidden = true;
+              fallbackNode.hidden = false;
+              reportError(error);
+            });
+          }
           resize();
         } catch (error) {
           reportError(error);
@@ -256,12 +305,14 @@ const buildSandboxHtml = ({
         reportError(event.reason);
       });
 
-      parent.postMessage({
-        type: 'backy.interactive-component.ready',
-        protocol: protocol,
-        componentKey: componentKey,
-        version: version
-      }, '*');
+      modulePromise.then(function () {
+        parent.postMessage({
+          type: 'backy.interactive-component.ready',
+          protocol: protocol,
+          componentKey: componentKey,
+          version: version
+        }, '*');
+      }).catch(function () {});
       resize();
     }());
   </script>
@@ -283,14 +334,15 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   }
 
-  const registryEntries = shouldUseDemoStoreFallback()
-    ? listInteractiveComponents(resolvedSiteId, { publicOnly: true }).map(toPublicRegistryEntry)
+  const storedEntries = shouldUseDemoStoreFallback()
+    ? listInteractiveComponents(resolvedSiteId, { publicOnly: true })
     : (await (await getRequiredDatabaseRepositories()).interactiveComponents.list({
         siteId: resolvedSiteId,
         publicOnly: true,
         limit: 100,
         offset: 0,
-      })).items.map(toPublicRegistryEntry);
+      })).items;
+  const registryEntries = storedEntries.map(toPublicRegistryEntry);
   const registry = buildPublicInteractiveComponentRegistry(resolvedSiteId, registryEntries);
   const component = registry.components.find((entry) => (
     entry.componentKey === decodeURIComponent(componentKey)
@@ -319,9 +371,26 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   }
 
+  const storedComponent = storedEntries.find((entry) => entry.componentKey === component.componentKey && entry.version === component.version);
+  let bundleBase64: string | undefined;
+  if (storedComponent) {
+    if (!registry.contract.sandbox.enabled) {
+      return sandboxError({ status: 403, title: 'Component disabled', detail: 'Custom code execution is disabled.', request, requestId, siteId: resolvedSiteId });
+    }
+    if (process.env.NODE_ENV === 'production' && normalizePublicOrigin(registry.contract.sandbox.origin) !== new URL(request.url).origin) {
+      return sandboxError({ status: 503, title: 'Component unavailable', detail: 'A matching dedicated sandbox origin must be configured for production execution.', request, requestId, siteId: resolvedSiteId });
+    }
+    try {
+      bundleBase64 = await loadVerifiedInteractiveComponentBundle({ ...storedComponent, siteId: resolvedSiteId });
+    } catch (error) {
+      return sandboxError({ status: error instanceof InteractiveComponentBundleError ? error.status : 503, title: 'Component unavailable', detail: error instanceof InteractiveComponentBundleError ? error.message : 'Component bundle verification failed.', request, requestId, siteId: resolvedSiteId });
+    }
+  }
+
   const csp = [
+    'sandbox allow-scripts allow-forms',
     "default-src 'none'",
-    "script-src 'unsafe-inline'",
+    bundleBase64 ? "script-src 'unsafe-inline' blob:" : "script-src 'unsafe-inline'",
     "style-src 'unsafe-inline'",
     "img-src data: https: http:",
     "media-src data: blob:",
@@ -331,7 +400,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     "frame-src 'none'",
     "worker-src 'none'",
     "manifest-src 'none'",
-    "frame-ancestors 'self'",
+    registry.contract.sandbox.responseHeaders.contentSecurityPolicy.find((directive) => directive.startsWith('frame-ancestors ')) || "frame-ancestors 'self'",
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ');
@@ -341,6 +410,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     displayName: component.displayName,
     version: component.version,
     protocol: component.runtime?.postMessageProtocol || registry.contract.renderContract.postMessageProtocol,
+    bundleBase64,
   });
 
   return publicContractResponse(
@@ -348,7 +418,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     {
       requestId,
       request,
-      cache: 'discovery',
+      cache: bundleBase64 ? 'private' : 'discovery',
       siteId: resolvedSiteId,
       schemaVersion: SANDBOX_SCHEMA_VERSION,
       etagSeed: {

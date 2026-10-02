@@ -150,7 +150,9 @@ function assertSourceGuards() {
   assert(sandboxRoute.includes("'Permissions-Policy': sandboxPermissionsPolicy"), 'sandbox route must return an explicit permissions policy header');
   assert(sandboxRoute.includes("SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1'"), 'sandbox route must expose a stable schema version');
   assert(sandboxRoute.includes('publicContractResponse('), 'sandbox route must use the public contract response wrapper');
-  assert(sandboxRoute.includes("cache: 'discovery'") && sandboxRoute.includes("cache: 'error'"), 'sandbox route must distinguish active discovery cache from error no-store cache');
+  assert(sandboxRoute.includes("cache: bundleBase64 ? 'private' : 'discovery'") && sandboxRoute.includes("cache: 'error'"), 'sandbox route must not cache executable bundles or errors');
+  assert(sandboxRoute.includes("'sandbox allow-scripts allow-forms'"), 'HTTP CSP must enforce opaque isolation even without an iframe sandbox attribute');
+  assert(sandboxRoute.includes('event.source !== parent'), 'sandbox must reject messages from sibling frames');
   assert(sandboxRoute.includes('etagSeed') && sandboxRoute.includes('schemaVersion: SANDBOX_SCHEMA_VERSION'), 'sandbox route must expose ETag and schema headers');
   for (const directive of ['camera=()', 'microphone=()', 'geolocation=()', 'payment=()', 'usb=()', 'serial=()', 'clipboard-read=()', 'clipboard-write=()']) {
     assert(sandboxRoute.includes(directive), `sandbox permissions policy must deny ${directive}`);
@@ -549,7 +551,7 @@ async function cleanup() {
 
 try {
   assertSourceGuards();
-  await assertBrowserSandbox();
+  if (process.env.BACKY_INTERACTIVE_SANDBOX_SOURCE_ONLY !== '1') await assertBrowserSandbox();
   console.log('Backy interactive sandbox security smoke passed');
 } finally {
   await cleanup();

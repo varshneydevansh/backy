@@ -1,3 +1,5 @@
+import { normalizePublicOrigin } from './publicOriginPolicy';
+
 const interactiveEnvValue = (keys: string[]): string => {
   for (const key of keys) {
     const value = process.env[key]?.trim();
@@ -18,6 +20,7 @@ export const buildInteractiveComponentManifestContract = () => {
   const allowedConnectSrc = interactiveEnvValue(['BACKY_COMPONENT_ALLOWED_CONNECT_SRC', 'BACKY_INTERACTIVE_ALLOWED_CONNECT_SRC'])
     || "'self'";
   const contentSecurityPolicy = [
+    'sandbox allow-scripts allow-forms',
     "default-src 'none'",
     "script-src 'unsafe-inline'",
     "style-src 'unsafe-inline'",
@@ -29,7 +32,7 @@ export const buildInteractiveComponentManifestContract = () => {
     "frame-src 'none'",
     "worker-src 'none'",
     "manifest-src 'none'",
-    "frame-ancestors 'self'",
+    `frame-ancestors 'self' ${Array.from(new Set((process.env.BACKY_CORS_ALLOWED_ORIGINS || '').split(',').map(normalizePublicOrigin).filter(Boolean))).join(' ')}`.trim(),
     "base-uri 'none'",
     "form-action 'none'",
   ];
@@ -109,6 +112,16 @@ export const buildInteractiveComponentManifestContract = () => {
       postMessageProtocol: 'backy.interactive-component.v1',
       fallbackRequired: true,
       unknownComponentBehavior: 'render-static-fallback',
+      bundleModule: {
+        schemaVersion: 'backy.interactive-component-module.v1',
+        format: 'self-contained-es-module',
+        requiredExport: 'mount',
+        optionalExport: 'update',
+        contextFields: ['root', 'props', 'controls', 'dataBindings', 'componentKey', 'version', 'resize'],
+        cleanup: 'mount may return a cleanup function; it runs before remounting',
+        integrity: 'approved status, site/key/version storage scope, HMAC-SHA256 signature, and SHA256 byte verification',
+        networkImports: false,
+      },
     },
     dataBindingScopes: ['collections', 'media', 'forms', 'commerce', 'page', 'blog'],
     security: {

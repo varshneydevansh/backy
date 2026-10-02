@@ -1298,6 +1298,16 @@ export type GeneratedBackyOpenApiInteractiveComponentManifestContract = {
     postMessageProtocol: "backy.interactive-component.v1";
     fallbackRequired: boolean;
     unknownComponentBehavior: "render-static-fallback";
+    bundleModule?: {
+      schemaVersion: "backy.interactive-component-module.v1";
+      format: "self-contained-es-module";
+      requiredExport: "mount";
+      optionalExport: "update";
+      contextFields: Array<string>;
+      cleanup: string;
+      integrity: string;
+      networkImports: false;
+    };
   };
   dataBindingScopes: Array<"collections" | "media" | "forms" | "commerce" | "page" | "blog">;
   security: GeneratedBackyOpenApiInteractiveComponentSecurity;
