@@ -296,13 +296,15 @@ This document defines how custom frontends, admin UI, and public renderer intera
   - Successful file responses increment Backy-served delivery analytics under `media.metadata.mediaDelivery`, including request counts, bytes served, daily buckets, and last delivery metadata.
   - Public media file responses emit `ETag` and `x-backy-cache-revision` for the concrete media/disposition variant; a matching `If-None-Match` returns `304` without streaming bytes or incrementing delivery analytics after normal site, signature, storage-path, and quarantine checks pass.
   - Success and error responses expose public Backy contract headers, including `x-backy-contract-version: backy.ai-frontend.v1`, `x-backy-schema-version: backy.media-file.v1`, `x-backy-request-id`, and `x-backy-cache-scope`; successful file responses also include `x-backy-site-id`, `x-backy-media-id`, `ETag`, and `x-backy-cache-revision` while preserving immutable public-file caching or short private signed-file caching as appropriate.
+  - Production private-file signing requires `BACKY_MEDIA_SIGNING_SECRET` (or an existing server-only admin signing alias). Without a secret, signature verification fails closed and signed-URL creation returns `503 MEDIA_SIGNING_NOT_CONFIGURED`; the public development signing key is never accepted in production. Keep provider buckets private and deliver files through Backy.
 - `GET /api/sites/:siteId/media/:mediaId/transform`
+  - Prepared variants use Backy transform URLs, including when the provider bucket is private. An exact width/quality match returns `200 image/webp` from a site/media-scoped generated object after visibility/quarantine checks; unmatched sizes retain the optimizer redirect. `srcSet` does not expose provider public URLs.
   - Query: `width`/`w` from `16..3840`, optional `quality`/`q` from `1..100`.
   - The SDK exports `buildBackyMediaTransformPath()`, `buildBackyMediaTransformUrl()`, `mediaTransformUrl()`, and `mediaTransformCached()` so custom frontends can build optimizer URLs and revalidate transform redirects with `If-None-Match` while preserving redirect `location`, `ETag`, `x-backy-cache-revision`, media id, width, and quality metadata.
   - Invalid transform width values return `400 INVALID_TRANSFORM_WIDTH`; invalid quality values return `400 INVALID_TRANSFORM_QUALITY`.
   - Only public image media is accepted.
   - Quarantined media transform requests return `423 MEDIA_QUARANTINED` and do not redirect to the optimizer.
-  - Successful requests return a `307` redirect to Backy's image optimizer with `x-backy-transform-width` and `x-backy-transform-quality` headers.
+  - Requests without a matching prepared variant return a `307` redirect to Backy's image optimizer with `x-backy-transform-width` and `x-backy-transform-quality` headers. Prepared `200` responses carry the same transform/cache metadata.
   - Successful transform redirects increment Backy-served transform delivery analytics under `media.metadata.mediaDelivery`.
   - Non-image or private assets return contract error envelopes.
   - Transform redirects emit `ETag` and `x-backy-cache-revision` for the concrete media/width/quality variant; a matching `If-None-Match` returns `304` without redirecting or counting another transform delivery after normal publish, type, and quarantine checks pass.

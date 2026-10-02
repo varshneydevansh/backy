@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+const signingModule = await import('../src/lib/mediaSigning.ts');
+const { createSignedMediaAccess, verifySignedMediaAccess } = signingModule.default || signingModule;
+for (const key of ['BACKY_MEDIA_SIGNING_SECRET', 'BACKY_ADMIN_SECRET_KEY', 'BACKY_ADMIN_API_KEY']) delete process.env[key];
+process.env.NODE_ENV = 'test';
+const identity = { siteId: 'fixture-site', mediaId: 'fixture-media' };
+const development = createSignedMediaAccess(identity);
+assert.equal(verifySignedMediaAccess({ ...identity, ...development }), true);
+process.env.NODE_ENV = 'production';
+assert.equal(verifySignedMediaAccess({ ...identity, ...development }), false, 'production must reject signatures made with the public development secret');
+assert.throws(() => createSignedMediaAccess(identity), /signing.*configured/i, 'production signing requires a server secret');
+process.env.BACKY_MEDIA_SIGNING_SECRET = 'fixture-signing-key-for-private-media';
+const signed = createSignedMediaAccess(identity);
+assert.equal(verifySignedMediaAccess({ ...identity, ...signed }), true);
+assert.equal(verifySignedMediaAccess({ ...identity, ...signed, mediaId: 'other-media' }), false);
+assert.equal(verifySignedMediaAccess({ ...identity, ...signed, expiresAt: 1 }), false);
+console.log(JSON.stringify({ ok: true, contract: 'backy.media-signing-security.v1' }));

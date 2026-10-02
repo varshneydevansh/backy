@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { NextRequest } from 'next/server';
+const cwd = process.cwd();
+const scratch = mkdtempSync(join(tmpdir(), 'backy-private-storage-'));
+process.chdir(scratch);
+process.env.BACKY_DATA_MODE = 'demo';
+process.env.BACKY_STORAGE_PROVIDER = 'local';
+process.env.NODE_ENV = 'test';
+try {
+  const storeModule = await import('../src/lib/backyStore.ts');
+  const store = storeModule.default || storeModule;
+  const responsiveModule = await import('../src/lib/mediaResponsive.ts');
+  const responsive = responsiveModule.default || responsiveModule;
+  const storageModule = await import('../src/lib/mediaStorage.ts');
+  const storage = await (storageModule.default || storageModule).getMediaStorageAdapter();
+  const media = store.createMediaItem('site-demo', { filename: 'fixture.png', originalName: 'fixture.png', mimeType: 'image/png', type: 'image', sizeBytes: 4, url: 'https://storage.example.com/storage/v1/object/public/private-bucket/original.png', visibility: 'public' });
+  const bytes = Buffer.from('RIFF-private-storage-fixture');
+  const storagePath = `sites/site-demo/generated/media/${media.id}/batch/320.webp`;
+  await storage.upload(bytes, { path: storagePath, filename: '320.webp', mimeType: 'image/webp' });
+  const variant = { width: 320, quality: 75, url: 'https://storage.example.com/storage/v1/object/public/private-bucket/generated.webp', storagePath, bytes: bytes.length, mimeType: 'image/webp', format: 'webp' };
+  store.updateMediaItem('site-demo', media.id, { metadata: { generatedTransforms: { variants: [variant] } } });
+  const saved = store.getMediaById('site-demo', media.id)!;
+  const manifest = responsive.buildImageResponsiveManifest('site-demo', saved)!;
+  const path = responsive.mediaTransformPath('site-demo', media.id, 320);
+  assert.equal(manifest.variants[0].url, path, 'prepared variants must use Backy delivery, not provider public URLs');
+  assert.equal(manifest.srcSet, `${path} 320w`);
+  const module = await import('../src/app/api/sites/[siteId]/media/[mediaId]/transform/route.ts');
+  const route = module.default || module;
+  const request = () => new NextRequest(`http://localhost${path}`);
+  const params = { params: Promise.resolve({ siteId: 'site-demo', mediaId: media.id }) };
+  const response = await route.GET(request(), params);
+  assert.equal(response.status, 200, 'prepared bytes must be served through the guarded transform route');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes);
+  assert.equal(response.headers.get('content-type'), 'image/webp');
+  store.updateMediaItem('site-demo', media.id, { visibility: 'private' });
+  assert.equal((await route.GET(request(), params)).status, 404, 'private transforms stay hidden');
+  store.updateMediaItem('site-demo', media.id, { visibility: 'public', metadata: { generatedTransforms: { variants: [{ ...variant, storagePath: 'sites/other-site/generated/secret.webp' }] } } });
+  assert.equal((await route.GET(request(), params)).status, 307, 'cross-site variant paths cannot be read');
+  console.log(JSON.stringify({ ok: true, contract: 'backy.private-storage-delivery.v1' }));
+} finally {
+  process.chdir(cwd);
+  rmSync(scratch, { recursive: true, force: true });
+}

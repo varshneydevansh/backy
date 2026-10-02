@@ -44,9 +44,11 @@
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",
         "test:admin-contract-source": "BACKY_ADMIN_CONTRACT_SOURCE_GUARD=1 node scripts/admin-contract-smoke.mjs",
         "test:localized-routes": "tsx --tsconfig tsconfig.json scripts/localized-route-smoke.ts",
-        "test:public-security": "node scripts/public-security-regression-smoke.mjs && npm run test:comment-security",
+        "test:public-security": "node scripts/public-security-regression-smoke.mjs && npm run test:comment-security && npm run test:media-signing-security",
         "test:comment-security": "tsx --tsconfig tsconfig.json scripts/comment-security-smoke.mts",
-        "test:media-storage-runtime": "tsx --tsconfig tsconfig.json scripts/media-storage-runtime-smoke.ts"
+        "test:media-storage-runtime": "tsx --tsconfig tsconfig.json scripts/media-storage-runtime-smoke.ts",
+        "test:media-private-storage": "tsx --tsconfig tsconfig.json scripts/media-private-storage-smoke.mts",
+        "test:media-signing-security": "tsx --tsconfig tsconfig.json scripts/media-signing-security-smoke.mts"
     },
     "dependencies": {
         "@backy-cms/core": "*",

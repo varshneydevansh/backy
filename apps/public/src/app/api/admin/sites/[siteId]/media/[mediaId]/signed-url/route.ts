@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
-import { buildSignedMediaPath, createSignedMediaAccess } from '@/lib/mediaSigning';
+import { buildSignedMediaPath, createSignedMediaAccess, MediaSigningConfigurationError } from '@/lib/mediaSigning';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -144,6 +144,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof MediaSigningConfigurationError) {
+      return errorResponse(503, 'MEDIA_SIGNING_NOT_CONFIGURED', error.message, requestId);
+    }
     console.error('Admin media signed URL API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

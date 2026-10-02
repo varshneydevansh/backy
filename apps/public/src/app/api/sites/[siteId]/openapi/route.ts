@@ -4173,6 +4173,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 ),
               ],
               responses: {
+                "200": {
+                  description: "Prepared WebP bytes served through Backy's guarded storage adapter",
+                  headers: mediaTransformResponseHeaders,
+                  content: { "image/webp": { schema: { type: "string", format: "binary" } } },
+                },
                 "307": {
                   description: "Redirect to optimized image URL",
                   headers: mediaTransformResponseHeaders,

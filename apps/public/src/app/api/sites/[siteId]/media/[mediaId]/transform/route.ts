@@ -4,6 +4,7 @@ import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
+import { getMediaStorageAdapter } from '@/lib/mediaStorage';
 import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -142,6 +143,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }).catch((error) => {
       console.error('Media transform analytics update failed:', error);
     });
+
+    // Prepared images remain behind Backy's visibility/quarantine checks even
+    // when the storage bucket itself is private.
+    const generated = media.metadata?.generatedTransforms as { variants?: unknown } | undefined;
+    const variants = Array.isArray(generated?.variants) ? generated.variants : [];
+    const variant = variants.find((value): value is { storagePath: string } => {
+      if (!value || typeof value !== 'object') return false;
+      const entry = value as Record<string, unknown>;
+      const path = typeof entry.storagePath === 'string' ? entry.storagePath : '';
+      return Number(entry.width) === width && Number(entry.quality) === quality
+        && entry.mimeType === 'image/webp' && entry.format === 'webp'
+        && path.startsWith(`sites/${site.id}/generated/media/${media.id}/`)
+        && !path.includes('\\') && !path.split('/').includes('..');
+    });
+    if (variant) {
+      const storage = await getMediaStorageAdapter();
+      const buffer = await storage.read(variant.storagePath);
+      return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+          ...commonHeaders,
+          'content-type': 'image/webp',
+          'content-length': String(buffer.byteLength),
+        },
+      });
+    }
 
     const transformUrl = new URL('/_next/image', request.url);
     transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id));

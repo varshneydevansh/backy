@@ -2,6 +2,7 @@ import type { StorageAdapter } from '@backy/storage';
 import type { MediaItem } from '@backy-cms/core';
 import sharp from 'sharp';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
+import { mediaTransformPath, publicMediaFilePath } from '@/lib/mediaResponsive';
 
 export type GeneratedImageVariant = {
   width: number;
@@ -172,7 +173,7 @@ export const generateImageTransformManifest = async (input: {
     variants.push({
       width,
       quality: input.quality,
-      url: upload.url,
+      url: mediaTransformPath(input.siteId, input.media.id, width, input.quality),
       storagePath: upload.path,
       bytes: upload.size,
       mimeType: 'image/webp',
@@ -182,7 +183,7 @@ export const generateImageTransformManifest = async (input: {
   }
 
   return {
-    src: input.media.url,
+    src: publicMediaFilePath(input.siteId, input.media.id),
     srcSet: variants.map((variant) => `${variant.url} ${variant.width}w`).join(', '),
     sizes: input.sizes,
     variants,

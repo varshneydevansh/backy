@@ -9,8 +9,14 @@ const signingSecret = () => (
   process.env.BACKY_MEDIA_SIGNING_SECRET?.trim() ||
   process.env.BACKY_ADMIN_SECRET_KEY?.trim() ||
   process.env.BACKY_ADMIN_API_KEY?.trim() ||
-  'backy-dev-media-signing-secret'
+  (process.env.NODE_ENV === 'production' ? '' : 'backy-dev-media-signing-secret')
 );
+
+export class MediaSigningConfigurationError extends Error {
+  constructor() {
+    super('Media signing is not configured. Set BACKY_MEDIA_SIGNING_SECRET on the server.');
+  }
+}
 
 const normalizedDisposition = (value: unknown): SignedMediaDisposition => (
   value === 'attachment' ? 'attachment' : 'inline'
@@ -32,8 +38,8 @@ const signedMediaPayload = (
   disposition: SignedMediaDisposition,
 ) => `${siteId}:${mediaId}:${expiresAt}:${disposition}`;
 
-const signPayload = (payload: string) => (
-  createHmac('sha256', signingSecret())
+const signPayload = (payload: string, secret: string) => (
+  createHmac('sha256', secret)
     .update(payload)
     .digest('base64url')
 );
@@ -44,6 +50,8 @@ export const createSignedMediaAccess = (input: {
   expiresInSeconds?: unknown;
   disposition?: unknown;
 }) => {
+  const secret = signingSecret();
+  if (!secret) throw new MediaSigningConfigurationError();
   const disposition = normalizedDisposition(input.disposition);
   const expiresAt = Math.floor(Date.now() / 1000) + normalizeExpiresIn(input.expiresInSeconds);
   const payload = signedMediaPayload(input.siteId, input.mediaId, expiresAt, disposition);
@@ -51,7 +59,7 @@ export const createSignedMediaAccess = (input: {
   return {
     expiresAt,
     disposition,
-    token: signPayload(payload),
+    token: signPayload(payload, secret),
   };
 };
 
@@ -62,6 +70,8 @@ export const verifySignedMediaAccess = (input: {
   disposition: unknown;
   token: unknown;
 }) => {
+  const secret = signingSecret();
+  if (!secret) return false;
   const expiresAt = Number(input.expiresAt);
   const token = typeof input.token === 'string' ? input.token : '';
   const disposition = normalizedDisposition(input.disposition);
@@ -70,7 +80,7 @@ export const verifySignedMediaAccess = (input: {
     return false;
   }
 
-  const expected = signPayload(signedMediaPayload(input.siteId, input.mediaId, expiresAt, disposition));
+  const expected = signPayload(signedMediaPayload(input.siteId, input.mediaId, expiresAt, disposition), secret);
   const expectedBytes = Buffer.from(expected);
   const tokenBytes = Buffer.from(token);
 
