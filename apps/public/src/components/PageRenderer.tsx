@@ -856,9 +856,7 @@ const normalizeRendererType = (value: string): KnownElementType => {
     'codeComponent',
   ];
 
-  return knownTypes.includes(normalized as KnownElementType)
-    ? (normalized as KnownElementType)
-    : 'text';
+  return knownTypes.find((type) => type.toLowerCase() === normalized) || 'text';
 };
 
 const normalizeInputType = (value: unknown): string => {
