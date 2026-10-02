@@ -512,7 +512,7 @@ export const scanMediaUploadWithProviders = async (input: {
       signal: controller.signal,
     });
     const payload = await normalizeProviderScanResponse(response);
-    const status = typeof payload.status === 'string' ? payload.status.toLowerCase() : response.ok ? 'clean' : 'error';
+    const status = typeof payload.status === 'string' ? payload.status.trim().toLowerCase() : 'invalid-scanner-verdict';
     const scanner = typeof payload.scanner === 'string' && payload.scanner.trim().length > 0
       ? payload.scanner
       : 'http-media-scanner';

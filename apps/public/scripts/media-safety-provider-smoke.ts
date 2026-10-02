@@ -75,6 +75,12 @@ const scannerServer = createHttpServer((request, response) => {
     const filename = request.headers['x-backy-media-filename'];
     const auth = request.headers.authorization;
 
+    if (request.url === '/missing-verdict' || request.url === '/malformed') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(request.url === '/missing-verdict' ? '{}' : 'not a verdict');
+      return;
+    }
+
     if (request.url === '/reject') {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({
@@ -162,6 +168,17 @@ const main = async () => {
     assert.equal(providerScan.providerScans?.[0]?.details?.bytes, 23);
     assert.equal(providerScan.providerScans?.[0]?.details?.authorized, true);
 
+    for (const path of ['/missing-verdict', '/malformed']) {
+      process.env.BACKY_MEDIA_SCAN_ENDPOINT = `${baseUrl}${path}`;
+      for (const failOpen of ['false', 'true']) {
+        process.env.BACKY_MEDIA_SCAN_FAIL_OPEN = failOpen;
+        await assertMediaSafetyError(
+          () => scanMediaUploadWithProviders(cleanPngInput()),
+          `An HTTP 200 without an explicit clean verdict must be rejected (${path}, failOpen=${failOpen})`,
+        );
+      }
+    }
+
     resetScanEnv();
     process.env.BACKY_MEDIA_SCAN_PROVIDER = 'http';
     process.env.BACKY_MEDIA_SCAN_ENDPOINT = `${baseUrl}/reject`;
@@ -226,7 +243,7 @@ const main = async () => {
 
     console.log(JSON.stringify({
       ok: true,
-      cases: 12,
+      cases: 16,
     }));
   } finally {
     restoreEnv();

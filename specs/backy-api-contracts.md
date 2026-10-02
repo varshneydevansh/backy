@@ -458,6 +458,7 @@ Public page payload should include:
   - Response uses `{ success, requestId, data: { comment, message } }`; legacy top-level `comment` and `message` remain for compatibility.
   - Validation and spam rejections return structured `422` envelopes with `error.code: "VALIDATION_ERROR"`, `details`, and `validation` field errors instead of legacy string errors.
 
+
 - `GET /api/sites/:siteId/pages/:pageId/comments?status=approved&limit=&cursor=`
 - `GET /api/public/sites/:siteId/pages/:pageId/comments` (optional alias)
   - Returns approved comments and count metadata.
@@ -579,15 +580,20 @@ Public page payload should include:
 - `DELETE /api/admin/sites/:siteId/pages/:pageId`
   - Deletes the page from the runtime adapter.
 
-Current sites/pages admin endpoints are intentionally local file-backed. Production completion still requires authenticated database persistence, RBAC, preview tokens, cache invalidation, workflow audit events, and contract tests.
+Demo-mode sites/pages use the local runtime catalog. Production database mode persists through repositories with authenticated writes, RBAC, preview tokens, workflow audit events, and cache invalidation; the disposable production page/blog round trip is recorded in the release tracker.
 
 ### 3.3 Media
+
+Production media uploads require a configured scanner. With `BACKY_MEDIA_SCAN_PROVIDER=http`, set the server-only `BACKY_MEDIA_SCAN_ENDPOINT` and optional `BACKY_MEDIA_SCAN_API_KEY`; the endpoint receives raw file bytes with MIME content type and `x-backy-media-filename`, `x-backy-media-type`, and `x-backy-media-size` headers. It must return JSON with an explicit `status: "clean"` verdict to accept a file. Empty/malformed responses and HTTP 200 without a verdict are rejected, including under fail-open policy. ClamAV is available through `BACKY_MEDIA_SCAN_PROVIDER=clamav`, `BACKY_MEDIA_SCAN_HOST`, and `BACKY_MEDIA_SCAN_PORT`. Keep `BACKY_MEDIA_SCAN_FAIL_OPEN=false` for launch verification.
+
+Vercel media storage must use Supabase or S3-compatible persistent storage through `BACKY_STORAGE_PROVIDER`; the default local deployment filesystem is reported as unconfigured there. Configure the matching provider bucket and server-only credentials, then verify storage provisioning plus a real upload/readback before claiming image, video, file, or font upload readiness. External media links and font tokens alone do not prove uploaded assets work.
+
 
 - `POST /api/admin/sites/:siteId/media`
   - multipart upload
   - query/body flags: `scope` (`global|page|post`), `scopeTargetId`, `visibility`
   - current implementation accepts `file`, `altText`, `caption`, `tags`, `uploadedBy`, arbitrary JSON `metadata`, plus `fontFamily`, `fontWeight`, and `fontStyle` for font uploads
-  - validates image/video/audio/document/font/other MIME categories, classifies unknown safe files as `other`, runs static upload safety checks before storage, optionally enforces HTTP scanner or ClamAV `clamd` clean verdicts through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
+  - validates image/video/audio/document/font/other MIME categories, classifies unknown safe files as `other`, runs static upload safety checks before storage, requires a configured HTTP scanner or ClamAV `clamd` clean verdict in production (optional in local development) through `BACKY_MEDIA_SCAN_*`, rejects active-content SVG or provider-rejected payloads with `MEDIA_SAFETY_SCAN_FAILED`, and writes assets through the active `@backy/storage` adapter
   - invalid explicit upload policy fields return `400` before storage work begins: `INVALID_MEDIA_SCOPE`, `INVALID_MEDIA_VISIBILITY`, `INVALID_MEDIA_SCOPE_TARGET`, or `INVALID_MEDIA_FOLDER`
   - invalid upload metadata JSON returns `400 INVALID_MEDIA_METADATA` instead of silently dropping the metadata
   - stores extension metadata automatically and preserves custom upload metadata through later metadata edits
