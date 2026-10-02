@@ -494,7 +494,9 @@ export class BackyCustomFrontendClient {
         ...(options.headers || {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      cache: options.method ? "no-store" : "force-cache",
+      // Backy owns publishing and withdrawal. Re-read its public state on every
+      // request so a separately deployed frontend never keeps a stale snapshot.
+      cache: "no-store",
     });
     const json = (await response.json().catch(() => ({}))) as TData | BackyErrorEnvelope;
 

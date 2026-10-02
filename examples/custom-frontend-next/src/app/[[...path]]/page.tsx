@@ -46,6 +46,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
         description: "Published reports, essays, notes, and updates.",
       };
     }
+    if (backyError.status === 404) notFound();
     throw error;
   }
 }
