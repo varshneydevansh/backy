@@ -1,3 +1,4 @@
+import { isContentPublished } from '@backy-cms/core';
 import {
   DEFAULT_SITE_SETTINGS,
   DEFAULT_THEME,
@@ -3838,16 +3839,7 @@ function isPublished(
     | StoreCollectionRecord["status"],
   scheduledAt?: string | null,
 ): boolean {
-  if (status === "published") {
-    return true;
-  }
-
-  if (status !== "scheduled" || !scheduledAt) {
-    return false;
-  }
-
-  const scheduledTime = Date.parse(scheduledAt);
-  return Number.isFinite(scheduledTime) && scheduledTime <= Date.now();
+  return isContentPublished({ status, scheduledAt });
 }
 
 function defaultNoIndexForStatus(
@@ -12991,6 +12983,7 @@ function normalizeCommentStatus(
 export function listComments(
   siteId: string,
   params: {
+    publicOnly?: boolean;
     targetType?: CommentTargetType | "all";
     targetId?: string;
     status?: "pending" | "approved" | "rejected" | "spam" | "blocked" | "all";
@@ -13007,6 +13000,7 @@ export function listComments(
   refreshPersistedInteractionStore();
 
   const {
+    publicOnly = false,
     targetType,
     targetId,
     status: rawStatus,
@@ -13028,6 +13022,15 @@ export function listComments(
 
   let filtered = commentStore.filter((comment) => comment.siteId === siteId);
 
+  if (publicOnly) {
+    const site = getSiteByIdOrSlug(siteId);
+    filtered = filtered.filter((comment) => {
+      const target = comment.targetType === "page"
+        ? getAdminPageById(siteId, comment.targetId) : getAdminBlogPostById(siteId, comment.targetId);
+      return Boolean(site?.isPublished && comment.status === "approved" && isContentPublished(target));
+    });
+  }
+
   if (targetType && targetType !== "all") {
     filtered = filtered.filter((comment) => comment.targetType === targetType);
   }
@@ -13036,7 +13039,7 @@ export function listComments(
     filtered = filtered.filter((comment) => comment.targetId === targetId);
   }
 
-  if (normalizedRequestId) {
+  if (normalizedRequestId && !publicOnly) {
     filtered = filtered.filter(
       (comment) => comment.requestId === normalizedRequestId,
     );
@@ -13053,7 +13056,7 @@ export function listComments(
       const haystack = [
         comment.content,
         comment.authorName,
-        comment.authorEmail,
+        publicOnly ? undefined : comment.authorEmail,
         comment.authorWebsite,
       ]
         .filter(Boolean)

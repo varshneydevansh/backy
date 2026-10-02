@@ -14,8 +14,9 @@ import {
     type CommentStatus,
     type CommentTargetType,
 } from '@backy-cms/core';
+import { isContentPublished } from '@backy-cms/core';
 import { and, desc, eq } from 'drizzle-orm';
-import { commentBlocklist, comments } from '../schema';
+import { commentBlocklist, comments, pages, blogPosts, sites } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
 type QueryDatabase = {
@@ -128,12 +129,12 @@ const normalizeReportReasons = (value: unknown): CommentReportReason[] => (
         : []
 );
 
-const searchText = (comment: Comment, search: string): boolean => {
+const searchText = (comment: Comment, search: string, publicOnly = false): boolean => {
     const needle = search.toLowerCase();
     return [
         comment.content,
         comment.authorName,
-        comment.authorEmail,
+        publicOnly ? undefined : comment.authorEmail,
         comment.authorWebsite,
     ]
         .filter(Boolean)
@@ -224,15 +225,29 @@ export function createCommentRepository(db: DatabaseInstance): BackyCommentRepos
     return {
         async list(input: BackyCommentListInput): Promise<BackyListResult<Comment>> {
             const rows = await database.select().from(comments).where(eq(comments.siteId, input.siteId)).orderBy(desc(comments.createdAt)) as CommentRow[];
+            let publicTargets: Set<string> | undefined;
+            if (input.publicOnly) {
+                const site = await firstOrNull<{ isPublished: boolean }>(database.select({ isPublished: sites.isPublished }).from(sites).where(eq(sites.id, input.siteId)).limit(1));
+                if (!site?.isPublished) return paginate([], input.limit, input.offset);
+                const [pageRows, postRows] = await Promise.all([
+                    database.select({ id: pages.id, status: pages.status, scheduledAt: pages.scheduledAt }).from(pages).where(eq(pages.siteId, input.siteId)),
+                    database.select({ id: blogPosts.id, status: blogPosts.status, scheduledAt: blogPosts.scheduledAt }).from(blogPosts).where(eq(blogPosts.siteId, input.siteId)),
+                ]) as { id: string; status: string; scheduledAt: Date | null }[][];
+                publicTargets = new Set([
+                    ...pageRows.filter((row) => isContentPublished(row)).map((row) => `page:${row.id}`),
+                    ...postRows.filter((row) => isContentPublished(row)).map((row) => `post:${row.id}`),
+                ]);
+            }
             const normalizedParentId = typeof input.parentId === 'string' && input.parentId.length > 0 ? input.parentId : null;
             const filtered = rows
                 .map(toComment)
+                .filter((comment) => !input.publicOnly || (comment.status === 'approved' && publicTargets?.has(`${comment.targetType}:${comment.targetId}`)))
                 .filter((comment) => input.targetType ? comment.targetType === input.targetType : true)
                 .filter((comment) => input.targetId ? comment.targetId === input.targetId : true)
                 .filter((comment) => input.status && input.status !== 'all' ? comment.status === input.status : true)
-                .filter((comment) => input.requestId ? comment.requestId === input.requestId : true)
+                .filter((comment) => input.requestId && !input.publicOnly ? comment.requestId === input.requestId : true)
                 .filter((comment) => input.commentThreadId ? comment.commentThreadId === input.commentThreadId : true)
-                .filter((comment) => input.q ? searchText(comment, input.q) : true)
+                .filter((comment) => input.q ? searchText(comment, input.q, input.publicOnly) : true)
                 .filter((comment) => input.parentOnly ? (normalizedParentId ? comment.parentId === normalizedParentId : comment.parentId == null) : true);
             return paginate(sortComments(filtered, input.sort), input.limit, input.offset);
         },

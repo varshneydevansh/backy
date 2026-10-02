@@ -8,7 +8,7 @@ import {
   updateCommentThread,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
+import { isCommentPubliclyVisible, hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   resolveRepositorySite,
@@ -168,11 +168,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       const includePrivateFields = comment.status !== 'approved' || hasCommentCredentials(_request);
-    if (includePrivateFields) {
+      if (includePrivateFields) {
         const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
         if (access instanceof NextResponse) {
           return access;
         }
+      }
+
+      if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment, repositories)) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
       }
 
       return privateResponse({
@@ -201,6 +205,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       if (access instanceof NextResponse) {
         return access;
       }
+    }
+
+    if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment)) {
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
     return privateResponse({

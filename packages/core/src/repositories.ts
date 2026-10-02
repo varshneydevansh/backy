@@ -566,6 +566,8 @@ export interface BackyCommentUpdateInput {
 
 export interface BackyCommentListInput extends BackyPaginationInput {
   siteId: string;
+  /** Internal public-read boundary: approved comments on published targets; private search fields excluded. */
+  publicOnly?: boolean;
   targetType?: Comment['targetType'];
   targetId?: string;
   status?: CommentStatus | 'all';

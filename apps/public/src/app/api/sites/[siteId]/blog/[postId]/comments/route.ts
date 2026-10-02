@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
+import { isCommentTargetPublished, hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
-  createComment,
+  getAdminBlogPostById,  createComment,
   getCommentById,
-  getBlogPosts,
-  getCommentsByTarget,
+  listComments,
   getSiteByIdOrSlug,
   validateAndClassifyComment,
 } from '@/lib/backyStore';
@@ -248,7 +247,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const post = await repositories.posts.getById(site.id, postId);
-      if (!post) {
+      if (!post || (!includePrivateFields && !isCommentTargetPublished(site, post))) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
       }
 
@@ -284,40 +283,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const postResult = getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 });
-    const postExists = postResult.posts.some((post) => post.id === postId);
-    if (!postExists) {
+    const post = getAdminBlogPostById(site.id, postId);
+    if (!post || (!includePrivateFields && !isCommentTargetPublished(site, post))) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
 
-    const comments = getCommentsByTarget(site.id, {
+    const comments = listComments(site.id, {
       targetType: 'post',
       targetId: postId,
       commentThreadId: commentThreadId || undefined,
       status,
+      parentOnly,
+      parentId: parentId || null,
+      sort,
       limit,
       offset,
     });
-
-    const filtered = parentOnly
-      ? comments.comments.filter((comment) => (parentId ? comment.parentId === parentId : comment.parentId == null))
-      : comments.comments;
-
-    const sorted = [...filtered].sort((a, b) =>
-      sort === 'oldest'
-        ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
 
     return privateResponse({
       success: true,
       requestId,
       data: {
-        comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
+        comments: comments.comments.map((comment) => serializeComment(comment, includePrivateFields)),
         count: comments.count,
         pagination: comments.pagination,
       },
-      comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
+      comments: comments.comments.map((comment) => serializeComment(comment, includePrivateFields)),
       count: comments.count,
       pagination: comments.pagination,
     }, requestId);
@@ -341,7 +332,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const post = await repositories.posts.getById(site.id, postId);
-      if (!post) {
+      if (!post || !isCommentTargetPublished(site, post)) {
         return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', responseRequestId);
       }
 
@@ -529,9 +520,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
-    const postResult = getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 });
-    const postExists = postResult.posts.some((post) => post.id === postId);
-    if (!postExists) {
+    const post = getAdminBlogPostById(site.id, postId);
+    if (!post || !isCommentTargetPublished(site, post)) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', responseRequestId);
     }
 

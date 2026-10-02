@@ -5481,6 +5481,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             get: {
               tags: ["Interactions"],
               summary: "List site-wide comments across pages and posts",
+              description: "Anonymous approved reads include only published sites and targets, including due schedules. Other statuses, private request filters, and private fields require comments.view access.",
               operationId: "listBackySiteComments",
               parameters: [
                 queryParameter("targetType", {
@@ -5499,7 +5500,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                     "all",
                   ],
                 }),
-                queryParameter("requestId"),
+                queryParameter("requestId", { type: "string" }, "Private correlation filter; requires authenticated comments.view access."),
                 queryParameter(
                   "parentId",
                   { type: "string" },
@@ -5518,7 +5519,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 queryParameter(
                   "q",
                   { type: "string" },
-                  "Search comment content and author fields.",
+                  "Search public content, author name and website; authenticated moderation also searches author email.",
                 ),
                 queryParameter("sort", {
                   type: "string",

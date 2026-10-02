@@ -268,7 +268,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const limit = limitFilter.value;
     const offset = offsetFilter.value;
 
-    const includePrivateFields = status !== 'approved' || hasCommentCredentials(request);
+    const includePrivateFields = status !== 'approved' || Boolean(requestId) || hasCommentCredentials(request);
     if (includePrivateFields) {
       const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.view' });
       if (access instanceof NextResponse) {
@@ -285,6 +285,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       const result = await repositories.comments.list({
         siteId: site.id,
+        publicOnly: !includePrivateFields,
         targetType: targetType === 'all' ? undefined : targetType,
         targetId,
         status,
@@ -320,6 +321,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const result = listComments(site.id, {
+      publicOnly: !includePrivateFields,
       targetType,
       targetId,
       status,

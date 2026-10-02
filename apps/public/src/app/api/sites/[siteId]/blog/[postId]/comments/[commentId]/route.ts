@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getBlogPosts,
+  getAdminBlogPostById,  getBlogPosts,
   getCommentById,
   getSiteByIdOrSlug,
   updateCommentStatus,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
+import { isCommentPubliclyVisible, hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
@@ -123,11 +123,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       const includePrivateFields = comment.status !== 'approved' || hasCommentCredentials(_request);
-    if (includePrivateFields) {
+      if (includePrivateFields) {
         const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
         if (access instanceof NextResponse) {
           return access;
         }
+      }
+
+      if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment, repositories)) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
       }
 
       return privateResponse({
@@ -145,9 +149,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const posts = getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 });
-    const postExists = posts.posts.some((post) => post.id === postId);
-    if (!postExists) {
+    const post = getAdminBlogPostById(site.id, postId);
+    if (!post) {
       return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     }
 
@@ -162,6 +165,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       if (access instanceof NextResponse) {
         return access;
       }
+    }
+
+    if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment)) {
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
     return privateResponse({

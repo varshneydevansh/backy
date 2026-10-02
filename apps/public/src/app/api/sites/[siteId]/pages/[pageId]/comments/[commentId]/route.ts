@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getCommentById,
+  getAdminPageById,  getCommentById,
   getPageSummary,
   getSiteByIdOrSlug,
   updateCommentStatus,
 } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
+import { isCommentPubliclyVisible, hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import {
   resolveRepositorySite,
   updateRepositoryCommentStatus,
@@ -123,11 +123,15 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       }
 
       const includePrivateFields = comment.status !== 'approved' || hasCommentCredentials(_request);
-    if (includePrivateFields) {
+      if (includePrivateFields) {
         const access = await requireAdminAccess(_request, requestId, { permission: 'comments.view' });
         if (access instanceof NextResponse) {
           return access;
         }
+      }
+
+      if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment, repositories)) {
+        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
       }
 
       return privateResponse({
@@ -145,9 +149,8 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const pages = getPageSummary(site.id, { includeUnpublished: true });
-    const pageExists = pages.some((page) => page.id === pageId);
-    if (!pageExists) {
+    const page = getAdminPageById(site.id, pageId);
+    if (!page) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
 
@@ -162,6 +165,10 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       if (access instanceof NextResponse) {
         return access;
       }
+    }
+
+    if (!includePrivateFields && !await isCommentPubliclyVisible(site, comment)) {
+      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
     }
 
     return privateResponse({

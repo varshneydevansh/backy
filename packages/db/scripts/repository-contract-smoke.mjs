@@ -1644,6 +1644,41 @@ assert((await commentRepository.list({
   status: 'all',
 })).items.some((comment) => comment.id === replyComment.id), 'Expected comment parent filter');
 
+// Public counts and search must use the same visibility boundary before pagination.
+const publicComments = await commentRepository.list({ siteId: site.id, publicOnly: true, status: 'all', limit: 1 });
+assert(publicComments.pagination.total === 1 && publicComments.items[0]?.id === rootComment.id, 'Public comments exclude pending rows before pagination');
+assert((await commentRepository.list({ siteId: site.id, publicOnly: true, q: 'reader@example.com' })).pagination.total === 0, 'Public comment search excludes email');
+assert((await commentRepository.list({ siteId: site.id, q: 'reader@example.com' })).pagination.total === 1, 'Moderator search retains email');
+const pageRow = db.state.pages.find((row) => row.id === publishedPage.id);
+for (const hiddenStatus of ['draft', 'archived', 'scheduled']) {
+  pageRow.status = hiddenStatus;
+  pageRow.scheduledAt = new Date(Date.now() + 86400000);
+  assert((await commentRepository.list({ siteId: site.id, publicOnly: true })).pagination.total === 0, `Public comment feed excludes ${hiddenStatus} targets`);
+}
+pageRow.status = 'scheduled';
+pageRow.scheduledAt = new Date(Date.now() - 86400000);
+assert((await commentRepository.list({ siteId: site.id, publicOnly: true })).pagination.total === 1, 'Public comments allow due scheduled targets');
+pageRow.status = 'published';
+pageRow.scheduledAt = null;
+const postRow = db.state.blogPosts.find((row) => row.id === post.id);
+const savedPostStatus = postRow.status;
+const savedPostSchedule = postRow.scheduledAt;
+const postVisibilityComment = (await commentRepository.create({ siteId: site.id, targetType: 'post', targetId: post.id, content: 'Post visibility fixture', status: 'approved' })).item;
+for (const hiddenStatus of ['draft', 'archived', 'scheduled']) {
+  postRow.status = hiddenStatus;
+  postRow.scheduledAt = new Date(Date.now() + 86400000);
+  assert((await commentRepository.list({ siteId: site.id, publicOnly: true, targetType: 'post' })).pagination.total === 0, `Public feed excludes ${hiddenStatus} posts`);
+}
+postRow.status = 'published';
+assert((await commentRepository.list({ siteId: site.id, publicOnly: true, targetType: 'post', limit: 1 })).items[0]?.id === postVisibilityComment.id, 'Public feed includes published posts');
+await commentRepository.delete(site.id, postVisibilityComment.id);
+postRow.status = savedPostStatus;
+postRow.scheduledAt = savedPostSchedule;
+const siteRow = db.state.sites.find((row) => row.id === site.id);
+siteRow.isPublished = false;
+assert((await commentRepository.list({ siteId: site.id, publicOnly: true })).pagination.total === 0, 'Unpublished site comments are private');
+siteRow.isPublished = true;
+
 const updatedComment = (await commentRepository.update(site.id, rootComment.id, {
   status: 'blocked',
   reviewedBy: 'user_admin',

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { serializeComment } from '@/lib/commentPrivacy';
+import { isCommentPubliclyVisible, serializeComment } from '@/lib/commentPrivacy';
 import {
   getCommentById,
   getSiteByIdOrSlug,
@@ -182,7 +182,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const comment = await repositories.comments.getById(site.id, commentId);
-      if (!comment) {
+      if (!comment || !await isCommentPubliclyVisible(site, comment, repositories)) {
         return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
       }
 
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const comment = getCommentById(commentId);
-    if (!comment || comment.siteId !== site.id) {
+    if (!comment || !await isCommentPubliclyVisible(site, comment)) {
       return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', baseRequestId);
     }
 

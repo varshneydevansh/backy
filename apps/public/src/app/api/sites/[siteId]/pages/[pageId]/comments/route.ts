@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
+import { isCommentTargetPublished, hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
-  createComment,
+  getAdminPageById,  createComment,
   getCommentById,
-  getCommentsByTarget,
-  getPageSummary,
+  listComments,
   getSiteByIdOrSlug,
   validateAndClassifyComment,
 } from '@/lib/backyStore';
@@ -248,7 +247,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const page = await repositories.pages.getById(site.id, pageId);
-      if (!page) {
+      if (!page || (!includePrivateFields && !isCommentTargetPublished(site, page))) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
       }
 
@@ -284,40 +283,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const pages = getPageSummary(site.id, { includeUnpublished: true });
-    const pageExists = pages.some((page) => page.id === pageId);
-    if (!pageExists) {
+    const page = getAdminPageById(site.id, pageId);
+    if (!page || (!includePrivateFields && !isCommentTargetPublished(site, page))) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
     }
 
-    const comments = getCommentsByTarget(site.id, {
+    const comments = listComments(site.id, {
       targetType: 'page',
       targetId: pageId,
       commentThreadId: commentThreadId || undefined,
       status,
+      parentOnly,
+      parentId: parentId || null,
+      sort,
       limit,
       offset,
     });
-
-    const filtered = parentOnly
-      ? comments.comments.filter((comment) => (parentId ? comment.parentId === parentId : comment.parentId == null))
-      : comments.comments;
-
-    const sorted = [...filtered].sort((a, b) =>
-      sort === 'oldest'
-        ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
 
     return privateResponse({
       success: true,
       requestId,
       data: {
-        comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
+        comments: comments.comments.map((comment) => serializeComment(comment, includePrivateFields)),
         count: comments.count,
         pagination: comments.pagination,
       },
-      comments: sorted.map((comment) => serializeComment(comment, includePrivateFields)),
+      comments: comments.comments.map((comment) => serializeComment(comment, includePrivateFields)),
       count: comments.count,
       pagination: comments.pagination,
     }, requestId);
@@ -341,7 +332,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const page = await repositories.pages.getById(site.id, pageId);
-      if (!page) {
+      if (!page || !isCommentTargetPublished(site, page)) {
         return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', responseRequestId);
       }
 
@@ -530,9 +521,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
-    const pages = getPageSummary(site.id, { includeUnpublished: true });
-    const pageExists = pages.some((page) => page.id === pageId);
-    if (!pageExists) {
+    const page = getAdminPageById(site.id, pageId);
+    if (!page || !isCommentTargetPublished(site, page)) {
       return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', responseRequestId);
     }
 
