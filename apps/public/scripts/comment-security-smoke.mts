@@ -71,7 +71,7 @@ try {
       }
       const reportResponse = await report.POST(new NextRequest(`http://localhost/api/sites/site-demo/comments/${fixture.id}/report`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'spam' }) }), { params: Promise.resolve({ siteId: 'site-demo', commentId: fixture.id }) });
       assert.equal(reportResponse.status, 404, 'report must not reveal hidden target comments');
-      const adminRead = await siteRoute.GET(new NextRequest(`http://localhost/api/sites/site-demo/comments/${fixture.id}?status=approved&targetId=${targetId}`, { headers: { 'x-backy-admin-key': process.env.BACKY_ADMIN_API_KEY } }), { params: Promise.resolve({ siteId: 'site-demo' }) });
+      const adminRead = await siteRoute.GET(new NextRequest(`http://localhost/api/sites/site-demo/comments?status=approved&targetId=${targetId}`, { headers: { 'x-backy-admin-key': process.env.BACKY_ADMIN_API_KEY } }), { params: Promise.resolve({ siteId: 'site-demo' }) });
       assert.equal((await adminRead.json()).data.count > 0, true, 'moderators retain access to comments on unpublished content');
       const module = await import(list[0]); const route = module.default || module;
       const submitted = await route.POST(new NextRequest(`http://localhost/api/sites/site-demo${list[1]}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: 'Hidden target submission', authorName: 'Reader' }) }), { params: Promise.resolve(list[2]) });
@@ -86,6 +86,14 @@ try {
     assert.equal((await published.json()).data.count > 0, true, 'due schedules must remain publicly visible');
     update('site-demo', targetId, { status: 'published' });
   }
+  store.updateAdminSite('site-demo', { isPublished: false });
+  for (const [path, suffix, params] of routes.slice(1)) {
+    const module = await import(path); const route = module.default || module;
+    assert.equal((await route.GET(new NextRequest(`http://localhost/api/sites/site-demo${suffix}`), { params: Promise.resolve(params) })).status, 404, 'unpublished site comments are private');
+  }
+  const hiddenSiteFeed = await siteRoute.GET(new NextRequest('http://localhost/api/sites/site-demo/comments?status=approved'), { params: Promise.resolve({ siteId: 'site-demo' }) });
+  assert.equal((await hiddenSiteFeed.json()).data.count, 0, 'unpublished site feed is empty');
+  store.updateAdminSite('site-demo', { isPublished: true });
   const site = store.getSiteByIdOrSlug('site-demo')!;
   store.updateAdminSite('site-demo', { settings: { commentPolicy: { ...site.settings.commentPolicy, allowGuests: false } } });
   for (const [path, suffix, params] of [routes[1], routes[4]]) {
