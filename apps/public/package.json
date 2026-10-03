@@ -40,7 +40,7 @@
         "test:commerce-webhook": "tsx scripts/commerce-webhook-idempotency-smoke.ts",
         "test:commerce-webhook-secret": "tsx scripts/commerce-webhook-secret-smoke.ts",
         "test:repository-runtime": "tsx scripts/repository-runtime-smoke.ts",
-        "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx && tsx scripts/page-renderer-component-types-smoke.tsx && npm run test:product-design-render",
+        "test:page-renderer": "tsx scripts/page-renderer-rich-text-smoke.tsx && tsx scripts/page-renderer-component-types-smoke.tsx && tsx scripts/page-renderer-typography-smoke.tsx && npm run test:product-design-render",
         "test:product-design-render": "tsx --tsconfig tsconfig.json scripts/product-design-render-smoke.ts",
         "test:hosted-responsive": "node scripts/hosted-responsive-smoke.mjs",
         "test:admin-contract": "node scripts/admin-contract-smoke.mjs",

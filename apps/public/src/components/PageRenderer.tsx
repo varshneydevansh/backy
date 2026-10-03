@@ -1095,7 +1095,7 @@ function getSafeResize(value: unknown): React.CSSProperties['resize'] {
 }
 
 function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties {
-  return {
+  const style = {
     fontFamily: getNameClass(props.fontFamily),
     fontSize: getLength(props.fontSize),
     fontWeight: getNameClass(props.fontWeight),
@@ -1110,6 +1110,9 @@ function getTypographyStyle(props: Record<string, unknown>): React.CSSProperties
     textDecoration: getNameClass(props.textDecoration),
     fontStyle: getNameClass(props.fontStyle),
   };
+  // Absent editor properties must not erase imported canvas typography.
+  // Explicit values, including empty-string resets and zero, still take precedence.
+  return Object.fromEntries(Object.entries(style).filter(([key]) => props[key] !== undefined && props[key] !== null)) as React.CSSProperties;
 }
 
 function getAppearanceStyle(props: Record<string, unknown>): React.CSSProperties {
