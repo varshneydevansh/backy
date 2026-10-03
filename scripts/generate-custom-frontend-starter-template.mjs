@@ -26,6 +26,7 @@ const starterFiles = [
   { path: 'src/lib/blog.tsx', role: 'blog-archive' },
   { path: 'src/lib/checkout.tsx', role: 'checkout-ui' },
   { path: 'src/lib/render.tsx', role: 'backy-renderer' },
+  { path: 'src/lib/interactive.tsx', role: 'sandbox-component-renderer' },
 ];
 
 const readStarterFile = (relativePath) => {

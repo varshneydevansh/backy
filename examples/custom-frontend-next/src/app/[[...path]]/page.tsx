@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import type { BackyApiError, BackyRenderPayload } from "../../lib/backy-client";
 
-import { backy, sitePublicHost } from "../../lib/backy";
+import { backy, backyConfig, sitePublicHost } from "../../lib/backy";
 import { BackyBlogArchive } from "../../lib/blog";
 import { BackyCheckout, BackyCheckoutResult } from "../../lib/checkout";
 import { BackyPage } from "../../lib/render";
@@ -81,7 +81,7 @@ export default async function CustomBackyPage({
       schemaVersion: "backy.content-payload.v1",
     });
 
-    return <BackyPage payload={rendered.data} />;
+    return <BackyPage payload={rendered.data} publicApiBaseUrl={backyConfig.apiBaseUrl} />;
   } catch (error) {
     const backyError = error as BackyApiError;
     if (backyError.status === 404 && path === "/blog") {

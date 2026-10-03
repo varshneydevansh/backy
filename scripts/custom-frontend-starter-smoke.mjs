@@ -248,6 +248,7 @@ assertIncludes(files.generatedTemplate, 'backy.custom-frontend-connection.v1', '
 assertIncludes(files.generatedTemplate, 'backy.custom-frontend-control-plane.v1', 'Generated starter bundle includes the connection control-plane probe');
 assertIncludes(files.generatedTemplate, 'src/app/[[...path]]/page.tsx', 'Generated starter bundle includes the catch-all page renderer');
 assertIncludes(files.generatedTemplate, 'src/lib/backy-client.ts', 'Generated starter bundle includes the vendored Backy public client');
+assertIncludes(files.generatedTemplate, 'src/lib/interactive.tsx', 'Generated starter bundle includes the sandbox component renderer');
 assertIncludes(files.generatedTemplate, 'data-backy-element-id', 'Generated starter bundle preserves element API id attributes');
 assertIncludes(files.generatedTemplate, 'data-backy-component-contract-pointer', 'Generated starter bundle preserves component contract pointers');
 assertIncludes(files.generatedTemplate, 'const cssTextValue', 'Generated starter bundle sanitizes generated responsive CSS text values');

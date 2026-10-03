@@ -37,7 +37,7 @@
     "custom-frontend:materialize": "node scripts/materialize-custom-frontend-starter.mjs",
     "custom-frontend:ensure-site": "node scripts/ensure-custom-frontend-site.mjs",
     "custom-frontend:scaffold": "node scripts/scaffold-custom-frontend-starter.mjs",
-    "test:custom-frontend-starter": "node scripts/custom-frontend-starter-smoke.mjs",
+    "test:custom-frontend-starter": "node scripts/custom-frontend-starter-smoke.mjs && node scripts/custom-frontend-interactive-smoke.mjs",
     "test:custom-frontend-connection": "node scripts/custom-frontend-connection-smoke.mjs",
     "test:custom-frontend-control-plane": "npm run test:custom-frontend-starter && npm run test:custom-frontend-connection && npm run test:vercel-production-readiness && npm run test:repo-public-hygiene",
     "test:repo-public-hygiene": "node scripts/repo-public-hygiene-smoke.mjs",

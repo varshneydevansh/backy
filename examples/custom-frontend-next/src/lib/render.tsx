@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { BackyInteractiveComponent } from "./interactive";
 
 import type {
   BackyElement,
@@ -371,13 +372,19 @@ function BackyElementFrame({
 export function BackyElementView({
   element,
   payload,
+  publicApiBaseUrl = "",
 }: {
   element: BackyElement;
   payload: BackyRenderPayload;
+  publicApiBaseUrl?: string;
 }) {
   const props = asRecord(element.props);
   const children = elementChildren(element);
   const text = asText(props.content, props.text, props.label, element.name);
+
+  if (element.type === "codeComponent" || element.type === "interactiveFigure") {
+    return <BackyElementFrame element={element} payload={payload}><BackyInteractiveComponent element={element} siteId={payload.site.id} publicApiBaseUrl={publicApiBaseUrl} /></BackyElementFrame>;
+  }
 
   if (element.type === "image") {
     const src = mediaUrl(element, payload.assets.media);
@@ -502,7 +509,7 @@ export function BackyElementView({
     return (
       <BackyElementFrame element={element} payload={payload}>
         {children.map((child) => (
-          <BackyElementView key={child.id} element={child} payload={payload} />
+          <BackyElementView key={child.id} element={child} payload={payload} publicApiBaseUrl={publicApiBaseUrl} />
         ))}
       </BackyElementFrame>
     );
@@ -525,8 +532,10 @@ export function BackyElementView({
 
 export function BackyPage({
   payload,
+  publicApiBaseUrl = "",
 }: {
   payload: BackyRenderPayload;
+  publicApiBaseUrl?: string;
 }) {
   const elements = extractBackyElements(payload);
   const canvas = asRecord(payload.content.canvas);
@@ -548,7 +557,7 @@ export function BackyPage({
         <style data-backy-responsive-css="media-query">{responsiveCss}</style>
       ) : null}
       {elements.map((element) => (
-        <BackyElementView key={element.id} element={element} payload={payload} />
+        <BackyElementView key={element.id} element={element} payload={payload} publicApiBaseUrl={publicApiBaseUrl} />
       ))}
     </main>
   );
