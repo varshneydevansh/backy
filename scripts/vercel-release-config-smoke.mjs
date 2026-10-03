@@ -40,6 +40,15 @@ assert(
   'apps/admin/vercel.json must rewrite deep SPA routes to index.html.',
 );
 
+const apiProxyIndex = adminVercel.rewrites.findIndex((rewrite) => rewrite.source === '/api/:path*');
+const spaRewriteIndex = adminVercel.rewrites.findIndex((rewrite) => rewrite.destination === '/index.html');
+assert(apiProxyIndex >= 0 && apiProxyIndex < spaRewriteIndex, 'Admin API proxy must run before the SPA fallback.');
+const proxyDestination = new URL(adminVercel.rewrites[apiProxyIndex].destination);
+assert(proxyDestination.protocol === 'https:' && proxyDestination.pathname === '/api/:path*', 'Admin proxy must preserve API paths on a fixed HTTPS backend.');
+assert(!proxyDestination.username && !proxyDestination.password && !proxyDestination.search, 'Admin proxy destination must not contain credentials or query parameters.');
+assert(adminVercel.rewrites[spaRewriteIndex].source.includes('api/|'), 'Admin SPA fallback must exclude API routes.');
+assert(adminVercel.headers.some((rule) => rule.source === '/api/:path*' && rule.headers.some((header) => header.key.toLowerCase() === 'cache-control' && header.value === 'no-store')), 'Admin proxy responses must not be cached.');
+
 assert(
   JSON.stringify(adminVercel).includes('X-Content-Type-Options') &&
     JSON.stringify(adminVercel).includes('strict-origin-when-cross-origin'),

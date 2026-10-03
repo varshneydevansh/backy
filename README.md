@@ -124,7 +124,7 @@ Create two Vercel projects from this repo so admin/editor traffic and public/cus
 - Framework Preset: Vite
 - Build Command: `npm --prefix=../.. run build:vercel:admin`
 - Output Directory: `dist`
-- Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api` and `VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-domain>/api/admin`. Production admin auth uses session login plus the httpOnly `backy_admin_session` cookie against `backy-public`; do not put admin API keys in Vite/client environment variables.
+- Runtime config: set `VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-domain>/api` and `VITE_BACKY_ADMIN_API_BASE_URL=/api/admin`. The admin project's `/api/:path*` rewrite forwards API requests to `backy-public`; replace its fixed HTTPS destination when deploying your own backend. Keep authenticated browser requests on the admin origin so the httpOnly `backy_admin_session` cookie survives reloads even when admin and public run on separate hosting domains. The backend still performs session validation and RBAC. Do not put admin API keys in Vite/client environment variables.
 - SPA routing and baseline headers are tracked in `apps/admin/vercel.json`.
 
 ### Protected topology
@@ -182,9 +182,9 @@ npx vercel@latest link --project backy-public --yes
 npx vercel@latest deploy --target=preview --yes
 
 npx vercel@latest link --project backy-admin --yes
-npx vercel@latest deploy --target=preview --yes \
+npx vercel@latest deploy --target=preview --yes --local-config apps/admin/vercel.json \
   --build-env VITE_BACKY_PUBLIC_API_BASE_URL=https://<backy-public-preview>/api \
-  --build-env VITE_BACKY_ADMIN_API_BASE_URL=https://<backy-public-preview>/api/admin
+  --build-env VITE_BACKY_ADMIN_API_BASE_URL=/api/admin
 ```
 
 Do not use the current prebuilt standalone output as release proof for `backy-public`; it can produce static assets without the Next.js API routes Backy needs for `/api/sites/:siteId/agent-handoff`, manifest, OpenAPI, render, forms, and admin API traffic.

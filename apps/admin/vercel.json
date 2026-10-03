@@ -2,11 +2,24 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/((?!assets/|favicon.ico|robots.txt).*)",
+      "source": "/api/:path*",
+      "destination": "https://backy-public.vercel.app/api/:path*"
+    },
+    {
+      "source": "/((?!api/|assets/|favicon.ico|robots.txt).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [
