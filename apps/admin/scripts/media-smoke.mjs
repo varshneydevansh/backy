@@ -226,6 +226,8 @@ const assertMediaRouteSourceContract = () => {
   assert(
     source.includes("const uploadActionStatusId = 'media-upload-action-status';") &&
       source.includes('const uploadActionDisabledReason = isUploading') &&
+      source.includes('getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner)') &&
+      source.includes('data-testid="media-upload-runtime-notice"') &&
       source.includes('const uploadActionState = isUploading ?') &&
       source.includes('const uploadActionStatus = isUploading') &&
       source.includes('const isUploadActionDisabled = Boolean(uploadActionDisabledReason);') &&
@@ -243,7 +245,7 @@ const assertMediaRouteSourceContract = () => {
       !source.includes('disabled={isMediaMutationBusy || !canCreateMedia}') &&
       source.includes('const currentFiles = useStore.getState().media;') &&
       source.includes('setMedia(['),
-    'Media primary upload controls must expose shared action-status metadata and stay scoped to upload/permission blocking instead of unrelated media mutations.',
+    'Media primary upload controls must expose shared action-status metadata, known runtime prerequisites and permissions instead of unrelated media mutations.',
   );
   assert(
     source.includes("const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&

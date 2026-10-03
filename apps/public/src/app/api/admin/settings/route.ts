@@ -2021,7 +2021,7 @@ const getMediaScannerRuntimeSummary = () => {
       apiKeyConfigured: Boolean(envValue(['BACKY_MEDIA_SCAN_API_KEY', 'BACKY_MEDIA_SCANNER_API_KEY'])),
       timeoutMs: numberValue(envValue(['BACKY_MEDIA_SCAN_TIMEOUT_MS', 'BACKY_MEDIA_SCANNER_TIMEOUT_MS']), 5000),
       failOpen: ['1', 'true', 'yes', 'on'].includes(envValue(['BACKY_MEDIA_SCAN_FAIL_OPEN', 'BACKY_MEDIA_SCANNER_FAIL_OPEN']).toLowerCase()),
-      missing: ['BACKY_MEDIA_SCAN_PROVIDER=http or none'],
+      missing: ['BACKY_MEDIA_SCAN_PROVIDER=http or clamav'],
       error: error instanceof Error ? error.message : 'Unable to resolve media scanner runtime.',
     };
   }

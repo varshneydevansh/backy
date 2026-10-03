@@ -13,6 +13,7 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { DEFAULT_MAX_TAGS, normalizeTagValues, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
+import { getMediaUploadRuntimeDisabledReason } from '@/lib/mediaUploadReadiness';
 import {
   getSettings,
   getUserPermissions,
@@ -520,7 +521,7 @@ const MEDIA_SCANNER_ENV_CONTRACT: MediaScannerEnvField[] = [
     name: 'provider',
     env: ['BACKY_MEDIA_SCAN_PROVIDER', 'BACKY_MEDIA_SCANNER_PROVIDER'],
     required: false,
-    detail: 'Set to http or clamav to scan uploads and replacements before storage. Defaults to none.',
+    detail: 'Production requires http or clamav to scan uploads and replacements before storage. Development defaults to none.',
   },
   {
     name: 'endpoint',
@@ -1430,11 +1431,12 @@ function MediaPage() {
   );
   const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const uploadActionStatusId = 'media-upload-action-status';
+  const uploadRuntimeDisabledReason = getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner);
   const uploadActionDisabledReason = isUploading
     ? 'An upload is already in progress.'
     : !canCreateMedia
       ? createPermissionTitle || 'Your account needs media.create to upload media.'
-      : '';
+      : uploadRuntimeDisabledReason;
   const uploadActionState = isUploading ? 'busy' : uploadActionDisabledReason ? 'blocked' : 'ready';
   const uploadActionStatus = isUploading
     ? `Uploading ${activeUploadMode.label.toLowerCase()} to ${uploadTargetFolderLabel}.`
@@ -1755,6 +1757,15 @@ function MediaPage() {
         ready: storageReady,
       },
       {
+        label: 'Upload scanner',
+        detail: runtimeMediaScanner
+          ? runtimeMediaScanner.error || (runtimeMediaScanner.configured
+            ? runtimeMediaScanner.enabled ? `${runtimeMediaScanner.provider} scanning is configured.` : 'Server permits static scanning in this environment.'
+            : 'Connect an HTTP or ClamAV scanner before uploading.')
+          : 'Runtime scanner summary has not loaded.',
+        ready: runtimeMediaScanner?.configured === true,
+      },
+      {
         label: 'Quota headroom',
         detail: mediaQuota ? `${formatBytes(mediaQuota.remainingBytes)} remaining` : 'Quota data will appear after the media API responds.',
         ready: quotaReady,
@@ -1831,6 +1842,7 @@ function MediaPage() {
     mediaAnalytics.unusedAssets,
     mediaQuota,
     runtimeStorage,
+    runtimeMediaScanner,
     uploadVisibility,
   ]);
   const scannerRuntime = runtimeMediaScanner || DEFAULT_MEDIA_SCANNER_RUNTIME;
@@ -3109,6 +3121,10 @@ function MediaPage() {
       setError(deniedCreateMessage);
       return;
     }
+    if (uploadRuntimeDisabledReason) {
+      setError(uploadRuntimeDisabledReason);
+      return;
+    }
     if (!fileList || fileList.length === 0) return;
     const allFiles = Array.from(fileList);
     const targetUploadMode = uploadMode;
@@ -4084,6 +4100,12 @@ function MediaPage() {
         <span id={uploadActionStatusId} className="sr-only" data-testid="media-upload-action-status" aria-live="polite">
           {uploadActionStatus}
         </span>
+        {canCreateMedia && uploadRuntimeDisabledReason && (
+          <Notice tone="warning" title="Uploads unavailable" className="mb-4" data-testid="media-upload-runtime-notice">
+            <p>{uploadRuntimeDisabledReason}</p>
+            <a href="#media-storage" className="mt-1 inline-block underline">Review Storage health</a>
+          </Notice>
+        )}
         <span id={mediaCommandSecondaryActionStatusId} className="sr-only" data-testid="media-command-secondary-action-status" aria-live="polite">
           {mediaCommandSecondaryActionStatus}
         </span>
@@ -5010,24 +5032,18 @@ function MediaPage() {
                 <div>
                   <p className="text-sm font-medium">Upload scanner</p>
                   <p className="text-xs text-muted-foreground">
-                    Optional pre-storage scan provider used by uploads and replacements.
+                    Production uploads and replacements require a configured pre-storage scanner.
                   </p>
                 </div>
                 <span
                   className={cn(
                     'rounded px-2 py-0.5 text-[11px] font-semibold',
-                    !scannerRuntime.enabled
-                      ? 'bg-muted text-muted-foreground'
-                      : scannerRuntime.configured
-                        ? 'bg-success/10 text-success'
-                        : 'bg-warning/10 text-warning',
+                    !scannerRuntime.configured
+                      ? 'bg-warning/10 text-warning'
+                      : scannerRuntime.enabled ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground',
                   )}
                 >
-                  {!scannerRuntime.enabled
-                    ? 'Disabled'
-                    : scannerRuntime.configured
-                      ? 'Configured'
-                      : 'Needs env'}
+                  {!scannerRuntime.configured ? 'Needs env' : scannerRuntime.enabled ? 'Configured' : 'Static scanning'}
                 </span>
               </div>
               <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -5414,7 +5430,7 @@ function MediaPage() {
                   <div>
                     <h4 className="text-sm font-semibold">Scanner env contract</h4>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Upload scanning is disabled by default. Set provider http or clamav to require a clean scanner verdict before storage.
+                      Production requires an HTTP or ClamAV scanner and a clean verdict before storage. Development can use static scanning.
                     </p>
                   </div>
                   <span className="rounded bg-background px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -10472,7 +10488,7 @@ const buildMediaOperationActionPlan = ({
   const storageConfigured = runtimeStorage?.configured === true;
   const storageMissing = runtimeStorage?.missing || [];
   const supabaseConfigured = runtimeSupabase?.configured === true || storageProvider !== 'supabase';
-  const scannerReady = !scannerRuntime.enabled || scannerRuntime.configured === true;
+  const scannerReady = scannerRuntime.configured === true;
   const quotaReady = mediaQuota ? mediaQuota.remainingBytes > 0 : false;
   const quotaUsageRatio = mediaQuota && mediaQuota.limitBytes > 0 ? mediaQuota.usedBytes / mediaQuota.limitBytes : 0;
   const quotaRisk = quotaUsageRatio >= 0.9;
@@ -10517,7 +10533,9 @@ const buildMediaOperationActionPlan = ({
         ? scannerRuntime.configured
           ? `${scannerRuntime.provider} scanning is configured for uploads and replacements.`
           : `Scanner is enabled but missing ${scannerRuntime.missing?.join(', ') || 'runtime configuration'}.`
-        : 'Scanner is optional and currently disabled; enable it for stricter pre-storage media safety.',
+        : scannerRuntime.configured
+          ? 'Server permits static scanning in this environment.'
+          : 'Connect an HTTP or ClamAV scanner before uploading.',
     },
     {
       key: 'review-quota',

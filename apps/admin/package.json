@@ -75,7 +75,7 @@
     "test:products": "BACKY_PRODUCTS_SOURCE_ONLY=1 node scripts/commerce-smoke.mjs",
     "test:commerce-provider-certification-rendered": "BACKY_COMMERCE_PROVIDER_CERTIFICATION_RENDERED_ONLY=1 node scripts/commerce-smoke.mjs",
     "test:orders": "node scripts/orders-smoke.mjs",
-    "test:media": "node scripts/media-smoke.mjs",
+    "test:media": "tsx --tsconfig tsconfig.smoke.json scripts/media-upload-readiness-smoke.ts && node scripts/media-smoke.mjs",
     "test:collections": "node scripts/collections-smoke.mjs",
     "test:reusable-sections": "node scripts/reusable-sections-smoke.mjs",
     "test:forms": "node scripts/forms-smoke.mjs",
