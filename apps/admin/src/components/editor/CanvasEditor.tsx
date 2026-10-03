@@ -2039,7 +2039,7 @@ const buildRulerTicks = (length: number, scale: number) => {
 export interface CanvasEditorProps {
   initialElements: CanvasElement[];
   initialSettings: PageSettings;
-  mode?: 'page' | 'blog' | 'section';
+  mode?: 'page' | 'blog' | 'section' | 'product';
   onSave: (
     elements: CanvasElement[],
     settings: PageSettings,
@@ -2481,7 +2481,7 @@ export function CanvasEditor({
   const normalizedSaveOwnerLabel = saveOwnerLabel || (
     mode === 'blog' ? 'post form' : mode === 'section' ? 'section editor' : 'parent form'
   );
-  const editorEntityLabel = mode === 'blog' ? 'Post' : mode === 'section' ? 'Section' : 'Page';
+  const editorEntityLabel = mode === 'blog' ? 'Post' : mode === 'section' ? 'Section' : mode === 'product' ? 'Product' : 'Page';
   const saveOwnerVersionRef = useRef<string | number | null | undefined>(saveOwnerVersion);
   const isCanvasMutationDisabled = isPreview || !canEdit;
   const [showReloadConfirm, setShowReloadConfirm] = useState(false);
@@ -5936,7 +5936,7 @@ export function CanvasEditor({
       }),
       command({
         id: 'toggle-preview',
-        label: isPreview ? 'Return to edit mode' : 'Preview page',
+        label: isPreview ? 'Return to edit mode' : `Preview ${editorEntityLabel.toLowerCase()}`,
         category: 'view',
         targetScope: 'canvas',
         testId: 'editor-preview-toggle',
@@ -8707,7 +8707,7 @@ export function CanvasEditor({
         disabled={isSaving}
         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
         title={editorCommandDisabledReason(reloadCommand) || reloadCommand?.reason || 'Reload page from last saved state'}
-        aria-label="Reload page"
+        aria-label={`Reload ${editorEntityLabel.toLowerCase()}`}
         aria-describedby={editorPrimaryActionStatusId}
         data-command-id={reloadCommand?.id}
         data-action-state={editorCommandActionState(reloadCommand)}

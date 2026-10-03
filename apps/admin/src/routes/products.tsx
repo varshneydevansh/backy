@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -68,6 +68,10 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
+import { CanvasEditor } from '@/components/editor/CanvasEditor';
+import type { PageSettings } from '@/components/editor/PageSettingsModal';
+import type { CanvasElement, CanvasSize } from '@/types/editor';
+import { readProductCanvas, writeProductCanvas } from '@/lib/productCanvasDesign';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -115,6 +119,7 @@ const PRODUCT_CONTROL_AREAS = [
 
 const PRODUCT_EDITOR_SECTIONS = [
   { id: 'products-editor-identity', label: 'Basics' },
+  { id: 'products-design', label: 'Design' },
   { id: 'products-editor-variants', label: 'Variants' },
   { id: 'products-editor-fulfillment', label: 'Fulfillment' },
   { id: 'products-editor-subscriptions', label: 'Subscriptions' },
@@ -836,7 +841,7 @@ interface ProductCanvasNoticeAction {
   message: string;
   label: string;
   route: string;
-  search: ProductPageTemplateSearch;
+  search: ProductsSearch;
   action: string;
   target: string;
   status: 'ready' | 'blocked';
@@ -1748,6 +1753,8 @@ function ProductsRoute() {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(routeSearch.productId || null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [formState, setFormState] = useState<ProductFormState>(EMPTY_PRODUCT_FORM);
+  const [productCanvasDraft, setProductCanvasDraft] = useState<Record<string, unknown> | null>(null);
+  const [productCanvasDirty, setProductCanvasDirty] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProductStatusFilter>(routeSearch.status || 'all');
   const [productTypeFilter, setProductTypeFilter] = useState<ProductTypeFilter>(routeSearch.type || 'all');
   const [stockFilter, setStockFilter] = useState<ProductStockFilter>(routeSearch.stock || 'all');
@@ -2055,14 +2062,11 @@ function ProductsRoute() {
     message: string,
     target: string,
   ): ProductCanvasNoticeAction | null => {
-    const brief = productPageTemplateBriefs.find((candidate) => candidate.mode === 'item') || productPageTemplateBriefs[0];
-    if (!brief) return null;
-
     return {
       message,
       label: 'Open editable canvas',
-      route: brief.createRoute,
-      search: brief.search,
+      route: `/products?siteId=${encodeURIComponent(activeSiteId)}&productId=${encodeURIComponent(target)}#products-design`,
+      search: { siteId: activeSiteId, productId: target },
       action: 'products.open.createdProductCanvas',
       target,
       status: 'ready',
@@ -2085,6 +2089,21 @@ function ProductsRoute() {
     () => products.find((product) => product.id === selectedProductId) || null,
     [products, selectedProductId],
   );
+  const productCanvasInitial = useMemo(() => readProductCanvas(selectedProduct?.values || {}), [selectedProduct]);
+  const productCanvasSettings = useMemo<PageSettings>(() => ({
+    title: formState.title,
+    slug: formState.slug,
+    status: formState.status,
+    scheduledAt: formState.scheduledAt,
+    meta: { title: formState.seoTitle, description: formState.description },
+  }), [formState.title, formState.slug, formState.status, formState.scheduledAt, formState.seoTitle, formState.description]);
+  const changeProductCanvas = useCallback((elements: CanvasElement[], _settings: PageSettings, size?: CanvasSize) => {
+    if (!selectedProduct) return;
+    setProductCanvasDraft((current) => writeProductCanvas(
+      { ...selectedProduct.values, ...current }, selectedProduct.id, productCanvasSettings,
+      elements, size || productCanvasInitial.canvasSize,
+    ));
+  }, [selectedProduct, productCanvasSettings, productCanvasInitial.canvasSize]);
   const selectedProductProviderSync = useMemo(
     () => productProviderSync(selectedProduct),
     [selectedProduct],
@@ -4196,6 +4215,8 @@ function ProductsRoute() {
   }, [activeSiteId, canViewProducts, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
+    setProductCanvasDraft(null);
+    setProductCanvasDirty(false);
     if (!selectedProduct) return;
     setFormState(productToForm(selectedProduct));
     setProductFormSubmitted(false);
@@ -4571,12 +4592,14 @@ function ProductsRoute() {
     setNotice(null);
 
     try {
+      const instanceSuffix = crypto.randomUUID().slice(0, 8);
       const values = {
         ...blueprint.values,
         ...buildFrontendProductTemplateValues(template, frontendDesign),
+        [productFieldKey('sku')]: `${blueprint.sku}-${instanceSuffix.toUpperCase()}`,
       };
       const saved = normalizeProductRecord(await createCollectionRecord(activeSiteId, productCollection.id, {
-        slug: `${blueprint.slug}-${Date.now().toString(36)}`,
+        slug: `${blueprint.slug}-${instanceSuffix}`,
         status: 'draft',
         values,
       }));
@@ -4598,12 +4621,16 @@ function ProductsRoute() {
     }
   };
 
-  const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!productCollection) return;
-    if (isProductsBusy) return;
+  const saveProduct = async (event?: FormEvent<HTMLFormElement>, canvasValues?: Record<string, unknown>) => {
+    event?.preventDefault();
+    if (!productCollection || isProductsBusy) {
+      if (!event) throw new Error('Product catalog is not ready to save.');
+      return;
+    }
     if (!canEditProducts) {
-      setError(editPermissionTitle || 'Your account cannot save products.');
+      const message = editPermissionTitle || 'Your account cannot save products.';
+      setError(message);
+      if (!event) throw new Error(message);
       return;
     }
 
@@ -4612,12 +4639,14 @@ function ProductsRoute() {
     if (productIdentityMissing) {
       setError('Fix product identity fields before saving.');
       setNotice(null);
+      if (!event) throw new Error('Fix product identity fields before saving.');
       return;
     }
 
     if (scheduledProductDateError) {
       setError(scheduledProductDateError);
       setNotice(null);
+      if (!event) throw new Error(scheduledProductDateError);
       return;
     }
 
@@ -4635,6 +4664,7 @@ function ProductsRoute() {
       status: formState.status,
       scheduledAt,
       values: {
+        ...selectedProduct?.values,
         [productFieldKey('title')]: formState.title.trim(),
         [productFieldKey('sku')]: formState.sku.trim(),
         [productFieldKey('variants')]: productVariants,
@@ -4676,6 +4706,7 @@ function ProductsRoute() {
         [productFieldKey('taxable')]: formState.taxable,
         ...getPersistedFrontendProductValues(selectedProduct),
         ...getPersistedProductProviderValues(selectedProduct),
+        ...(canvasValues || productCanvasDraft || {}),
       },
     };
 
@@ -4698,6 +4729,7 @@ function ProductsRoute() {
       setNoticeCanvasAction(!selectedProduct ? buildProductCanvasNoticeAction(message, saved.id) : null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
+      if (!event) throw saveError;
     } finally {
       setIsSaving(false);
     }
@@ -5320,17 +5352,17 @@ function ProductsRoute() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => navigate({ to: '/pages/new', search: noticeCanvasAction.search })}
-                disabled={isProductsBusy || !canEditPages}
-                title={!canEditPages ? pagesEditPermissionTitle : undefined}
+                onClick={() => navigate({ to: '/products', search: noticeCanvasAction.search, hash: 'products-design' })}
+                disabled={isProductsBusy || !canEditProducts}
+                title={!canEditProducts ? editPermissionTitle : undefined}
                 iconStart={<Sparkles className="size-4" />}
                 data-action={noticeCanvasAction.action}
                 data-action-target={noticeCanvasAction.target}
                 data-action-route={noticeCanvasAction.route}
-                data-action-state={isProductsBusy || !canEditPages ? 'blocked' : noticeCanvasAction.status}
-                data-state={isProductsBusy || !canEditPages ? 'blocked' : noticeCanvasAction.status}
-                data-action-status={!canEditPages ? pagesEditPermissionTitle || 'Your account cannot create storefront pages.' : 'Open editable product canvas available.'}
-                data-disabled-reason={!canEditPages ? pagesEditPermissionTitle : undefined}
+                data-action-state={isProductsBusy || !canEditProducts ? 'blocked' : noticeCanvasAction.status}
+                data-state={isProductsBusy || !canEditProducts ? 'blocked' : noticeCanvasAction.status}
+                data-action-status={!canEditProducts ? editPermissionTitle || 'Your account cannot edit product designs.' : 'Open editable product canvas available.'}
+                data-disabled-reason={!canEditProducts ? editPermissionTitle : undefined}
                 data-target-site-id={activeSiteId}
                 data-testid="products-created-canvas-action"
               >
@@ -9173,6 +9205,54 @@ function ProductsRoute() {
             </PanelContent>
           </Panel>
         </div>
+      )}
+
+      {selectedProduct && canViewProducts && (
+        <Panel id="products-design" className="mb-5 scroll-mt-24" data-testid="products-design-panel">
+          <PanelHeader
+            title="Product design"
+            description={formState.title || selectedProduct.slug}
+            icon={<Edit3 className="size-4" />}
+            action={<span className="text-xs text-muted-foreground">{productCanvasDirty ? 'Unsaved design' : 'Saved design'}</span>}
+          />
+          <PanelContent>
+            <div className="h-[min(780px,calc(100dvh-12rem))] min-h-[360px] overflow-hidden rounded-lg border border-border bg-background" data-testid="products-canvas-editor">
+              <CanvasEditor
+                mode="product"
+                key={`${activeSiteId}:${selectedProduct.id}:${selectedProduct.updatedAt}`}
+                initialElements={productCanvasInitial.elements}
+                initialSize={productCanvasInitial.canvasSize}
+                initialSettings={productCanvasSettings}
+                className="h-full w-full"
+                theme={activeSite?.theme}
+                onChange={changeProductCanvas}
+                onSave={async (elements, _settings, size) => {
+                  await saveProduct(undefined, writeProductCanvas(
+                    { ...selectedProduct.values, ...productCanvasDraft }, selectedProduct.id, productCanvasSettings,
+                    elements, size || productCanvasInitial.canvasSize,
+                  ));
+                }}
+                onUnsavedChangesChange={setProductCanvasDirty}
+                hideNavigation
+                hideSettings
+                saveOwnerLabel="product editor"
+                saveOwnerVersion={selectedProduct.updatedAt}
+                mediaContext={{ siteId: activeSiteId, scope: 'global', targetId: selectedProduct.id, targetLabel: formState.title || selectedProduct.slug }}
+                canView={canViewProducts}
+                canEdit={canEditProducts && !isProductsAccessBusy}
+                editDisabledReason={editPermissionTitle || (isProductsAccessBusy ? 'Product catalog is busy.' : undefined)}
+                canPublish={false}
+                publishDisabled
+                publishDisabledReason="Set product publication status in the catalog editor."
+                canViewMedia={canViewMedia}
+                canCreateMedia={canCreateMedia}
+                canViewCollections={canViewCollections}
+                canDeleteReusableSections={false}
+                validateSettings={() => productIdentityMissing ? 'Fix product identity fields before saving.' : scheduledProductDateError || null}
+              />
+            </div>
+          </PanelContent>
+        </Panel>
       )}
 
       {pendingDeleteProduct && (

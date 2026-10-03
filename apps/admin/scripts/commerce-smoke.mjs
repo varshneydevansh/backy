@@ -1320,6 +1320,13 @@ const assertProductsApiContractsSource = () => {
       source.includes("navigate({ to: '/pages/new', search: { siteId: activeSiteId, template: 'storefront', templateSource: 'backy-canvas', focus: 'canvas' } })") &&
       source.includes('data-testid="products-created-canvas-action"') &&
       source.includes("action: 'products.open.createdProductCanvas'") &&
+      source.includes("navigate({ to: '/products', search: noticeCanvasAction.search, hash: 'products-design' })") &&
+      source.includes('data-testid="products-canvas-editor"') &&
+      source.includes('mode="product"') &&
+      source.includes("const instanceSuffix = crypto.randomUUID().slice(0, 8);") &&
+      source.includes("[productFieldKey('sku')]: `${blueprint.sku}-${instanceSuffix.toUpperCase()}`") &&
+      source.includes("...selectedProduct?.values") &&
+      source.includes("...(canvasValues || productCanvasDraft || {})") &&
       source.includes('data-action={noticeCanvasAction.action}') &&
       source.includes("Show templates") &&
       source.includes('data-testid="products-frontend-template-design-readiness"') &&
@@ -4671,10 +4678,9 @@ const assertCreatedProductCanvasAction = async (client, productId) => {
       state.text.includes("Open editable canvas") &&
       state.action === "products.open.createdProductCanvas" &&
       state.target === productId &&
-      state.route.includes("/pages/new") &&
-      state.route.includes("templateSource=backy-canvas") &&
-      state.route.includes("focus=canvas") &&
-      state.route.includes("datasetMode=item")
+      state.route.includes("/products?") &&
+      state.route.includes(`productId=${encodeURIComponent(productId)}`) &&
+      state.route.endsWith("#products-design")
     ) {
       return state;
     }
