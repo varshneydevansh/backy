@@ -4747,7 +4747,7 @@ export interface ReusableSectionInstance {
 }
 
 export interface ReusableSectionInstanceTargetReport {
-  type: 'page' | 'post';
+  type: 'page' | 'post' | 'product';
   id: string;
   title: string;
   slug: string;
@@ -4768,7 +4768,7 @@ export interface ReusableSectionInstancesReport {
 }
 
 export interface ReusableSectionInstancesFilters {
-  targetType?: 'page' | 'post' | 'all';
+  targetType?: 'page' | 'post' | 'product' | 'all';
   targetId?: string;
 }
 
@@ -4782,7 +4782,7 @@ export interface ReusableSectionInstancesRefreshResult {
   sectionId: string;
   sourceUpdatedAt?: string;
   refreshedTargets: Array<{
-    type: 'page' | 'post';
+    type: 'page' | 'post' | 'product';
     id: string;
     title: string;
     slug: string;

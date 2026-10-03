@@ -9,7 +9,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import {
-  getAdminBlogPostById,
+  getCollectionByIdOrSlug,
+  listCollectionRecords,
+  updateAdminCollectionRecord,
   getAdminPageById,
   getBlogPosts,
   getReusableSectionByIdOrSlug,
@@ -28,8 +30,13 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
+import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
-import type { BackyContentDocument, Site } from "@backy-cms/core";
+import type {
+  BackyContentDocument,
+  BackyJsonValue,
+  Site,
+} from "@backy-cms/core";
 
 export const runtime = "nodejs";
 
@@ -40,7 +47,7 @@ interface RouteParams {
   }>;
 }
 
-type InstanceTargetType = "page" | "post";
+type InstanceTargetType = "page" | "post" | "product";
 
 type ContentTarget = {
   type: InstanceTargetType;
@@ -50,6 +57,8 @@ type ContentTarget = {
   status?: string;
   updatedAt?: string;
   content: unknown;
+  collectionId?: string;
+  values?: Record<string, unknown>;
 };
 
 type AdminPage = NonNullable<ReturnType<typeof getAdminPageById>>;
@@ -98,7 +107,104 @@ const parseJsonBody = async (
 const targetTypeFilter = (
   value: string | null | undefined,
 ): InstanceTargetType | "all" =>
-  value === "page" || value === "post" ? value : "all";
+  value === "page" || value === "post" || value === "product" ? value : "all";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+// Products store the same canvas in record values, not page/post content.
+const productTarget = (record: {
+  id: string;
+  collectionId: string;
+  slug: string;
+  status: string;
+  updatedAt: string;
+  values: Record<string, unknown>;
+}): ContentTarget => {
+  const values = record.values;
+  const document = isRecord(values.frontendDesignContentDocument)
+    ? values.frontendDesignContentDocument
+    : {};
+  return {
+    type: "product",
+    id: record.id,
+    collectionId: record.collectionId,
+    title: typeof values.title === "string" ? values.title : record.slug,
+    slug: record.slug,
+    status: record.status,
+    updatedAt: record.updatedAt,
+    values,
+    content: {
+      elements: Array.isArray(values.frontendDesignElements)
+        ? values.frontendDesignElements
+        : document.elements || [],
+    },
+  };
+};
+
+const refreshedProductValues = (target: ContentTarget, content: unknown) => {
+  const values = target.values || {};
+  const elements = isRecord(content) ? content.elements : [];
+  return {
+    ...values,
+    frontendDesignElements: elements,
+    ...(isRecord(values.frontendDesignContentDocument)
+      ? {
+          frontendDesignContentDocument: {
+            ...values.frontendDesignContentDocument,
+            elements,
+          },
+        }
+      : {}),
+  };
+};
+
+// Keep page-only readers/editors working without exposing or changing products.
+// Explicit product requests must pass both existing collection and commerce gates.
+const productAccess = async (
+  request: NextRequest,
+  requestId: string,
+  targetType: InstanceTargetType | "all",
+  operation: "view" | "edit",
+): Promise<boolean | NextResponse> => {
+  if (targetType !== "all" && targetType !== "product") return false;
+  for (const permission of [
+    `collections.${operation}`,
+    `commerce.${operation}`,
+  ]) {
+    const access = await requireAdminAccess(request, requestId, { permission });
+    if (access instanceof NextResponse)
+      return targetType === "product" ? access : false;
+  }
+  return true;
+};
+
+const productTargets = async (
+  siteId: string,
+  repositories?: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+): Promise<ContentTarget[]> => {
+  const collection = repositories
+    ? await repositories.collections.getBySlug(siteId, "products")
+    : getCollectionByIdOrSlug(siteId, "products", { includeUnpublished: true });
+  if (!collection) return [];
+  const targets: ContentTarget[] = [];
+  let offset = 0;
+  while (true) {
+    const input = { includeUnpublished: true, limit: 100, offset };
+    const result = repositories
+      ? await repositories.collections.listRecords({
+          ...input,
+          siteId,
+          collectionId: collection.id,
+        })
+      : listCollectionRecords(siteId, collection.id, input);
+    const records = "items" in result ? result.items : result.records;
+    targets.push(...records.map(productTarget));
+    if (!result.pagination.hasMore || records.length === 0) break;
+    offset += records.length;
+  }
+  return targets;
+};
 
 const targetMatches = (
   target: ContentTarget,
@@ -217,6 +323,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       searchParams.get("targetType") || searchParams.get("type"),
     );
     const targetId = searchParams.get("targetId") || undefined;
+    const includeProducts = await productAccess(
+      request,
+      requestId,
+      targetType,
+      "view",
+    );
+    if (includeProducts instanceof NextResponse) return includeProducts;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -244,7 +357,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const [pages, posts] = await Promise.all([
-        targetType === "post"
+        targetType !== "all" && targetType !== "page"
           ? Promise.resolve({ items: [] })
           : repositories.pages.list({
               siteId: site.id,
@@ -253,7 +366,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               limit: 1000,
               offset: 0,
             }),
-        targetType === "page"
+        targetType !== "all" && targetType !== "post"
           ? Promise.resolve({ items: [] })
           : repositories.posts.list({
               siteId: site.id,
@@ -264,6 +377,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }),
       ]);
       const targets: ContentTarget[] = [
+        ...(includeProducts ? await productTargets(site.id, repositories) : []),
         ...pages.items.map((page) => ({
           type: "page" as const,
           id: page.id,
@@ -324,7 +438,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const pageTargets: ContentTarget[] =
-      targetType === "post"
+      targetType !== "all" && targetType !== "page"
         ? []
         : getPageSummary(site.id, { includeUnpublished: true })
             .map((page) => getAdminPageById(site.id, page.id))
@@ -339,7 +453,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               content: page.content,
             }));
     const postTargets: ContentTarget[] =
-      targetType === "page"
+      targetType !== "all" && targetType !== "post"
         ? []
         : getBlogPosts(site.id, {
             includeUnpublished: true,
@@ -355,9 +469,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             content: post.content,
           }));
     const targetReports = reportInstances(
-      [...pageTargets, ...postTargets].filter((target) =>
-        targetMatches(target, { targetType, targetId }),
-      ),
+      [
+        ...pageTargets,
+        ...postTargets,
+        ...(includeProducts ? await productTargets(site.id) : []),
+      ].filter((target) => targetMatches(target, { targetType, targetId })),
       section,
     );
 
@@ -412,6 +528,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ? body.targetId.trim()
         : undefined;
     const dryRun = body.dryRun === true;
+    const includeProducts = await productAccess(
+      request,
+      requestId,
+      targetType,
+      "edit",
+    );
+    if (includeProducts instanceof NextResponse) return includeProducts;
     const updatedBy =
       typeof body.updatedBy === "string" && body.updatedBy.trim()
         ? body.updatedBy.trim()
@@ -443,7 +566,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const [pages, posts] = await Promise.all([
-        targetType === "post"
+        targetType !== "all" && targetType !== "page"
           ? Promise.resolve({ items: [] })
           : repositories.pages.list({
               siteId: site.id,
@@ -452,7 +575,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               limit: 1000,
               offset: 0,
             }),
-        targetType === "page"
+        targetType !== "all" && targetType !== "post"
           ? Promise.resolve({ items: [] })
           : repositories.posts.list({
               siteId: site.id,
@@ -463,6 +586,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             }),
       ]);
       const targets: ContentTarget[] = [
+        ...(includeProducts ? await productTargets(site.id, repositories) : []),
         ...pages.items.map((page) => ({
           type: "page" as const,
           id: page.id,
@@ -497,7 +621,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           refreshed: result.refreshed,
         });
         if (dryRun) continue;
-        if (target.type === "page") {
+        if (target.type === "product" && target.collectionId) {
+          const values = refreshedProductValues(
+            target,
+            result.content,
+          ) as Record<string, BackyJsonValue>;
+          await repositories.collections.updateRecord(
+            site.id,
+            target.collectionId,
+            target.id,
+            { values },
+          );
+          await syncRepositoryCollectionRecordMediaReferences({
+            mediaRepository: repositories.media,
+            siteId: site.id,
+            collectionId: target.collectionId,
+            recordId: target.id,
+            values,
+          });
+        } else if (target.type === "page") {
           await repositories.pages.update(site.id, target.id, {
             content: result.content as BackyContentDocument,
             revisionNote: `Refresh reusable section ${section.name}`,
@@ -591,7 +733,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const pageTargets: ContentTarget[] =
-      targetType === "post"
+      targetType !== "all" && targetType !== "page"
         ? []
         : getPageSummary(site.id, { includeUnpublished: true })
             .map((page) => getAdminPageById(site.id, page.id))
@@ -606,7 +748,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               content: page.content,
             }));
     const postTargets: ContentTarget[] =
-      targetType === "page"
+      targetType !== "all" && targetType !== "post"
         ? []
         : getBlogPosts(site.id, {
             includeUnpublished: true,
@@ -621,9 +763,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             updatedAt: post.updatedAt,
             content: post.content,
           }));
-    const targets = [...pageTargets, ...postTargets].filter((target) =>
-      targetMatches(target, { targetType, targetId }),
-    );
+    const targets = [
+      ...pageTargets,
+      ...postTargets,
+      ...(includeProducts ? await productTargets(site.id) : []),
+    ].filter((target) => targetMatches(target, { targetType, targetId }));
     const refreshedTargets = [];
     for (const target of targets) {
       const result = refreshReusableSectionInstancesInContent(
@@ -639,7 +783,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         refreshed: result.refreshed,
       });
       if (dryRun) continue;
-      if (target.type === "page") {
+      if (target.type === "product" && target.collectionId) {
+        updateAdminCollectionRecord(site.id, target.collectionId, target.id, {
+          values: refreshedProductValues(target, result.content),
+        });
+      } else if (target.type === "page") {
         updateAdminPage(site.id, target.id, {
           content: result.content,
           updatedBy,

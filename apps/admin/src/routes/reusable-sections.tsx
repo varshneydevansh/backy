@@ -2167,7 +2167,7 @@ function ReusableSectionsRoute() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold text-foreground">Instance propagation</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">Find synced page/post instances and refresh stale copies from the selected source section.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Find synced page, post, and product instances and refresh stale copies from the selected source section.</p>
                 </div>
                 <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
                   {sectionInstances ? `${sectionInstances.totals.stale} stale` : activeSection ? 'Not loaded' : 'Select section'}
