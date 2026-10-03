@@ -51,6 +51,7 @@ import {
   DEFAULT_CANVAS_SIZE,
   createCanvasElement,
   extractFrontendTemplateDesignSerialization,
+  getFrontendTemplateCanvasSize,
   serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 
@@ -862,8 +863,9 @@ function buildFrontendBlogTemplateElements(
         return contentDocument.elements as CanvasElement[];
     }
 
-    const canvasWidth = template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width;
-    const canvasHeight = template.canvasSize?.height || 900;
+    const templateCanvasSize = getFrontendTemplateCanvasSize(template, { ...DEFAULT_CANVAS_SIZE, height: 900 });
+    const canvasWidth = templateCanvasSize.width;
+    const canvasHeight = templateCanvasSize.height;
 
     return [
         createCanvasElement('section', 0, 0, {
@@ -1455,10 +1457,10 @@ function appendLongFormBlockToElements(
 }
 
 function getFrontendBlogTemplateCanvasSize(template: SiteFrontendDesignTemplate, elements: CanvasElement[]): CanvasSize {
+    const templateCanvasSize = getFrontendTemplateCanvasSize(template);
     return {
-        ...DEFAULT_CANVAS_SIZE,
-        width: template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width,
-        height: Math.max(template.canvasSize?.height || DEFAULT_CANVAS_SIZE.height, getCanvasHeightForElements(elements)),
+        ...templateCanvasSize,
+        height: Math.max(templateCanvasSize.height, getCanvasHeightForElements(elements)),
     };
 }
 
@@ -2191,11 +2193,7 @@ function NewBlogPostPage() {
             slug: currentSlugValue || routeSlugFromPattern(template.routePattern) || 'post-slug',
             excerpt,
         });
-        const nextCanvasSize = {
-            ...DEFAULT_CANVAS_SIZE,
-            width: template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width,
-            height: Math.max(template.canvasSize?.height || DEFAULT_CANVAS_SIZE.height, getCanvasHeightForElements(nextElements)),
-        };
+        const nextCanvasSize = getFrontendBlogTemplateCanvasSize(template, nextElements);
         const routeSlug = routeSlugFromPattern(template.routePattern);
 
         clearCreationFeedback();

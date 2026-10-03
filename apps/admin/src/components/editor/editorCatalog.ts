@@ -2907,6 +2907,33 @@ export function extractFrontendTemplateDesignSerialization(
   };
 }
 
+/** Resolve the canvas stored with a frontend template before its summary alias. */
+export function getFrontendTemplateCanvasSize(
+  template: { content?: unknown; canvasSize?: { width: number; height: number } },
+  fallback: CanvasSize = DEFAULT_CANVAS_SIZE,
+): CanvasSize {
+  const content = isRecord(template.content) ? template.content : {};
+  const document = isRecord(content.contentDocument) ? content.contentDocument : {};
+  const metadata = isRecord(content.metadata) ? content.metadata : {};
+  const documentMetadata = isRecord(document.metadata) ? document.metadata : {};
+  const savedSize = firstTemplateRecord<Record<string, unknown>>(
+    content.canvasSize, document.canvasSize, metadata.canvasSize, documentMetadata.canvasSize,
+  );
+  const dimension = (...values: unknown[]): number | undefined => {
+    for (const value of values) {
+      if (typeof value !== 'number' && typeof value !== 'string') continue;
+      const number = Number(value);
+      if (Number.isFinite(number) && number > 0) return number;
+    }
+    return undefined;
+  };
+  return {
+    ...fallback,
+    width: dimension(savedSize?.width, template.canvasSize?.width) ?? fallback.width,
+    height: dimension(savedSize?.height, template.canvasSize?.height) ?? fallback.height,
+  };
+}
+
 export function normalizeSavedCanvasContent(raw?: string | null): SavedCanvasPayload {
   if (!raw) {
     return {

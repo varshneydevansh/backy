@@ -40,6 +40,7 @@ import {
     DEFAULT_CANVAS_SIZE,
     createCanvasElement,
     extractFrontendTemplateDesignSerialization,
+    getFrontendTemplateCanvasSize,
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
@@ -1947,7 +1948,7 @@ function NewPageRoute() {
         : selectedDatasetCollection
             ? `${selectedDatasetCollection.name} dataset ${selectedDatasetMode || 'list'} page`
         : selectedTemplate.name;
-    const effectiveCanvasSize = selectedFrontendTemplate?.canvasSize || DEFAULT_CANVAS_SIZE;
+    const effectiveCanvasSize = selectedFrontendTemplate ? getFrontendTemplateCanvasSize(selectedFrontendTemplate) : DEFAULT_CANVAS_SIZE;
     const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(selectedFrontendTemplate) || formData.template === 'blank';
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? selectedFrontendTemplate
@@ -3045,7 +3046,7 @@ function NewPageRoute() {
         },
         canvas: {
             width: effectiveCanvasSize.width,
-            height: selectedFrontendTemplate?.canvasSize?.height || getCanvasHeightForElements(buildTemplateElements({
+            height: selectedFrontendTemplate ? effectiveCanvasSize.height : getCanvasHeightForElements(buildTemplateElements({
                 template: formData.template,
                 title: formData.title.trim() || 'Untitled page',
                 slug: resolvedSlug,
@@ -5451,12 +5452,8 @@ function createInitialPageContent(input: {
         : input.datasetCollection
             ? buildCollectionDatasetPageElements(input.datasetCollection, input.datasetMode || 'list', input)
         : buildTemplateElements(input);
-    const canvasSize = input.frontendTemplate?.canvasSize
-        ? {
-            ...DEFAULT_CANVAS_SIZE,
-            width: input.frontendTemplate.canvasSize.width,
-            height: input.frontendTemplate.canvasSize.height,
-        }
+    const canvasSize = input.frontendTemplate
+        ? getFrontendTemplateCanvasSize(input.frontendTemplate)
         : {
             ...DEFAULT_CANVAS_SIZE,
             height: getCanvasHeightForElements(elements),
@@ -5742,8 +5739,9 @@ function buildFrontendTemplateElements(
         return applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument);
     }
 
-    const canvasWidth = template.canvasSize?.width || DEFAULT_CANVAS_SIZE.width;
-    const canvasHeight = template.canvasSize?.height || 900;
+    const templateCanvasSize = getFrontendTemplateCanvasSize(template, { ...DEFAULT_CANVAS_SIZE, height: 900 });
+    const canvasWidth = templateCanvasSize.width;
+    const canvasHeight = templateCanvasSize.height;
 
     const section = createCanvasElement('section', 0, 0, {
         id: `frontend-template-${template.id}`,

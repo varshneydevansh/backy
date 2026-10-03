@@ -93,7 +93,8 @@
     "test:help-rendered": "BACKY_HELP_RENDERED_SMOKE=1 node scripts/help-smoke.mjs",
     "test:settings": "node scripts/settings-smoke.mjs",
     "clean": "rm -rf dist",
-    "test:product-canvas": "npm run build --workspace @backy-cms/core && tsx --tsconfig tsconfig.smoke.json scripts/product-canvas-design-smoke.ts"
+    "test:product-canvas": "npm run build --workspace @backy-cms/core && tsx --tsconfig tsconfig.smoke.json scripts/product-canvas-design-smoke.ts",
+    "test:frontend-template-canvas": "tsx --tsconfig tsconfig.smoke.json scripts/frontend-template-canvas-smoke.ts"
   },
   "dependencies": {
     "@backy-cms/core": "*",
