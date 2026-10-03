@@ -32,6 +32,7 @@ import {
 } from "@/lib/repositoryRuntime";
 import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import { productCanvasDesign } from "@backy-cms/core";
 import type {
   BackyContentDocument,
   BackyJsonValue,
@@ -122,8 +123,9 @@ const productTarget = (record: {
   values: Record<string, unknown>;
 }): ContentTarget => {
   const values = record.values;
-  const document = isRecord(values.frontendDesignContentDocument)
-    ? values.frontendDesignContentDocument
+  const design = productCanvasDesign(values);
+  const document = isRecord(design.contentDocument)
+    ? design.contentDocument
     : {};
   return {
     type: "product",
@@ -135,8 +137,8 @@ const productTarget = (record: {
     updatedAt: record.updatedAt,
     values,
     content: {
-      elements: Array.isArray(values.frontendDesignElements)
-        ? values.frontendDesignElements
+      elements: Array.isArray(design.elements)
+        ? design.elements
         : document.elements || [],
     },
   };
@@ -145,14 +147,38 @@ const productTarget = (record: {
 const refreshedProductValues = (target: ContentTarget, content: unknown) => {
   const values = target.values || {};
   const elements = isRecord(content) ? content.elements : [];
+  const design = productCanvasDesign(values);
+  const document = isRecord(design.contentDocument)
+    ? design.contentDocument
+    : null;
+  const withElements = (value: unknown) => ({
+    ...(isRecord(value) ? value : document || {}),
+    elements,
+  });
   return {
     ...values,
     frontendDesignElements: elements,
-    ...(isRecord(values.frontendDesignContentDocument)
+    ...(document
       ? {
-          frontendDesignContentDocument: {
-            ...values.frontendDesignContentDocument,
+          frontendDesignContentDocument: withElements(
+            values.frontendDesignContentDocument,
+          ),
+        }
+      : {}),
+    ...(isRecord(values.design)
+      ? {
+          design: {
+            ...values.design,
             elements,
+            frontendDesignElements: elements,
+            ...(document
+              ? {
+                  contentDocument: withElements(values.design.contentDocument),
+                  frontendDesignContentDocument: withElements(
+                    values.design.frontendDesignContentDocument,
+                  ),
+                }
+              : {}),
           },
         }
       : {}),

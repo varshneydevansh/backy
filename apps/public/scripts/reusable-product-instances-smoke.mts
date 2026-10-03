@@ -77,7 +77,26 @@ try {
   const product = store.createAdminCollectionRecord(
     "site-demo",
     collection.id,
-    { slug: "reusable-product", status: "archived", values: original },
+    {
+      slug: "reusable-product",
+      status: "archived",
+      values: {
+        ...original,
+        design: {
+          elements: structuredClone(original.frontendDesignElements),
+          frontendDesignElements: structuredClone(
+            original.frontendDesignElements,
+          ),
+          contentDocument: structuredClone(
+            original.frontendDesignContentDocument,
+          ),
+          frontendDesignContentDocument: structuredClone(
+            original.frontendDesignContentDocument,
+          ),
+          customEnvelopeField: "keep",
+        },
+      },
+    },
   );
   assert(product);
   const routeModule =
@@ -224,6 +243,25 @@ try {
   const values = updated.values as any;
   const heading = values.frontendDesignElements[0];
   assert.equal(heading.width, 840);
+  assert.equal(
+    values.design.elements[0].width,
+    840,
+    "Authoring envelope must agree with refreshed aliases",
+  );
+  assert.deepEqual(
+    values.design.frontendDesignElements,
+    values.design.elements,
+  );
+  assert.deepEqual(
+    values.design.contentDocument.elements,
+    values.design.elements,
+  );
+  assert.deepEqual(
+    values.design.frontendDesignContentDocument.elements,
+    values.design.elements,
+  );
+  assert.equal(values.design.customEnvelopeField, "keep");
+
   assert.equal(heading.x, 600);
   assert.equal(heading.y, 710);
   assert.equal(heading.id, "instance");
@@ -277,6 +315,9 @@ try {
       ],
     },
   };
+  // Detaching through the editor updates the authoritative design envelope too.
+  (detached.values as any).design.elements[0].props.reusableSection.mode = "detached";
+  (detached.values as any).design.frontendDesignElements[0].props.reusableSection.mode = "detached";
   let writes = 0,
     mediaReads = 0,
     invalidations = 0;
