@@ -2,6 +2,7 @@ import {
   buildBackyThemeTokens,
   canvasContentPayloadToBackyContentDocument,
   canvasElementsToBackyContentDocument,
+  productCanvasDesign,
   type BackyContentKind,
   type BackyContentStatus,
 } from '@backy-cms/core';
@@ -1964,18 +1965,15 @@ const applyCollectionTemplateContext = (
   return next;
 };
 
-export const buildCollectionTemplateContent = (
+const buildCollectionCanvasContent = (
   site: StoreSite,
   collection: StoreCollection,
   kind: CollectionTemplateRenderKind,
+  canvas: CollectionTemplateCanvas,
   record?: StoreCollectionRecord,
   context?: RenderPayloadContext,
+  allowEmpty = false,
 ): CollectionRenderableContent | null => {
-  const canvas = collectionTemplateCanvas(site, collection, kind);
-  if (!canvas) {
-    return null;
-  }
-
   const elements = resolveElementDataBindings(
     site.id,
     canvas.elements
@@ -1985,7 +1983,7 @@ export const buildCollectionTemplateContent = (
     context,
   );
 
-  if (elements.length === 0) {
+  if (elements.length === 0 && !allowEmpty) {
     return null;
   }
 
@@ -2012,6 +2010,45 @@ export const buildCollectionTemplateContent = (
     elements,
   };
 };
+
+export const buildCollectionTemplateContent = (
+  site: StoreSite,
+  collection: StoreCollection,
+  kind: CollectionTemplateRenderKind,
+  record?: StoreCollectionRecord,
+  context?: RenderPayloadContext,
+): CollectionRenderableContent | null => {
+  const canvas = collectionTemplateCanvas(site, collection, kind);
+  return canvas ? buildCollectionCanvasContent(site, collection, kind, canvas, record, context) : null;
+};
+
+const buildProductCanvasContent = (
+  site: StoreSite,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  context: RenderPayloadContext,
+): CollectionRenderableContent | null => {
+  if (collection.slug !== PRODUCT_COLLECTION_SLUG) return null;
+  const design = productCanvasDesign(record.values);
+  const canvas = templateContentCanvas({
+    ...design,
+    customCSS: design.customCSS ?? design.customCss,
+    customJS: design.customJS ?? design.customJs,
+  });
+  return canvas ? buildCollectionCanvasContent(site, collection, 'item', canvas, record, context, true) : null;
+};
+
+/** Keep hosted product pages and headless render responses on the same saved layout. */
+export const buildCollectionRecordContent = (
+  site: StoreSite,
+  collection: StoreCollection,
+  record: StoreCollectionRecord,
+  context: RenderPayloadContext = {},
+): CollectionRenderableContent => (
+  buildProductCanvasContent(site, collection, record, context)
+  || buildCollectionTemplateContent(site, collection, 'item', record, context)
+  || buildCollectionItemContent(site, collection, record, context)
+);
 
 const buildCollectionListDataset = (
   collection: StoreCollection,
@@ -2775,8 +2812,7 @@ export function buildPublicCollectionItemRenderPayload(
 ) {
   const context = { dataSource: options.dataSource };
   const sourceData = renderDataSource(context);
-  const content = buildCollectionTemplateContent(site, collection, 'item', record, context)
-    || buildCollectionItemContent(site, collection, record, context);
+  const content = buildCollectionRecordContent(site, collection, record, context);
   const elements = content.elements;
   const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = sourceData.getMediaList(site.id, {
@@ -2791,9 +2827,23 @@ export function buildPublicCollectionItemRenderPayload(
   const title = getCollectionRecordTitle(collection, record);
   const description = getCollectionRecordDescription(collection, record);
   const dataset = buildCollectionItemDataset(collection, record);
+  const productDesign = collection.slug === PRODUCT_COLLECTION_SLUG ? productCanvasDesign(record.values) : {};
+  const productDocument = isRecord(productDesign.contentDocument) ? productDesign.contentDocument : {};
+  const productDocumentMetadata = isRecord(productDocument.metadata) ? productDocument.metadata : {};
+  const productDesignMetadata = Object.fromEntries(Object.entries({
+    ...productDesign,
+    ...(Array.isArray(productDocument.elements) ? { elements: productDesign.elements ?? productDocument.elements } : {}),
+    ...(productDocumentMetadata.canvasSize ? { canvasSize: productDesign.canvasSize ?? productDocumentMetadata.canvasSize } : {}),
+  })
+    .filter(([key]) => !key.startsWith('frontendDesign'))
+    .map(([key, value]) => {
+      const name = key === 'customCSS' ? 'customCss' : key === 'customJS' ? 'customJs' : key;
+      return [`frontendDesign${name[0].toUpperCase()}${name.slice(1)}`, value];
+    }));
+  const recordFrontendDesignMetadata = { ...record.values, ...productDesignMetadata };
   const frontendDesignMetadata = {
     ...collection.metadata,
-    ...record.values,
+    ...recordFrontendDesignMetadata,
   };
   const designReadiness = collection.slug === PRODUCT_COLLECTION_SLUG
     ? productDesignReadinessFromValues(record.values)
@@ -2836,7 +2886,7 @@ export function buildPublicCollectionItemRenderPayload(
           apiUrl: `/api/sites/${site.id}/collections/${collection.id}/records?slug=${encodeURIComponent(record.slug)}`,
           renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(canonical)}`,
           hostedPath: canonical,
-          frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
+          frontendDesign: frontendDesignProvenanceFromMetadata(recordFrontendDesignMetadata),
           collectionFrontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
           ...(designReadiness ? { designReadiness } : {}),
         },

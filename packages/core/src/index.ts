@@ -23,6 +23,7 @@ export * from './custom-frontend-agent-handoff';
 export * from './repositories';
 export * from './theme-tokens';
 export * from './publication';
+export * from './product-design';
 
 // ============================================
 // CONSTANTS

@@ -28,7 +28,7 @@ import { PageRenderer, type PageContent } from '@/components/PageRenderer';
 import AnimationHydrator from '@/components/AnimationHydrator';
 import LivePageManagementOverlay from '@/components/LivePageManagementOverlay';
 import {
-    buildCollectionItemContent,
+    buildCollectionRecordContent,
     buildCollectionListContent,
     buildCollectionTemplateContent,
     resolveElementDataBindings,
@@ -713,8 +713,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
             const dynamicContent = dynamicRoute.type === 'list'
                 ? (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'list', undefined, { dataSource })
                     || buildCollectionListContent(storeSite, dynamicRoute.collection, dynamicRoute.records, { dataSource })) as unknown as PageContent
-                : (buildCollectionTemplateContent(storeSite, dynamicRoute.collection, 'item', dynamicRoute.record, { dataSource })
-                    || buildCollectionItemContent(storeSite, dynamicRoute.collection, dynamicRoute.record, { dataSource })) as unknown as PageContent;
+                : buildCollectionRecordContent(storeSite, dynamicRoute.collection, dynamicRoute.record, { dataSource }) as unknown as PageContent;
 
             return (
                 <>
@@ -848,8 +847,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
     const dynamicContent = dynamicRoute.type === 'list'
         ? (buildCollectionTemplateContent(site, dynamicRoute.collection, 'list')
             || buildCollectionListContent(site, dynamicRoute.collection, dynamicRoute.records)) as unknown as PageContent
-        : (buildCollectionTemplateContent(site, dynamicRoute.collection, 'item', dynamicRoute.record)
-            || buildCollectionItemContent(site, dynamicRoute.collection, dynamicRoute.record)) as unknown as PageContent;
+        : buildCollectionRecordContent(site, dynamicRoute.collection, dynamicRoute.record) as unknown as PageContent;
 
     return (
         <>
