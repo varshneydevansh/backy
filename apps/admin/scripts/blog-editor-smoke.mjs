@@ -1172,6 +1172,12 @@ const assertUnchangedRouteSaveWithRouteCheckError = async (client, post) => {
     const payload = await requestApi(`/api/admin/sites/${SITE_ID}/blog/${post.id}`);
     persisted = payload.data?.post || payload.post;
     if (persisted?.title === nextTitle && persisted.slug === post.slug) {
+      for (const [key, value] of Object.entries(post.meta || {}).filter(([key]) => key.startsWith('frontendDesign'))) {
+        assert(
+          JSON.stringify(persisted.meta?.[key]) === JSON.stringify(value),
+          `A title-only owner save must retain the registered frontend metadata field ${key}`,
+        );
+      }
       return {
         readyState,
         changed,

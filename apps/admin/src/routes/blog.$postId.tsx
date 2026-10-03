@@ -1330,6 +1330,7 @@ function EditBlogPostPage() {
                 featuredImageId,
                 content: JSON.parse(content),
                 meta: {
+                    ...post.meta,
                     title: seoTitle.trim() || title,
                     description: seoDescription.trim() || excerpt,
                     canonical: normalizedCanonicalPath,
