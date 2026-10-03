@@ -32,6 +32,10 @@ const assertBlogEditorFallbackIsReadOnly = () => {
   const blogRevisionRouteSource = fs.readFileSync(new URL('../../public/src/app/api/admin/sites/[siteId]/blog/[postId]/revisions/route.ts', import.meta.url), 'utf8');
   const revisionBranchMetadataSource = fs.readFileSync(new URL('../../public/src/lib/contentRevisionBranchMetadata.ts', import.meta.url), 'utf8');
   assert(source.includes('isUsingLocalPostCopy'), 'Blog editor must track backend-load fallback state');
+  const postLoadEffect = source.slice(source.indexOf('const loadPost = async () => {'), source.indexOf('const loadTaxonomy = async () => {'));
+  const postLoadDependencies = postLoadEffect.match(/\}, \[([^\]]+)\]\);/)?.[1]?.split(',').map((value) => value.trim()) || [];
+  assert(postLoadDependencies.includes('postId') && postLoadDependencies.includes('activeSiteId'), 'Blog backend loading must follow the selected post and site');
+  assert(!postLoadDependencies.includes('storePost') && !postLoadDependencies.includes('storePostId'), 'Backend cache updates must not retrigger blog loading and keep the editor permanently busy');
   assert(source.includes('localPostCopyDisabledMessage'), 'Blog editor must explain that local fallback copies are read-only');
   assert(source.includes('canEdit={canEditBlog && !isUsingLocalPostCopy}'), 'Blog editor canvas editing must be disabled for local fallback copies');
   assert(source.includes('editorBusy || !canEditBlog || isUsingLocalPostCopy'), 'Blog editor canvas changes must ignore local fallback copies');

@@ -2,7 +2,7 @@
  * BACKY CMS - EDIT BLOG POST (HYBRID LAYOUT)
  */
 
-import { useCallback, useEffect, useState, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useState, useMemo, useRef, type Dispatch, type SetStateAction } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, Archive, ArrowLeft, CalendarClock, CheckCircle2, Code2, Copy, Download, ExternalLink, Eye, Flag, Globe, History, Image as ImageIcon, Maximize2, MessageSquare, Minimize2, PenLine, RefreshCw, RotateCcw, Save, SearchCheck, Send, Tags, Trash2, UserRound, X, XCircle } from 'lucide-react';
 import {
@@ -669,7 +669,10 @@ function EditBlogPostPage() {
     const { sites, posts, media, updatePost, deletePost } = useStore();
     const currentAdmin = useAuthStore((state) => state.user);
     const storePost = posts.find((p) => p.id === postId);
-    const storePostId = storePost?.id;
+    // Updating the cache after a backend read must not trigger another read.
+    // Keep the latest fallback without making its object identity a load dependency.
+    const storePostRef = useRef(storePost);
+    storePostRef.current = storePost;
     const storePostSiteId = storePost?.siteId;
     const requestedSite = routeSearch.siteId
         ? sites.find((site) => siteMatchesIdentifier(site, routeSearch.siteId || ''))
@@ -822,7 +825,7 @@ function EditBlogPostPage() {
 
     useEffect(() => {
         let cancelled = false;
-        const localFallbackPost = storePost;
+        const localFallbackPost = storePostRef.current;
 
         const loadPost = async () => {
             if (!canViewBlog) {
@@ -888,7 +891,7 @@ function EditBlogPostPage() {
         return () => {
             cancelled = true;
         };
-    }, [activeSiteId, canViewBlog, postId, storePost, storePostId, updatePost, viewBlogDeniedMessage]);
+    }, [activeSiteId, canViewBlog, postId, updatePost, viewBlogDeniedMessage]);
 
     useEffect(() => {
         let cancelled = false;
