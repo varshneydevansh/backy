@@ -43,7 +43,8 @@ type ReturningQuery = {
 
 type CategoryRow = typeof blogCategories.$inferSelect;
 type TagRow = typeof blogTags.$inferSelect;
-type PostRow = typeof blogPosts.$inferSelect;
+// Taxonomy counts/author assignment never read the post body or canvas state.
+type PostRow = Pick<typeof blogPosts.$inferSelect, 'siteId' | 'status' | 'meta' | 'authorId'>;
 type ProfileRow = typeof profiles.$inferSelect;
 
 const asDb = (db: DatabaseInstance): QueryDatabase => db as unknown as QueryDatabase;
@@ -74,7 +75,12 @@ const postCategoryIds = (post: PostRow) => toStringArray(getPostMeta(post).categ
 const postTagIds = (post: PostRow) => toStringArray(getPostMeta(post).tagIds);
 
 const activeSitePosts = async (database: QueryDatabase, siteId: string): Promise<PostRow[]> => {
-    const rows = await database.select().from(blogPosts).where(eq(blogPosts.siteId, siteId)) as PostRow[];
+    const rows = await database.select({
+        siteId: blogPosts.siteId,
+        status: blogPosts.status,
+        meta: blogPosts.meta,
+        authorId: blogPosts.authorId,
+    }).from(blogPosts).where(eq(blogPosts.siteId, siteId)) as PostRow[];
     return rows.filter((post) => post.siteId === siteId && post.status !== 'archived');
 };
 
