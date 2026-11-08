@@ -2,6 +2,7 @@ import type { Site, SiteWebhookEventKind } from '@backy-cms/core';
 import { toAuditJsonObject } from '@/lib/adminAudit';
 import { trackWebhookEvent } from '@/lib/backyStore';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
+import { purgePublicCdnCache } from '@/lib/publicContractResponse';
 import type { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
 
 type SiteWebhookRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
@@ -11,6 +12,17 @@ type DeliverableSite = Pick<Site, 'id' | 'name' | 'slug'> & Partial<Pick<Site, '
 };
 
 const DELIVERY_TIMEOUT_MS = 5000;
+
+// Owner/moderator changes that alter anonymous public output. Visitor-triggered
+// kinds (submissions, reports, runtime events, provider callbacks) never purge,
+// so anonymous traffic cannot force CDN refills.
+const PUBLIC_CDN_PURGE_KINDS: ReadonlySet<SiteWebhookEventKind> = new Set<SiteWebhookEventKind>([
+  'site-created',
+  'site-updated',
+  'site-deleted',
+  'commerce-product',
+  'comment-status',
+]);
 
 const isValidWebhookUrl = (value: string): boolean => {
   try {
@@ -77,6 +89,12 @@ export async function deliverSiteWebhooks(params: {
   data?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }) {
+  // Purge before notifying: a subscriber that refetches on `site-updated` must
+  // not be handed the CDN's pre-change copy. Runs even with no endpoints.
+  if (PUBLIC_CDN_PURGE_KINDS.has(params.kind)) {
+    await purgePublicCdnCache({ siteId: params.site.id, reason: params.reason || params.kind });
+  }
+
   const webhooks = params.site.settings?.webhooks;
   const eventBase = {
     repositories: params.repositories,

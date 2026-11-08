@@ -70,6 +70,7 @@ const mocks = {
   '@/lib/repositoryRuntime': { getRequiredDatabaseRepositories: async () => repositories },
 };
 const forms = loadMediaFixture('../src/lib/formSubmissionDelivery.ts', mocks, current.fixtureProcess, current.globals);
+mocks['@/lib/publicContractResponse'] ??= loadMediaFixture('../src/lib/publicContractResponse.ts', {});
 const comments = loadMediaFixture('../src/lib/commentDelivery.ts', mocks, current.fixtureProcess, current.globals);
 const commerce = loadMediaFixture('../src/lib/commerceOrderDelivery.ts', mocks, current.fixtureProcess, current.globals);
 for (const siteId of ['site-a', 'site-b']) {

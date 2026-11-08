@@ -2,6 +2,7 @@ import { sanitizeDeliveryProviderEvidence, commentDeliveryErrorDetails, BackyCom
 import { demoCommentDeliveryJournal } from '@/lib/demoCommentDeliveryJournal';
 import { getAdminSettings, trackWebhookEvent } from '@/lib/backyStore';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
+import { purgePublicCdnCache } from '@/lib/publicContractResponse';
 import {
   buildCommentNotificationEmail,
   EmailDeliveryError,
@@ -225,6 +226,10 @@ export async function notifyCommentDelivery(params: {
   actor?: string | null;
 }) {
   const outcome: CommentNotificationOutcome = { attemptedChannels: 0, failedChannels: 0, completionWarnings: [], channels: [] };
+  // Moderation changes public comment lists; never driven by visitor submissions.
+  if (params.kind === 'comment-status') {
+    await purgePublicCdnCache({ siteId: params.siteId, reason: params.reason || params.kind });
+  }
   const notifications = await readNotificationSettings(params.repositories);
   const digestFrequency = readString(notifications.digestFrequency);
   if (digestFrequency === 'off') {

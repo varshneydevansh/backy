@@ -210,6 +210,20 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+// The proxy runs as a function before Vercel's CDN on every matched request,
+// so it must not match anonymous public reads it has nothing to add to:
+// otherwise CDN-cached render/discovery/media responses still cost an
+// invocation each. Non-admin API traffic only needs it for CORS (requests
+// carrying Origin, which includes every preflight). Admin, private comment
+// delivery, /uploads rewrites and hosted /sites HTML/SEO keep unconditional
+// coverage.
 export const config = {
-  matcher: ['/api/:path*', '/uploads/:path*', '/sites/:path*'],
+  matcher: [
+    '/api/admin/:path*',
+    '/api/sites/:siteId/comments/delivery-attempts',
+    '/api/sites/:siteId/comments/:commentId/delivery-attempts/:path*',
+    { source: '/api/:path*', has: [{ type: 'header', key: 'origin' }] },
+    '/uploads/:path*',
+    '/sites/:path*',
+  ],
 };

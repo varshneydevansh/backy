@@ -69,9 +69,22 @@ for (const demo of [true, false]) {
     }
     checks++;
   };
+  // Anonymous, unconditional public file 200s may be held by Vercel's CDN only
+  // (purged by site/media tag on admin mutation); browser and downstream CDN
+  // layers stay no-store. Every other delivery below remains no-store everywhere.
+  const vercelCdnOnly = (response: Response) => {
+    for (const name of ['cache-control', 'cdn-cache-control']) {
+      assert.ok(response.headers.get(name)?.split(',').map(part => part.trim().toLowerCase()).includes('no-store'), `${name}: ${response.headers.get(name)}`);
+    }
+    assert.equal(response.headers.get('vercel-cdn-cache-control'), 'max-age=86400, stale-while-revalidate=3600');
+    assert.deepEqual(response.headers.get('vercel-cache-tag')?.split(','), ['backy-public', `backy-site-${site.id}`, `backy-media-${site.id}-${media.id}`]);
+    assert.match(response.headers.get('vary') || '', /Authorization/);
+    checks++;
+  };
   const initialEtags: Record<string, string> = {};
   for (const kind of ['file', 'transform'] as const) {
-    const response = await get(kind); assert.equal(response.status, 200); noStore(response, true);
+    const response = await get(kind); assert.equal(response.status, 200);
+    if (kind === 'file') vercelCdnOnly(response); else noStore(response, true);
     initialEtags[kind] = response.headers.get('etag')!; assert.ok(initialEtags[kind]);
     assert.equal(await response.text(), kind === 'file' ? 'one' : 'variant-one');
     const conditional = await get(kind, { etag: initialEtags[kind] });

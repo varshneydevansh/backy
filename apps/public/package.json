@@ -60,6 +60,7 @@
     "test:media-safety": "tsx scripts/media-safety-provider-smoke.ts",
     "test:owner-media-uploads": "tsx --tsconfig tsconfig.json scripts/owner-media-upload-handler-smoke.mts && tsx --tsconfig tsconfig.json scripts/media-upload-readiness-smoke.mts",
     "test:media-delivery-cache-admission": "tsx --tsconfig tsconfig.json scripts/media-delivery-cache-admission-smoke.mts",
+    "test:public-cdn-cache": "tsx --tsconfig tsconfig.json scripts/public-cdn-cache-smoke.mts",
     "test:media-scope": "tsx scripts/media-scope-smoke.ts",
     "test:media-secret-manager": "node scripts/media-secret-manager-smoke.mjs",
     "test:site-webhook-delivery": "tsx --tsconfig tsconfig.json scripts/site-webhook-delivery-smoke.ts",

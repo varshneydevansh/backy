@@ -4,6 +4,7 @@ import type {
   BackyRepositories,
   BackyRepositoryEntity,
 } from '@backy-cms/core';
+import { purgePublicCdnCache } from '@/lib/publicContractResponse';
 
 export type PublicCacheInvalidation = Pick<BackyCacheInvalidationEvent, 'scope' | 'reason' | 'revision' | 'createdAt'>;
 
@@ -26,8 +27,8 @@ export const recordSiteCacheInvalidation = async (
     reason: string;
     requestId?: string;
   },
-): Promise<PublicCacheInvalidation> => publicCacheInvalidationPayload(
-  await repositories.cacheInvalidations.record({
+): Promise<PublicCacheInvalidation> => {
+  const event = await repositories.cacheInvalidations.record({
     siteId: input.siteId,
     scope: input.scope,
     entity: input.entity,
@@ -36,5 +37,8 @@ export const recordSiteCacheInvalidation = async (
     metadata: {
       ...(input.requestId ? { requestId: input.requestId } : {}),
     },
-  }),
-);
+  });
+  // The recorded revision changes public output; drop Vercel CDN copies too.
+  await purgePublicCdnCache({ siteId: input.siteId, reason: input.reason });
+  return publicCacheInvalidationPayload(event);
+};

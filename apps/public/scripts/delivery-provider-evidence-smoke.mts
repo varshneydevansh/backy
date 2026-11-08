@@ -11,6 +11,7 @@ try{
  const submission=store.createFormSubmission({siteId:'site-demo',formId:form.id,values:{retained:'private fixture'},status:'pending'});
  let checks=0,sends=0,provider='resend',throws=false,failSettle=false,webhookCode=202;
  const mocks:any={'@/lib/backyStore':store,'@/lib/commentRepositorySupport':{recordRepositoryInteractionEvent:async()=>{}},'@/lib/formEmailDelivery':{EmailDeliveryError:class extends Error{},getEmailDeliveryConfig:()=>({provider}),buildCommentNotificationEmail:()=>({}),buildFormNotificationEmail:()=>({}),sendEmailMessage:async()=>{sends++;if(throws)throw Error('NEVER-EXPOSE-TRANSPORT-SECRET');return {statusCode:202,metadata:{providerMessageId:'synthetic-message-123',outboxOnly:true,token:'NEVER-PERSIST-TOKEN',body:{private:'NEVER-PERSIST-PAYLOAD'}}};}}};
+ mocks['@/lib/publicContractResponse']=loadMediaFixture('../src/lib/publicContractResponse.ts',{});
  for(const name of ['demoCommentDeliveryJournal','demoFormDeliveryJournal','commentDeliveryHistory','formDeliveryHistory'])mocks['@/lib/'+name]=loadMediaFixture('../src/lib/'+name+'.ts',mocks);
  const commentJournal=mocks['@/lib/demoCommentDeliveryJournal'].demoCommentDeliveryJournal,formJournal=mocks['@/lib/demoFormDeliveryJournal'].demoFormDeliveryJournal;
  const journal=(original:any)=>({...original,settle:async(...args:any[])=>{if(failSettle)throw Error('NEVER-EXPOSE-JOURNAL-SECRET');return original.settle(...args);}});

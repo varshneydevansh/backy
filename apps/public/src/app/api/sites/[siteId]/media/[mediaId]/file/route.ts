@@ -6,7 +6,12 @@ import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined, requiresAttachmentDelivery } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
-import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
+import {
+  applyPublicCdnCache,
+  BACKY_PUBLIC_CONTRACT_VERSION,
+  PUBLIC_CDN_MAX_CACHEABLE_BYTES,
+  publicContractJson,
+} from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { getRepositorySitePublication } from '@/lib/repositorySitePublication';
 
@@ -200,6 +205,28 @@ async function deliverMediaFile(request: NextRequest, { params }: RouteParams) {
         ...(selection.status === 206 ? { 'content-range': `bytes ${selection.start}-${selection.endExclusive - 1}/${buffer.byteLength}` } : {}),
       },
     });
+
+    // Browser and downstream CDNs keep `no-store`. Vercel's CDN may hold a full,
+    // anonymous, unconditional public 200 under purgeable site/media tags; admin
+    // media mutations delete those tags, so visibility/bytes/quarantine changes
+    // take effect immediately. Private, signed, ranged and conditional
+    // deliveries never reach this branch with CDN caching enabled.
+    if (
+      !isPrivateMedia
+      && !requiresAttachment
+      && selection.status === 200
+      && !request.headers.has('range')
+      && !request.headers.has('if-none-match')
+      && buffer.byteLength <= PUBLIC_CDN_MAX_CACHEABLE_BYTES
+    ) {
+      applyPublicCdnCache(response.headers, {
+        kind: 'media',
+        request,
+        status: 200,
+        siteId: site.id,
+        mediaId: media.id,
+      });
+    }
 
     return response;
   } catch (error) {
