@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageDir = resolve(scriptDir, '..');
@@ -60,6 +61,23 @@ const schemas = new Map(schemaFiles.map((file) => [
   JSON.parse(readFileSync(join(schemaDir, file), 'utf8')),
 ]));
 const openApiRouteSource = readFileSync(openApiRouteFile, 'utf8');
+// Split contract modules contribute operations just as inline route declarations do.
+const openApiOperationSource = openApiRouteSource + '\n' + ['frontendCompositionOpenApi.ts', 'siteBackupOpenApi.ts', 'formTemplatePackOpenApi.ts', 'siteMailboxOpenApi.ts', 'newsletterCampaignOpenApi.ts', 'mediaUploadSessionsOpenApi.ts', 'visitorErasureOpenApi.ts', 'commerceEntitlementsOpenApi.ts', 'siteMailboxManagementOpenApi.ts'].map(file => readFileSync(join(repoRoot, 'apps/public/src/lib', file), 'utf8')).join('\n');
+const splitContractExports = {};
+const splitContractSource = readFileSync(join(repoRoot, 'apps/public/src/lib/frontendCompositionOpenApi.ts'), 'utf8');
+// Evaluate only the repository-owned, import-free schema module, never frontend packages.
+const splitContractJs = ts.transpileModule(splitContractSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+Function('exports', splitContractJs)(splitContractExports);
+const backupContractSource = readFileSync(join(repoRoot, 'apps/public/src/lib/siteBackupOpenApi.ts'), 'utf8');
+Function('exports', ts.transpileModule(backupContractSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(splitContractExports);
+const formPackContractSource = readFileSync(join(repoRoot, 'apps/public/src/lib/formTemplatePackOpenApi.ts'), 'utf8');
+Function('exports', ts.transpileModule(formPackContractSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(splitContractExports);
+const mailboxContractSource = readFileSync(join(repoRoot, 'apps/public/src/lib/siteMailboxOpenApi.ts'), 'utf8');
+Function('exports', ts.transpileModule(mailboxContractSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(splitContractExports);
+for (const file of ['newsletterCampaignOpenApi.ts', 'mediaUploadSessionsOpenApi.ts', 'visitorErasureOpenApi.ts', 'commerceEntitlementsOpenApi.ts', 'siteMailboxManagementOpenApi.ts']) {
+  const source = readFileSync(join(repoRoot, 'apps/public/src/lib', file), 'utf8');
+  Function('exports', ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(splitContractExports);
+}
 const openApiComponentSchemas = extractOpenApiComponentSchemas(openApiRouteSource);
 const openApiComponentNames = Object.keys(openApiComponentSchemas);
 
@@ -97,7 +115,7 @@ const union = (parts) => {
 const stringLiteralUnion = (values) => union([...new Set(values)].sort().map((value) => literal(value)));
 
 function extractOpenApiOperationIds(source) {
-  return [...source.matchAll(/operationId:\s*['"]([^'"]+)['"]/gu)].map((match) => match[1]);
+  return [...source.matchAll(/(?:"operationId"|operationId):\s*['"]([^'"]+)['"]/gu)].map((match) => match[1]);
 }
 
 function extractOpenApiComponentNames(source) {
@@ -228,8 +246,17 @@ function extractOpenApiComponentSchemas(source) {
   const evaluated = Function(
     'envelopeSchema',
     'formSubmissionValidationCodes',
+    'frontendCompositionSchemas',
+    'siteBackupSchemas',
+    'formTemplatePackSchemas',
+    'siteMailboxSchemas',
+    'newsletterCampaignSchemas',
+    'mediaUploadSessionSchemas',
+    'visitorErasureOpenApiSchemas',
+    'commerceEntitlementSchemas',
+    'siteMailboxManagementSchemas',
     `"use strict"; return (${componentObject});`,
-  )(envelopeSchemaForGeneration, formCodes);
+  )(envelopeSchemaForGeneration, formCodes, splitContractExports.frontendCompositionSchemas, splitContractExports.siteBackupSchemas, splitContractExports.formTemplatePackSchemas, splitContractExports.siteMailboxSchemas, splitContractExports.newsletterCampaignSchemas, splitContractExports.mediaUploadSessionSchemas, splitContractExports.visitorErasureOpenApiSchemas, splitContractExports.commerceEntitlementSchemas, splitContractExports.siteMailboxManagementSchemas);
 
   return evaluated && typeof evaluated === 'object' ? evaluated : {};
 }
@@ -247,23 +274,26 @@ function envelopeSchemaForGeneration(dataSchema) {
   };
 }
 
-function schemaToType(schema, currentFile, indent = 0) {
+function schemaToType(schema, currentFile, indent = 0, binaryRequest = false) {
+  // JSON Schema false forbids a property; keep that exclusion in discriminated unions.
+  if (schema === false) return 'never';
   if (!schema || Object.keys(schema).length === 0) return 'unknown';
   if (schema.$ref) return refToType(schema.$ref, currentFile);
   if (Array.isArray(schema.enum)) return union(schema.enum.map((value) => literal(value)));
   if (Object.prototype.hasOwnProperty.call(schema, 'const')) return literal(schema.const);
-  if (Array.isArray(schema.oneOf)) return union(schema.oneOf.map((item) => schemaToType(item, currentFile, indent)));
-  if (Array.isArray(schema.anyOf)) return union(schema.anyOf.map((item) => schemaToType(item, currentFile, indent)));
+  if (Array.isArray(schema.oneOf)) return union(schema.oneOf.map((item) => schemaToType(item, currentFile, indent, binaryRequest)));
+  if (Array.isArray(schema.anyOf)) return union(schema.anyOf.map((item) => schemaToType(item, currentFile, indent, binaryRequest)));
   if (Array.isArray(schema.allOf) && schema.type) {
     const { allOf: _allOf, ...baseSchema } = schema;
-    return schemaToType(baseSchema, currentFile, indent);
+    return schemaToType(baseSchema, currentFile, indent, binaryRequest);
   }
-  if (Array.isArray(schema.allOf)) return schema.allOf.map((item) => schemaToType(item, currentFile, indent)).join(' & ');
-  if (Array.isArray(schema.type)) return union(schema.type.map((type) => schemaToType({ ...schema, type }, currentFile, indent)));
+  if (Array.isArray(schema.allOf)) return schema.allOf.map((item) => schemaToType(item, currentFile, indent, binaryRequest)).join(' & ');
+  if (Array.isArray(schema.type)) return union(schema.type.map((type) => schemaToType({ ...schema, type }, currentFile, indent, binaryRequest)));
 
   switch (schema.type) {
     case 'string':
-      return 'string';
+      // Multipart request parts are browser Blob/File objects. Response wire schemas stay strings.
+      return binaryRequest && schema.format === 'binary' ? 'Blob' : 'string';
     case 'number':
     case 'integer':
       return 'number';
@@ -272,18 +302,18 @@ function schemaToType(schema, currentFile, indent = 0) {
     case 'null':
       return 'null';
     case 'array':
-      return `Array<${schemaToType(schema.items, currentFile, indent)}>`;
+      return `Array<${schemaToType(schema.items, currentFile, indent, binaryRequest)}>`;
     case 'object':
-      return objectSchemaToType(schema, currentFile, indent);
+      return objectSchemaToType(schema, currentFile, indent, binaryRequest);
     default:
       if (schema.properties || schema.additionalProperties) {
-        return objectSchemaToType(schema, currentFile, indent);
+        return objectSchemaToType(schema, currentFile, indent, binaryRequest);
       }
       return 'unknown';
   }
 }
 
-function objectSchemaToType(schema, currentFile, indent = 0) {
+function objectSchemaToType(schema, currentFile, indent = 0, binaryRequest = false) {
   const properties = schema.properties || {};
   const propertyNames = Object.keys(properties);
   const required = new Set(schema.required || []);
@@ -292,7 +322,7 @@ function objectSchemaToType(schema, currentFile, indent = 0) {
 
   if (propertyNames.length === 0) {
     if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
-      return `Record<string, ${schemaToType(schema.additionalProperties, currentFile, indent)}>`;
+      return `Record<string, ${schemaToType(schema.additionalProperties, currentFile, indent, binaryRequest)}>`;
     }
     return schema.additionalProperties === false ? 'Record<string, never>' : 'Record<string, unknown>';
   }
@@ -300,7 +330,7 @@ function objectSchemaToType(schema, currentFile, indent = 0) {
   const lines = ['{'];
   for (const name of propertyNames) {
     const optional = required.has(name) ? '' : '?';
-    lines.push(`${childPad}${propertyKey(name)}${optional}: ${schemaToType(properties[name], currentFile, indent + 2)};`);
+    lines.push(`${childPad}${propertyKey(name)}${optional}: ${schemaToType(properties[name], currentFile, indent + 2, binaryRequest)};`);
   }
   if (schema.additionalProperties === true || typeof schema.additionalProperties === 'object') {
     lines.push(`${childPad}[key: string]: unknown;`);
@@ -314,7 +344,7 @@ const sourceLines = [
   '// Generated by packages/sdk-js/scripts/generate-contract-types.mjs.',
   '// Source schemas: specs/ai-frontend-contract/*.schema.json. Do not edit by hand.',
   '',
-  `export type GeneratedBackyOpenApiOperationId = ${stringLiteralUnion(extractOpenApiOperationIds(openApiRouteSource))};`,
+  `export type GeneratedBackyOpenApiOperationId = ${stringLiteralUnion(extractOpenApiOperationIds(openApiOperationSource))};`,
   '',
   `export type GeneratedBackyOpenApiComponentName = ${stringLiteralUnion(openApiComponentNames.length > 0 ? openApiComponentNames : extractOpenApiComponentNames(openApiRouteSource))};`,
   '',
@@ -348,7 +378,7 @@ const sourceLines = [
 ];
 
 for (const [name, schema] of Object.entries(openApiComponentSchemas)) {
-  sourceLines.push(`export type ${openApiComponentTypeName(name)} = ${schemaToType(schema, 'openapi', 0)};`, '');
+  sourceLines.push(`export type ${openApiComponentTypeName(name)} = ${schemaToType(schema, 'openapi', 0, name.endsWith('MultipartRequest'))};`, '');
 }
 
 sourceLines.push(

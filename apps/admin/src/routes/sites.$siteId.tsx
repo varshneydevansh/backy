@@ -38,6 +38,13 @@ import {
   X,
 } from "lucide-react";
 import { useStore } from "@/stores/mockStore";
+import { adminPermissionRule } from "@/lib/adminPermissionUi";
+import { VisitorMembersPanel } from '@/components/sites/VisitorMembersPanel';
+import { SiteBackupPanel } from '@/components/sites/SiteBackupPanel';
+import { ComponentMigrationPanel } from '@/components/sites/ComponentMigrationPanel';
+import { FrontendCompatibilityPanel } from '@/components/sites/FrontendCompatibilityPanel';
+import { FrontendCompositionImportPanel } from '@/components/sites/FrontendCompositionImportPanel';
+import { TemplateHistoryPanel } from '@/components/sites/TemplateHistoryPanel';
 import { PageShell } from "@/components/layout/PageShell";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -96,6 +103,7 @@ import type { Page, Site } from "@/stores/mockStore";
 import { useAuthStore, type User } from "@/stores/authStore";
 import { siteMatchesIdentifier } from "@/lib/siteSelection";
 import { getLocalBackendOrigin } from "@/lib/localBackendOrigin";
+import { readFrontendTemplateDefaultDraft, setFrontendTemplateDefaultDraft, type DefaultTemplateType } from "@/lib/frontendTemplateDefaults";
 import {
   CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
   buildCustomFrontendAgentAdminEntryPoints,
@@ -197,7 +205,14 @@ type SiteThemeDraft = {
   customCSS: string;
 };
 type SiteDetailPermissionKey =
+  | "sites.create"
   | "sites.view"
+  | "pages.view"
+  | "pages.edit"
+  | "collections.view"
+  | "collections.edit"
+  | "commerce.view"
+  | "commerce.edit"
   | "sites.configure"
   | "sites.delete"
   | "forms.view"
@@ -215,7 +230,14 @@ const SITE_DETAIL_PERMISSION_ROLE_DEFAULTS: Record<
   SiteDetailPermissionKey,
   Array<User["role"]>
 > = {
+  "sites.create": ["owner", "admin"],
   "sites.view": ["owner", "admin", "editor", "viewer"],
+  "pages.view": ["owner", "admin", "editor", "viewer"],
+  "pages.edit": ["owner", "admin", "editor"],
+  "collections.view": ["owner", "admin", "editor", "viewer"],
+  "collections.edit": ["owner", "admin", "editor"],
+  "commerce.view": ["owner", "admin", "editor", "viewer"],
+  "commerce.edit": ["owner", "admin", "editor"],
   "sites.configure": ["owner", "admin"],
   "sites.delete": ["owner"],
   "forms.view": ["owner", "admin", "editor", "viewer"],
@@ -2115,6 +2137,7 @@ function EditSitePage() {
   const { siteId } = Route.useParams();
   const { sites, updateSite, deleteSite } = useStore();
   const currentAdmin = useAuthStore((store) => store.user);
+  const visitorReviewSession = useAuthStore((store) => store.session);
 
   const storeSite = sites.find((s) => siteMatchesIdentifier(s, siteId));
   const [fetchedSite, setFetchedSite] = useState<Site | null>(null);
@@ -3315,6 +3338,21 @@ function EditSitePage() {
         },
       },
     }));
+  };
+
+  const handleFrontendTemplateDefaultChange = (type: DefaultTemplateType, templateId: string) => {
+    if (isFrontendDesignDraftDisabled || !canConfigureSite) return;
+    setFrontendDesignState((prev) => {
+      try {
+        const next = setFrontendTemplateDefaultDraft(prev.templatesJson, prev.frontendDesign, type, templateId);
+        return { ...prev, dirty: true, errorMessage: null,
+          templatesJson: next.templatesJson,
+          frontendDesign: { ...prev.frontendDesign, templates: next.templates },
+          notice: "Default layout changed in your draft. Save design to apply it together with your other design edits." };
+      } catch (error) {
+        return { ...prev, notice: null, errorMessage: error instanceof Error ? error.message : "Unable to update the default layout. Your draft is unchanged." };
+      }
+    });
   };
 
   const handleSaveFrontendDesign = async () => {
@@ -4570,7 +4608,7 @@ function EditSitePage() {
       const updated = await updateForm(
         siteApiId,
         state.selectedFormId,
-        payload,
+        { ...payload, expectedVersion: savedFormBuilderDraftRef.current?.version },
       );
       setState((prev) => ({
         ...prev,
@@ -5502,6 +5540,13 @@ function EditSitePage() {
     [formData.domainAliases],
   );
   const hasCustomDomain = Boolean(savedCustomDomain);
+  const frontendTemplateDefaultDraft = useMemo(() => {
+    try {
+      return { data: readFrontendTemplateDefaultDraft(frontendDesignState.templatesJson, frontendDesignState.frontendDesign), error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error.message : "Unable to read the current template draft." };
+    }
+  }, [frontendDesignState.templatesJson, frontendDesignState.frontendDesign]);
   const templateVersionReadiness = useMemo(
     () =>
       buildFrontendTemplateVersionReadiness(
@@ -9158,6 +9203,12 @@ function EditSitePage() {
             </div>
           </div>
 
+          <FrontendCompatibilityPanel siteId={siteApiId || ''} design={frontendDesignState.frontendDesign} canConfigure={canConfigureSite} onUpdated={() => void loadFrontendDesignEditor()} />
+          <FrontendCompositionImportPanel siteId={siteApiId || ''} canConfigure={canConfigureSite} onUpdated={() => void loadFrontendDesignEditor()} />
+          <SiteBackupPanel siteId={siteApiId || ''} canConfigure={canConfigureSite} canCreate={isSiteDetailRoutePermissionAllowed('sites.create')} />
+          <ComponentMigrationPanel key={siteApiId || ''} siteId={siteApiId || ''} canView={isSiteDetailRoutePermissionAllowed("pages.view")} canEdit={isSiteDetailRoutePermissionAllowed("pages.edit")} />
+          <TemplateHistoryPanel siteId={siteApiId || ''} templates={frontendDesignState.frontendDesign.templates} canConfigure={canConfigureSite} canUpgradeInstances={isSiteDetailRoutePermissionAllowed("pages.edit")} canViewProductInstances={!isPermissionsLoading && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "collections.view") && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "commerce.view")} canViewCollectionInstances={isSiteDetailRoutePermissionAllowed("collections.view")} canUpgradeCollectionInstances={isSiteDetailRoutePermissionAllowed("collections.edit")} canViewFormInstances={isSiteDetailRoutePermissionAllowed("forms.view")} canUpgradeFormInstances={isSiteDetailRoutePermissionAllowed("forms.edit")} canUpgradeProductInstances={!isPermissionsLoading && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "collections.edit") && isSiteDetailPermissionAllowed(permissionMatrix, currentAdmin, "commerce.edit")} onUpdated={() => void loadFrontendDesignEditor()} />
+
           {frontendDesignState.errorMessage && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {frontendDesignState.errorMessage}
@@ -9211,6 +9262,46 @@ function EditSitePage() {
               </div>
             ))}
           </div>
+
+          <section className="mt-5 rounded-lg border bg-background p-4" data-testid="site-template-defaults">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Default layouts</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">Choose the registered layout for new pages, blog posts and products. Save design applies these choices together with your other design edits.</p>
+              </div>
+              <button type="button" onClick={() => void handleSaveFrontendDesign()} disabled={isFrontendDesignSaveDisabled || Boolean(frontendTemplateDefaultDraft.error)}
+                title={canConfigureSite ? undefined : configureSitePermissionTitle}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="site-template-defaults-save">
+                <Save className="size-4" />{frontendDesignState.saving ? "Saving..." : "Save design"}
+              </button>
+            </div>
+            {frontendTemplateDefaultDraft.error ? (
+              <p className="mt-3 text-sm text-amber-700" role="status">{frontendTemplateDefaultDraft.error}</p>
+            ) : (
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                {frontendTemplateDefaultDraft.data?.groups.map((group) => (
+                  <div key={group.type} className="min-w-0">
+                    <label htmlFor={`site-template-default-${group.type}`} className="text-sm font-medium">{group.label}</label>
+                    <select id={`site-template-default-${group.type}`} value={group.selectedId} disabled={isFrontendDesignDraftDisabled || group.options.length === 0}
+                      onChange={(event) => handleFrontendTemplateDefaultChange(group.type, event.target.value)}
+                      className="mt-1 min-h-11 w-full rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      data-testid={`site-template-default-${group.type}`} aria-describedby={`site-template-default-${group.type}-status`}>
+                      <option value="">{group.ambiguous ? "Conflicting defaults — choose a layout" : "Automatic"}</option>
+                      {group.options.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+                    </select>
+                    <p id={`site-template-default-${group.type}-status`} className="mt-2 text-xs leading-5 text-muted-foreground" role="status">
+                      {group.ambiguous ? "Multiple layouts are marked as default. Automatic selection is disabled until you choose one."
+                        : group.effective ? `${group.selectedId ? "Selected" : "Automatic"}: ${group.effective.name}.`
+                          : group.options.length ? "No default selected. Choose a layout or explicitly select one when creating content."
+                            : "No active editable layout registered. Descriptive template shells are available through manual selection."}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">Automatic uses a single eligible layout when one is available. Your explicit starter choices and existing authored content keep their layouts.</p>
+          </section>
 
           <div
             className="mt-5 rounded-lg border bg-muted/20 p-4"
@@ -9381,7 +9472,6 @@ function EditSitePage() {
               {frontendDesignState.frontendDesign.templates.length > 0 ? (
                 <div className="grid gap-2 lg:grid-cols-2">
                   {frontendDesignState.frontendDesign.templates
-                    .slice(0, 8)
                     .map((template) => {
                       const cloneTarget = frontendTemplateCloneTarget(
                         template.type,
@@ -11144,6 +11234,11 @@ function EditSitePage() {
             </div>
           )}
         </section>
+
+        <VisitorMembersPanel key={siteApiId || ''} siteId={siteApiId || ''} canConfigure={canConfigureSite}
+          canReviewPrivacy={Boolean(visitorReviewSession && Date.parse(visitorReviewSession.expiresAt) > Date.now() && !isPermissionsLoading && !permissionError && currentAdmin?.role === 'owner' && permissionMatrix?.userId === currentAdmin.id && permissionMatrix.role === 'owner' && permissionMatrix.status === 'active' && adminPermissionRule(permissionMatrix, 'users.view', siteApiId)?.allowed)}
+          canErasePrivacy={Boolean(visitorReviewSession && Date.parse(visitorReviewSession.expiresAt) > Date.now() && !isPermissionsLoading && !permissionError && currentAdmin?.role === 'owner' && permissionMatrix?.userId === currentAdmin.id && permissionMatrix.role === 'owner' && permissionMatrix.status === 'active' && adminPermissionRule(permissionMatrix, 'users.delete', siteApiId)?.allowed)}
+          privacyContextKey={JSON.stringify([currentAdmin?.id, currentAdmin?.role, visitorReviewSession?.issuedAt, visitorReviewSession?.expiresAt, permissionMatrix])} />
 
         <section id="site-automation" className="space-y-4 scroll-mt-24">
           <div className="flex items-start justify-between gap-4">

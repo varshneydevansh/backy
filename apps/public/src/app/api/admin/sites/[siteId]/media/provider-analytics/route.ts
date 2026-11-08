@@ -20,6 +20,8 @@ import {
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import type { BackyJsonObject, MediaItem, Site } from "@backy-cms/core";
 
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
+
 export const runtime = "nodejs";
 
 interface RouteParams {
@@ -299,15 +301,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const mediaItems = (
-        await repositories.media.list({
-          siteId: site.id,
-          type: "all",
-          visibility: "all",
-          limit: 10000,
-          offset: 0,
-        })
-      ).items;
+      const mediaItems = await readCompleteMediaInventory(site.id, pagination => repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', ...pagination }));
       const matched: ProviderAnalyticsMatch[] = [];
       const unmatched: ProviderAnalyticsEntry[] = [];
       const updatedIds = new Set<string>();
@@ -459,10 +453,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const mediaItems = getMediaList(site.id, {
-      limit: 10000,
-      offset: 0,
-    }).media;
+    const mediaItems = await readCompleteMediaInventory(site.id, async pagination => {
+      const result = getMediaList(site.id, pagination);
+      return { items: result.media, pagination: result.pagination };
+    });
     const matched: ProviderAnalyticsMatch[] = [];
     const unmatched: ProviderAnalyticsEntry[] = [];
     const webhookBefore: MediaItem[] = [];
@@ -500,7 +494,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           : "url";
       const updated = updateMediaItem(site.id, media.id, {
         metadata: {
-          ...(media.metadata || {}),
           providerDelivery: {
             ...existingDelivery,
             totalRequests,
@@ -605,6 +598,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     console.error("Admin media provider analytics ingest API error:", error);
     return errorResponse(
       500,

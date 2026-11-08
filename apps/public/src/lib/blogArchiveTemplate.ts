@@ -1,11 +1,11 @@
-import type { SiteSettings } from '@backy-cms/core';
+import type { BackyCanvasSize, SiteSettings } from '@backy-cms/core';
 
 type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
 
 type BlogArchiveTemplateContent = {
   elements: unknown[];
-  canvasSize: { width: number; height: number };
+  canvasSize: BackyCanvasSize;
   customCSS?: string;
   contentDocument?: Record<string, unknown>;
 };
@@ -93,6 +93,7 @@ const canvasFromContent = (value: unknown, template?: FrontendDesignTemplate): B
       ? metadata.canvasSize
       : template?.canvasSize;
   const canvasSize = {
+    ...rawCanvasSize,
     width: Number(rawCanvasSize?.width) || 1200,
     height: Number(rawCanvasSize?.height) || 900,
   };

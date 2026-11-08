@@ -1,6 +1,10 @@
 import { extname } from 'node:path';
 import { Socket } from 'node:net';
 import type { MediaItem } from '@backy-cms/core';
+import type { AdminAccessContext } from './adminAccess';
+
+/** Supplied only by an admin handler after authentication and site admission. */
+export type OwnerMediaUploadContext = { access: AdminAccessContext; siteId: string };
 
 export type MediaSafetyScan = {
   status: 'clean';
@@ -17,6 +21,7 @@ export type MediaSafetyScan = {
     signature?: string;
     details?: Record<string, unknown>;
   }>;
+  ownerUploadPolicy?: { mode: 'owner-static'; siteId: string; actorId: string; malwareScanned: false };
 };
 
 export type MediaSecurityPolicy = {
@@ -46,6 +51,7 @@ type MediaScannerConfig = {
   port?: number;
   timeoutMs: number;
   failOpen: boolean;
+  ownerUploadPolicy?: MediaSafetyScan['ownerUploadPolicy'];
 };
 
 const envValue = (names: string[]): string | undefined => {
@@ -74,12 +80,19 @@ const envPositiveInteger = (value: string | undefined, fallback: number): number
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-export const resolveMediaScannerConfig = (): MediaScannerConfig => {
+export const resolveMediaScannerConfig = (context?: OwnerMediaUploadContext): MediaScannerConfig => {
   const provider = (envValue(['BACKY_MEDIA_SCAN_PROVIDER', 'BACKY_MEDIA_SCANNER_PROVIDER']) || 'none').toLowerCase();
   const failOpen = envBoolean(envValue(['BACKY_MEDIA_SCAN_FAIL_OPEN', 'BACKY_MEDIA_SCANNER_FAIL_OPEN']), false);
   const timeoutMs = envPositiveInteger(envValue(['BACKY_MEDIA_SCAN_TIMEOUT_MS', 'BACKY_MEDIA_SCANNER_TIMEOUT_MS']), 5000);
 
   if (provider === 'none' || provider === 'off' || provider === 'disabled') {
+    // Never derive this authority from uploaded metadata or request fields.
+    // A service key remains ineligible even if it also carries an owner cookie.
+    const owner = context?.access.type === 'session' ? context.access.session?.user : undefined;
+    const sites = (envValue(['BACKY_OWNER_STATIC_MEDIA_SITE_IDS']) || '').split(',').map(value => value.trim()).filter(Boolean);
+    if (owner?.role === 'owner' && owner.status === 'active' && owner.id && context?.siteId && sites.includes(context.siteId)) {
+      return { provider: 'none', timeoutMs, failOpen: false, ownerUploadPolicy: { mode: 'owner-static', siteId: context.siteId, actorId: owner.id, malwareScanned: false } };
+    }
     if (!productionDisabledScannerAllowed()) {
       throw new MediaSafetyError('Production media scanner provider is not configured.', {
         provider,
@@ -423,12 +436,12 @@ export const scanMediaUploadWithProviders = async (input: {
   originalName: string;
   mimeType: string;
   mediaType: MediaItem['type'];
-}): Promise<MediaSafetyScan> => {
+}, context?: OwnerMediaUploadContext): Promise<MediaSafetyScan> => {
   const staticScan = scanMediaUpload(input);
   let scannerConfig: MediaScannerConfig;
 
   try {
-    scannerConfig = resolveMediaScannerConfig();
+    scannerConfig = resolveMediaScannerConfig(context);
   } catch (error) {
     if (error instanceof MediaSafetyError) throw error;
     throw new MediaSafetyError('Unable to resolve media scanner configuration.', {
@@ -437,6 +450,11 @@ export const scanMediaUploadWithProviders = async (input: {
   }
 
   if (scannerConfig.provider === 'none') {
+    if (scannerConfig.ownerUploadPolicy) return {
+      ...staticScan,
+      ownerUploadPolicy: scannerConfig.ownerUploadPolicy,
+      warnings: [...staticScan.warnings, 'Owner upload received basic file checks only. Antivirus scanning was not performed.'],
+    };
     return staticScan;
   }
 

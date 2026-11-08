@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listReusableSections } from '@/lib/backyStore';
-import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import { publicReusableSection } from '@/lib/publicReusableSection';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -32,15 +32,6 @@ const errorResponse = (status: number, code: string, message: string, requestId:
     { status, requestId, cache: 'error' },
   )
 );
-
-const reusableSectionFrontendDesign = (section: { metadata?: unknown }) => (
-  frontendDesignProvenanceFromMetadata(section.metadata)
-);
-
-const publicReusableSection = <TSection extends { metadata?: Record<string, unknown> }>(section: TSection) => ({
-  ...section,
-  frontendDesign: reusableSectionFrontendDesign(section),
-});
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();

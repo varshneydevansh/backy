@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getUserMfaEnrollment,
@@ -143,6 +143,9 @@ export async function PATCH(
     if (!user) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
+
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: user.role });
+    if (ownerError) return ownerError;
 
     const before = getUserMfaEnrollment(settings.auth, user.id, user.email);
     const result = updateUserMfaEnrollment({

@@ -1,3 +1,4 @@
+import { ReusableSectionPropagationPreview, canApplyReusableSectionPropagation } from '@/components/editor/ReusableSectionPropagationPreview';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
@@ -40,6 +41,7 @@ import {
   type ReusableSectionContent,
   type ReusableSectionInput,
   type ReusableSectionInstancesReport,
+  type ReusableSectionInstancesRefreshResult,
   type ReusableSectionMetadata,
   type ReusableSectionVersions,
   type ReusableSectionExportEntry,
@@ -504,6 +506,7 @@ function ReusableSectionsRoute() {
   const [visualEditorHasUnsavedChanges, setVisualEditorHasUnsavedChanges] = useState(false);
   const [sectionVersions, setSectionVersions] = useState<ReusableSectionVersions | null>(null);
   const [sectionInstances, setSectionInstances] = useState<ReusableSectionInstancesReport | null>(null);
+  const [propagationPreview, setPropagationPreview] = useState<ReusableSectionInstancesRefreshResult | null>(null);
   const [sectionMetadata, setSectionMetadata] = useState<ReusableSectionMetadata | null>(null);
   const [metadataDraft, setMetadataDraft] = useState<SectionMetadataDraft>(() => metadataDraftFromLibrary(null));
   const [permissionMatrix, setPermissionMatrix] = useState<AdminUserPermissionMatrix | null>(null);
@@ -519,11 +522,13 @@ function ReusableSectionsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  useEffect(() => { setPropagationPreview(null); }, [activeSiteId, selectedSectionId]);
   const activeSiteSlug = activeSite?.slug || activeSiteId;
   const activeSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId) || null,
     [sections, selectedSectionId],
   );
+  useEffect(() => { setPropagationPreview(null); }, [activeSection?.updatedAt]);
   const frontendSectionTemplates = useMemo(
     () => (frontendDesign?.templates || []).filter((template) => template.type === 'section'),
     [frontendDesign?.templates],
@@ -1319,19 +1324,22 @@ function ReusableSectionsRoute() {
       return;
     }
 
+    if (!dryRun && !canApplyReusableSectionPropagation(propagationPreview, activeSection.siteId, activeSection.id)) { setError('Run and review the dry-run preview before refreshing instances.'); return; }
     setIsWorkflowLoading(true);
     setError(null);
     setNotice(null);
     try {
       const result = await refreshReusableSectionInstances(activeSiteId, activeSection.id, {
         dryRun,
-        updatedBy: currentAdmin?.email || currentAdmin?.fullName || 'admin',
+        ...(dryRun ? {} : { reviewedPreview: propagationPreview!.reviewedPreview }),
       });
       await loadReusableSectionWorkflow(activeSection.id);
+      setPropagationPreview(dryRun ? result : null);
       setNotice(dryRun
         ? `${result.totals.instances} stale reusable section instance${result.totals.instances === 1 ? '' : 's'} can be refreshed.`
-        : `Refreshed ${result.totals.instances} reusable section instance${result.totals.instances === 1 ? '' : 's'} across ${result.totals.targets} target${result.totals.targets === 1 ? '' : 's'}.`);
+        : `Refreshed ${result.totals.instances} reusable section instance${result.totals.instances === 1 ? '' : 's'} across ${result.totals.targets} target${result.totals.targets === 1 ? '' : 's'}.${result.completionWarnings.length ? ` ${result.completionWarnings.join(' ')}` : ''}`);
     } catch (refreshError) {
+      setPropagationPreview(null);
       setError(isAdminPermissionDeniedError(refreshError)
         ? editPermissionTitle || 'Your account cannot refresh reusable section instances.'
         : refreshError instanceof Error ? refreshError.message : 'Unable to refresh reusable section instances');
@@ -1639,6 +1647,7 @@ function ReusableSectionsRoute() {
       const metadata = buildFrontendSectionTemplateMetadata(template, frontendDesign);
       const saved = await createReusableSection(activeSiteId, {
         ...blueprint,
+        frontendDesignTemplateId: template.id,
         metadata,
         sourceElementId: template.id,
         createdBy: 'admin',
@@ -2219,18 +2228,19 @@ function ReusableSectionsRoute() {
                   size="sm"
                   variant="primary"
                   onClick={() => void refreshSectionInstances(false)}
-                  disabled={Boolean(reusableSectionsInstanceRefreshDisabledReason)}
-                  title={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                  disabled={Boolean(reusableSectionsInstanceRefreshDisabledReason || !canApplyReusableSectionPropagation(propagationPreview, activeSection?.siteId, activeSection?.id))}
+                  title={reusableSectionsInstanceRefreshDisabledReason || (!canApplyReusableSectionPropagation(propagationPreview, activeSection?.siteId, activeSection?.id) ? 'Run and review the dry-run preview first.' : undefined)}
                   aria-describedby={reusableSectionsWorkflowActionStatusId}
                   data-testid="reusable-section-workflow-refresh-instances"
-                  data-action-state={actionStateFromDisabledReason(reusableSectionsInstanceRefreshDisabledReason)}
-                  data-action-status={actionStatus('Refresh synced instances available.', reusableSectionsInstanceRefreshDisabledReason)}
-                  data-disabled-reason={reusableSectionsInstanceRefreshDisabledReason || undefined}
+                  data-action-state={actionStateFromDisabledReason(reusableSectionsInstanceRefreshDisabledReason || (!canApplyReusableSectionPropagation(propagationPreview, activeSection?.siteId, activeSection?.id) ? 'Run and review the dry-run preview first.' : ''))}
+                  data-action-status={actionStatus('Apply reviewed refresh available.', reusableSectionsInstanceRefreshDisabledReason || (!canApplyReusableSectionPropagation(propagationPreview, activeSection?.siteId, activeSection?.id) ? 'Run and review the dry-run preview first.' : ''))}
+                  data-disabled-reason={reusableSectionsInstanceRefreshDisabledReason || (!canApplyReusableSectionPropagation(propagationPreview, activeSection?.siteId, activeSection?.id) ? 'Run and review the dry-run preview first.' : undefined)}
                   iconStart={<RotateCcw className="size-4" />}
                 >
                   Refresh instances
                 </Button>
               </div>
+              {propagationPreview && <ReusableSectionPropagationPreview preview={propagationPreview} />}
             </div>
           </div>
 
@@ -2715,7 +2725,7 @@ function ReusableSectionsRoute() {
         <Panel id="reusable-sections-editor">
           <PanelHeader
             title={activeSection ? 'Edit section' : 'Create section'}
-            description="Manual JSON editing is available for backend validation until the full visual sections manager is expanded."
+            description="Use the visual editor above for layout and content. These fields edit section details and provide advanced access to its saved JSON."
             icon={<Code2 className="size-4" />}
           />
           <PanelContent>

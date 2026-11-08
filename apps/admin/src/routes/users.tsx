@@ -56,7 +56,8 @@ import {
   type UserImportResult,
 } from '@/lib/adminContentApi';
 import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
-import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
+import { getSiteSelectionFromSearch } from '@/lib/siteSelection';
+import { buildUsersVisitorAccountHandoff, resolveUsersMembershipSite, safeUsersHandoffBaseUrl } from '@/lib/usersMembershipHandoff';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore, type User as UserType } from '@/stores/mockStore';
@@ -206,9 +207,9 @@ const MEMBERSHIP_FLOW_SYSTEMS = [
   },
   {
     key: 'supabase-auth',
-    title: 'Supabase Auth adapter',
-    status: 'next',
-    detail: 'Credentials, sessions, password reset, and protected-route enforcement are provider-gated through Settings.',
+    title: 'Visitor account APIs and account bridge',
+    status: 'implemented',
+    detail: 'Register, login, session, logout, recovery, reset-password, display-name profile, request-email-change and confirm-email-change APIs plus the checked Next account BFF are implemented. Enabled site policy, database and server-configured Supabase Auth remain connection requirements.',
   },
   {
     key: 'member-portal',
@@ -266,7 +267,7 @@ const MEMBERSHIP_HANDOFF_STEPS = [
     step: '6',
     title: 'Connect auth provider',
     detail: 'Use Settings to track Supabase/Auth infrastructure before enforcing credentialed public member sessions.',
-    status: 'next',
+    status: 'connection-required',
     to: '/settings',
     label: 'Open settings',
   },
@@ -287,13 +288,13 @@ const MEMBERSHIP_AUTH_BOUNDARIES = [
   },
   {
     key: 'credentialed-login',
-    title: 'Credentialed member login',
-    status: 'next',
-    detail: 'Public member signup, login, password reset, email verification, and protected routes are gated on the Supabase/Auth provider pass.',
+    title: 'Credentialed visitor API implementation',
+    status: 'implemented',
+    detail: 'The visitor account APIs and checked /account server-only BFF are implemented. Sessions require enabled selected-site policy and a configured database/provider; real signup and email callbacks still need certification.',
   },
   {
     key: 'member-portal',
-    title: 'Self-service member portal shell',
+    title: 'Member portal template shell',
     status: 'available',
     detail: 'Member-account pages can capture profile/preferences through Backy Forms and link signed downloads, order status handoffs, support, and collection-backed profile records.',
   },
@@ -403,21 +404,23 @@ function UsersListView() {
   const userInviteActionDisabled = isUserMutationBusy || !canCreateUsers;
   const userImportActionDisabled = isUserMutationBusy || !canCreateUsers || (importMode === 'upsert' && !canManageUsers);
   const routeNotice = routeSearch.notice || '';
-  const adminBaseUrl = useMemo(() => getAdminBaseUrl(), []);
-  const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
-  const selectedMembershipSiteId = useMemo(() => getSiteSelectionFromSearch(sites), [sites]);
+  const adminBaseUrl = useMemo(() => safeUsersHandoffBaseUrl(getAdminBaseUrl()), []);
+  const publicBaseUrl = useMemo(() => safeUsersHandoffBaseUrl(getPublicBaseUrl()), []);
+  const selectedMembershipSiteId = useMemo(() => routeSearch.siteId || getSiteSelectionFromSearch(sites), [routeSearch.siteId, sites]);
   const membershipSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedMembershipSiteId)) || sites[0],
+    () => resolveUsersMembershipSite(sites, selectedMembershipSiteId),
     [selectedMembershipSiteId, sites],
   );
-  const membershipSiteId = membershipSite?.publicSiteId || membershipSite?.id || selectedMembershipSiteId || 'site-demo';
+  const membershipSiteId = membershipSite?.publicSiteId || membershipSite?.id || '';
+  const visitorAccounts = useMemo(() => buildUsersVisitorAccountHandoff(membershipSite, publicBaseUrl), [membershipSite, publicBaseUrl]);
+  const membershipScopeDisabledReason = !membershipSite ? 'Select a known site before copying or opening the member handoff.' : !publicBaseUrl ? 'Configure a public API base URL without credentials or query values.' : '';
   const encodedMembershipSiteId = encodeURIComponent(membershipSiteId);
   const usersListUrl = `${adminBaseUrl}/users`;
   const userDetailUrl = `${adminBaseUrl}/users/{userId}`;
-  const publicFormsUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms`;
-  const publicRegistrationDefinitionUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/definition`;
-  const publicRegistrationSubmitUrl = `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/submissions`;
-  const publicContactsUrl = `${adminBaseUrl}/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts`;
+  const publicFormsUrl = membershipSite ? `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms` : 'Select a known site';
+  const publicRegistrationDefinitionUrl = membershipSite ? `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/definition` : 'Select a known site';
+  const publicRegistrationSubmitUrl = membershipSite ? `${publicBaseUrl}/api/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/submissions` : 'Select a known site';
+  const publicContactsUrl = membershipSite ? `${adminBaseUrl}/sites/${encodedMembershipSiteId}/forms/{registrationFormId}/contacts` : 'Select a known site';
   const isCurrentUser = useCallback((user: UserType) => (
     Boolean(currentAdmin && (
       user.id === currentAdmin.id ||
@@ -624,7 +627,7 @@ function UsersListView() {
       },
       {
         label: 'Public registration',
-        detail: 'Registration and member pages are connected to Forms, Contacts, Collections, and a provider-gated member access handoff.',
+        detail: 'Lead forms and member templates are implemented; visitor account APIs require selected-site policy and provider connection verification.',
         ready: true,
       },
       {
@@ -768,7 +771,7 @@ function UsersListView() {
       const updatedById = new Map(result.users.map((user) => [user.id, user]));
       setUsers(users.map((user) => updatedById.get(user.id) || user));
       setSelectedUserIds([]);
-      setNotice(`${result.updated} user${result.updated === 1 ? '' : 's'} moved to ${bulkStatus}.`);
+      setNotice(`${result.updated} user${result.updated === 1 ? '' : 's'} moved to ${bulkStatus}.${result.outcome === 'partial' ? ` ${result.failedTargets.length} targets failed or were not attempted. Reload users before choosing a new action; completed changes are already saved.` : ''}${result.completionWarnings?.includes('OPERATOR_BULK_AUDIT_PENDING') ? ' Audit recording needs attention.' : ''}`);
       void loadUserAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Bulk status update failed.');
@@ -801,7 +804,7 @@ function UsersListView() {
       setUsers(users.filter((user) => !deletedIds.has(user.id)));
       setSelectedUserIds([]);
       setPendingBulkDelete(false);
-      setNotice(`${result.deleted} user${result.deleted === 1 ? '' : 's'} removed.`);
+      setNotice(`${result.deleted} user${result.deleted === 1 ? '' : 's'} removed.${result.outcome === 'partial' ? ` ${result.failedTargets.length} targets failed or were not attempted. Reload users before choosing a new action; completed removals are already saved.` : ''}${result.completionWarnings?.includes('OPERATOR_BULK_AUDIT_PENDING') ? ' Audit recording needs attention.' : ''}`);
       void loadUserAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Bulk delete failed.');
@@ -830,7 +833,8 @@ function UsersListView() {
   }, [isUserMutationBusy, pendingBulkDelete, pendingDelete, pendingImportRollback]);
 
   const copyUserApiText = async (value: string, label: string) => {
-    if (isUsersBusy) return;
+    if (isUsersBusy || !canViewUsers) return;
+    if (label === 'Member access handoff' && membershipScopeDisabledReason) { setNotice(membershipScopeDisabledReason); return; }
 
     try {
       await navigator.clipboard.writeText(value);
@@ -1394,7 +1398,8 @@ function UsersListView() {
     navigate({ to: '/users/$userId', params: { userId: accessWorkflowUser.id } });
   };
   const openMembershipStep = (step: (typeof MEMBERSHIP_HANDOFF_STEPS)[number]) => {
-    if (isUsersBusy) return;
+    if (isUsersBusy || !canViewUsers) return;
+    if (membershipScopeDisabledReason) { setNotice(membershipScopeDisabledReason); return; }
 
     if (step.to === '/pages/new') {
       navigate({ to: '/pages/new', search: { siteId: membershipSiteId, template: 'template' in step ? step.template : 'registration', templateSource: 'backy-canvas' } });
@@ -1416,15 +1421,12 @@ function UsersListView() {
   const memberAccessHandoff = useMemo(() => ({
     schemaVersion: MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
-    site: {
-      id: membershipSiteId,
-      name: membershipSite?.name || membershipSiteId,
-      slug: membershipSite?.slug || null,
-    },
+    site: { id: visitorAccounts.scope.siteId, name: membershipSite ? 'Selected website' : 'Unknown site', slug: null },
+    visitorAccounts,
     pageTemplates: {
-      registration: `/pages/new?siteId=${encodedMembershipSiteId}&template=registration`,
-      memberLogin: `/pages/new?siteId=${encodedMembershipSiteId}&template=member-login`,
-      memberAccount: `/pages/new?siteId=${encodedMembershipSiteId}&template=member-account`,
+      registration: membershipSite ? `/pages/new?siteId=${encodedMembershipSiteId}&template=registration` : 'Select a known site',
+      memberLogin: membershipSite ? `/pages/new?siteId=${encodedMembershipSiteId}&template=member-login` : 'Select a known site',
+      memberAccount: membershipSite ? `/pages/new?siteId=${encodedMembershipSiteId}&template=member-account` : 'Select a known site',
     },
     publicApis: {
       formsCatalog: publicFormsUrl,
@@ -1440,7 +1442,9 @@ function UsersListView() {
     dataBindings: MEMBERSHIP_DATA_BINDINGS,
     actionBindings: MEMBERSHIP_ACTION_BINDINGS,
     authProviderGate: {
-      status: 'provider-gated',
+      status: 'connection-required',
+      implementation: 'source-implemented',
+      policyState: visitorAccounts.connection.policyState,
       settingsRoute: '/settings?tab=infrastructure',
       providerFamily: 'supabase-auth-or-compatible',
       requiredFor: ['credentialed-public-member-sessions', 'member-password-reset', 'member-email-verification', 'protected-member-routes'],
@@ -1449,14 +1453,17 @@ function UsersListView() {
     privacy: {
       includesIdentity: false,
       excludes: ['private admin user records', 'raw contact payloads', 'session cookies', 'auth provider secrets', 'reset tokens', 'invite tokens'],
-      note: 'Use public form APIs for visitor registration, private admin APIs for review, and the configured auth provider for credentialed member sessions.',
+      note: 'Use public form APIs for lead capture; use canonical visitorAccounts APIs and the checked server-only account BFF for credentialed accounts. Private admin users never become website visitors through this handoff.',
     },
     launchPath: [
       'Create the registration page template.',
       'Review the generated registration form definition and submit URL.',
       'Route approved registrations into Contacts or a member profile collection.',
       'Create member login and member account pages.',
-      'Configure Supabase/Auth provider readiness in Settings before enforcing protected routes.',
+      'Read visitorAccounts from the canonical selected-site agent-handoff, manifest and OpenAPI mirrors.',
+      'Use SDK visitor helpers behind the checked Next /account server-only BFF; do not treat the editable member page templates as the credentialed account runtime.',
+      'Enable exact selected-site visitor policy and configure the persisted database and server-only Supabase Auth provider.',
+      'Certify real signup/login, confirmation and recovery email callbacks and deployed browser connection before launch.',
     ],
   }), [
     encodedMembershipSiteId,
@@ -1469,6 +1476,8 @@ function UsersListView() {
     publicRegistrationSubmitUrl,
     userDetailUrl,
     usersListUrl,
+    visitorAccounts,
+    membershipSite,
   ]);
   const userHandoff = useMemo(() => ({
     generatedAt: new Date().toISOString(),
@@ -1482,37 +1491,34 @@ function UsersListView() {
       publicRegistrationContacts: publicContactsUrl,
     },
     membership: {
-      model: 'Public members are captured through Forms, Contacts, and Collections today; admin users remain private workspace users.',
-      site: {
-        id: membershipSiteId,
-        name: membershipSite?.name || membershipSiteId,
-        slug: membershipSite?.slug || null,
-      },
+      model: 'Lead capture uses Forms, Contacts and Collections. Credentialed website accounts use the implemented visitor APIs and checked account BFF, subject to selected-site policy and provider connection. Admin users remain private workspace operators.',
+      site: memberAccessHandoff.site,
+      visitorAccounts,
       routes: {
-        registrationPage: `/pages/new?siteId=${encodedMembershipSiteId}&template=registration`,
-        forms: `/forms?siteId=${encodedMembershipSiteId}`,
-        contacts: `/contacts?siteId=${encodedMembershipSiteId}`,
+        registrationPage: memberAccessHandoff.pageTemplates.registration,
+        forms: membershipSite ? `/forms?siteId=${encodedMembershipSiteId}` : null,
+        contacts: membershipSite ? `/contacts?siteId=${encodedMembershipSiteId}` : null,
         authAndInfrastructureSettings: '/settings',
       },
       systems: MEMBERSHIP_FLOW_SYSTEMS,
       handoffSteps: MEMBERSHIP_HANDOFF_STEPS,
       frontendHandoff: memberAccessHandoff,
       authBoundary: {
-        model: 'Registration capture and member page shells are available through Backy content systems; credentialed public member sessions stay separated from private admin users and are enforced through configured Supabase/Auth readiness.',
+        model: 'Lead capture and member page templates are available through Backy content systems. Visitor signup/login/session/logout/recovery/reset APIs and the account BFF are implemented; live admission requires enabled selected-site policy and configured database/provider.',
         boundaries: MEMBERSHIP_AUTH_BOUNDARIES,
         availableNow: MEMBERSHIP_AUTH_BOUNDARIES
           .filter((boundary) => boundary.status === 'available')
           .map((boundary) => boundary.key),
-        notYetShipped: MEMBERSHIP_AUTH_BOUNDARIES
-          .filter((boundary) => boundary.status === 'next')
-          .map((boundary) => boundary.key),
+        implementedApis: ['credentialed-login'],
+        connection: visitorAccounts.connection,
+        notYetShipped: visitorAccounts.pending,
       },
       frontendFlow: [
         'Create a registration page from the page starter template.',
         'Use Forms to review the registration definition, public submit URL, contacts, and submissions.',
         'Use Settings to connect Supabase metadata and auth/infrastructure readiness.',
         'Connect the form to Backy Forms contact sharing and optional collection writes.',
-        'Use Supabase Auth settings to enforce credentialed sessions on the seeded member pages.',
+        'Read canonical visitorAccounts and connect the checked Next /account server-only BFF; seeded member pages remain editable templates.',
         'Use private admin users only for Backy workspace access.',
       ],
     },
@@ -1535,7 +1541,8 @@ function UsersListView() {
       signedInRole: userAuthority.currentBackyUser?.role || currentAdmin?.role || null,
     },
     filters: {
-      search: searchQuery,
+      search: '',
+      searchActive: Boolean(searchQuery),
       role: roleFilter,
       status: statusFilter,
       review: reviewFilter,
@@ -1559,14 +1566,7 @@ function UsersListView() {
       label: status.label,
       userCount: users.filter((user) => user.status === status.value).length,
     })),
-    users: data.map((user) => ({
-      id: user.id,
-      role: user.role,
-      status: user.status,
-      lastActive: user.lastActive,
-      hasName: Boolean(user.fullName),
-      hasEmail: Boolean(user.email),
-    })),
+    users: [],
     guardrails: [
       'Backend blocks deleting or demoting the final active owner/admin.',
       'Invites and edits reject emails already attached to another user.',
@@ -1575,7 +1575,7 @@ function UsersListView() {
     ],
     privacy: {
       includesIdentity: false,
-      note: 'Use CSV export or the private users API for names and emails. This manifest exposes endpoint contracts, role model, filters, counts, and non-PII user state only.',
+      note: 'Use CSV export or the private users API for names and emails. This manifest exposes endpoint contracts, role model, filter state and aggregate counts only. Search text, names, mail addresses, raw member records, credentials and tokens are excluded.',
     },
   }), [
     accessReadiness.checks,
@@ -1606,11 +1606,13 @@ function UsersListView() {
     userAuthority.state,
     users,
     usersListUrl,
+    visitorAccounts,
+    membershipSite,
   ]);
   const userHandoffText = useMemo(() => JSON.stringify(userHandoff, null, 2), [userHandoff]);
   const memberAccessHandoffText = useMemo(() => JSON.stringify(memberAccessHandoff, null, 2), [memberAccessHandoff]);
   const downloadUserHandoff = () => {
-    if (isUsersBusy) return;
+    if (isUsersBusy || !canViewUsers) return;
 
     const blob = new Blob([userHandoffText], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -2594,7 +2596,7 @@ function UsersListView() {
           <Panel id="users-membership" className="scroll-mt-24">
             <PanelHeader
               title="Membership registration"
-              description={`Public registration capture and credentialed auth handoff for ${membershipSite?.name || membershipSiteId}.`}
+              description={`Public registration capture and credentialed auth handoff for ${membershipSite?.name || 'a selected website'}.`}
               icon={<Shield className="size-4" />}
               action={
                 <div className="flex flex-wrap items-center gap-2">
@@ -2602,7 +2604,7 @@ function UsersListView() {
                     size="sm"
                     variant="primary"
                     onClick={() => openMembershipStep(registrationMembershipStep)}
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || Boolean(membershipScopeDisabledReason)}
                     iconStart={<Plus className="size-4" />}
                   >
                     Create page
@@ -2611,7 +2613,7 @@ function UsersListView() {
                     size="sm"
                     variant="outline"
                     onClick={() => openMembershipStep(MEMBERSHIP_HANDOFF_STEPS[1])}
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || Boolean(membershipScopeDisabledReason)}
                     iconStart={<ClipboardList className="size-4" />}
                   >
                     Forms
@@ -2620,7 +2622,7 @@ function UsersListView() {
                     size="sm"
                     variant="outline"
                     onClick={() => openMembershipStep(authMembershipStep)}
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || Boolean(membershipScopeDisabledReason)}
                     iconStart={<Settings className="size-4" />}
                   >
                     Auth settings
@@ -2630,7 +2632,7 @@ function UsersListView() {
             />
             <PanelContent>
               <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                Start from the registration template, review the generated form in Forms, then connect auth/provider settings when member credentials are ready.
+                Use registration templates for lead capture. For credentialed accounts, read the selected-site visitorAccounts contract and connect the checked account BFF after verifying site policy and provider readiness.
               </div>
 
               <div className="mb-4 rounded-lg border border-border bg-background p-3">
@@ -2650,7 +2652,7 @@ function UsersListView() {
                     <MembershipStepCard
                       key={step.step}
                       step={step}
-                      disabled={isUsersBusy}
+                      disabled={isUsersBusy || Boolean(membershipScopeDisabledReason)}
                       onOpen={() => openMembershipStep(step)}
                     />
                   ))}
@@ -2684,7 +2686,7 @@ function UsersListView() {
                   <div>
                     <h3 className="text-sm font-semibold">Member auth boundary</h3>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Public registration and member page shells are available today. Credentialed public member sessions stay separate from private Backy admin users and are enforced through the Supabase/Auth provider pass.
+                      Visitor register, login, session, logout, recovery, reset-password, display-name profile, request-email-change and confirm-email-change APIs and the checked Next account BFF are implemented. Credentialed sessions require enabled selected-site policy, a persisted database and server-configured provider; signup and email callbacks still need real proof.
                     </p>
                   </div>
                   <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -2719,18 +2721,24 @@ function UsersListView() {
                   <div>
                     <h3 className="text-sm font-semibold">Custom frontend member handoff</h3>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION} packages the page templates, public form APIs, editable regions, member bindings, provider gate, and privacy boundary for external member-area frontends.
+                      {MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION} includes canonical visitorAccounts discovery, all account API operations, SDK helpers, the checked server-only account BFF, and existing lead forms and editable templates.
+                      {' '}Policy: {visitorAccounts.connection.policyState}. Provider proof: {visitorAccounts.connection.productionProviderProof}.
                     </p>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={isUsersBusy}
+                    disabled={isUsersBusy || Boolean(membershipScopeDisabledReason)}
+                    title={membershipScopeDisabledReason || 'Copy selected-site member contract without private identities.'}
                     onClick={() => void copyUserApiText(memberAccessHandoffText, 'Member access handoff')}
                     iconStart={<Copy className="size-3.5" />}
                   >
                     Copy member handoff
                   </Button>
+                </div>
+                <div className="mt-3">
+                  <UserApiSnippet label="Canonical visitor account handoff" value={visitorAccounts.discovery.agentHandoff || 'Select a known site'} />
+                  <p className="mt-2 text-xs text-muted-foreground">Verified email change and Owner mailbox reading are implemented in source; privacy erasure, mailbox compose/reply and payments remain separate work. Read the live handoff; deployed provider proof remains pending.</p>
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-3">
                   <UserApiStat label="Editable regions" value={`${MEMBERSHIP_EDITABLE_REGIONS.length}`} />

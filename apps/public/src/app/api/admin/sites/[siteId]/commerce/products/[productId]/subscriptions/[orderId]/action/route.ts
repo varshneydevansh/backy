@@ -1859,27 +1859,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
       if (commerceAccess) return commerceAccess;
 
+      const findRecord = async (collectionId: string, identifier: string) =>
+        (await repositories.collections.getRecordById(site.id, collectionId, identifier))
+        || (await repositories.collections.getRecordBySlug(site.id, collectionId, identifier));
       const [product, order] = await Promise.all([
-        repositories.collections.getRecordById(
-          site.id,
-          productsCollection.id,
-          productId,
-        ) ||
-          repositories.collections.getRecordBySlug(
-            site.id,
-            productsCollection.id,
-            productId,
-          ),
-        repositories.collections.getRecordById(
-          site.id,
-          ordersCollection.id,
-          orderId,
-        ) ||
-          repositories.collections.getRecordBySlug(
-            site.id,
-            ordersCollection.id,
-            orderId,
-          ),
+        findRecord(productsCollection.id, productId),
+        findRecord(ordersCollection.id, orderId),
       ]);
       if (!product)
         return errorResponse(

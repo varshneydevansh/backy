@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminAuthPolicySettings,
@@ -321,6 +321,16 @@ export async function POST(request: NextRequest) {
       const existing = repositories
         ? await repositories.users.getByEmail(row.email)
         : getAdminUserByEmail(row.email);
+
+      if (!existing || mode === 'upsert') {
+        const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: existing?.role, nextRole: row.role });
+        if (ownerError) {
+          const denied = await ownerError.json();
+          errors.push({ row: row.row, email: row.email, code: denied.error.code, message: denied.error.message });
+          skipped += 1;
+          continue;
+        }
+      }
 
       if (existing) {
         if (mode !== 'upsert') {

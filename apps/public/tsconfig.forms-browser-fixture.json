@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@backy-cms/core": ["../../packages/core/src/index.ts"],
+      "@backy/storage": ["../../packages/storage/src/index.ts"],
+      "@/*": ["./src/*"]
+    }
+  }
+}

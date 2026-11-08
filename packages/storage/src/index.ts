@@ -403,8 +403,10 @@ export async function createS3Adapter(config: S3Config): Promise<StorageAdapter>
                     etag: response.ETag,
                     metadata: response.Metadata,
                 };
-            } catch {
-                return null;
+            } catch (error) {
+                const failure = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+                if (failure.name === 'NotFound' || failure.name === 'NoSuchKey' || failure.$metadata?.httpStatusCode === 404) return null;
+                throw error;
             }
         },
     };
@@ -428,6 +430,32 @@ export async function createSupabaseAdapter(
     });
     const supabase = createClient(config.url, config.key);
     const storage = supabase.storage.from(config.bucket);
+
+    const statObject = async (path: string): Promise<StorageItem | null> => {
+        // Exact object lookup avoids a folder search's pagination and transfer cost.
+        // Do not fall back to listing or downloading when metadata is unavailable.
+        if (typeof storage.info !== 'function') {
+            throw new Error('Supabase storage metadata requires an SDK with object info support.');
+        }
+        const { data, error } = await storage.info(path.split('/').map(encodeURIComponent).join('/'));
+        if (error) {
+            if (error.status === 404 || String(error.statusCode) === '404') return null;
+            throw new Error(`Stat failed: ${error.message}`);
+        }
+        if (!data) throw new Error('Stat failed: object metadata is unavailable.');
+        const size = data.size ?? data.metadata?.size;
+        if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) {
+            throw new Error('Stat failed: object size is unavailable or invalid.');
+        }
+        return {
+            path,
+            size,
+            lastModified: new Date(data.lastModified || data.updatedAt || data.createdAt || new Date().toISOString()),
+            mimeType: data.contentType || (typeof data.metadata?.mimetype === 'string' ? data.metadata.mimetype : undefined),
+            etag: data.etag,
+            metadata: data.metadata,
+        };
+    };
 
     return {
         provider: 'supabase',
@@ -502,28 +530,10 @@ export async function createSupabaseAdapter(
         },
 
         async exists(path: string): Promise<boolean> {
-            const dir = dirname(path);
-            const name = basename(path);
-            const { data } = await storage.list(dir, { search: name });
-            return (data || []).some((item: { name: string }) => item.name === name);
+            return (await statObject(path)) !== null;
         },
 
-        async stat(path: string): Promise<StorageItem | null> {
-            const dir = dirname(path);
-            const name = basename(path);
-            const { data, error } = await storage.list(dir, { search: name });
-            if (error) throw new Error(`Stat failed: ${error.message}`);
-            const item = (data || []).find((candidate: { name: string }) => candidate.name === name);
-            if (!item) return null;
-
-            return {
-                path,
-                size: item.metadata?.size || 0,
-                lastModified: new Date(item.updated_at || item.created_at || new Date().toISOString()),
-                mimeType: item.metadata?.mimetype,
-                metadata: item.metadata,
-            };
-        },
+        stat: statObject,
     };
 }
 
@@ -620,16 +630,13 @@ export function createLocalAdapter(config: LocalConfig): StorageAdapter {
 
         async stat(path: string): Promise<StorageItem | null> {
             const safePath = safeLocalPath(config.basePath, path);
-            if (!existsSync(safePath)) {
-                return null;
+            try {
+                const stat = statSync(safePath);
+                return { path: normalizeStoragePath(path), size: stat.size, lastModified: stat.mtime };
+            } catch (error) {
+                if ((error as { code?: string }).code === 'ENOENT') return null;
+                throw error;
             }
-
-            const stat = statSync(safePath);
-            return {
-                path: normalizeStoragePath(path),
-                size: stat.size,
-                lastModified: stat.mtime,
-            };
         },
     };
 }

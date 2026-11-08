@@ -1,3 +1,11 @@
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import * as schema from '../schema';
+import { sites } from '../schema';
+import { createDatabaseRepositories } from './factory';
+import { withVisitorPrivacyFollowup } from './visitor-privacy-admission';
+import { withActiveVisitorAdmission } from './visitor-accounts';
+import { createHash } from 'node:crypto';
+import { serializeBackyFormVersion, snapshotFormTemplateDesign, assertFormDesignOnlyUpdate, type BackyFormUpdateInput, type BackyFormDesignRevision } from '@backy-cms/core';
 import {
     type BackyContactListInput,
     type BackyFormListInput,
@@ -9,10 +17,11 @@ import {
     type FormDefinition,
     type FormSubmission,
 } from '@backy-cms/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import {
     formContacts,
     formDefinitions,
+    formDesignRevisions,
     formSubmissions,
 } from '../schema';
 import type { DatabaseInstance } from '../adapters';
@@ -176,6 +185,7 @@ const mergeFormSettings = (
 };
 
 const toSubmission = (row: SubmissionRow): FormSubmission => ({
+    visitorMemberId: row.visitorMemberId,
     id: row.id,
     siteId: row.siteId,
     formId: row.formId,
@@ -221,10 +231,30 @@ const toContact = (row: ContactRow): Contact => ({
     updatedAt: toIso(row.updatedAt),
 });
 
-export function createFormRepository(db: DatabaseInstance): BackyFormRepository {
+export function createFormRepository(db: DatabaseInstance, adapterType = 'postgres', definitionScope?: { siteId: string; formId: string; form: FormDefinition }): BackyFormRepository {
     const database = asDb(db);
 
     return {
+        withSubmissionFollowup: (siteId, formId, submissionId, operation) => withVisitorPrivacyFollowup(db, siteId, { formId, submissionId }, operation),
+        withContactFollowup: (siteId, contactId, operation) => withVisitorPrivacyFollowup(db, siteId, { contactId }, operation),
+        async withDefinitionWriteLock(siteId, formId, operation) {
+            if (definitionScope?.siteId === siteId && definitionScope.formId === formId) return operation(this, definitionScope.form, createDatabaseRepositories({ adapter: { type: 'postgres', db, isConnected: async () => true, close: async () => {} } }));
+            if (adapterType !== 'postgres') throw Object.assign(Error('Guarded form authoring requires PostgreSQL.'), { code: 'FORM_DEFINITION_WRITE_UNAVAILABLE' });
+            return (db as NodePgDatabase<typeof schema>).transaction(async tx => {
+                const [site] = await tx.select({ id: sites.id }).from(sites).where(eq(sites.id, siteId)).for('update');
+                const [row] = site ? await tx.select().from(formDefinitions).where(and(eq(formDefinitions.siteId, siteId), eq(formDefinitions.id, formId))).for('update') : [];
+                if (!row) throw Object.assign(Error('Form not found.'), { code: 'FORM_NOT_FOUND' });
+                return createFormRepository(tx as unknown as DatabaseInstance, adapterType, { siteId, formId, form: toForm(row) }).withDefinitionWriteLock!(siteId, formId, operation);
+            });
+        },
+        async withTemplatePackImportLock(siteId, operation) {
+            if (adapterType !== 'postgres') throw Object.assign(new Error('Atomic form template import is unavailable.'), { code: 'FORM_TEMPLATE_IMPORT_UNAVAILABLE' });
+            return (db as NodePgDatabase<typeof schema>).transaction(async tx => {
+                const [site] = await tx.select({ id: sites.id }).from(sites).where(eq(sites.id, siteId)).for('update');
+                if (!site) throw Object.assign(new Error('Site not found.'), { code: 'SITE_NOT_FOUND' });
+                return operation(createDatabaseRepositories({ adapter: { type: 'postgres', db: tx as unknown as DatabaseInstance, isConnected: async () => true, close: async () => {} } }));
+            }, { isolationLevel: 'serializable' });
+        },
         async list(input: BackyFormListInput): Promise<BackyListResult<FormDefinition>> {
             const rows = await database.select().from(formDefinitions).where(eq(formDefinitions.siteId, input.siteId)).orderBy(desc(formDefinitions.updatedAt)) as FormRow[];
             const filtered = rows
@@ -271,7 +301,19 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             return { item: toForm(row) };
         },
 
-        async update(siteId: string, formId: string, input: Partial<FormDefinition>): Promise<BackyRepositoryMutationResult<FormDefinition>> {
+        async update(siteId: string, formId: string, input: BackyFormUpdateInput): Promise<BackyRepositoryMutationResult<FormDefinition>> {
+            if (adapterType === 'postgres' && (definitionScope?.siteId !== siteId || definitionScope.formId !== formId)) return this.withDefinitionWriteLock!(siteId, formId, repository => repository.update(siteId, formId, input));
+            if (adapterType !== 'postgres' && (input.expectedVersion !== undefined || input.expectedForm || input.beforeUpdateFormDesignRevision)) throw Object.assign(Error('Guarded form authoring requires PostgreSQL.'), { code: 'FORM_DEFINITION_WRITE_UNAVAILABLE' });
+            const before = definitionScope?.form;
+            if (before) {
+                const version = (form: FormDefinition) => `form-v1:${createHash('sha256').update(serializeBackyFormVersion(form)).digest('hex')}`;
+                if ((input.expectedVersion !== undefined && input.expectedVersion !== version(before)) || (input.expectedForm && version(input.expectedForm) !== version(before))) throw Object.assign(Error('The form changed.'), { code: 'FORM_DEFINITION_CONFLICT' });
+                if (input.beforeUpdateFormDesignRevision) {
+                    assertFormDesignOnlyUpdate(before, input);
+                    const details = input.beforeUpdateFormDesignRevision;
+                    await database.insert(formDesignRevisions).values({ siteId, formId, snapshot: snapshotFormTemplateDesign(before), ...details, templateId: details.templateId || null, targetRevisionId: details.targetRevisionId || null, actorId: details.actorId || null }).returning();
+                }
+            }
             const updates: Record<string, unknown> = { updatedAt: new Date() };
             if (input.pageId !== undefined) updates.pageId = input.pageId;
             if (input.postId !== undefined) updates.postId = input.postId;
@@ -312,6 +354,15 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             return { item: toForm(row) };
         },
 
+        async listFormDesignRevisions(siteId, formId, options = {}) {
+            const rows = await database.select().from(formDesignRevisions).where(and(eq(formDesignRevisions.siteId, siteId), eq(formDesignRevisions.formId, formId))).orderBy(desc(formDesignRevisions.createdAt), desc(formDesignRevisions.id)).limit(Math.min(100, Math.max(1, options.limit || 100)) + 1).offset(Math.max(0, options.offset || 0));
+            return (rows as typeof formDesignRevisions.$inferSelect[]).map(row => ({ ...row, snapshot: row.snapshot as BackyFormDesignRevision['snapshot'], operation: row.operation as BackyFormDesignRevision['operation'], createdAt: row.createdAt.toISOString() }));
+        },
+        async getFormDesignRevision(siteId, formId, revisionId) {
+            const [row] = await database.select().from(formDesignRevisions).where(and(eq(formDesignRevisions.siteId, siteId), eq(formDesignRevisions.formId, formId), eq(formDesignRevisions.id, revisionId))).limit(1) as typeof formDesignRevisions.$inferSelect[];
+            return row ? { ...row, snapshot: row.snapshot as BackyFormDesignRevision['snapshot'], operation: row.operation as BackyFormDesignRevision['operation'], createdAt: row.createdAt.toISOString() } : null;
+        },
+
         async delete(siteId: string, formId: string): Promise<boolean> {
             await database.delete(formDefinitions).where(and(eq(formDefinitions.siteId, siteId), eq(formDefinitions.id, formId)));
             return true;
@@ -340,7 +391,9 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
         },
 
         async createSubmission(input: Omit<FormSubmission, 'id' | 'submittedAt'>): Promise<BackyRepositoryMutationResult<FormSubmission>> {
-            const [row] = await database.insert(formSubmissions).values({
+            return withActiveVisitorAdmission(db, input.siteId, input.visitorMemberId, async persistedDatabase => {
+            const [row] = await asDb(persistedDatabase).insert(formSubmissions).values({
+                visitorMemberId: input.visitorMemberId || null,
                 siteId: input.siteId,
                 formId: input.formId,
                 pageId: input.pageId || null,
@@ -358,6 +411,7 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 updatedAt: new Date(),
             }).returning() as SubmissionRow[];
             return { item: toSubmission(row) };
+            });
         },
 
         async updateSubmission(siteId: string, submissionId: string, input: Partial<FormSubmission>): Promise<BackyRepositoryMutationResult<FormSubmission>> {
@@ -400,8 +454,23 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             return row ? toContact(row) : null;
         },
 
+        async shareContactFromSubmission(siteId, formId, submissionId, input, dedupeByEmail) {
+            return withVisitorPrivacyFollowup(db, siteId, { formId, submissionId }, async () => {
+              return (db as unknown as NodePgDatabase<typeof schema>).transaction(async tx => {
+                const [submission] = await tx.select().from(formSubmissions).where(and(eq(formSubmissions.siteId,siteId),eq(formSubmissions.formId,formId),eq(formSubmissions.id,submissionId))).for('update');
+                if (!submission || submission.privacyErasedAt) throw Object.assign(new Error('Visitor source is fenced'),{code:'VISITOR_PRIVACY_FENCED'});
+                const [existing] = dedupeByEmail && input.email ? await tx.select().from(formContacts).where(and(eq(formContacts.siteId,siteId),eq(formContacts.formId,formId),sql`lower(trim(${formContacts.email})) = ${input.email.trim().toLowerCase()}`)).limit(1).for('update') : [];
+                if (existing) await withVisitorPrivacyFollowup(db,siteId,{contactId:existing.id},async()=>undefined);
+                const values = {name:input.name ?? existing?.name ?? null,email:input.email ?? existing?.email ?? null,phone:input.phone ?? existing?.phone ?? null,notes:[existing?.notes,input.notes].filter(Boolean).join(existing?.notes?'\n':''),sourceValues:input.sourceValues||{},status:'new',updatedAt:new Date()};
+                const [row] = existing ? await tx.update(formContacts).set(values).where(eq(formContacts.id,existing.id)).returning() : await tx.insert(formContacts).values({...values,siteId,formId,pageId:submission.pageId,postId:submission.postId,sourceSubmissionId:submissionId,requestId:submission.requestId,sourceIpHash:submission.ipHash,provenanceAmbiguous:false}).returning();
+                await tx.execute(sql`INSERT INTO form_contact_contributors(site_id,contact_id,submission_id,member_id) VALUES(${siteId}::uuid,${row.id}::uuid,${submissionId}::uuid,${submission.visitorMemberId}::uuid) ON CONFLICT DO NOTHING`);
+                return {item:toContact(row)};
+              });
+            });
+        },
         async createContact(input: Omit<Contact, 'id' | 'createdAt' | 'updatedAt'>): Promise<BackyRepositoryMutationResult<Contact>> {
-            const [row] = await database.insert(formContacts).values({
+            const action = async (writeDb: DatabaseInstance = db) => {
+            const [row] = await asDb(writeDb).insert(formContacts).values({
                 siteId: input.siteId,
                 formId: input.formId,
                 pageId: input.pageId || null,
@@ -424,11 +493,16 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
                 sourceIpHash: input.sourceIpHash || null,
                 updatedAt: new Date(),
             }).returning() as ContactRow[];
+            if (input.sourceSubmissionId) await (writeDb as unknown as NodePgDatabase).execute(sql`INSERT INTO form_contact_contributors(site_id,contact_id,submission_id,member_id) SELECT ${input.siteId}::uuid,${row.id}::uuid,id,visitor_member_id FROM form_submissions WHERE site_id=${input.siteId}::uuid AND form_id=${input.formId}::uuid AND id=${input.sourceSubmissionId}::uuid ON CONFLICT DO NOTHING`);
             return { item: toContact(row) };
+            };
+            return input.sourceSubmissionId ? withVisitorPrivacyFollowup(db, input.siteId, { formId: input.formId, submissionId: input.sourceSubmissionId }, () => (db as unknown as NodePgDatabase).transaction(tx => action(tx as unknown as DatabaseInstance))) : action();
         },
 
         async updateContact(siteId: string, contactId: string, input: Partial<Contact>): Promise<BackyRepositoryMutationResult<Contact>> {
-            const updates: Record<string, unknown> = { updatedAt: new Date() };
+            return withVisitorPrivacyFollowup(db, siteId, { contactId }, async () => (db as unknown as NodePgDatabase<typeof schema>).transaction(async tx => {
+            const [before] = await tx.select().from(formContacts).where(and(eq(formContacts.siteId,siteId),eq(formContacts.id,contactId))).for('update');if(!before)throw Object.assign(new Error('Contact unavailable'),{code:'VISITOR_PRIVACY_FENCED'});
+            const updates: Record<string, unknown> = { updatedAt: new Date(), provenanceAmbiguous: true };
             if (input.status !== undefined) updates.status = input.status;
             if (input.name !== undefined) updates.name = input.name;
             if (input.email !== undefined) updates.email = input.email;
@@ -448,8 +522,11 @@ export function createFormRepository(db: DatabaseInstance): BackyFormRepository 
             if (input.requestId !== undefined) updates.requestId = input.requestId;
             if (input.sourceIpHash !== undefined) updates.sourceIpHash = input.sourceIpHash;
 
-            const [row] = await database.update(formContacts).set(updates).where(and(eq(formContacts.siteId, siteId), eq(formContacts.id, contactId))).returning() as ContactRow[];
+            if (input.sourceSubmissionId) await withVisitorPrivacyFollowup(db,siteId,{formId:before.formId,submissionId:input.sourceSubmissionId},async()=>undefined);
+            const [row] = await tx.update(formContacts).set(updates).where(and(eq(formContacts.siteId, siteId), eq(formContacts.id, contactId))).returning() as ContactRow[];
+            if (input.sourceSubmissionId) await tx.execute(sql`INSERT INTO form_contact_contributors(site_id,contact_id,submission_id,member_id) SELECT ${siteId}::uuid,${row.id}::uuid,id,visitor_member_id FROM form_submissions WHERE site_id=${siteId}::uuid AND form_id=${row.formId}::uuid AND id=${input.sourceSubmissionId}::uuid ON CONFLICT DO NOTHING`);
             return { item: toContact(row) };
+            }));
         },
 
         async deleteContact(siteId: string, contactId: string): Promise<boolean> {

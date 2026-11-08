@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { backy } from "../lib/backy";
+import { BackyAnimationHydrator } from "../lib/animation";
 
 import "./styles.css";
 
@@ -12,7 +13,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang={locale}>
-      <body data-backy-site-id={siteId}>{children}</body>
+      <body data-backy-site-id={siteId}>{children}<BackyAnimationHydrator /></body>
     </html>
   );
 }

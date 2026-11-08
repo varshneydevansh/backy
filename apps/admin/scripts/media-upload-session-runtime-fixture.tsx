@@ -1,0 +1,5 @@
+import { useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { runMediaUploadMountedTests } from './media-upload-session-mounted-tests';
+function App(){const [proof,setProof]=useState<any>(null),[busy,setBusy]=useState(false);const run=async()=>{setBusy(true);let result:any;try{result=await runMediaUploadMountedTests(document.getElementById('mounted-test-root')!);}catch(error){result={ok:false,error:String(error)};}finally{setBusy(false);}setProof(result);await fetch('/fixture/proof',{method:'POST',body:JSON.stringify(result)});};return <main className="mx-auto max-w-5xl p-5"><h1 className="text-xl font-semibold">Media transfer acceptance</h1><p className="my-3 text-sm">Actual mounted transfer UI and resumable client. Synthetic files and responses only.</p><button className="min-h-11 rounded border px-4" disabled={busy} onClick={()=>void run()}>Run mounted checks</button><div id="mounted-test-root"/><pre data-testid="mounted-proof" className="mt-4 whitespace-pre-wrap text-sm">{proof?JSON.stringify(proof,null,2):''}</pre></main>;}
+createRoot(document.getElementById('root')!).render(<App/>);

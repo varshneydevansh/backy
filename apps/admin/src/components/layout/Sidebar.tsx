@@ -114,7 +114,7 @@ export function Sidebar({
   const deferredNavFilter = useDeferredValue(navFilter);
   const normalizedNavFilter = deferredNavFilter.trim().toLowerCase();
   const activeSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)),
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';

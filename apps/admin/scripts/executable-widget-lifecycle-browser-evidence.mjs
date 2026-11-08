@@ -1,0 +1,27 @@
+/** Validates captured actual browser evidence; never synthesizes an acceptance run. */
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const [evidencePath,consolePath]=process.argv.slice(2);
+assert(evidencePath&&consolePath,'Pass captured /fixture/evidence and CUA console JSON.');
+const evidence=JSON.parse(readFileSync(evidencePath,'utf8')),consoleEvidence=JSON.parse(readFileSync(consolePath,'utf8'));
+const parse=logs=>logs.map(log=>({...JSON.parse(log.message.slice(log.message.indexOf('{'))),timestamp:log.timestamp}));
+const mounts=parse(consoleEvidence.mountLogs),updates=parse(consoleEvidence.updateLogs),cleanups=parse(consoleEvidence.cleanupLogs);
+const trace=evidence.trace,siteId='executable-widget-site',key='fixture.executable.lifecycle';
+let checks=0;const checked=(value,message)=>{assert(value,message);checks++};
+for(const version of ['1.0.0','2.0.0','3.0.0'])for(const suffix of ['/bundle','/review'])checked(trace.some(request=>request.method==='POST'&&request.path===`/api/admin/sites/${siteId}/interactive-components/${key}/${version}${suffix}`&&request.status===200),`Actual version${version}${suffix}200`);
+checked(trace.some(request=>request.method==='POST'&&request.path===`/api/admin/sites/${siteId}/interactive-components`&&request.status===201),'Actual registry201');
+for(const [kind,record]of [['pages',evidence.page],['blog',evidence.post]]){checked(record.status==='published',`${kind} published`);checked(trace.some(request=>request.method==='PATCH'&&request.path===`/api/admin/sites/${siteId}/${kind}/${record.id}`&&request.status===200),`${kind} actual PATCH200`);checked(trace.some(request=>request.method==='GET'&&request.path===`/api/admin/sites/${siteId}/${kind}/${record.id}`&&request.status===200),`${kind} fresh GET200`);checked(trace.some(request=>request.method==='POST'&&request.path===`/api/admin/sites/${siteId}/${kind}/${record.id}/publish`&&request.status===200),`${kind} publish200`);}
+checked(trace.filter(request=>request.path.includes('/render?path=')&&request.status===200).length>=2,'Both actual public render routes200');
+const pageWidget=evidence.page.content.elements[0],blogWidget=evidence.post.content.elements[0].props.content.find(node=>node.type==='interactive_component');
+checked(pageWidget.props.count===7&&pageWidget.props.tall===true,'Page saved updated executable props');checked(blogWidget.props.count===9&&blogWidget.props.label==='Blog control edited reviewed payload'&&blogWidget.props.tall===true,'Actual schema authoring controls persisted');
+for(const widget of [pageWidget,blogWidget]){assert.deepEqual(widget.props.unknown.retained,[false,0]);assert.equal(widget.props.flags.enabled,false);assert.equal(widget.dataBindings[0].metadata.retain[0],false);checks+=3;}
+for(const [field,record]of [['pages',evidence.page],['blogPosts',evidence.post]]){const persisted=evidence.persisted[field].find(row=>row.id===record.id);assert.deepEqual(persisted.content.elements,record.content.elements);checks++;}
+const observed=evidence.events.filter(event=>event.transport!=='image'),allMounts=[...mounts,...observed.filter(event=>event.kind==='mount')],allUpdates=[...updates,...observed.filter(event=>event.kind==='update')];
+const once=allMounts.find(mount=>mount.version==='1.0.0'&&mount.props.count===0&&allUpdates.some(update=>update.instance===mount.instance&&update.props.count===7));checked(once,'Same instance mount then props update');
+checked(mounts.some(mount=>mount.props.count===9&&mount.props.label==='Blog control edited reviewed payload'),'Fresh writer/published render mount received persisted props');
+for(const mount of mounts){assert.deepEqual(mount.attempts,{parentDom:'blocked',parentCookies:'blocked',parentStorage:'blocked'});assert.equal(mount.readOnly,true);checked(!('iframeUrl'in mount.props)&&(!('sandboxUrl'in mount.props)||mount.props.sandboxUrl===`/api/sites/${siteId}/interactive-components/${key}/1.0.0/sandbox`),'Registry-scoped frame identity; shared writer may retain authored URL as inert module props');}
+checked(cleanups.some(cleanup=>cleanup.version==='1.0.0'&&mounts.some(mount=>mount.instance===cleanup.instance)),'Surviving real-browser removed/navigated frame cleanup log');
+for(const cleanup of cleanups)checked(cleanups.filter(item=>item.instance===cleanup.instance&&item.mounted===cleanup.mounted).length===1,'Exactly once cleanup per mount');
+checked(observed.some((event,index)=>event.kind==='mount'&&event.version==='2.0.0'&&event.mounted>1&&observed.slice(0,index).some(cleanup=>cleanup.kind==='cleanup'&&cleanup.instance===event.instance&&cleanup.mounted===event.mounted-1)),'No-update cleanup precedes same-frame remount');
+checked(trace.some(request=>request.path.endsWith('/9.9.9')&&request.status===404),'Unregistered exact version404');checked(trace.some(request=>request.path.endsWith('/review')&&request.status===403),'Denied reviewed-write permission403');checked(trace.filter(request=>request.path.endsWith('/1.0.0')&&request.status===404).length>=2,'Revoked exact version checked again by hosted and portable');
+console.log(`Captured executable widget browser evidence passed ${checks} assertions: actual registration/upload/review, shared page/blog save/reopen/publish/render, props/bindings/isolation, cleanup/remount and current-version denial. Synthetic auth/providers, local storage and manually observed resize/fallback remain explicit boundaries.`);

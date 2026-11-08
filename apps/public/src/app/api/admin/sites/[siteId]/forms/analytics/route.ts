@@ -1,3 +1,4 @@
+import { collectCompleteFormsInventory, FormsInventoryIncompleteError } from '@/lib/formsInventory';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   DEFAULT_SITE_SETTINGS,
@@ -73,8 +74,6 @@ const STATUSES: FormSubmissionStatus[] = ['pending', 'approved', 'rejected', 'sp
 const CONTACT_STATUSES: Contact['status'][] = ['new', 'contacted', 'qualified', 'archived'];
 const CONTACT_LIST_STATUSES = ['all', 'new', 'contacted', 'qualified', 'archived'] as const;
 const CONTACT_LIST_QUALITIES = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote', 'duplicate-email'] as const;
-const PAGE_LIMIT = 100;
-const MAX_PAGES = 100;
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -251,32 +250,6 @@ const filterContactsForList = (
   });
 };
 
-const fetchAllSubmissions = async (
-  fetchPage: (offset: number) => Promise<{ items: FormSubmission[]; total: number; hasMore: boolean }>,
-): Promise<FormSubmission[]> => {
-  const submissions: FormSubmission[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const offset = page * PAGE_LIMIT;
-    const result = await fetchPage(offset);
-    submissions.push(...result.items);
-    if (!result.hasMore || submissions.length >= result.total) break;
-  }
-  return submissions;
-};
-
-const fetchAllContacts = async (
-  fetchPage: (offset: number) => Promise<{ items: Contact[]; total: number; hasMore: boolean }>,
-): Promise<Contact[]> => {
-  const contacts: Contact[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const offset = page * PAGE_LIMIT;
-    const result = await fetchPage(offset);
-    contacts.push(...result.items);
-    if (!result.hasMore || contacts.length >= result.total) break;
-  }
-  return contacts;
-};
-
 const buildLeadAnalytics = (
   forms: FormDefinition[],
   contacts: Contact[],
@@ -451,32 +424,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const formsResult = await repositories.forms.list({ siteId: site.id, limit: 100, offset: 0 });
-      const forms = formsResult.items;
-      const submissions = await fetchAllSubmissions(async (offset) => {
-        const page = await repositories.forms.listSubmissions({
-          siteId: site.id,
-          limit: PAGE_LIMIT,
-          offset,
-        });
-        return {
-          items: page.items,
-          total: page.pagination.total,
-          hasMore: page.pagination.hasMore,
-        };
-      });
-      const contacts = await fetchAllContacts(async (offset) => {
-        const page = await repositories.forms.listContacts({
-          siteId: site.id,
-          limit: PAGE_LIMIT,
-          offset,
-        });
-        return {
-          items: page.items,
-          total: page.pagination.total,
-          hasMore: page.pagination.hasMore,
-        };
-      });
+      const forms = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.list({ siteId: site.id, ...pagination }));
+      const submissions = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.listSubmissions({ siteId: site.id, ...pagination }));
+      const contacts = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.listContacts({ siteId: site.id, ...pagination }));
       const analytics = buildAnalytics(forms, submissions, contacts, normalizeSavedLists(siteSettings(site.settings)), days);
 
       return NextResponse.json({
@@ -496,12 +446,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const forms = listFormsBySite(site.id);
-    const submissions = forms.flatMap((form) => (
-      listFormSubmissions(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).data
-    ));
-    const contacts = forms.flatMap((form) => (
-      listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts
-    ));
+    const submissions = (await Promise.all(forms.map(form => collectCompleteFormsInventory(site.id, async pagination => { const result = listFormSubmissions(form.id, { ...pagination, siteId: site.id }); return { items: result.data, pagination: result.pagination }; }, item => item.formId === form.id)))).flat();
+    const contacts = (await Promise.all(forms.map(form => collectCompleteFormsInventory(site.id, async pagination => { const result = listFormContacts(form.id, { ...pagination, siteId: site.id }); return { items: result.contacts, pagination: result.pagination }; }, item => item.formId === form.id)))).flat();
     const analytics = buildAnalytics(forms, submissions, contacts, normalizeSavedLists(siteSettings(site.settings)), days);
 
     return NextResponse.json({
@@ -514,6 +460,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin forms analytics API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

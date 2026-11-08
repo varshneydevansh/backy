@@ -1,3 +1,8 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { CollectionRecordAdmissionUnavailableError, withRepositoryCollectionRecordAdmission } from "@/lib/collectionRecordAdmission";
+import { BackyCollectionRecordValidationError } from "@backy-cms/core";
+import { collectionRecordWithVersion } from "@/lib/collectionRecordVersion";
+import { CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 /**
  * Admin CMS collection records endpoint.
  *
@@ -19,6 +24,7 @@ import {
 } from "@backy-cms/core";
 import {
   createAdminCollectionRecord,
+  normalizeCollectionRecordValues,
   getAdminSettings,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
@@ -43,8 +49,8 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
-import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import { collectCompleteExportPages, CollectionExportIncompleteError } from "@/lib/collectionExportPagination";
 
 export const runtime = "nodejs";
 
@@ -70,6 +76,12 @@ interface CollectionRecordAuditSource {
   scheduledAt?: string | null;
   publishedAt?: string | null;
 }
+
+const boundedInteger = (value: string | null, fallback: number, minimum: number, maximum: number): number => {
+  if (value === null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, Math.trunc(parsed))) : fallback;
+};
 
 const makeRequestId = () =>
   `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -117,7 +129,7 @@ const normalizeSlug = (value: unknown): string =>
         .replace(/^-+|-+$/g, "")
     : "";
 
-const parseStatusFilter = (value: string | null) =>
+const parseStatusFilter = (value: string | null): PublishStatus | undefined =>
   value === "draft" ||
   value === "published" ||
   value === "scheduled" ||
@@ -365,46 +377,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const csvRequested =
         searchParams.get("format") === "csv" ||
         searchParams.get("export") === "csv";
-      const defaultLimit = csvRequested ? 1000 : 50;
-      const maxLimit = csvRequested ? 1000 : 100;
-      const limit = Math.max(
-        1,
-        Math.min(maxLimit, Number(searchParams.get("limit") || defaultLimit)),
-      );
-      const offset = Math.max(0, Number(searchParams.get("offset") || 0));
-      const sortDirection =
+      const limit = boundedInteger(searchParams.get("limit"), 50, 1, 100);
+      const offset = boundedInteger(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
+      const sortDirection: "asc" | "desc" =
         searchParams.get("sortDirection") === "desc" ? "desc" : "asc";
       const slug = searchParams.get("slug");
+      const query = {
+        siteId: site.id,
+        collectionId: collection.id,
+        includeUnpublished: true,
+        status: parseStatusFilter(searchParams.get("status")),
+        search: searchParams.get("q") || searchParams.get("search") || undefined,
+        fieldKey: searchParams.get("fieldKey") || undefined,
+        fieldValue: searchParams.get("fieldValue") || undefined,
+        sortBy: searchParams.get("sortBy") || undefined,
+        sortDirection,
+      };
+      const slugRecord = slug ? await repositories.collections.getRecordBySlug(site.id, collection.id, slug) : null;
+      const exported = csvRequested && !slug
+        ? await collectCompleteExportPages(pagination => repositories.collections.listRecords({ ...query, ...pagination }),
+            record => record.siteId === site.id && record.collectionId === collection.id)
+        : null;
       const payload = slug
-        ? {
-            items: [
-              await repositories.collections.getRecordBySlug(
-                site.id,
-                collection.id,
-                slug,
-              ),
-            ].filter(Boolean) as BackyCollectionRecord[],
-            pagination: {
-              total: 1,
-              limit: 1,
-              offset: 0,
-              hasMore: false,
-            },
-          }
-        : await repositories.collections.listRecords({
-            siteId: site.id,
-            collectionId: collection.id,
-            includeUnpublished: true,
-            status: parseStatusFilter(searchParams.get("status")),
-            search:
-              searchParams.get("q") || searchParams.get("search") || undefined,
-            fieldKey: searchParams.get("fieldKey") || undefined,
-            fieldValue: searchParams.get("fieldValue") || undefined,
-            sortBy: searchParams.get("sortBy") || undefined,
-            sortDirection,
-            limit,
-            offset,
-          });
+        ? { items: slugRecord ? [slugRecord] : [], pagination: { total: slugRecord ? 1 : 0, limit: 1, offset: 0, hasMore: false } }
+        : exported
+          ? { items: exported, pagination: { total: exported.length, limit: exported.length, offset: 0, hasMore: false } }
+          : await repositories.collections.listRecords({ ...query, limit, offset });
 
       if (slug && payload.items.length === 0) {
         return errorResponse(
@@ -432,7 +430,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         requestId,
         data: {
           collection,
-          records: payload.items,
+          records: payload.items.map(collectionRecordWithVersion),
           pagination: payload.pagination,
         },
       });
@@ -468,16 +466,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const csvRequested =
       searchParams.get("format") === "csv" ||
       searchParams.get("export") === "csv";
-    const defaultLimit = csvRequested ? 1000 : 50;
-    const maxLimit = csvRequested ? 1000 : 100;
-    const limit = Math.max(
-      1,
-      Math.min(maxLimit, Number(searchParams.get("limit") || defaultLimit)),
-    );
-    const offset = Math.max(0, Number(searchParams.get("offset") || 0));
-    const sortDirection =
+    const limit = boundedInteger(searchParams.get("limit"), 50, 1, 100);
+    const offset = boundedInteger(searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
+    const sortDirection: "asc" | "desc" =
       searchParams.get("sortDirection") === "desc" ? "desc" : "asc";
-    const payload = listCollectionRecords(site.id, collection.id, {
+    const query = {
       includeUnpublished: true,
       status: parseStatusFilter(searchParams.get("status")),
       slug: searchParams.get("slug") || undefined,
@@ -486,9 +479,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       fieldValue: searchParams.get("fieldValue") || undefined,
       sortBy: searchParams.get("sortBy") || undefined,
       sortDirection,
-      limit,
-      offset,
-    });
+    };
+    const exported = csvRequested
+      ? await collectCompleteExportPages(async pagination => {
+          const result = listCollectionRecords(site.id, collection.id, { ...query, ...pagination });
+          return { items: result.records, pagination: result.pagination };
+        }, record => record.siteId === site.id && record.collectionId === collection.id)
+      : null;
+    const payload = exported
+      ? { records: exported, pagination: { total: exported.length, limit: exported.length, offset: 0, hasMore: false } }
+      : listCollectionRecords(site.id, collection.id, { ...query, limit, offset });
+    if (query.slug && payload.records.length === 0) return errorResponse(404, "COLLECTION_RECORD_NOT_FOUND", "Collection record not found", requestId);
 
     if (csvRequested) {
       const csv = buildRecordsCsv(collection, payload.records);
@@ -507,11 +508,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       requestId,
       data: {
         collection,
-        records: payload.records,
+        records: payload.records.map(collectionRecordWithVersion),
         pagination: payload.pagination,
       },
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(409, "COLLECTION_EXPORT_INCOMPLETE", error.message, requestId);
     console.error("Admin collection records list API error:", error);
     return errorResponse(
       500,
@@ -548,7 +550,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const collection =
+      let collection =
         (await repositories.collections.getById(site.id, collectionId)) ||
         (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
@@ -570,6 +572,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const rawBody = await parseJsonBody(request);
+      const admissionSlug = collection.slug;
+      const admitted = await withRepositoryCollectionRecordAdmission(repositories.collections, site.id, collection.id, async (repository, collection, context) => {
+        if (collection.slug !== admissionSlug) return errorResponse(409, 'COLLECTION_RECORD_CONFLICT', 'This collection changed while the record was being saved. Reload it before retrying.', requestId, { reloadRequired: true });
+      const lockedSite = await context.sites.getById(site.id);
+      if (!lockedSite) return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
       const seeded = seedCollectionRecordInputFromFrontendDesignTemplate({
         siteSettings: site.settings,
         body: rawBody,
@@ -581,6 +588,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
         seeded.body,
       );
+      if (body.values !== undefined && (!body.values || typeof body.values !== 'object' || Array.isArray(body.values))) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Record values must be a JSON object.', requestId);
+      }
       const values = normalizeCollectionRecordMediaValues(
         collection,
         toRecord(body.values),
@@ -599,7 +609,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       if (
-        await repositories.collections.getRecordBySlug(
+        await repository.getRecordBySlug(
           site.id,
           collection.id,
           slug,
@@ -614,8 +624,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const validationErrors = await validateRepositoryCollectionRecordValues({
-        repository: repositories.collections,
-        mediaRepository: repositories.media,
+        repository,
+        mediaRepository: context.media,
         siteId: site.id,
         collection,
         values,
@@ -631,9 +641,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const [settings, existingProducts] = await Promise.all([
-        repositories.settings.get(),
+        context.settings.get(),
         collection.slug === "products"
-          ? repositories.collections.listRecords({
+          ? repository.listRecords({
               siteId: site.id,
               collectionId: collection.id,
               includeUnpublished: true,
@@ -645,7 +655,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ]);
       const billingLimitError = enforceProductBillingLimit(
         collection,
-        site.settings,
+        lockedSite.settings,
         settings,
         existingProducts?.pagination.total || 0,
         requestId,
@@ -655,7 +665,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const record = (
-        await repositories.collections.createRecord({
+        await repository.createRecord({
           siteId: site.id,
           collectionId: collection.id,
           slug,
@@ -663,16 +673,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ...(typeof body.scheduledAt === "string"
             ? { scheduledAt: body.scheduledAt }
             : {}),
-          values: toJsonRecord(values),
+          values: toJsonRecord(normalizeCollectionRecordValues(collection as unknown as StoreCollection, values)),
         })
       ).item;
-      await syncRepositoryCollectionRecordMediaReferences({
-        mediaRepository: repositories.media,
-        siteId: site.id,
-        collectionId: collection.id,
-        recordId: record.id,
-        values: record.values,
+        return { record, collection };
       });
+      if (admitted instanceof NextResponse) return admitted;
+      collection = admitted.collection;
+      const record = admitted.record;
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {
@@ -705,7 +713,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       return NextResponse.json(
-        { success: true, requestId, data: { record, cacheInvalidation } },
+        { success: true, requestId, data: { record: collectionRecordWithVersion(record), cacheInvalidation } },
         { status: 201 },
       );
     }
@@ -749,6 +757,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
       seeded.body,
     );
+    if (body.values !== undefined && (!body.values || typeof body.values !== 'object' || Array.isArray(body.values))) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Record values must be a JSON object.', requestId);
+    }
     const values = normalizeCollectionRecordMediaValues(
       collection as unknown as BackyCollection,
       toRecord(body.values),
@@ -842,10 +853,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json(
-      { success: true, requestId, data: { record } },
+      { success: true, requestId, data: { record: collectionRecordWithVersion(record) } },
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof CollectionRecordAdmissionUnavailableError) return errorResponse(503, 'COLLECTION_WRITE_UNAVAILABLE', error.message, requestId);
+    if (error instanceof BackyCollectionRecordValidationError || (error && typeof error === 'object' && 'code' in error && error.code === 'COLLECTION_RECORD_VALIDATION')) return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid.', requestId, 'details' in error ? error.details : undefined);
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin collection record create API error:", error);
     return errorResponse(
       500,

@@ -14,6 +14,7 @@ import { resolveElementDataBindings, type RenderDataSource } from '@/lib/renderP
 import { publicMediaFilePath } from '@/lib/mediaResponsive';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { withPublicDataFigureDatasets } from '@/lib/publicDataFigureHydration';
 import type { Metadata } from 'next';
 import type { StoreBlogPost, StoreCollection, StoreCollectionRecord } from '@/lib/backyStore';
 
@@ -155,6 +156,7 @@ function normalizeRepositoryPostContentWithContext(post: BackyPost, dataSource?:
     elements: resolveElementDataBindings(post.siteId, post.content.elements, { dataSource }) as unknown as PageContent['elements'],
     canvasSize: isRecord(post.content.metadata?.canvasSize)
       ? {
+          ...post.content.metadata.canvasSize,
           width: Number(post.content.metadata.canvasSize.width) || 1200,
           height: Number(post.content.metadata.canvasSize.height) || 900,
         }
@@ -308,6 +310,7 @@ const normalizePostContent = (siteId: string, post: StoreBlogPost): PageContent 
   const content = post.content;
   const canvasSize = isRecord(content.canvasSize)
     ? {
+        ...content.canvasSize,
         width: Number(content.canvasSize.width) || 900,
         height: Number(content.canvasSize.height) || 720,
       }
@@ -467,7 +470,7 @@ export default async function BlogPostPage({ params, searchParams }: PageProps) 
     return (
       <>
         <PageRenderer
-          content={normalizeRepositoryPostContentWithContext(post, dataSource)}
+          content={normalizeRepositoryPostContentWithContext(post, await withPublicDataFigureDatasets(site.id, post.content, hostedSite.repositories.collections, dataSource))}
           theme={repositoryTheme(site)}
           fontAssets={await getRepositoryFontAssets(hostedSite)}
           siteId={site.id}

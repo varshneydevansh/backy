@@ -1,3 +1,4 @@
+import { customFrontendPreviewUrl } from '@/lib/customFrontendPreview';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
@@ -14,10 +15,19 @@ interface RouteParams {
   }>;
 }
 
+// Preview URLs contain a bearer token and must never enter shared or browser caches.
+const privatePreviewResponse = (response: NextResponse) => {
+  response.headers.set('cache-control', 'private, no-store');
+  return response;
+};
+const privatePreviewJson = (body: unknown, init?: ResponseInit) => (
+  privatePreviewResponse(NextResponse.json(body, init))
+);
+
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 const errorResponse = (status: number, code: string, message: string, requestId: string) => (
-  NextResponse.json({ success: false, requestId, error: { code, message } }, { status })
+  privatePreviewJson({ success: false, requestId, error: { code, message } }, { status })
 );
 
 const encodePath = (path: string) => (
@@ -34,7 +44,7 @@ const previewActorId = (access: Exclude<Awaited<ReturnType<typeof requireAdminAc
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'pages.publish' });
-  if (access instanceof NextResponse) return access;
+  if (access instanceof NextResponse) return privatePreviewResponse(access);
 
   try {
     const { siteId, postId } = await params;
@@ -89,7 +99,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
 
-      return NextResponse.json({
+      return privatePreviewJson({
         success: true,
         requestId,
         data: {
@@ -98,6 +108,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           targetType: preview.targetType,
           targetId: preview.targetId,
           hostedUrl,
+          customFrontendUrl: customFrontendPreviewUrl(site, post.status, `/blog/${encodedSlug}`, preview.token),
           postApiUrl,
         },
       });
@@ -148,7 +159,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
 
-    return NextResponse.json({
+    return privatePreviewJson({
       success: true,
       requestId,
       data: {
@@ -157,6 +168,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         targetType: preview.targetType,
         targetId: preview.targetId,
         hostedUrl,
+        customFrontendUrl: customFrontendPreviewUrl(site, post.status, `/blog/${encodedSlug}`, preview.token),
         postApiUrl,
       },
     });

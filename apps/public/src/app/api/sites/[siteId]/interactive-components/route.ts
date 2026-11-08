@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { getSiteByIdOrSlug, listInteractiveComponents } from '@/lib/backyStore';
-import { buildPublicInteractiveComponentRegistry, type BackyInteractiveComponentRegistryEntry } from '@/lib/interactiveComponentRegistry';
+import { loadCompleteRegistryEntries, paginateRegistry, registryPageOptions, toPublicRegistryEntry } from '@/lib/interactiveRegistryDiscovery';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -33,110 +33,13 @@ const errorResponse = (status: number, code: string, message: string, requestId:
   )
 );
 
-type PublicRegistryComponent = {
-  componentKey: string;
-  displayName: string;
-  type: BackyInteractiveComponentRegistryEntry['type'];
-  status: 'active' | 'disabled' | 'archived' | string;
-  version: string;
-  renderMode: BackyInteractiveComponentRegistryEntry['renderMode'];
-  source: BackyInteractiveComponentRegistryEntry['source'];
-  description?: string;
-  allowedDataScopes?: string[];
-  requiredFields?: string[];
-  controls?: Array<Record<string, unknown>>;
-  fallback?: BackyInteractiveComponentRegistryEntry['fallback'];
-  integrity?: BackyInteractiveComponentRegistryEntry['integrity'];
-  runtime?: BackyInteractiveComponentRegistryEntry['runtime'];
-  dependencyMetadata?: Record<string, unknown>;
-};
-
-const recordValue = (value: unknown): Record<string, unknown> | undefined => (
-  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-);
-
-const stringListValue = (value: unknown): string[] => (
-  Array.isArray(value)
-    ? value.map((item) => typeof item === 'string' ? item.trim() : '').filter(Boolean)
-    : []
-);
-
-const recordListValue = (value: unknown): Array<Record<string, unknown>> | undefined => (
-  Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
-    : undefined
-);
-
-const normalizeDependencyPolicy = (value: unknown): BackyInteractiveComponentRegistryEntry['dependencyPolicy'] | undefined => {
-  const record = recordValue(value);
-  const preset = typeof record?.preset === 'string' ? record.preset : '';
-  if (preset !== 'built-in' && preset !== 'signed-sandbox' && preset !== 'no-runtime-deps') {
-    return undefined;
-  }
-  if (!record) {
-    return undefined;
-  }
-
-  return {
-    preset,
-    allowedPackagePatterns: stringListValue(record.allowedPackagePatterns),
-    blockedBuiltins: stringListValue(record.blockedBuiltins),
-    lifecycleScripts: false,
-    remoteRuntimeUrls: false,
-  };
-};
-
-const normalizeCompatibility = (value: unknown): BackyInteractiveComponentRegistryEntry['compatibility'] | undefined => {
-  const record = recordValue(value);
-  const reducedMotion = record?.reducedMotion === 'recommended' ? 'recommended' : 'required';
-  const backyRuntime = typeof record?.backyRuntime === 'string' ? record.backyRuntime.trim() : '';
-  const renderTargets = stringListValue(record?.renderTargets);
-
-  if (!backyRuntime || renderTargets.length === 0) {
-    return undefined;
-  }
-
-  return {
-    backyRuntime,
-    renderTargets,
-    animationLibraries: stringListValue(record?.animationLibraries),
-    browserSupport: stringListValue(record?.browserSupport),
-    reducedMotion,
-  };
-};
-
-const toPublicRegistryEntry = (component: PublicRegistryComponent): BackyInteractiveComponentRegistryEntry => ({
-  componentKey: component.componentKey,
-  displayName: component.displayName,
-  type: component.type,
-  status: component.status === 'active' ? 'active' : 'disabled',
-  version: component.version,
-  renderMode: component.renderMode,
-  source: component.source,
-  description: component.description || '',
-  allowedDataScopes: component.allowedDataScopes || [],
-  requiredFields: component.requiredFields || [],
-  controls: component.controls || [],
-  fallback: component.fallback || { required: true, supported: [] },
-  security: {
-    adminApiAccess: false,
-    parentDomAccess: false,
-    parentCookieAccess: false,
-    secretsInPayload: false,
-    communication: 'postMessage-only',
-  },
-  integrity: component.integrity || { signed: false, signatureRequiredForCustomCode: true },
-  runtime: component.runtime,
-  dependencyPolicy: normalizeDependencyPolicy(component.dependencyMetadata?.dependencyPolicy),
-  compatibility: normalizeCompatibility(component.dependencyMetadata?.compatibility),
-  dataBindingPresets: recordListValue(component.dependencyMetadata?.dataBindingPresets) as BackyInteractiveComponentRegistryEntry['dataBindingPresets'],
-});
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId } = await params;
+    let options;
+    try { options = registryPageOptions(request.url); } catch (error) { return errorResponse(400, 'INVALID_PAGINATION', (error as Error).message, requestId); }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -146,13 +49,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const registryEntries = (await repositories.interactiveComponents.list({
+      const registryEntries = (await loadCompleteRegistryEntries((offset) => repositories.interactiveComponents.list({
         siteId: site.id,
         publicOnly: true,
         limit: 100,
-        offset: 0,
-      })).items.map(toPublicRegistryEntry);
-      const registry = buildPublicInteractiveComponentRegistry(site.id, registryEntries);
+        offset,
+      }))).map(toPublicRegistryEntry);
+      const registry = paginateRegistry(site.id, registryEntries, options);
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
         scope: 'settings',
@@ -182,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const registryEntries = listInteractiveComponents(site.id, { publicOnly: true }).map(toPublicRegistryEntry);
-    const registry = buildPublicInteractiveComponentRegistry(site.id, registryEntries);
+    const registry = paginateRegistry(site.id, registryEntries, options);
 
     return publicContractJson({
       success: true,

@@ -1,6 +1,7 @@
 import { generateId } from '@/lib/utils';
 import {
   canvasElementsToBackyContentDocument,
+  createBackyDataFigureSample,
   isBackyContentDocument,
   type BackyContentDocument,
   type BackyContentKind,
@@ -475,35 +476,17 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     icon: 'Sparkles',
     category: 'advanced',
     defaultProps: {
-      componentKey: 'backy.chart.line',
+      ...createBackyDataFigureSample('backy.chart.line'),
       version: '1.0.0',
-      title: 'Metric over time',
-      series: [],
-      fallbackText: 'A static fallback summary for the data-bound line chart.',
-      fallback: {
-        title: 'Metric over time',
-        text: 'Line chart showing a trend over time. Bind collection data from the Data panel.',
-        ariaLabel: 'Line chart figure',
-      },
-      controls: [
-        {
-          key: 'series',
-          label: 'Series',
-          type: 'select',
-          options: [],
-          required: true,
-        },
-      ],
       renderCapabilities: {
         hydrationMode: 'trusted-component',
-        fallbackRequired: true,
-        postMessageProtocol: 'backy.interactive-component.v1',
+        fallbackRequired: false,
       },
     },
-    defaultSize: { width: 640, height: 360 },
+    defaultSize: { width: 720, height: 420 },
     defaultResponsive: {
-      tablet: { width: 560, height: 320 },
-      mobile: { width: 335, height: 300 },
+      tablet: { width: 688, height: 420 },
+      mobile: { width: 335, height: 460 },
     },
     defaultStyles: {
       backgroundColor: '#f8fafc',
@@ -512,7 +495,39 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       borderStyle: 'solid',
       borderRadius: 8,
     },
-    description: 'Data-bound line chart figure with collection bindings and fallback content',
+    description: 'Native line chart with editable JSON/CSV rows or a published collection, series toggles, data-point details and an accessible data view',
+  },
+  {
+    id: 'interactive-figure-bar-chart',
+    type: 'interactiveFigure',
+    name: 'Bar chart figure',
+    icon: 'Sparkles',
+    category: 'advanced',
+    defaultProps: {
+      ...createBackyDataFigureSample('backy.chart.bar'),
+      version: '1.0.0',
+      renderCapabilities: { hydrationMode: 'trusted-component', fallbackRequired: false },
+    },
+    defaultSize: { width: 720, height: 420 },
+    defaultResponsive: { tablet: { width: 688, height: 420 }, mobile: { width: 335, height: 460 } },
+    defaultStyles: { backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', borderRadius: 8 },
+    description: 'Native bar chart with editable JSON/CSV rows or a published collection, series toggles, data-point details and an accessible data view',
+  },
+  {
+    id: 'interactive-figure-data-table',
+    type: 'interactiveFigure',
+    name: 'Data table figure',
+    icon: 'Table',
+    category: 'advanced',
+    defaultProps: {
+      ...createBackyDataFigureSample('backy.table.data'),
+      version: '1.0.0',
+      renderCapabilities: { hydrationMode: 'trusted-component', fallbackRequired: false },
+    },
+    defaultSize: { width: 720, height: 460 },
+    defaultResponsive: { tablet: { width: 688, height: 460 }, mobile: { width: 335, height: 500 } },
+    defaultStyles: { backgroundColor: '#f8fafc', borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid', borderRadius: 8 },
+    description: 'Native searchable, sortable, paginated table with editable JSON/CSV rows or explicitly selected published collection columns',
   },
   {
     id: 'interactive-figure-timeline',
@@ -882,6 +897,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
     defaultChildren: [
       {
         type: 'heading',
+        bindingSlots: [{ id: 'hero-title', label: 'Headline', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }],
         x: 72,
         y: 82,
         width: 560,
@@ -901,6 +917,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
       {
         type: 'paragraph',
+        bindingSlots: [{ id: 'hero-copy', label: 'Supporting copy', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }],
         x: 76,
         y: 222,
         width: 500,
@@ -918,6 +935,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       },
       {
         type: 'button',
+        bindingSlots: [{ id: 'hero-cta-label', label: 'Button label', sourceKind: 'static', targetPath: 'props.label', mode: 'text' }, { id: 'hero-cta-url', label: 'Button destination', sourceKind: 'static', targetPath: 'props.href', mode: 'url' }],
         x: 76,
         y: 332,
         width: 172,
@@ -956,6 +974,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
         children: [
           {
             type: 'image',
+            bindingSlots: [{ id: 'hero-image', label: 'Hero image', sourceKind: 'static', targetPath: 'props.src', mode: 'image' }],
             x: 24,
             y: 24,
             width: 372,
@@ -973,6 +992,7 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
           },
           {
             type: 'text',
+            bindingSlots: [{ id: 'hero-media-caption', label: 'Media caption', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }],
             x: 28,
             y: 254,
             width: 260,
@@ -1734,6 +1754,56 @@ export const CANVAS_COMPONENT_LIBRARY: ComponentLibraryItem[] = [
       mobile: { width: 375, height: 150 },
     },
     description: 'Reusable page header block',
+  },
+  {
+    id: 'site-header-section',
+    type: 'header',
+    name: 'Header with logo and navigation',
+    icon: 'Menu',
+    category: 'layout',
+    description: 'Composed header with an editable logo image, site name, navigation links, and call to action',
+    defaultProps: { chromeRole: 'site.header', backgroundColor: '#ffffff', padding: 0, borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid' },
+    defaultSize: { width: 1200, height: 88 },
+    defaultResponsive: { tablet: { width: 768, height: 96 }, mobile: { width: 375, height: 152 } },
+    defaultChildren: [
+      {
+        type: 'image', name: 'Logo image', x: 32, y: 26, width: 36, height: 36,
+        props: { chromeRole: 'site.header.logo-image', src: '/placeholder-image.jpg', alt: 'Site logo', objectFit: 'contain' },
+        bindingSlots: [{ id: 'header-logo-image', label: 'Logo image', sourceKind: 'site', fieldKey: 'logo', targetPath: 'props.src', mode: 'image' }],
+        responsive: { tablet: { x: 24, y: 30, width: 36, height: 36 }, mobile: { x: 20, y: 22, width: 32, height: 32 } },
+      },
+      {
+        type: 'link', name: 'Site logo', x: 80, y: 22, width: 228, height: 44,
+        props: { chromeRole: 'site.header.logo', content: 'Your site', href: '/', fontSize: 24, fontWeight: '700', color: '#0f172a', underline: false },
+        styles: { display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' },
+        bindingSlots: [{ id: 'header-logo-name', label: 'Site name', sourceKind: 'site', fieldKey: 'name', targetPath: 'props.content', mode: 'text' }],
+        responsive: { tablet: { x: 72, y: 26, width: 180, height: 44 }, mobile: { x: 62, y: 16, width: 126, height: 44, props: { fontSize: 20 } } },
+      },
+      {
+        type: 'nav', name: 'Header navigation', x: 460, y: 22, width: 440, height: 44,
+        props: { chromeRole: 'site.header.navigation', navigationSource: 'site-primary', navigationBinding: 'site.navigation.primary', navItems: [{ label: 'Home', href: '/' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' }], backgroundColor: 'transparent', padding: 0, color: '#334155' },
+        bindingSlots: [{ id: 'header-navigation-items', label: 'Primary navigation', sourceKind: 'site', fieldKey: 'navigation.primary', targetPath: 'props.navItems', mode: 'json' }],
+        responsive: { tablet: { x: 272, y: 26, width: 310, height: 44 }, mobile: { x: 20, y: 80, width: 335, height: 44 } },
+        children: [
+          { type: 'link', name: 'Home link', x: 0, y: 0, width: 96, height: 44, props: { content: 'Home', href: '/', fontSize: 15, color: '#334155', underline: false }, styles: { display: 'flex', alignItems: 'center', justifyContent: 'center' }, bindingSlots: [{ id: 'header-home-label', label: 'Home label', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }, { id: 'header-home-url', label: 'Home destination', sourceKind: 'static', targetPath: 'props.href', mode: 'url' }], responsive: { tablet: { x: 0, width: 90 }, mobile: { x: 0, width: 100 } } },
+          { type: 'link', name: 'About link', x: 112, y: 0, width: 96, height: 44, props: { content: 'About', href: '/about', fontSize: 15, color: '#334155', underline: false }, styles: { display: 'flex', alignItems: 'center', justifyContent: 'center' }, bindingSlots: [{ id: 'header-about-label', label: 'About label', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }, { id: 'header-about-url', label: 'About destination', sourceKind: 'static', targetPath: 'props.href', mode: 'url' }], responsive: { tablet: { x: 104, width: 90 }, mobile: { x: 116, width: 100 } } },
+          { type: 'link', name: 'Contact link', x: 224, y: 0, width: 112, height: 44, props: { content: 'Contact', href: '/contact', fontSize: 15, color: '#334155', underline: false }, styles: { display: 'flex', alignItems: 'center', justifyContent: 'center' }, bindingSlots: [{ id: 'header-contact-label', label: 'Contact label', sourceKind: 'static', targetPath: 'props.content', mode: 'text' }, { id: 'header-contact-url', label: 'Contact destination', sourceKind: 'static', targetPath: 'props.href', mode: 'url' }], responsive: { tablet: { x: 208, width: 102 }, mobile: { x: 232, width: 103 } } },
+        ],
+      },
+      {
+        type: 'button', name: 'Header call to action', x: 1020, y: 22, width: 148, height: 44,
+        props: { chromeRole: 'site.header.cta', label: 'Get in touch', href: '/contact', backgroundColor: '#0f766e', color: '#ffffff', borderRadius: 6, fontSize: 14, fontWeight: '600' },
+        bindingSlots: [{ id: 'header-cta-label', label: 'Button label', sourceKind: 'static', targetPath: 'props.label', mode: 'text' }, { id: 'header-cta-url', label: 'Button destination', sourceKind: 'static', targetPath: 'props.href', mode: 'url' }],
+        responsive: { tablet: { x: 608, y: 26, width: 136, height: 44 }, mobile: { x: 207, y: 16, width: 148, height: 44 } },
+      },
+    ],
+  },
+  {
+    type: 'collapsible', name: 'Collapsible section', icon: 'ChevronDown', category: 'content',
+    description: 'Native disclosure with an editable title and formatted rich content',
+    defaultProps: { title: 'Details', defaultOpen: false, content: [{ type: 'p', children: [{ text: 'Add supporting information, code, or media here.' }] }], fontSize: 16, lineHeight: 1.6, color: '#334155', backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderWidth: 1, borderStyle: 'solid', borderRadius: 6, padding: 16 },
+    defaultSize: { width: 720, height: 220 },
+    defaultResponsive: { tablet: { width: 688, height: 240 }, mobile: { width: 335, height: 300 } },
   },
   {
     type: 'nav',
@@ -2635,26 +2705,24 @@ const CANVAS_ITEM_BY_TYPE: Record<ElementType, ComponentLibraryItem | undefined>
     return acc;
   }, {} as Record<ElementType, ComponentLibraryItem | undefined>);
 
-const createPresetChild = (child: ComponentLibraryChild, zIndex: number): CanvasElement => ({
-  id: generateId(),
-  type: child.type,
-  name: child.name,
-  x: child.x,
-  y: child.y,
-  width: child.width,
-  height: child.height,
-  zIndex,
-  props: cloneDefaultProps(child.props || {}),
-  styles: cloneDefaultStyles(child.styles),
-  responsive: cloneDefaultResponsive(child.responsive),
-  bindingSlots: cloneDefaultBindingSlots(child.bindingSlots),
-  children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1)),
-});
+const createPresetChild = (child: ComponentLibraryChild, zIndex: number, parentId: string): CanvasElement => {
+  const id = generateId();
+  return {
+    id, parentId, type: child.type, name: child.name,
+    x: child.x, y: child.y, width: child.width, height: child.height, zIndex,
+    props: cloneDefaultProps(child.props || {}),
+    styles: cloneDefaultStyles(child.styles),
+    responsive: cloneDefaultResponsive(child.responsive),
+    bindingSlots: cloneDefaultBindingSlots(child.bindingSlots),
+    children: child.children?.map((nestedChild, index) => createPresetChild(nestedChild, index + 1, id)),
+  };
+};
 
 const cloneReusableElement = (
   element: CanvasElement,
   options: {
     root: boolean;
+    parentId?: string;
     originX: number;
     originY: number;
     targetX: number;
@@ -2662,6 +2730,7 @@ const cloneReusableElement = (
     zIndex: number;
     reusableMeta?: {
       sectionId: string;
+      siteId?: string;
       slug?: string;
       name?: string;
       sourceUpdatedAt?: string;
@@ -2673,6 +2742,7 @@ const cloneReusableElement = (
 ): CanvasElement => {
   const rest: CanvasElement = { ...element };
   delete rest.parentId;
+  const nextId = generateId();
   const nextProps = cloneDefaultProps(element.props || {});
   if (options.root && options.reusableMeta) {
     nextProps.reusableSection = options.reusableMeta;
@@ -2680,7 +2750,8 @@ const cloneReusableElement = (
 
   return {
     ...rest,
-    id: generateId(),
+    id: nextId,
+    ...(options.parentId ? { parentId: options.parentId } : {}),
     x: options.root ? options.targetX + (element.x - options.originX) : element.x,
     y: options.root ? options.targetY + (element.y - options.originY) : element.y,
     zIndex: options.root ? options.zIndex : element.zIndex,
@@ -2691,6 +2762,7 @@ const cloneReusableElement = (
     children: element.children?.map((child) => cloneReusableElement(child, {
       ...options,
       root: false,
+      parentId: nextId,
       zIndex: child.zIndex || 1,
     })),
   };
@@ -2712,6 +2784,7 @@ export function createCanvasElementsFromReusableContent(
   const reusableMeta = content?.sectionId
     ? {
         sectionId: content.sectionId,
+        siteId: content.siteId,
         slug: content.slug,
         name: content.name,
         sourceUpdatedAt: content.sourceUpdatedAt,
@@ -2742,7 +2815,12 @@ export function createCanvasElement(
   y: number,
   overrides: Partial<CanvasElement> = {}
 ): CanvasElement {
-  const definition = CANVAS_ITEM_BY_TYPE[type];
+  // Interactive figures share a canvas type, but their controls and fallback
+  // belong to a particular component. Never borrow another component's props.
+  const componentKey = overrides.props?.componentKey;
+  const definition = type === 'interactiveFigure' && typeof componentKey === 'string'
+    ? CANVAS_COMPONENT_LIBRARY.find((item) => item.type === type && item.defaultProps?.componentKey === componentKey)
+    : CANVAS_ITEM_BY_TYPE[type];
   const props = mergeUnknownRecord(
     definition ? cloneDefaultProps(definition.defaultProps || {}) : {},
     overrides.props,
@@ -2787,8 +2865,9 @@ export function createCanvasElementFromLibraryItem(
   const base = createCanvasElement(item.type, x, y, {
     width: item.defaultSize?.width,
     height: item.defaultSize?.height,
+    ...(Array.isArray(item.defaultProps?.dataBindings) ? { dataBindings: JSON.parse(JSON.stringify(item.defaultProps.dataBindings)) as Record<string, unknown>[] } : {}),
     ...restOverrides,
-    props: mergeUnknownRecord(cloneDefaultProps(item.defaultProps || {}), overrideProps) || {},
+    props: mergeUnknownRecord({ ...(item.id ? { componentPresetId: item.id } : {}), ...cloneDefaultProps(item.defaultProps || {}) }, overrideProps) || {},
     styles: mergeCssProperties(cloneDefaultStyles(item.defaultStyles), overrideStyles),
     responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive),
     bindingSlots: overrideBindingSlots
@@ -2798,7 +2877,7 @@ export function createCanvasElementFromLibraryItem(
 
   return {
     ...base,
-    children: overrideChildren ?? item.defaultChildren?.map((child, index) => createPresetChild(child, index + 1)),
+    children: overrideChildren ?? item.defaultChildren?.map((child, index) => createPresetChild(child, index + 1, base.id)),
   };
 }
 
@@ -2909,7 +2988,7 @@ export function extractFrontendTemplateDesignSerialization(
 
 /** Resolve the canvas stored with a frontend template before its summary alias. */
 export function getFrontendTemplateCanvasSize(
-  template: { content?: unknown; canvasSize?: { width: number; height: number } },
+  template: { content?: unknown; canvasSize?: { width: number; height: number; layout?: 'fixed' | 'fluid' } },
   fallback: CanvasSize = DEFAULT_CANVAS_SIZE,
 ): CanvasSize {
   const content = isRecord(template.content) ? template.content : {};
@@ -2929,8 +3008,11 @@ export function getFrontendTemplateCanvasSize(
   };
   return {
     ...fallback,
+    ...template.canvasSize,
+    ...savedSize,
     width: dimension(savedSize?.width, template.canvasSize?.width) ?? fallback.width,
     height: dimension(savedSize?.height, template.canvasSize?.height) ?? fallback.height,
+    layout: (savedSize?.layout ?? template.canvasSize?.layout) === 'fluid' ? 'fluid' : 'fixed',
   };
 }
 

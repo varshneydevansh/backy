@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls=[];
+const archive={contract:'backy.site-backup.v1',sourceSiteId:'site/source',graph:{site:{id:'site/source'},tables:{}},files:[{base64:'AA==',sha256:'0'.repeat(64)}],opaque:{layout:[false,0]}};
+const review={contract:'backy.site-backup-preview.v1',sourceSiteId:'site/source',name:'Fresh',slug:'fresh',packageFingerprint:'exact',safetyResets:['draft']};
+const client=createBackyClient({baseUrl:'https://backy.example',siteId:'site/source',fetch:async(url,init)=>{
+ const call={url:new URL(url),init,body:init.body?JSON.parse(init.body):undefined};calls.push(call);
+ if(call.body?.name==='uncertain')return Response.json({success:false,requestId:'uncertain',error:{code:'SITE_BACKUP_UNAVAILABLE',message:'Inspect staging',jobId:'private-job'}},{status:503});
+ if(call.body?.name==='stale')return Response.json({success:false,requestId:'stale',error:{code:'SITE_BACKUP_REVIEW_REQUIRED',message:'Review again'}},{status:409});
+ const data=call.body?.action==='preview'?{dryRun:true,reviewedPreview:review}:call.body?.action==='apply'?{state:'draft',cleanupPending:true,completionWarnings:['SITE_BACKUP_AUDIT_PENDING']}:call.url.pathname.endsWith('/retry')?{status:'pending',remainingFiles:1}:call.url.pathname.endsWith('/restore-jobs')?{jobs:[]}:{private:true,archive};
+ return Response.json({success:true,requestId:'fixture',data},{status:call.body?.action==='apply'?201:200});
+}});
+const options={adminSession:'fixture-session',credentials:'include',requestId:'request-proof'};
+assert.equal((await client.exportAdminSiteBackup(options)).data.private,true);
+assert.equal(calls[0].url.pathname,'/api/admin/sites/site%2Fsource/backup');
+assert.equal(calls[0].init.credentials,'include');assert.equal(calls[0].init.headers.get('x-request-id'),'request-proof');
+assert(calls[0].init.headers.get('authorization')?.includes('fixture-session')||calls[0].init.headers.get('x-backy-admin-session')==='fixture-session');
+await client.previewAdminSiteBackup({archive,name:'Fresh',slug:'fresh'},options);
+assert.deepEqual(calls[1].body,{archive,name:'Fresh',slug:'fresh',action:'preview'});
+const input={archive,name:'Fresh',slug:'fresh',reviewedPreview:review,confirmPrivateData:true,confirmSafetyResets:true};
+const applied=await client.applyAdminSiteBackup(input,options);assert.equal(applied.data.state,'draft');assert.equal(applied.data.cleanupPending,true);assert.equal(applied.data.completionWarnings[0],'SITE_BACKUP_AUDIT_PENDING');assert.deepEqual(calls[2].body,{...input,action:'apply'});
+await client.listAdminSiteBackupJobs({siteId:'override'});assert.equal(calls[3].url.pathname,'/api/admin/sites/override/backup/restore-jobs');
+assert.equal((await client.retryAdminSiteBackupJob('job/one')).data.status,'pending');assert.equal(calls[4].url.pathname,'/api/admin/sites/site%2Fsource/backup/restore-jobs/job%2Fone/retry');assert.deepEqual(calls[4].body,{});
+await assert.rejects(client.applyAdminSiteBackup({...input,name:'uncertain'}),e=>e instanceof BackyApiError&&e.status===503&&e.jobId==='private-job');
+await assert.rejects(client.applyAdminSiteBackup({...input,name:'stale'}),e=>e instanceof BackyApiError&&e.status===409);
+assert.equal(calls.length,7,'No automatic replay of uncertain or stale apply');
+console.log('Private recovery SDK transport PASS: five methods, scoped session, exact archive/review/acknowledgements, warnings, safe uncertain jobId and no apply replay.');

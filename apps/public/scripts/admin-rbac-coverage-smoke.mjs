@@ -3,14 +3,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inspectAdminRoute, scopedAccessCallEvidence } from './admin-rbac-delegation-evidence.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, '..');
 const adminApiRoot = path.join(appRoot, 'src', 'app', 'api', 'admin');
-const exportedMethodPattern = /export\s+async\s+function\s+(GET|POST|PATCH|PUT|DELETE)\b/g;
-const mutatingMethodPattern = /export\s+async\s+function\s+(POST|PATCH|PUT|DELETE)\b/g;
-const adminAccessPattern = /\brequireAdminAccess\s*\(/;
-const adminPermissionPattern = /\bpermission\s*:/;
+const adminPermissionPattern = /\bpermissions?\s*:/;
 
 const authLifecycleRoutePattern = /[/\\]auth[/\\]/;
 const allowedRoleOnlyAccessChecks = [
@@ -22,6 +20,17 @@ const allowedRoleOnlyAccessChecks = [
 ];
 
 const dynamicPermissionAccessChecks = [
+  {
+    path: 'src/app/api/admin/sites/[siteId]/reusable-sections/[sectionId]/instances/route.ts',
+    callSnippet: 'requireAdminAccess(request, requestId, { permission })',
+    sourceSnippets: [
+      'operation: "view" | "edit"',
+      '`collections.${operation}`',
+      '`commerce.${operation}`',
+      'if (targetType !== "all" && targetType !== "product") return false;',
+    ],
+    reason: 'Product instances require both collection and commerce permissions, constructed from the bounded view/edit operation.',
+  },
   {
     path: 'src/app/api/admin/sites/[siteId]/commerce/reconcile/route.ts',
     callSnippet: 'requireAdminAccess(request, requestId, accessRequirement)',
@@ -84,6 +93,7 @@ const permissionFailures = [];
 const allowedRoleOnlyAccess = [];
 const dynamicPermissionAccess = [];
 const contractFailures = [];
+const delegatedMethodEvidence = [];
 
 const lineNumberForIndex = (source, index) => source.slice(0, index).split(/\r?\n/).length;
 
@@ -155,8 +165,9 @@ const dynamicPermissionCheck = (relativePath, source, callText) => (
 
 for (const routeFile of routeFiles) {
   const source = fs.readFileSync(routeFile, 'utf8');
-  const exportedMethods = [...source.matchAll(exportedMethodPattern)].map((match) => match[1]);
-  const mutatingMethods = [...source.matchAll(mutatingMethodPattern)].map((match) => match[1]);
+  const methodEvidence = inspectAdminRoute({ file: routeFile, source, appRoot });
+  const exportedMethods = methodEvidence.map(item => item.method);
+  const mutatingMethods = exportedMethods.filter(method => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method));
   if (exportedMethods.length === 0) {
     continue;
   }
@@ -168,19 +179,20 @@ for (const routeFile of routeFiles) {
   }
 
   checkedAdminRoutes.push({ path: relativePath, methods: exportedMethods });
-  const hasAdminAccess = adminAccessPattern.test(source);
-  if (!hasAdminAccess) {
-    readFailures.push({ path: relativePath, methods: exportedMethods });
+  const unguardedMethods = methodEvidence.filter(item => !item.guarded).map(item => item.method);
+  delegatedMethodEvidence.push(...methodEvidence.filter(item => item.kind === 'delegated').map(item => ({ path: relativePath, ...item })));
+  if (unguardedMethods.length > 0) {
+    readFailures.push({ path: relativePath, methods: unguardedMethods });
   }
 
   if (mutatingMethods.length > 0) {
     checked.push({ path: relativePath, methods: mutatingMethods });
   }
-  if (mutatingMethods.length > 0 && !hasAdminAccess) {
-    failures.push({ path: relativePath, methods: mutatingMethods });
-  }
+  const unguardedWrites = unguardedMethods.filter(method => mutatingMethods.includes(method));
+  if (unguardedWrites.length > 0) failures.push({ path: relativePath, methods: unguardedWrites });
 
   const calls = extractRequireAdminAccessCalls(source);
+  const scopedEvidence = scopedAccessCallEvidence(routeFile, source);
   const unscopedCalls = [];
   for (const call of calls) {
     if (adminPermissionPattern.test(call.text)) {
@@ -194,6 +206,12 @@ for (const routeFile of routeFiles) {
         line: call.line,
         reason: roleOnlyAccess.reason,
       });
+      continue;
+    }
+
+    const boundedCapability = scopedEvidence.find(item => item.index === call.index);
+    if (boundedCapability) {
+      dynamicPermissionAccess.push({ path: relativePath, line: call.line, capabilities: boundedCapability.capabilities });
       continue;
     }
 
@@ -297,4 +315,5 @@ console.log(JSON.stringify({
   skippedAuthLifecycleRoutes: skippedAuth.length,
   skippedAuthLifecycleMethods: skippedAuth.reduce((total, route) => total + route.methods.length, 0),
   routeSpecificContracts: routeContractChecks.length,
+  delegatedMethodEvidence,
 }, null, 2));

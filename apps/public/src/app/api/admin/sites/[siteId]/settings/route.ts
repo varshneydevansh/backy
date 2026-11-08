@@ -1,3 +1,4 @@
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
 /**
  * Site-scoped admin settings endpoint.
  *
@@ -1144,6 +1145,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
   const body = await parseJsonBody(request);
   const settingsPatch = settingsPatchFromBody(body);
+  if (Object.prototype.hasOwnProperty.call(settingsPatch, "frontendDesign")) {
+    return errorResponse(400, "FRONTEND_DESIGN_ENDPOINT_REQUIRED", "Update frontendDesign through /api/admin/sites/:siteId/frontend-design so template snapshots are retained atomically.", requestId);
+  }
   const filteredPatch = filteredSiteSettingsPatch(settingsPatch);
   const changedKeys = Object.keys(filteredPatch);
   if (changedKeys.length === 0) {
@@ -1182,7 +1186,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const nextSettings = mergeSiteSettings(site.settings, filteredPatch);
       const updated = await repositories.sites.update(site.id, {
-        settings: nextSettings,
+        settings: unrelatedSiteSettingsPatch(nextSettings),
       });
       await recordAdminAudit({
         repositories,
@@ -1231,7 +1235,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const nextSettings = mergeSiteSettings(site.settings, filteredPatch);
-    const updated = updateAdminSite(site.id, { settings: nextSettings });
+    const updated = updateAdminSite(site.id, { settings: unrelatedSiteSettingsPatch(nextSettings) });
     if (!updated) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }

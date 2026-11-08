@@ -3,6 +3,7 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { PRODUCT_COLLECTION_SLUG, productRecordToCommerceProduct, type CommerceSourceRecord } from '@/lib/commerceCatalog';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { getAdminSettings, getCollectionByIdOrSlug, getCollectionRecordByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
@@ -28,7 +29,6 @@ interface SourceRecord {
 
 const ORDERS_COLLECTION_SLUG = 'orders';
 const SCHEMA_VERSION = 'backy.product-subscription-lifecycle.v1';
-const ORDER_LIMIT = 1000;
 type SubscriptionLifecycleOperatorAction = 'pause' | 'resume' | 'cancel';
 type SubscriptionActionExecutionMode = 'stripe-api' | 'paypal-api' | 'paddle-api' | 'square-api' | 'adyen-api' | 'mollie-api' | 'razorpay-api' | 'http-api' | 'handoff';
 type SubscriptionLifecycleStatus = 'active' | 'renewal' | 'dunning' | 'paused' | 'trial_will_end' | 'cancelled' | 'pending';
@@ -780,14 +780,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         || await repositories.collections.getRecordBySlug(site.id, productsCollection.id, productId);
       if (!product) return errorResponse(404, 'PRODUCT_NOT_FOUND', 'Product not found', requestId);
 
-      const orders = await repositories.collections.listRecords({
+      const orders = await collectCompleteExportPages(pagination => repositories.collections.listRecords({
         siteId: site.id,
         collectionId: ordersCollection.id,
         includeUnpublished: true,
-        limit: ORDER_LIMIT,
-        offset: 0,
-      });
-      const lifecycle = buildLifecycle(product, orders.items);
+        ...pagination,
+      }), record => record.siteId === site.id && record.collectionId === ordersCollection.id);
+      const lifecycle = buildLifecycle(product, orders);
 
       return lifecycleResponse({
         success: true,
@@ -810,14 +809,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const product = getCollectionRecordByIdOrSlug(site.id, productsCollection.id, productId, { includeUnpublished: true });
     if (!product) return errorResponse(404, 'PRODUCT_NOT_FOUND', 'Product not found', requestId);
 
-    const orders = listCollectionRecords(site.id, ordersCollection.id, {
-      includeUnpublished: true,
-      limit: ORDER_LIMIT,
-      offset: 0,
-      sortBy: 'updatedAt',
-      sortDirection: 'desc',
-    });
-    const lifecycle = buildLifecycle(product, orders.records);
+    const orders = await collectCompleteExportPages(async pagination => {
+      const result = listCollectionRecords(site.id, ordersCollection.id, {
+        includeUnpublished: true,
+        sortBy: 'updatedAt',
+        sortDirection: 'desc',
+        ...pagination,
+      });
+      return { items: result.records, pagination: result.pagination };
+    }, record => record.siteId === site.id && record.collectionId === ordersCollection.id);
+    const lifecycle = buildLifecycle(product, orders);
 
     return lifecycleResponse({
       success: true,
@@ -830,6 +831,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       lifecycle,
     }, requestId, site.id);
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'ORDER_INVENTORY_INCOMPLETE', 'The complete order inventory could not be verified. Retry after content changes finish.', requestId);
     console.error('Admin product subscription lifecycle API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

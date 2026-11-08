@@ -144,10 +144,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'ids or blocklistIds are required', requestId);
     }
 
+    if (repositories && typeof repositories.comments.deleteBlocklistEntries !== 'function') return errorResponse(503, 'COMMENT_MODERATION_UNAVAILABLE', 'Atomic blocklist deletion is unavailable.', requestId);
+    const completionWarnings: string[] = [];
     const result = repositories
       ? await repositories.comments.deleteBlocklistEntries(site.id, ids)
       : deleteCommentBlocklistEntries({ siteId: site.id, ids });
-    await recordAdminAudit({
+    try { await recordAdminAudit({
       repositories,
       siteId: site.id,
       actorId: access.session?.user.id,
@@ -162,7 +164,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         types: Array.from(new Set(result.deleted.map((entry) => entry.type))),
       },
       requestId,
-    });
+    }); } catch { completionWarnings.push('COMMENT_AUDIT_PENDING'); }
 
     return privateResponse({
       success: true,
@@ -172,6 +174,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         deleted: result.deleted,
         deletedCount: result.deleted.length,
         missingIds: result.missingIds,
+        completionWarnings,
+        concurrencyBoundary: repositories ? 'database-site-row-lock' : 'demo-single-process',
       },
       siteId: site.id,
       deleted: result.deleted,
@@ -179,6 +183,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       missingIds: result.missingIds,
     }, requestId);
   } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code === 'COMMENT_MODERATION_CONFLICT' || code === 'COMMENT_PARENT_CONFLICT') return errorResponse(409, 'COMMENT_MODERATION_CONFLICT', 'The selected blocklist scope changed. Reload before deleting.', requestId);
+    if (code === 'COMMENT_MODERATION_UNAVAILABLE' || code === 'COMMENT_INVENTORY_INCOMPLETE') return errorResponse(503, code, 'The selected blocklist could not be removed atomically. No deletion was committed.', requestId);
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

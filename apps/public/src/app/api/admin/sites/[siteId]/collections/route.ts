@@ -1,3 +1,4 @@
+import {collectionDefinitionWithVersion} from '@/lib/collectionDefinitionVersion';
 /**
  * Admin CMS collections endpoint.
  *
@@ -37,6 +38,7 @@ import {
 } from "@/lib/collectionRoutes";
 import { seedCollectionInputFromFrontendDesignTemplate } from "@/lib/frontendDesignContract";
 import { findCollectionRouteConflict } from "@/lib/routeConflicts";
+import { collectCollectionRoutePages, CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 import { parseAdminCollectionFields } from "@/lib/adminCollectionFields";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
@@ -180,6 +182,7 @@ const parseBoundedInteger = (
   min: number,
   max: number,
 ) => {
+  if (value === null || value.trim() === "") return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
     return fallback;
@@ -317,7 +320,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         success: true,
         requestId,
         data: {
-          collections: payload.items,
+          collections: payload.items.map(collectionDefinitionWithVersion),
           pagination: payload.pagination,
         },
       });
@@ -335,7 +338,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        collections: collections.slice(offset, offset + limit),
+        collections: collections.slice(offset, offset + limit).map(row=>collectionDefinitionWithVersion(row as never)),
         pagination: {
           total: collections.length,
           limit,
@@ -345,6 +348,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collections list API error:", error);
     return errorResponse(
       500,
@@ -470,13 +474,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const pages = await repositories.pages.list({
+      const pages = await collectCollectionRoutePages(site.id, pagination => repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
         status: "all",
-        limit: 100,
-        offset: 0,
-      });
+        ...pagination,
+      }));
       const routeConflict = findCollectionRouteConflict(
         {
           slug,
@@ -484,7 +487,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           routePattern,
           listRoutePattern,
         },
-        pages.items,
+        pages,
       );
       if (routeConflict) {
         return errorResponse(
@@ -561,7 +564,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       return NextResponse.json(
-        { success: true, requestId, data: { collection, cacheInvalidation } },
+        { success: true, requestId, data: { collection:collectionDefinitionWithVersion(collection), cacheInvalidation } },
         { status: 201 },
       );
     }
@@ -715,10 +718,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json(
-      { success: true, requestId, data: { collection } },
+      { success: true, requestId, data: { collection:collectionDefinitionWithVersion(collection as never) } },
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection create API error:", error);
     return errorResponse(
       500,

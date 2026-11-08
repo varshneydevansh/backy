@@ -1,3 +1,7 @@
+import type { MediaVersion } from '@backy-cms/core';
+import { mediaStorageUsageWithPending, mediaStorageRetirementFiles, mediaStorageAssetRetirementFiles, withJournaledMediaStorageMutation, mediaStorageRecoveryErrorResponse } from '@/lib/mediaStorageRecovery';
+import { isDeepStrictEqual } from 'node:util';
+import { withMediaStorageMutation } from '@/lib/mediaStorageMutation';
 /**
  * Admin media detail endpoint.
  *
@@ -6,7 +10,7 @@
  * POST   /api/admin/sites/[siteId]/media/[mediaId] (multipart replacement)
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
@@ -17,6 +21,10 @@ import {
   getMediaById,
   getMediaList,
   getSiteByIdOrSlug,
+  getBlogPosts,
+  listAdminPages,
+  listCollections,
+  listCollectionRecords,
   listMediaFolders,
   updateMediaItem,
 } from "@/lib/backyStore";
@@ -52,7 +60,11 @@ import {
 } from "@/lib/repositoryRuntime";
 import { buildPublicMediaOrganization } from "@/lib/publicMediaResource";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import { authorizeMediaDeletion, repositoryMediaDeletionReferences, MediaDeletionSafetyError } from "@/lib/mediaDeletionSafety";
+import { CollectionExportIncompleteError } from "@/lib/collectionExportPagination";
 import type { BackyJsonObject, MediaFolder, MediaItem, Site } from "@backy-cms/core";
+
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
 
 export const runtime = "nodejs";
 
@@ -280,101 +292,6 @@ const buildPreviousVersion = (
   reason: input.reason,
 });
 
-const addScopedStoragePath = (
-  siteId: string,
-  storagePaths: Set<string>,
-  value: unknown,
-) => {
-  const storagePath = typeof value === "string" ? value.trim() : "";
-  if (storagePath.length > 0 && storagePath.startsWith(`sites/${siteId}/`)) {
-    storagePaths.add(storagePath);
-  }
-};
-
-const collectMediaStoragePaths = (
-  siteId: string,
-  media: { url?: string | null; metadata?: unknown },
-) => {
-  const storagePaths = new Set<string>();
-  addScopedStoragePath(
-    siteId,
-    storagePaths,
-    getMediaStoragePathFromMedia(siteId, media),
-  );
-
-  if (
-    media.metadata &&
-    typeof media.metadata === "object" &&
-    !Array.isArray(media.metadata)
-  ) {
-    generatedTransformStoragePaths(media.metadata).forEach((path) => {
-      addScopedStoragePath(siteId, storagePaths, path);
-    });
-
-    const versions = (media.metadata as Record<string, unknown>)
-      .replacementVersions;
-    if (Array.isArray(versions)) {
-      versions.forEach((version) => {
-        if (version && typeof version === "object" && !Array.isArray(version)) {
-          addScopedStoragePath(
-            siteId,
-            storagePaths,
-            (version as Record<string, unknown>).storagePath,
-          );
-        }
-      });
-    }
-  }
-
-  return storagePaths;
-};
-
-const collectRetainedVersionStoragePaths = (
-  siteId: string,
-  versions: Array<{
-    url?: string | null;
-    metadata?: unknown;
-    storagePath?: string | null;
-  }>,
-) => {
-  const storagePaths = new Set<string>();
-
-  versions.forEach((version) => {
-    addScopedStoragePath(siteId, storagePaths, version.storagePath);
-    addScopedStoragePath(
-      siteId,
-      storagePaths,
-      getMediaStoragePathFromMedia(siteId, version),
-    );
-  });
-
-  return Array.from(storagePaths);
-};
-
-const deleteUploadedFile = async (
-  siteId: string,
-  media: { url?: string | null; metadata?: unknown },
-  retainedStoragePaths: string[] = [],
-) => {
-  const storagePaths = collectMediaStoragePaths(siteId, media);
-  retainedStoragePaths.forEach((path) => {
-    addScopedStoragePath(siteId, storagePaths, path);
-  });
-
-  if (storagePaths.size === 0) {
-    return;
-  }
-
-  try {
-    const storage = await getMediaStorageAdapter();
-    await Promise.all(
-      Array.from(storagePaths).map((path) => storage.delete(path)),
-    );
-  } catch {
-    // Missing storage objects should not make catalog deletion fail.
-  }
-};
-
 const stringArrayFromInput = (value: unknown): string[] | undefined =>
   Array.isArray(value)
     ? Array.from(
@@ -409,6 +326,33 @@ const isMediaScopeInput = (
   value: unknown,
 ): value is "global" | "page" | "post" =>
   value === "global" || value === "page" || value === "post";
+
+const storageManagedMetadataKeys = [
+  'storagePath', 'storageProvider', 'binaryFingerprint', 'safetyScan',
+  'generatedTransforms', 'replacementVersions', 'resumableUploadId',
+] as const;
+const editableMediaMetadataFromInput = (value: unknown) => {
+  const metadata = metadataFromInput(value);
+  if (!metadata) return undefined;
+  return Object.fromEntries(Object.entries(metadata).filter(([key]) => !storageManagedMetadataKeys.includes(key as typeof storageManagedMetadataKeys[number])));
+};
+const jsonValue = (value: unknown): unknown => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+const mediaStorageMetadataValidationError = (body: Record<string, unknown>, current: MediaItem, requestId: string) => {
+  const input = metadataFromInput(body.metadata);
+  if (input && storageManagedMetadataKeys.some(key => hasBodyKey(input, key)
+    && !isDeepStrictEqual(jsonValue(input[key]), jsonValue(current.metadata?.[key])))) {
+    return errorResponse(400, 'INVALID_MEDIA_METADATA', 'Storage paths, scan evidence, generated variants and replacement history are managed by upload, replacement and transform operations.', requestId);
+  }
+  const managedFields: Record<string, unknown> = {
+    url: current.url, size: current.sizeBytes, sizeBytes: current.sizeBytes,
+    mimeType: current.mimeType, type: current.type,
+  };
+  if (Object.entries(managedFields).some(([key, value]) => hasBodyKey(body, key)
+    && !isDeepStrictEqual(jsonValue(body[key]), jsonValue(value)))) {
+    return errorResponse(400, 'INVALID_MEDIA_METADATA', 'Binary URL, size, MIME type and media type require a replacement upload.', requestId);
+  }
+  return null;
+};
 
 const mediaUpdateValidationError = (
   body: Record<string, unknown>,
@@ -619,81 +563,93 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const beforeMedia = await repositories.media.getById(site.id, mediaId);
-      if (!beforeMedia) {
-        return errorResponse(
-          404,
-          "MEDIA_NOT_FOUND",
-          "Media item not found",
-          requestId,
-        );
-      }
-
       const body = await parseJsonBody(request);
-      const validationError = mediaUpdateValidationError(body, requestId);
-      if (validationError) {
-        return validationError;
-      }
-      const folderId = nullableStringFromBody(body.folderId);
-      const inputMetadata = metadataFromInput(body.metadata);
-      const scopePatch = buildMediaScopeMetadataPatch(
-        {
-          scope: body.scope,
-          scopeTargetId: body.scopeTargetId,
-          pageIds: body.pageIds,
-          postIds: body.postIds,
-        },
-        beforeMedia,
-      );
-      const scopeError = mediaScopeValidationError(scopePatch, requestId);
-      if (scopeError) {
-        return scopeError;
-      }
-      const scopedMetadata = {
-        ...(inputMetadata || {}),
-        ...scopePatch,
-      };
-      const requestedVisibility = visibilityFromInput(body.visibility);
-      const nextMetadata = {
-        ...(beforeMedia.metadata || {}),
-        ...scopedMetadata,
-      };
-      const nextSecurity = getMediaSecurityPolicy(nextMetadata);
-      const nextVisibility =
-        nextSecurity.status === "quarantined" ? "private" : requestedVisibility;
-      if (folderId) {
-        const folder = await repositories.media.getFolderById(
-          site.id,
-          folderId,
-        );
-        if (!folder) {
+      const admitted = await withMediaStorageMutation(repositories.media, site.id, requestId, async () => {
+        const beforeMedia = await repositories.media.getById(site.id, mediaId);
+        if (!beforeMedia) {
           return errorResponse(
             404,
-            "FOLDER_NOT_FOUND",
-            "Media folder not found",
+            "MEDIA_NOT_FOUND",
+            "Media item not found",
             requestId,
           );
         }
-      }
 
-      const updated = await repositories.media.update(site.id, mediaId, {
-        filename: typeof body.filename === "string" ? body.filename : undefined,
-        originalName:
-          typeof body.originalName === "string" ? body.originalName : undefined,
-        folderId,
-        altText:
-          typeof body.altText === "string" || body.altText === null
-            ? body.altText
-            : undefined,
-        caption:
-          typeof body.caption === "string" || body.caption === null
-            ? body.caption
-            : undefined,
-        visibility: nextVisibility,
-        metadata: scopedMetadata,
-        tags: stringArrayFromInput(body.tags),
+        const validationError = mediaUpdateValidationError(body, requestId) || mediaStorageMetadataValidationError(body, beforeMedia, requestId);
+        if (validationError) {
+          return validationError;
+        }
+        const folderId = nullableStringFromBody(body.folderId);
+        const inputMetadata = editableMediaMetadataFromInput(body.metadata);
+        const scopePatch = buildMediaScopeMetadataPatch(
+          {
+            scope: body.scope,
+            scopeTargetId: body.scopeTargetId,
+            pageIds: body.pageIds,
+            postIds: body.postIds,
+          },
+          beforeMedia,
+        );
+        const scopeError = mediaScopeValidationError(scopePatch, requestId);
+        if (scopeError) {
+          return scopeError;
+        }
+        const scopedMetadata = {
+          ...(inputMetadata || {}),
+          ...scopePatch,
+        };
+        const requestedVisibility = visibilityFromInput(body.visibility);
+        const nextMetadata = {
+          ...(beforeMedia.metadata || {}),
+          ...scopedMetadata,
+        };
+        const nextSecurity = getMediaSecurityPolicy(nextMetadata);
+        const nextVisibility =
+          nextSecurity.status === "quarantined" ? "private" : requestedVisibility;
+        if (folderId) {
+          const folder = await repositories.media.getFolderById(
+            site.id,
+            folderId,
+          );
+          if (!folder) {
+            return errorResponse(
+              404,
+              "FOLDER_NOT_FOUND",
+              "Media folder not found",
+              requestId,
+            );
+          }
+        }
+
+        const updated = await repositories.media.update(site.id, mediaId, {
+          filename: typeof body.filename === "string" ? body.filename : undefined,
+          originalName:
+            typeof body.originalName === "string" ? body.originalName : undefined,
+          folderId,
+          altText:
+            typeof body.altText === "string" || body.altText === null
+              ? body.altText
+              : undefined,
+          caption:
+            typeof body.caption === "string" || body.caption === null
+              ? body.caption
+              : undefined,
+          visibility: nextVisibility,
+          metadata: scopedMetadata,
+          tags: stringArrayFromInput(body.tags),
+        });
+        return { beforeMedia, updated };
       });
-      await recordAdminAudit({
+      if (admitted instanceof NextResponse) return admitted;
+      const { beforeMedia, updated } = admitted;
+      // These tasks run after the metadata write commits. A failed task must not
+      // report a failed save or invite the caller to replay the mutation.
+      const completionWarnings: string[] = [];
+      const followUp = async <T>(code: string, operation: () => Promise<T>): Promise<T | undefined> => {
+        try { return await operation(); }
+        catch { completionWarnings.push(code); return undefined; }
+      };
+      await followUp("MEDIA_AUDIT_PENDING", () => recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "media",
@@ -705,8 +661,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           changedKeys: Object.keys(body),
         },
         requestId,
-      });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      }));
+      const cacheInvalidation = await followUp("MEDIA_CACHE_INVALIDATION_PENDING", () => recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -716,27 +672,32 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           reason: "media-updated",
           requestId,
         },
-      );
-      await deliverMediaAssetWebhook({
-        repositories,
-        site,
-        action: "media.updated",
-        before: beforeMedia,
-        after: updated.item,
-        changedFields: Object.keys(body),
-        requestId,
-        actor: access.session?.user.id,
+      ));
+      await followUp("MEDIA_WEBHOOK_DELIVERY_PENDING", async () => {
+        const outcomes = await deliverMediaAssetWebhook({
+          repositories,
+          site,
+          action: "media.updated",
+          before: beforeMedia,
+          after: updated.item,
+          changedFields: Object.keys(body),
+          requestId,
+          actor: access.session?.user.id,
+        });
+        if (outcomes.some(outcome => outcome.status === "failed")) throw new Error("Media update notification needs retry.");
+      });
+      let responseMedia = withAdminMediaOrganization(updated.item);
+      await followUp("MEDIA_ORGANIZATION_PENDING", async () => {
+        responseMedia = withAdminMediaOrganization(updated.item, await repositories.media.listFolders(site.id));
       });
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
-          media: withAdminMediaOrganization(
-            updated.item,
-            await repositories.media.listFolders(site.id),
-          ),
-          cacheInvalidation,
+          media: responseMedia,
+          ...(cacheInvalidation === undefined ? {} : { cacheInvalidation }),
+          completionWarnings,
         },
       });
     }
@@ -758,12 +719,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
-    const validationError = mediaUpdateValidationError(body, requestId);
+    const validationError = mediaUpdateValidationError(body, requestId) || mediaStorageMetadataValidationError(body, beforeMedia, requestId);
     if (validationError) {
       return validationError;
     }
     const folderId = nullableStringFromBody(body.folderId);
-    const inputMetadata = metadataFromInput(body.metadata);
+    const inputMetadata = editableMediaMetadataFromInput(body.metadata);
     const scopePatch = buildMediaScopeMetadataPatch(
       {
         scope: body.scope,
@@ -804,9 +765,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const media = updateMediaItem(site.id, mediaId, {
-      ...body,
-      ...(nextVisibility ? { visibility: nextVisibility } : {}),
+      filename: typeof body.filename === 'string' ? body.filename : undefined,
+      originalName: typeof body.originalName === 'string' ? body.originalName : undefined,
+      folderId,
+      altText: typeof body.altText === 'string' || body.altText === null ? body.altText : undefined,
+      caption: typeof body.caption === 'string' || body.caption === null ? body.caption : undefined,
+      visibility: nextVisibility,
       metadata: scopedMetadata,
+      tags: stringArrayFromInput(body.tags),
     });
 
     if (!media) {
@@ -880,6 +846,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
+    return await withMediaStorageMutation(repositories?.media || null, site.id, requestId, async () => {
     const beforeMedia = repositories
       ? await repositories.media.getById(site.id, mediaId)
       : getMediaById(site.id, mediaId);
@@ -966,21 +933,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
-    const currentMedia = repositories
-      ? (
-          await repositories.media.list({
-            siteId: site.id,
-            type: "all",
-            visibility: "all",
-            limit: 10000,
-            offset: 0,
-          })
-        ).items
-      : getMediaList(site.id, {
-          limit: 10000,
-          offset: 0,
-        }).media;
-    const currentUsageBytes = mediaUsageBytes(currentMedia);
+    const currentMedia = await readCompleteMediaInventory(site.id, async pagination => {
+      if (repositories) return repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', ...pagination });
+      const result = getMediaList(site.id, pagination);
+      return { items: result.media, pagination: result.pagination };
+    });
+    const currentUsageBytes = await mediaStorageUsageWithPending(site.id, repositories);
     const nextUsageBytes = currentUsageBytes + file.size;
     const billingLimit = readMediaBillingLimit(
       site.settings,
@@ -1011,7 +969,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const safeName = safePathSegment(
       extension ? originalName.slice(0, -extension.length) : originalName,
     );
-    const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
+    const storedFilename = `${randomUUID()}-${safeName}${extension}`;
     const storagePath = getMediaStoragePath({
       siteId: site.id,
       mediaFolder: mediaFolderForType(mediaType),
@@ -1024,8 +982,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       originalName,
       mimeType,
       mediaType,
-    });
+    }, { access, siteId: site.id });
+    const responseFolders = repositories ? await repositories.media.listFolders(site.id) : listMediaFolders(site.id);
     const storage = await getMediaStorageAdapter();
+    const retired = await mediaStorageAssetRetirementFiles(site.id, beforeMedia as MediaItem, repositories);
+    return withJournaledMediaStorageMutation({ siteId: site.id, mediaId: beforeMedia.id, operation: 'replace', requestId, files: [{ path: storagePath, bytes: uploadBuffer.length, purpose: 'write' }, ...retired] }, repositories, async () => {
     const upload = await storage.upload(uploadBuffer, {
       path: storagePath,
       filename: storedFilename,
@@ -1037,6 +998,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         replacesMediaId: beforeMedia.id,
       },
     });
+    if (upload.path !== storagePath || upload.size !== uploadBuffer.length) throw new Error('Storage adapter returned an unverified planned write.');
     const replacedAt = new Date().toISOString();
     const replacedBy = toStringValue(formData.get("replacedBy")) || "admin";
     const reason = toStringValue(formData.get("reason"));
@@ -1049,15 +1011,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       previousVersion,
       ...replacementVersionsFromMetadata(beforeMedia.metadata),
     ].slice(0, MAX_REPLACEMENT_VERSIONS);
-    await deleteGeneratedTransformFiles(beforeMedia.metadata).catch(
-      () => undefined,
-    );
     const metadataWithoutGeneratedTransforms = {
       ...(beforeMedia.metadata || {}),
     };
-    delete metadataWithoutGeneratedTransforms.generatedTransforms;
+    metadataWithoutGeneratedTransforms.generatedTransforms = null;
     const metadata = {
-      ...metadataWithoutGeneratedTransforms,
+      generatedTransforms: null,
       extension: extension.replace(/^\./, ""),
       storagePath: upload.path,
       storageProvider: storage.provider,
@@ -1138,7 +1097,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const versionRecord = repositories
+    const versionWarnings: string[] = [];
+    let versionRecord: MediaVersion | null = null;
+    try {
+    versionRecord = repositories
       ? (
           await repositories.media.createVersion({
             siteId: site.id,
@@ -1164,6 +1126,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         ).item
       : null;
 
+    } catch { versionWarnings.push('MEDIA_VERSION_INDEX_PENDING'); }
+    const completionWarnings: string[] = [...versionWarnings];
+    try {
     await recordAdminAudit({
       repositories,
       siteId: site.id,
@@ -1183,7 +1148,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
       requestId,
     });
-    const cacheInvalidation = repositories
+    } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+    let cacheInvalidation: Awaited<ReturnType<typeof recordSiteCacheInvalidation>> | undefined;
+    try {
+    cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,
           scope: "media",
@@ -1193,6 +1161,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestId,
         })
       : undefined;
+    } catch { completionWarnings.push('MEDIA_CACHE_INVALIDATION_PENDING'); }
+    try {
     await deliverMediaAssetWebhook({
       repositories,
       site: site as unknown as Site,
@@ -1204,16 +1174,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       actor: access.session?.user.id,
     });
 
+    } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         media: withAdminMediaOrganization(
           updated,
-          repositories
-            ? await repositories.media.listFolders(site.id)
-            : listMediaFolders(site.id),
+          responseFolders,
         ),
+        completionWarnings,
         cacheInvalidation,
         quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         replacement: {
@@ -1223,7 +1193,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+    });
+    });
   } catch (error) {
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     if (error instanceof MediaSafetyError) {
       return errorResponse(
         415,
@@ -1255,6 +1229,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId, mediaId } = await params;
+    const deleteInput = await parseJsonBody(request);
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site =
@@ -1270,6 +1245,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      return await withMediaStorageMutation(repositories.media, site.id, requestId, async () => {
       const media = await repositories.media.getById(site.id, mediaId);
 
       if (!media) {
@@ -1281,36 +1257,44 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const retainedVersionStoragePaths = collectRetainedVersionStoragePaths(
-        site.id,
-        (
-          await repositories.media.listVersions({
-            siteId: site.id,
-            mediaId,
-            limit: 200,
-            offset: 0,
-          })
-        ).items,
-      );
+      const deletion = authorizeMediaDeletion(media, deleteInput, await repositoryMediaDeletionReferences(repositories, media));
+      if (deletion.override) await recordAdminAudit({
+        repositories, siteId: site.id, actorId: access.session?.user.id,
+        entity: "media", entityId: media.id, action: "delete.override.authorized", requestId,
+        metadata: { reason: deletion.override.reason, referenceFingerprint: deletion.impact.referenceFingerprint,
+          references: deletion.impact.references, referenceCount: deletion.impact.referenceCount },
+      });
 
+      const currentMedia = await repositories.media.getById(site.id, mediaId);
+      if (!currentMedia) return errorResponse(404, "MEDIA_NOT_FOUND", "Media item not found", requestId);
+      authorizeMediaDeletion(currentMedia, deleteInput, await repositoryMediaDeletionReferences(repositories, currentMedia));
+      const files = await mediaStorageAssetRetirementFiles(site.id, currentMedia, repositories);
+      authorizeMediaDeletion(currentMedia, deleteInput, await repositoryMediaDeletionReferences(repositories, currentMedia));
+      return withJournaledMediaStorageMutation({ siteId: site.id, mediaId, operation: 'delete', requestId, files }, repositories, async () => {
       await repositories.media.delete(site.id, mediaId);
-      await deleteUploadedFile(site.id, media, retainedVersionStoragePaths);
-      await recordAdminAudit({
+      const completionWarnings: string[] = [];
+      try { await recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "media",
         entityId: media.id,
         action: "delete",
+        actorId: access.session?.user.id,
         before: media,
         metadata: {
           filename: media.originalName || media.filename,
           mimeType: media.mimeType,
           type: media.type,
           visibility: media.visibility || "public",
+          referencedDeleteOverride: Boolean(deletion.override),
+          ...(deletion.override ? { overrideReason: deletion.override.reason, referenceFingerprint: deletion.impact.referenceFingerprint,
+            affectedReferences: deletion.impact.references } : {}),
         },
         requestId,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+      let cacheInvalidation: Awaited<ReturnType<typeof recordSiteCacheInvalidation>> | undefined;
+      try { cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -1321,7 +1305,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           requestId,
         },
       );
-      await deliverMediaAssetWebhook({
+      } catch { completionWarnings.push('MEDIA_CACHE_INVALIDATION_PENDING'); }
+      try { await deliverMediaAssetWebhook({
         repositories,
         site,
         action: "media.deleted",
@@ -1330,14 +1315,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         actor: access.session?.user.id,
       });
 
+      } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           deleted: true,
           mediaId,
+          completionWarnings,
           cacheInvalidation,
         },
+      });
+      });
       });
     }
 
@@ -1347,7 +1336,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const media = deleteMediaItem(site.id, mediaId);
+    return await withMediaStorageMutation(null, site.id, requestId, async () => {
+    const media = getMediaById(site.id, mediaId);
 
     if (!media) {
       return errorResponse(
@@ -1358,22 +1348,60 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    await deleteUploadedFile(site.id, media);
-    await recordAdminAudit({
+    const pageOf = <T,>(items: T[], input: { limit: number; offset: number }) => ({
+      items: items.slice(input.offset, input.offset + input.limit),
+      pagination: { total: items.length, limit: input.limit, offset: input.offset, hasMore: input.offset + input.limit < items.length },
+    });
+    const referenceSource = {
+      pages: { list: async (input: { limit: number; offset: number }) => pageOf(listAdminPages(site.id, { includeUnpublished: true }), input) },
+      posts: { list: async (input: { limit: number; offset: number }) => {
+        const result = getBlogPosts(site.id, { includeUnpublished: true, ...input });
+        if (!result.pagination) throw new CollectionExportIncompleteError();
+        return { items: result.posts, pagination: result.pagination };
+      } },
+      collections: {
+        list: async (input: { limit: number; offset: number }) => pageOf(listCollections(site.id, { includeUnpublished: true }), input),
+        listRecords: async (input: { collectionId: string; limit: number; offset: number }) => {
+          const result = listCollectionRecords(site.id, input.collectionId, { includeUnpublished: true, limit: input.limit, offset: input.offset });
+          return { items: result.records, pagination: result.pagination };
+        },
+      },
+    };
+    const deletion = authorizeMediaDeletion(media, deleteInput, await repositoryMediaDeletionReferences(referenceSource, media));
+    if (deletion.override) await recordAdminAudit({
+      siteId: site.id, actorId: access.session?.user.id,
+      entity: "media", entityId: media.id, action: "delete.override.authorized", requestId,
+      metadata: { reason: deletion.override.reason, referenceFingerprint: deletion.impact.referenceFingerprint,
+        references: deletion.impact.references, referenceCount: deletion.impact.referenceCount },
+    });
+    const currentMedia = getMediaById(site.id, mediaId);
+    if (!currentMedia) return errorResponse(404, "MEDIA_NOT_FOUND", "Media item not found", requestId);
+    authorizeMediaDeletion(currentMedia, deleteInput, await repositoryMediaDeletionReferences(referenceSource, currentMedia));
+    const files = await mediaStorageAssetRetirementFiles(site.id, currentMedia as unknown as MediaItem, null);
+    authorizeMediaDeletion(currentMedia, deleteInput, await repositoryMediaDeletionReferences(referenceSource, currentMedia));
+    return withJournaledMediaStorageMutation({ siteId: site.id, mediaId, operation: 'delete', requestId, files }, null, async () => {
+    deleteMediaItem(site.id, mediaId);
+    const completionWarnings: string[] = [];
+    try { await recordAdminAudit({
       siteId: site.id,
       entity: "media",
       entityId: media.id,
       action: "delete",
+      actorId: access.session?.user.id,
       before: media,
       metadata: {
         filename: media.originalName || media.filename,
         mimeType: media.mimeType,
         type: media.type,
         visibility: media.visibility || "public",
+        referencedDeleteOverride: Boolean(deletion.override),
+        ...(deletion.override ? { overrideReason: deletion.override.reason, referenceFingerprint: deletion.impact.referenceFingerprint,
+          affectedReferences: deletion.impact.references } : {}),
       },
       requestId,
     });
-    await deliverMediaAssetWebhook({
+    } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+    try { await deliverMediaAssetWebhook({
       site: site as unknown as Site,
       action: "media.deleted",
       before: media,
@@ -1381,15 +1409,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       actor: access.session?.user.id,
     });
 
+    } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         deleted: true,
+        completionWarnings,
         mediaId,
       },
     });
+    });
+    });
   } catch (error) {
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
+    if (error instanceof MediaDeletionSafetyError) return errorResponse(error.status, error.code, error.message, requestId, { ...error.impact });
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(409, "MEDIA_REFERENCE_CHECK_INCOMPLETE", "Unable to verify all content references. Retry after content changes finish.", requestId);
     console.error("Admin media delete API error:", error);
     return errorResponse(
       500,

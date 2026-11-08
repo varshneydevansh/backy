@@ -10,6 +10,8 @@ import { getSiteByIdOrSlug } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildRepositorySiteReadiness, buildSiteReadiness } from '@/lib/siteReadiness';
 
+import { CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
+
 export const runtime = 'nodejs';
 
 interface RouteParams {
@@ -31,7 +33,7 @@ const errorResponse = (status: number, code: string, message: string, requestId:
       },
       errorMessage: message,
     },
-    { status },
+    { status, headers: { 'Cache-Control': 'private, no-store' } },
   )
 );
 
@@ -81,6 +83,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       readiness,
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, 'SITE_READINESS_INVENTORY_INCOMPLETE', 'Site readiness could not read a complete inventory. Retry after content changes finish.', requestId);
+    }
     console.error('Admin site readiness API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -1,3 +1,5 @@
+import { formDefinitionWithVersion } from '@/lib/formDefinitionVersion';
+import { collectCompleteFormsInventory, FormsInventoryIncompleteError } from '@/lib/formsInventory';
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -512,13 +514,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const payload = await repositories.forms.list({
-        siteId: site.id,
-        pageId,
-        postId,
-        limit: 100,
-        offset: 0,
-      });
+      const forms = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.list({ siteId: site.id, pageId, postId, ...pagination }), form => (!pageId || form.pageId === pageId) && (!postId || form.postId === postId));
+      const payload = { items: forms.map(formDefinitionWithVersion), pagination: { total: forms.length, limit: forms.length, offset: 0, hasMore: false } };
 
       return NextResponse.json({
         success: true,
@@ -540,7 +537,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const forms = listFormsBySite(site.id, { pageId, postId });
+    const forms = listFormsBySite(site.id, { pageId, postId }).map(formDefinitionWithVersion);
     return NextResponse.json({
       success: true,
       requestId,
@@ -560,6 +557,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       persistenceCertification: formPersistenceCertification(site.id, forms),
     });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin forms API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -650,7 +648,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       });
 
       return NextResponse.json(
-        { success: true, requestId, data: { form: created }, form: created },
+        { success: true, requestId, data: { form: formDefinitionWithVersion(created) }, form: formDefinitionWithVersion(created) },
         { status: 201 },
       );
     }
@@ -714,7 +712,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
 
     return NextResponse.json(
-      { success: true, requestId, data: { form: created }, form: created },
+      { success: true, requestId, data: { form: formDefinitionWithVersion(created) }, form: formDefinitionWithVersion(created) },
       { status: 201 },
     );
   } catch (error) {

@@ -226,7 +226,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
-    const result = listFormContacts(form.id, {
+    const result = listFormContacts(form.id, { siteId: site.id,
       status,
       newsletterSubscriptionStatus: newsletterStatusFilter.value,
       newsletterOnly,

@@ -2154,6 +2154,8 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
 
   const serviceKeyLabel = `Settings smoke server key ${Date.now()}`;
   await setLabeledControl(client, 'New key label', serviceKeyLabel);
+  await setLabeledControl(client, 'Access scope', 'workspace');
+  await setLabeledControl(client, 'I deliberately authorize access to every site', true);
   await clickByTestId(client, 'settings-admin-service-key-issue');
   await waitForText(client, 'Copy this key now');
   const issuedServiceKeyState = await evaluate(client, `(() => {
@@ -2182,6 +2184,8 @@ const assertOwnerCanRotateApiKeyThroughUi = async (client, ownerSession, ownerOr
   assert(
     issuedGrant?.id &&
       issuedGrant.status === 'active' &&
+      issuedGrant.scope?.mode === 'workspace' &&
+      !issuedGrant.scope?.legacy &&
       issuedGrant.keyFingerprint &&
       !JSON.stringify(issuedGrant).includes('keyHash'),
     `Issued service key metadata was not persisted safely: ${JSON.stringify(afterIssue.auth?.apiKeyServiceKeys).slice(0, 1000)}`,
@@ -2881,9 +2885,9 @@ const updateSettingsThroughUi = async (client, suffix, originalSettings, notific
     hasReleaseCertificationSettingsGate: runbookText.includes('certify_settings_providers') && runbookText.includes('ci:settings-provider-certification'),
     hasReleaseCertificationCommerceGate: runbookText.includes('certify_commerce_providers') && runbookText.includes('ci:commerce-provider-certification'),
     hasBackyCompletionStatus: Boolean(document.querySelector('[data-testid="settings-backy-completion-status"]')) &&
-      completionStatusText.includes('Backy completion status') &&
+      completionStatusText.includes('Legacy release audit') &&
       completionStatusText.includes('41 Ready / 4 Partial') &&
-      completionStatusText.includes('Artifacts accepted: 45 Ready / 0 Partial') &&
+      completionStatusText.includes('If artifacts pass: 45 Ready / 0 Partial') &&
       completionStatusText.includes('backy.completion-status.v1') &&
       completionStatusText.includes('data.contract.completionStatus') &&
       completionStatusText.includes('x-backy-completion-status'),

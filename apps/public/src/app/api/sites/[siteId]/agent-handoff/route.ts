@@ -1,3 +1,4 @@
+import type { BackyVisitorAccountSettings } from '@backy-cms/core';
 /**
  * Public AI/custom frontend builder handoff.
  *
@@ -22,6 +23,7 @@ type HandoffSite = {
   name: string;
   customDomain?: string | null;
   settings?: {
+    visitorAccounts?: BackyVisitorAccountSettings;
     domainVerification?: {
       domain?: string | null;
     } | null;
@@ -61,6 +63,7 @@ const agentHandoffResponse = (
     customDomain: site.customDomain,
     domainVerificationDomain: site.settings?.domainVerification?.domain,
     domainAliases: site.settings?.domainAliases || [],
+    visitorAccounts: site.settings?.visitorAccounts,
   });
   const body = {
     success: true,

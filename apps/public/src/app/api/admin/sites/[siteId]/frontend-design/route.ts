@@ -1,3 +1,4 @@
+import { persistFrontendDesignWithHistory } from '@/lib/templateHistory';
 /**
  * Admin frontend design contract endpoint.
  *
@@ -9,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import type { FormDefinition, Site, SiteSettings } from "@backy-cms/core";
+import { normalizeFrontendRuntimeDeclaration, type FormDefinition, type Site, type SiteSettings } from "@backy-cms/core";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import {
@@ -21,7 +22,6 @@ import {
   getPageSummary,
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
-  updateAdminSite,
 } from "@/lib/backyStore";
 import {
   recordSiteCacheInvalidation,
@@ -736,18 +736,10 @@ const responseForSite = (
 
 const persistRepositoryFrontendDesign = async (
   site: Site,
-  settings: SiteSettings,
+  _settings: SiteSettings,
   frontendDesign: FrontendDesignContract,
-) => {
-  const repositories = await getRequiredDatabaseRepositories();
-  const updated = await repositories.sites.update(site.id, {
-    settings: {
-      ...settings,
-      frontendDesign,
-    },
-  });
-  return updated.item;
-};
+  context: { source: string; actorId?: string | null; requestId?: string },
+) => persistFrontendDesignWithHistory(site, frontendDesign, context);
 
 const frontendDesignWebhookMetadata = (
   action: string,
@@ -831,6 +823,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return responseForSite(requestId, site as unknown as Site);
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "TEMPLATE_HISTORY_CONFLICT") return errorResponse(409, "TEMPLATE_HISTORY_CONFLICT", error instanceof Error ? error.message : "The site design changed. Reload before saving.", requestId);
     console.error("Admin frontend design API error:", error);
     return errorResponse(
       500,
@@ -852,6 +845,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const { siteId } = await params;
     const body = await parseJsonBody(request);
     const input = body.frontendDesign || body;
+    if (input && typeof input === 'object' && !Array.isArray(input) && Object.prototype.hasOwnProperty.call(input, 'runtime')) {
+      try { normalizeFrontendRuntimeDeclaration((input as Record<string, unknown>).runtime); }
+      catch (cause) { return errorResponse(400, 'INVALID_FRONTEND_RUNTIME', cause instanceof Error ? cause.message : 'Invalid runtime declaration.', requestId); }
+    }
     const updatedAt = new Date().toISOString();
 
     if (!shouldUseDemoStoreFallback()) {
@@ -878,6 +875,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         site,
         site.settings,
         frontendDesign,
+        { source: "frontendDesign.update", actorId: access.session?.user.id, requestId },
       );
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
@@ -930,12 +928,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       updatedAt,
       mergeFallback: true,
     });
-    const updated = updateAdminSite(site.id, {
-      settings: {
-        ...(site.settings || {}),
-        frontendDesign,
-      },
-    });
+    const updated = await persistFrontendDesignWithHistory(site as unknown as Site, frontendDesign, { source: "frontendDesign.update", actorId: access.session?.user.id, requestId });
 
     if (!updated) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
@@ -967,6 +960,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     return responseForSite(requestId, updated as unknown as Site);
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "TEMPLATE_HISTORY_CONFLICT") return errorResponse(409, "TEMPLATE_HISTORY_CONFLICT", error instanceof Error ? error.message : "The site design changed. Reload before saving.", requestId);
     console.error("Admin frontend design update API error:", error);
     return errorResponse(
       500,
@@ -1026,6 +1020,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           );
         }
 
+        if (Object.prototype.hasOwnProperty.call(imported.input, 'runtime')) {
+          try { normalizeFrontendRuntimeDeclaration(imported.input.runtime); }
+          catch (cause) { return errorResponse(400, 'INVALID_FRONTEND_RUNTIME', cause instanceof Error ? cause.message : 'Invalid runtime declaration.', requestId); }
+        }
         const frontendDesign = normalizeFrontendDesignContract(imported.input, {
           fallback: site.settings.frontendDesign,
           updatedAt,
@@ -1034,6 +1032,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           site,
           site.settings,
           frontendDesign,
+        { source: "frontendDesign.import", actorId: access.session?.user.id, requestId },
         );
         const cacheInvalidation = await recordSiteCacheInvalidation(
           repositories,
@@ -1144,6 +1143,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           site,
           site.settings,
           frontendDesign,
+        { source: "frontendDesign.captureTemplate", actorId: access.session?.user.id, requestId },
         );
         const cacheInvalidation = await recordSiteCacheInvalidation(
           repositories,
@@ -1204,6 +1204,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         site,
         site.settings,
         frontendDesign,
+        { source: "frontendDesign.captureDefaults", actorId: access.session?.user.id, requestId },
       );
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
@@ -1262,16 +1263,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      if (Object.prototype.hasOwnProperty.call(imported.input, 'runtime')) {
+        try { normalizeFrontendRuntimeDeclaration(imported.input.runtime); }
+        catch (cause) { return errorResponse(400, 'INVALID_FRONTEND_RUNTIME', cause instanceof Error ? cause.message : 'Invalid runtime declaration.', requestId); }
+      }
       const frontendDesign = normalizeFrontendDesignContract(imported.input, {
         fallback: site.settings?.frontendDesign,
         updatedAt,
       });
-      const updated = updateAdminSite(site.id, {
-        settings: {
-          ...(site.settings || {}),
-          frontendDesign,
-        },
-      });
+      const updated = await persistFrontendDesignWithHistory(site as unknown as Site, frontendDesign, { source: "frontendDesign.import", actorId: access.session?.user.id, requestId });
 
       if (!updated) {
         return errorResponse(
@@ -1366,12 +1366,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         editableMap: recordArray(body.editableMap) || captured.editableMap,
         updatedAt,
       });
-      const updated = updateAdminSite(site.id, {
-        settings: {
-          ...(site.settings || {}),
-          frontendDesign,
-        },
-      });
+      const updated = await persistFrontendDesignWithHistory(site as unknown as Site, frontendDesign, { source: "frontendDesign.captureTemplate", actorId: access.session?.user.id, requestId });
 
       if (!updated) {
         return errorResponse(
@@ -1422,12 +1417,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ),
       updatedAt,
     });
-    const updated = updateAdminSite(site.id, {
-      settings: {
-        ...(site.settings || {}),
-        frontendDesign,
-      },
-    });
+    const updated = await persistFrontendDesignWithHistory(site as unknown as Site, frontendDesign, { source: "frontendDesign.captureDefaults", actorId: access.session?.user.id, requestId });
 
     if (!updated) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
@@ -1459,6 +1449,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return responseForSite(requestId, updated as unknown as Site);
   } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "TEMPLATE_HISTORY_CONFLICT") return errorResponse(409, "TEMPLATE_HISTORY_CONFLICT", error instanceof Error ? error.message : "The site design changed. Reload before saving.", requestId);
     console.error("Admin frontend design action API error:", error);
     return errorResponse(
       500,

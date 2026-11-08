@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { getAdminUserById } from '@/lib/backyStore';
 import {
@@ -69,6 +69,9 @@ export async function POST(
     if (!user) {
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
+
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: user.role });
+    if (ownerError) return ownerError;
 
     if (user.status !== 'invited') {
       return errorResponse(409, 'USER_NOT_INVITED', 'Set the account to invited before issuing an invite link.', requestId);

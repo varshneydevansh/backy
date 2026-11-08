@@ -31,7 +31,8 @@ import {
   publishPage,
   rollbackPage,
   unpublishPage,
-  updatePage as updatePageFromApi,
+  updatePageWithOutcome,
+  formatContentSaveWarnings,
   type AdminUserPermissionMatrix,
   type ContentRevision,
   type PageReadiness,
@@ -636,6 +637,7 @@ function PageEditorRoute() {
   const [page, setPage] = useState<Page | null>(storePage || null);
   const [siteId, setSiteId] = useState(storePageSite?.publicSiteId || storePageSite?.id || storePage?.siteId || fallbackSiteId);
   const [isLoadingPage, setIsLoadingPage] = useState(true);
+  const [loadedPageId, setLoadedPageId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(routeSearch.navWarning || null);
   const [saveConflict, setSaveConflict] = useState<PageSaveConflict | null>(null);
@@ -780,6 +782,7 @@ function PageEditorRoute() {
         }
       } finally {
         if (!cancelled) {
+          setLoadedPageId(pageId);
           setIsLoadingPage(false);
         }
       }
@@ -1039,7 +1042,9 @@ function PageEditorRoute() {
   const pageEditorPageStateBackActionStatus = `Back to Pages available for ${siteId}.`;
 
   // If page not found, show error
-  if (isLoadingPage && !page) {
+  // Cached pages can lag behind the backend. Wait for the first read before
+  // mounting the canvas, but preserve its edits during subsequent reloads.
+  if (isLoadingPage && (!page || loadedPageId !== pageId)) {
     return (
       <PageShell title="Loading page" description="Fetching editor content from the backend.">
         <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
@@ -1622,6 +1627,7 @@ function PageEditorRoute() {
     settings: PageSettings,
     canvasSize: CanvasSize = initialCanvasSize
   ) => {
+    setWorkflowNotice(null);
     if (isPageEditorSaveBusy) {
       const message = 'Wait for the page load, preview, publish, archive, or restore workflow before saving.';
       setSaveWarning(message);
@@ -1673,7 +1679,7 @@ function PageEditorRoute() {
         editableMap: initialEditableMap,
         metadata: initialDesignMetadata,
       });
-      const savedPage = await updatePageFromApi(siteId, pageId, {
+      const saveOutcome = await updatePageWithOutcome(siteId, pageId, {
         title: settings.title,
         slug: settings.slug,
         status: statusForSave,
@@ -1684,6 +1690,7 @@ function PageEditorRoute() {
         updatedBy: 'admin',
         expectedUpdatedAt: page.lastUpdated,
       });
+      const savedPage = saveOutcome.page;
       const nextPage = shouldPublishThroughWorkflow
         ? await publishPage(siteId, pageId, { expectedUpdatedAt: savedPage.lastUpdated })
         : savedPage;
@@ -1696,7 +1703,7 @@ function PageEditorRoute() {
       setCurrentCanvasElements(elements);
       setCurrentCanvasSize(canvasSize);
       setSaveConflict(null);
-      setSaveWarning(null);
+      setSaveWarning(formatContentSaveWarnings(saveOutcome.completionWarnings));
       setWorkflowNotice(shouldPublishThroughWorkflow
         ? 'Page saved and published through readiness checks.'
         : 'Page saved and revision snapshot recorded.');

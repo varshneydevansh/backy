@@ -1,3 +1,8 @@
+import { MediaStorageRecoveryPanel } from '@/components/media/MediaStorageRecoveryPanel';
+import { MediaUploadQueue } from '@/components/media/MediaUploadQueue';
+import { MediaLinkedTargetFilter } from '@/components/media/MediaLinkedTargetFilter';
+import { mediaLinkedTargetFromSearch, mediaLinkedTargetQuery, mediaMatchesLinkedTarget } from '@/lib/mediaLinkedTargets';
+import { runMediaUploadBatch, type MediaUploadRow } from '@/lib/mediaUploadBatch';
 /**
  * BACKY CMS - MEDIA PAGE
  */
@@ -13,7 +18,8 @@ import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { DEFAULT_MAX_TAGS, normalizeTagValues, parseTagInput, serializeTagValues, TagInput } from '@/components/ui/TagInput';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
-import { getMediaUploadRuntimeDisabledReason } from '@/lib/mediaUploadReadiness';
+import { getMediaUploadRuntimeDisabledReason, getMediaUploadConfigurationDisabledReason, getMediaUploadScanPolicyNotice, type MediaUploadReadiness } from '@/lib/mediaUploadReadiness';
+import { MediaDeletionImpact as MediaDeletionImpactView } from '@/components/media/MediaDeletionImpact';
 import {
   getSettings,
   getUserPermissions,
@@ -39,6 +45,7 @@ import {
   createMediaFolder,
   deleteMediaFolder,
   deleteMediaFromBackend,
+  MediaDeletionConflictError,
   deleteMediaVersion,
   getDefaultMediaSiteId,
   getPublicImageTransformUrl,
@@ -59,9 +66,12 @@ import {
   type MediaPagination,
   type MediaVersionRecord,
   type SignedMediaUrl,
+  type MediaDeletionImpact,
+  type MediaDeletionReference,
 } from '@/lib/mediaApi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn, formatBytes } from '@/lib/utils';
+import { MediaUploadTransfers } from '@/components/media/MediaUploadTransfers';
 import { useAuthStore } from '@/stores/authStore';
 import { useStore, type MediaAsset } from '@/stores/mockStore';
 
@@ -86,6 +96,8 @@ type MediaImageObjectFit = 'cover' | 'contain';
 type MediaImageAspectRatio = 'original' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16';
 
 interface MediaSearch {
+  linkedPageId?: string;
+  linkedPostId?: string;
   siteId?: string;
   assetId?: string;
   folderId?: string;
@@ -666,6 +678,8 @@ const buildPublicMediaListUrl = (
     tag?: string;
     type?: MediaTypeFilter;
     folderId?: string | null;
+    linkedPageId?: string;
+    linkedPostId?: string;
   } = {},
 ): string => {
   const params = new URLSearchParams();
@@ -691,6 +705,8 @@ const buildPublicMediaListUrl = (
     params.set('folderId', filters.folderId.trim());
   }
 
+  if (filters.linkedPageId) params.set('linkedPageId', filters.linkedPageId);
+  if (filters.linkedPostId) params.set('linkedPostId', filters.linkedPostId);
   return `${publicBaseUrl}/api/sites/${encodeURIComponent(siteId)}/media?${params.toString()}`;
 };
 
@@ -704,6 +720,8 @@ export const Route = createFileRoute('/media')({
     type: isMediaTypeFilter(search.type) ? search.type : undefined,
     visibility: isMediaVisibilityFilter(search.visibility) ? search.visibility : undefined,
     usage: isMediaUsageFilter(search.usage) ? search.usage : undefined,
+    linkedPageId: normalizedSearchString(search.linkedPageId),
+    linkedPostId: normalizedSearchString(search.linkedPostId),
   }),
   component: MediaPage,
 });
@@ -794,6 +812,7 @@ interface MediaUploadSummary {
   attempted: number;
   uploaded: number;
   failed: number;
+  stopped: number;
   fontsRegistered: number;
   folderLabel: string;
   visibility: 'public' | 'private';
@@ -1018,6 +1037,9 @@ function MediaPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadRows, setUploadRows] = useState<MediaUploadRow[]>([]);
+  const [isStoppingUploads, setIsStoppingUploads] = useState(false);
+  const uploadBatchRef = useRef<{ stopped: boolean; siteId: string } | null>(null);
   const [isSavingMetadata, setIsSavingMetadata] = useState(false);
   const [isCreatingSignedUrl, setIsCreatingSignedUrl] = useState(false);
   const [isUpdatingBinding, setIsUpdatingBinding] = useState(false);
@@ -1058,6 +1080,8 @@ function MediaPage() {
     offset: 0,
     hasMore: false,
   });
+  const [uploadReadinessSnapshot, setUploadReadinessSnapshot] = useState<{ siteId: string; value?: MediaUploadReadiness } | null>(null);
+  const libraryLoadRevisionRef = useRef(0);
   const [runtimeStorage, setRuntimeStorage] = useState<SiteSettingsInput['runtimeStorage']>();
   const [runtimeSupabase, setRuntimeSupabase] = useState<SiteSettingsInput['runtimeSupabase']>();
   const [runtimeMediaScanner, setRuntimeMediaScanner] = useState<SiteSettingsInput['runtimeMediaScanner']>();
@@ -1097,6 +1121,14 @@ function MediaPage() {
   const [bulkTagMode, setBulkTagMode] = useState<'keep' | 'merge' | 'replace' | 'clear'>('keep');
   const [bulkTags, setBulkTags] = useState('');
   const [pendingDeleteAsset, setPendingDeleteAsset] = useState<MediaAsset | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<MediaDeletionImpact | null>(null);
+  const [deleteOverrideAcknowledged, setDeleteOverrideAcknowledged] = useState(false);
+  const [deleteOverrideReason, setDeleteOverrideReason] = useState('');
+  useEffect(() => {
+    setDeleteImpact(null);
+    setDeleteOverrideAcknowledged(false);
+    setDeleteOverrideReason('');
+  }, [pendingDeleteAsset?.id]);
   const [pendingRestoreVersionId, setPendingRestoreVersionId] = useState<string | null>(null);
   const [pendingDeleteVersionId, setPendingDeleteVersionId] = useState<string | null>(null);
   const [comparisonVersionId, setComparisonVersionId] = useState<string | null>(null);
@@ -1108,6 +1140,11 @@ function MediaPage() {
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(routeSearch.type || 'all');
   const [visibilityFilter, setVisibilityFilter] = useState<MediaVisibilityFilter>(routeSearch.visibility || 'all');
   const [usageFilter, setUsageFilter] = useState<MediaUsageFilter>(routeSearch.usage || 'all');
+  const linkedTarget = mediaLinkedTargetFromSearch(routeSearch);
+  const linkedTargetKey = JSON.stringify(linkedTarget);
+  const currentLinkedTargetRef = useRef(linkedTargetKey);
+  currentLinkedTargetRef.current = linkedTargetKey;
+  const [referenceTargetSnapshot, setReferenceTargetSnapshot] = useState<{ siteId: string; pages: Array<{ id: string; title: string }>; posts: Array<{ id: string; title: string }>; loading: boolean; error?: string } | null>(null);
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
@@ -1208,23 +1245,41 @@ function MediaPage() {
   useEffect(() => loadMediaPermissions(), [loadMediaPermissions]);
 
   const activeSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)),
     [selectedSiteId, sites],
   );
   const siteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || getDefaultMediaSiteId();
+  const currentMediaSiteRef = useRef(siteId);
+  currentMediaSiteRef.current = siteId;
+  // Invalidate the batch immediately on site changes, including A -> B -> A.
+  if (uploadBatchRef.current && uploadBatchRef.current.siteId !== siteId) {
+    uploadBatchRef.current.stopped = true;
+    uploadBatchRef.current = null;
+  }
+  useEffect(() => {
+    setUploadRows([]);
+    setIsUploading(false);
+    setIsStoppingUploads(false);
+    return () => {
+      if (uploadBatchRef.current) uploadBatchRef.current.stopped = true;
+      uploadBatchRef.current = null;
+    };
+  }, [siteId]);
+  const uploadReadiness = uploadReadinessSnapshot?.siteId === siteId ? uploadReadinessSnapshot.value : undefined;
   const canUseMediaRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
   const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseMediaRoleDefaults;
-  const canViewMedia = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
+  const mediaSiteUnavailableReason = activeSite ? undefined : 'Choose an available website before managing files.';
+  const canViewMedia = Boolean(activeSite) && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');
   const canCreateMedia = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.create');
   const canEditMedia = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.edit');
-  const canConfigureMediaStorage = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');
+  const canConfigureMediaStorage = Boolean(activeSite) && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');
   const canDeleteMedia = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.delete');
   const canExportMediaActivity = canViewMedia && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'activity.export');
   const canBulkSelectMedia = canEditMedia || canDeleteMedia;
-  const viewPermissionTitle = canViewMedia ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.view');
+  const viewPermissionTitle = canViewMedia ? undefined : mediaSiteUnavailableReason || mediaPermissionReason(permissionMatrix, currentAdmin, 'media.view');
   const createPermissionTitle = canCreateMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.create');
   const editPermissionTitle = canEditMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.edit');
-  const configurePermissionTitle = canConfigureMediaStorage ? undefined : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.configure');
+  const configurePermissionTitle = canConfigureMediaStorage ? undefined : mediaSiteUnavailableReason || mediaPermissionReason(permissionMatrix, currentAdmin, 'media.configure');
   const deletePermissionTitle = canDeleteMedia ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'media.delete');
   const activityPermissionTitle = canExportMediaActivity ? undefined : !canViewMedia ? viewPermissionTitle : mediaPermissionReason(permissionMatrix, currentAdmin, 'activity.export');
   const bulkSelectionPermissionTitle = canBulkSelectMedia
@@ -1257,6 +1312,7 @@ function MediaPage() {
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const publicMediaListUrl = buildPublicMediaListUrl(publicBaseUrl, siteId);
   const filteredPublicMediaListUrl = buildPublicMediaListUrl(publicBaseUrl, siteId, {
+    ...mediaLinkedTargetQuery(linkedTarget),
     search: searchQuery,
     tag: tagFilter,
     type: typeFilter,
@@ -1280,7 +1336,9 @@ function MediaPage() {
     ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
     ...(visibilityFilter !== 'all' ? { visibility: visibilityFilter } : {}),
     ...(usageFilter !== 'all' ? { usage: usageFilter } : {}),
-  }), [searchQuery, selectedAsset, selectedFolderId, siteId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
+    ...(routeSearch.linkedPageId ? { linkedPageId: routeSearch.linkedPageId } : {}),
+    ...(routeSearch.linkedPostId ? { linkedPostId: routeSearch.linkedPostId } : {}),
+  }), [routeSearch.linkedPageId, routeSearch.linkedPostId, linkedTargetKey, searchQuery, selectedAsset, selectedFolderId, siteId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
 
   const updateMediaRouteSearch = (next: MediaSearch) => {
     const merged: MediaSearch = {
@@ -1296,16 +1354,13 @@ function MediaPage() {
       ...(merged.type && merged.type !== 'all' ? { type: merged.type } : {}),
       ...(merged.visibility && merged.visibility !== 'all' ? { visibility: merged.visibility } : {}),
       ...(merged.usage && merged.usage !== 'all' ? { usage: merged.usage } : {}),
+      ...(merged.linkedPageId ? { linkedPageId: merged.linkedPageId } : {}),
+      ...(merged.linkedPostId ? { linkedPostId: merged.linkedPostId } : {}),
     };
 
     navigate({ to: '/media', search: normalized, replace: true });
   };
 
-  useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
-      setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
-    }
-  }, [selectedSiteId, sites]);
 
   const resetMediaWorkspaceState = useCallback(() => {
     setSelectedMediaIds([]);
@@ -1431,7 +1486,10 @@ function MediaPage() {
   );
   const uploadTagList = useMemo(() => parseTagInput(uploadTags), [uploadTags]);
   const uploadActionStatusId = 'media-upload-action-status';
-  const uploadRuntimeDisabledReason = getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner);
+  const uploadRuntimeDisabledReason = getMediaUploadConfigurationDisabledReason(uploadReadiness) || getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner, uploadReadiness);
+  const uploadScanPolicyNotice = getMediaUploadScanPolicyNotice(uploadReadiness);
+  const uploadAdmissionRef = useRef(false);
+  uploadAdmissionRef.current = canCreateMedia && !uploadRuntimeDisabledReason;
   const uploadActionDisabledReason = isUploading
     ? 'An upload is already in progress.'
     : !canCreateMedia
@@ -1529,6 +1587,7 @@ function MediaPage() {
   );
   const mediaAnalytics = useMemo(() => getMediaAnalytics(files), [files]);
   const mediaMatchesCurrentFilters = useCallback((file: MediaAsset) => {
+    if (!mediaMatchesLinkedTarget(file, linkedTarget)) return false;
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const normalizedTagFilter = tagFilter.trim().toLowerCase();
 
@@ -1582,8 +1641,12 @@ function MediaPage() {
       return getMediaSecurityPolicy(file.metadata).status === 'quarantined';
     }
     return true;
-  }, [searchQuery, selectedFolderFilterIds, selectedFolderId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
+  }, [linkedTargetKey, searchQuery, selectedFolderFilterIds, selectedFolderId, tagFilter, typeFilter, usageFilter, visibilityFilter]);
   const displayedFiles = useMemo(() => files.filter(mediaMatchesCurrentFilters), [files, mediaMatchesCurrentFilters]);
+  const hasActiveMediaFilters = Boolean(
+    searchQuery.trim() || tagFilter.trim() || selectedFolderId !== undefined ||
+    typeFilter !== 'all' || visibilityFilter !== 'all' || usageFilter !== 'all' || linkedTarget.kind !== 'all',
+  );
   const quotaUsagePercent = mediaQuota && mediaQuota.limitBytes > 0
     ? Math.min(100, Math.round((mediaQuota.usedBytes / mediaQuota.limitBytes) * 100))
     : 0;
@@ -1982,6 +2045,7 @@ function MediaPage() {
     currentView: {
       filteredList: filteredPublicMediaListUrl,
       publicFilters: {
+        ...mediaLinkedTargetQuery(linkedTarget),
         ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
         ...(tagFilter.trim() ? { tag: tagFilter.trim() } : {}),
         ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
@@ -1990,6 +2054,7 @@ function MediaPage() {
         visibility: 'public',
       },
       adminFilters: {
+        ...mediaLinkedTargetQuery(linkedTarget),
         ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
         ...(tagFilter.trim() ? { tag: tagFilter.trim() } : {}),
         type: typeFilter,
@@ -2149,6 +2214,7 @@ function MediaPage() {
     publicMediaFontsUrl,
     publicMediaFileUrl,
     filteredPublicMediaListUrl,
+    linkedTargetKey,
     publicMediaListUrl,
     publicMediaTransformUrl,
     quotaUsagePercent,
@@ -2233,6 +2299,9 @@ function MediaPage() {
     : 'Select a media asset to review asset actions.';
 
   const loadLibrary = useCallback(async (options: MediaLibraryLoadOptions = {}) => {
+    const revision = ++libraryLoadRevisionRef.current;
+    const isCurrent = () => currentMediaSiteRef.current === siteId && libraryLoadRevisionRef.current === revision
+      && currentLinkedTargetRef.current === linkedTargetKey;
     if (!canViewMedia) {
       filesRef.current = [];
       setMedia([]);
@@ -2243,8 +2312,16 @@ function MediaPage() {
       setSelectedAsset(null);
       setIsLoading(false);
       if (!isPermissionMatrixPending) {
-        setError(`Your account needs media.view to load the media library. ${viewPermissionTitle}`);
+        setError(mediaSiteUnavailableReason || `Your account needs media.view to load the media library. ${viewPermissionTitle}`);
       }
+      return [];
+    }
+
+    if (linkedTarget.kind === 'invalid') {
+      filesRef.current = []; setMedia([]); setSelectedMediaIds([]); setSelectedAsset(null);
+      const empty = { total: 0, limit: MEDIA_LIBRARY_PAGE_SIZE, offset: 0, hasMore: false };
+      mediaPaginationRef.current = empty; setMediaPagination(empty); setIsLoading(false);
+      setError('Choose one page or blog post to filter its files.');
       return [];
     }
 
@@ -2259,6 +2336,7 @@ function MediaPage() {
       const baseOptions: MediaListOptions = {
         siteId,
         scope: 'all',
+        ...mediaLinkedTargetQuery(linkedTarget),
         limit: MEDIA_LIBRARY_PAGE_SIZE,
         search: searchQuery.trim() || undefined,
         tag: tagFilter.trim() || undefined,
@@ -2270,6 +2348,8 @@ function MediaPage() {
         ...baseOptions,
         offset: startOffset,
       });
+      if (!isCurrent()) return [];
+      let loadedReadiness = firstPage.uploadReadiness;
       const mergedById = new Map<string, MediaAsset>();
 
       if (mode === 'append') {
@@ -2290,6 +2370,8 @@ function MediaPage() {
           ...baseOptions,
           offset: nextOffset,
         });
+        if (!isCurrent()) return [];
+        if (nextPage.uploadReadiness) loadedReadiness = nextPage.uploadReadiness;
         nextPage.media.forEach((asset) => mergedById.set(asset.id, asset));
         latestPagination = nextPage.pagination || {
           total: mergedById.size,
@@ -2300,6 +2382,8 @@ function MediaPage() {
         nextOffset = latestPagination.offset + latestPagination.limit;
       }
 
+      if (!isCurrent()) return [];
+      setUploadReadinessSnapshot({ siteId, value: loadedReadiness });
       const nextMedia = Array.from(mergedById.values());
       filesRef.current = nextMedia;
       setMedia(nextMedia);
@@ -2308,15 +2392,17 @@ function MediaPage() {
       setMediaPagination(latestPagination);
       return nextMedia;
     } catch (loadError) {
+      if (!isCurrent()) return [];
       setError(loadError instanceof Error ? loadError.message : 'Unable to load media library.');
       return filesRef.current;
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
-  }, [canViewMedia, isPermissionMatrixPending, searchQuery, selectedFolderId, setMedia, siteId, tagFilter, typeFilter, viewPermissionTitle, visibilityFilter]);
+  }, [canViewMedia, isPermissionMatrixPending, linkedTargetKey, mediaSiteUnavailableReason, searchQuery, selectedFolderId, setMedia, siteId, tagFilter, typeFilter, viewPermissionTitle, visibilityFilter]);
 
   useEffect(() => {
     void loadLibrary();
+    return () => { libraryLoadRevisionRef.current++; };
   }, [loadLibrary]);
 
   useEffect(() => {
@@ -2572,6 +2658,7 @@ function MediaPage() {
     let cancelled = false;
 
     const loadReferenceTargets = async () => {
+      setReferenceTargetSnapshot({ siteId, pages: [], posts: [], loading: canViewMedia });
       if (!canViewMedia) {
         setPages([]);
         setPosts([]);
@@ -2587,8 +2674,10 @@ function MediaPage() {
         if (!cancelled) {
           setPages(backendPages);
           setPosts(backendPosts);
+          setReferenceTargetSnapshot({ siteId, pages: backendPages, posts: backendPosts, loading: false });
         }
       } catch {
+        if (!cancelled) setReferenceTargetSnapshot({ siteId, pages: [], posts: [], loading: false, error: 'Page and post names could not load. Existing selected IDs remain filterable.' });
         // Keep any local page/post cache available for reference labels.
       }
     };
@@ -2933,6 +3022,9 @@ function MediaPage() {
         preparedBy: 'admin',
       });
       applyUpdatedAsset(updated);
+      if (updated.completionWarnings?.length) {
+        setAssetDeliveryError('Responsive variants were saved. Follow-up work needs attention: ' + updated.completionWarnings.join(', ') + '.');
+      }
       void loadAssetAuditLogs(updated.id);
       void loadLibraryAuditLogs(0);
     } catch (prepareError) {
@@ -3116,7 +3208,7 @@ function MediaPage() {
   };
 
   const handleFileUpload = async (fileList: FileList | null) => {
-    if (isUploading) return;
+    if (isUploading || uploadBatchRef.current) return;
     if (!canCreateMedia) {
       setError(deniedCreateMessage);
       return;
@@ -3128,51 +3220,51 @@ function MediaPage() {
     if (!fileList || fileList.length === 0) return;
     const allFiles = Array.from(fileList);
     const targetUploadMode = uploadMode;
-    const uploadFiles = allFiles.filter((file) => isFileAllowedForUploadMode(file, targetUploadMode));
-    const skippedModeMessages = allFiles
-      .filter((file) => !isFileAllowedForUploadMode(file, targetUploadMode))
-      .map((file) => uploadModeRejectMessage(file, targetUploadMode));
     const targetFolderMode = uploadFolderId;
     const targetFolderId = uploadTargetFolderId;
     const targetFolderLabel = uploadTargetFolderLabel;
     const targetVisibility = uploadVisibility;
     const targetTags = uploadTagList;
+    const batch = { stopped: false, siteId };
+    uploadBatchRef.current = batch;
+    const ownsWorkspace = () => uploadBatchRef.current === batch && currentMediaSiteRef.current === batch.siteId;
 
     setIsUploading(true);
+    setIsStoppingUploads(false);
+    setRecentUploadSummary(null);
     setError(null);
     setBulkNotice(null);
 
     try {
-      const uploadRequests = uploadFiles.map((file) => {
-        const uploadType = getCentralUploadType(file);
-        const uploadTagsForFile = uploadType === 'font'
-          ? Array.from(new Set(['font', ...targetTags]))
-          : targetTags;
+      const { rows, uploaded } = await runMediaUploadBatch({
+        files: allFiles,
+        reject: file => isFileAllowedForUploadMode(file, targetUploadMode) ? undefined : uploadModeRejectMessage(file, targetUploadMode),
+        shouldContinue: () => ownsWorkspace() && !batch.stopped && uploadAdmissionRef.current,
+        onRows: rows => { if (ownsWorkspace()) setUploadRows(rows); },
+        upload: file => {
+          const uploadType = getCentralUploadType(file);
+          const uploadTagsForFile = uploadType === 'font'
+            ? Array.from(new Set(['font', ...targetTags]))
+            : targetTags;
 
-        return uploadMedia(file, {
-          siteId,
-          scope: 'global',
-          folderId: targetFolderId,
-          visibility: targetVisibility,
-          tags: uploadTagsForFile.length ? uploadTagsForFile : undefined,
-          fontFamily: uploadType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
-          fontWeight: uploadType === 'font' ? '400' : undefined,
-          fontStyle: uploadType === 'font' ? 'normal' : undefined,
-          fontFallback: uploadType === 'font' ? 'system-ui, sans-serif' : undefined,
-          fontDisplay: uploadType === 'font' ? 'swap' : undefined,
-        });
+          return uploadMedia(file, {
+            siteId: batch.siteId,
+            scope: 'global',
+            folderId: targetFolderId,
+            visibility: targetVisibility,
+            tags: uploadTagsForFile.length ? uploadTagsForFile : undefined,
+            fontFamily: uploadType === 'font' ? cleanFontFamilyFromFilename(file.name) : undefined,
+            fontWeight: uploadType === 'font' ? '400' : undefined,
+            fontStyle: uploadType === 'font' ? 'normal' : undefined,
+            fontFallback: uploadType === 'font' ? 'system-ui, sans-serif' : undefined,
+            fontDisplay: uploadType === 'font' ? 'swap' : undefined,
+          });
+        },
       });
-      const results = await Promise.allSettled(uploadRequests);
-      const uploaded = results
-        .filter((result): result is PromiseFulfilledResult<MediaAsset> => result.status === 'fulfilled')
-        .map((result) => result.value);
-      const failures = results.filter((result) => result.status === 'rejected');
-      const failureMessages = [
-        ...skippedModeMessages,
-        ...failures.map((failure) => (
-          failure.reason instanceof Error ? failure.reason.message : 'Upload failed.'
-        )),
-      ];
+      if (!ownsWorkspace()) return;
+      const failureMessages = rows.filter(row => row.status === 'failed' || row.status === 'skipped')
+        .map(row => `${row.name}: ${row.message || 'Upload failed.'}`);
+      const stopped = rows.filter(row => row.status === 'stopped').length;
 
       if (uploaded.length) {
         const currentFiles = useStore.getState().media;
@@ -3184,7 +3276,8 @@ function MediaPage() {
           setSelectedFolderId(targetFolderId);
           updateMediaRouteSearch({ folderId: folderSelectionToRoute(targetFolderId) });
         }
-        setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.`);
+        const warnings = uploaded.flatMap(asset => asset.completionWarnings || []);
+        setBulkNotice(`${uploaded.length} file${uploaded.length === 1 ? '' : 's'} uploaded to ${targetFolderLabel}.` + (warnings.length ? ' Saved follow-up work needs attention: ' + [...new Set(warnings)].join(', ') + '. Review Storage recovery below.' : ''));
         void loadLibrary();
         void loadLibraryAuditLogs(0);
       }
@@ -3193,6 +3286,7 @@ function MediaPage() {
         attempted: allFiles.length,
         uploaded: uploaded.length,
         failed: failureMessages.length,
+        stopped,
         fontsRegistered: uploaded.filter((asset) => asset.type === 'font').length,
         folderLabel: targetFolderLabel,
         visibility: targetVisibility,
@@ -3209,11 +3303,15 @@ function MediaPage() {
       if (failureMessages.length) {
         const firstReason = failureMessages[0];
         setError(firstReason
-          ? `${firstReason}. ${failureMessages.length} file${failureMessages.length === 1 ? '' : 's'} were not uploaded.`
-          : `${failureMessages.length} file${failureMessages.length === 1 ? '' : 's'} were not uploaded.`);
+          ? `${firstReason} ${failureMessages.length} file${failureMessages.length === 1 ? ' needs' : 's need'} attention.`
+          : `${failureMessages.length} file${failureMessages.length === 1 ? ' needs' : 's need'} attention. Check the library before trying again.`);
       }
     } finally {
-      setIsUploading(false);
+      if (ownsWorkspace()) {
+        uploadBatchRef.current = null;
+        setIsUploading(false);
+        setIsStoppingUploads(false);
+      }
     }
   };
 
@@ -3230,7 +3328,11 @@ function MediaPage() {
     setIsDeletingAsset(true);
 
     try {
-      await deleteMediaFromBackend(file.id, siteId);
+      const override = deleteImpact?.mediaId === file.id && deleteOverrideAcknowledged
+        ? { allowReferencedDelete: true as const, reason: deleteOverrideReason.trim(), referenceFingerprint: deleteImpact.referenceFingerprint }
+        : undefined;
+      if (override && override.reason.length < 8) { setError('Add a deletion reason of at least 8 characters.'); return; }
+      await deleteMediaFromBackend(file.id, siteId, override);
       deleteMedia(file.id);
       if (selectedAsset?.id === file.id) {
         setSelectedAsset(null);
@@ -3240,6 +3342,10 @@ function MediaPage() {
       setBulkNotice(`Deleted ${file.name}.`);
       void loadLibraryAuditLogs(0);
     } catch (deleteError) {
+      if (deleteError instanceof MediaDeletionConflictError) {
+        setDeleteImpact(deleteError.impact);
+        setDeleteOverrideAcknowledged(false);
+      }
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete media.');
     } finally {
       setIsDeletingAsset(false);
@@ -3463,7 +3569,8 @@ function MediaPage() {
     if (failedIds.length > 0) {
       setSelectedMediaIds(failedIds);
       setPendingBulkDelete(false);
-      setError(`${failedIds.length} selected asset${failedIds.length === 1 ? '' : 's'} could not be deleted.`);
+      const referencedFailures = results.filter((result) => result.status === 'rejected' && result.reason instanceof MediaDeletionConflictError).length;
+      setError(`${failedIds.length} selected asset${failedIds.length === 1 ? '' : 's'} could not be deleted.${referencedFailures ? ` ${referencedFailures} are used by content. Review each file individually to remove references or explicitly override deletion.` : ''}`);
     } else {
       setSelectedMediaIds([]);
       setPendingBulkDelete(false);
@@ -3546,6 +3653,11 @@ function MediaPage() {
       return;
     }
 
+    if (uploadRuntimeDisabledReason) {
+      setAssetReplacementError(uploadRuntimeDisabledReason);
+      return;
+    }
+
     if (!selectedAsset || !fileList || fileList.length === 0) {
       return;
     }
@@ -3573,6 +3685,7 @@ function MediaPage() {
         fontDisplay: isFontReplacement ? metadataForm.fontDisplay : undefined,
       });
       applyUpdatedAsset(updated);
+      if (updated.completionWarnings?.length) setAssetReplacementError('Replacement saved. Follow-up work needs attention: ' + updated.completionWarnings.join(', ') + '. Review Storage recovery.');
       void loadLibrary();
       void loadAssetAuditLogs(updated.id);
       void loadLibraryAuditLogs(0);
@@ -3939,6 +4052,8 @@ function MediaPage() {
     setBulkNotice(`${displayedFiles.length} visible media asset${displayedFiles.length === 1 ? '' : 's'} exported.`);
   };
   const focusMediaFolders = () => {
+    const disclosure = document.getElementById('media-folders')?.closest('details');
+    if (disclosure) disclosure.open = true;
     document.getElementById('media-folders')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.setTimeout(() => {
       document.querySelector<HTMLInputElement>('[data-testid="media-new-folder-name-input"]')?.focus({ preventScroll: true });
@@ -4004,7 +4119,7 @@ function MediaPage() {
   return (
     <PageShell
       title="Media Library"
-      description="Upload, organize, protect, transform, and deliver every image, font, document, audio, video, and file used across Backy sites."
+      description="Upload and organize images, files, and fonts for the selected site."
       action={
         <div className="relative">
           <input
@@ -4054,7 +4169,8 @@ function MediaPage() {
         </div>
       }
     >
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="media-library-command-center">
+      {canViewMedia && <MediaStorageRecoveryPanel siteId={siteId} canRetry={canEditMedia} />}
+      <section className="mb-4 rounded-lg border border-border bg-card p-4" data-testid="media-library-command-center">
         {permissionError && (
           <Notice
             tone="warning"
@@ -4106,6 +4222,11 @@ function MediaPage() {
             <a href="#media-storage" className="mt-1 inline-block underline">Review Storage health</a>
           </Notice>
         )}
+        {uploadScanPolicyNotice && (
+          <Notice tone="warning" role="status" className="mb-4" data-testid="media-upload-scan-policy-notice">
+            {uploadScanPolicyNotice}
+          </Notice>
+        )}
         <span id={mediaCommandSecondaryActionStatusId} className="sr-only" data-testid="media-command-secondary-action-status" aria-live="polite">
           {mediaCommandSecondaryActionStatus}
         </span>
@@ -4123,8 +4244,8 @@ function MediaPage() {
                 {mediaLibraryReadiness.score}% ready
               </span>
             </div>
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              Control the central file layer for every site: uploads, folders, visibility, signed delivery, transforms, font files, and frontend media APIs.
+            <p className="mt-1 hidden max-w-3xl text-sm text-muted-foreground sm:block">
+              Browse assets, upload files, and organize media for the selected site.
             </p>
           </div>
           <div className="flex flex-col gap-2 xl:items-end">
@@ -4141,9 +4262,8 @@ function MediaPage() {
               }}
               className="min-h-10 min-w-56 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {sites.length === 0 ? (
-                <option value={getDefaultMediaSiteId()}>Demo site</option>
-              ) : sites.map((site) => (
+              {!activeSite && <option value={siteId} disabled>{siteId} (unavailable)</option>}
+              {sites.map((site) => (
                 <option key={site.id} value={site.publicSiteId || site.id}>
                   {site.name}
                 </option>
@@ -4262,238 +4382,40 @@ function MediaPage() {
             </details>
           </div>
         </div>
-
-        <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-semibold">Library readiness</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Checks whether media can be uploaded, organized, transformed, protected, and delivered to custom frontends.
-                </p>
-              </div>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {files.length} assets
-              </span>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn(
-                  'h-full rounded-full',
-                  mediaLibraryReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
-                )}
-                style={{ width: `${mediaLibraryReadiness.score}%` }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {mediaLibraryReadiness.checks.map((check) => (
-                <MediaReadinessCheck key={check.label} {...check} />
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border bg-background p-4">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold">Media workflow</h3>
-            </div>
-            <div className="mt-3 grid gap-2">
-              {mediaLibraryReadiness.workflow.map((step, index) => (
-                <MediaWorkflowStep key={step.label} index={index + 1} {...step} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-operation-action-plan-details" data-default-collapsed="true">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Media operation action plan</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Storage, scanner, quota, attribution, organization, and font readiness handoff.</span>
-            </span>
-            <span className="flex flex-wrap items-center gap-2">
-              <span className={cn(
-                'rounded-md px-2.5 py-1 text-xs font-semibold',
-                mediaOperationActionPlan.attention ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
-              )}
-              >
-                {mediaOperationActionPlan.readyCount}/{mediaOperationActionPlan.totalCount} ready
-              </span>
-              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
-                {mediaOperationActionPlan.schemaVersion}
-              </span>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show plan</span>
-              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide plan</span>
-            </span>
-          </summary>
-          <div className="border-t border-border p-4" data-testid="media-operation-action-plan">
-            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-              {mediaOperationActionPlan.summary}
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {mediaOperationActionPlan.actions.map((action) => (
-                <a
-                  key={action.key}
-                  href={action.href}
-                  className={cn(
-                    'rounded-md border px-3 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5',
-                    action.ready ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">{action.label}</span>
-                    <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                      {action.mode}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{action.reason}</p>
-                </a>
-              ))}
-            </div>
-          </div>
-        </details>
-
-        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-attribution-handoff-details" data-default-collapsed="true">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Attribution handoff</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Provider, CDN, and campaign-channel evidence for media ROI dashboards.</span>
-            </span>
-            <span className="flex flex-wrap items-center gap-2">
-              <span className={cn(
-                'rounded-md px-2.5 py-1 text-xs font-semibold capitalize',
-                mediaAttributionHandoff.status === 'ready'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : mediaAttributionHandoff.status === 'partial'
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-muted text-muted-foreground',
-              )}
-              >
-                {mediaAttributionHandoff.status.replace(/-/g, ' ')}
-              </span>
-              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
-                {mediaAttributionHandoff.schemaVersion}
-              </span>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show attribution</span>
-              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide attribution</span>
-            </span>
-          </summary>
-          <div
-            className="border-t border-border p-4"
-            data-testid="media-attribution-handoff"
-            data-attribution-schema={mediaAttributionHandoff.schemaVersion}
-            data-attribution-status={mediaAttributionHandoff.status}
-            data-attribution-channels={mediaAttributionHandoff.metrics.channels}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <p className="max-w-3xl rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                {mediaAttributionHandoff.summary}
-              </p>
-              <button
-                type="button"
-                onClick={() => void copyMediaAttributionHandoff()}
-                disabled={isMediaLibraryBusy || !canExportMediaActivity}
-                title={!canExportMediaActivity ? activityPermissionTitle : 'Copy media attribution handoff'}
-                aria-label="Copy media attribution handoff"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Copy className="size-3.5" />
-                Copy attribution
-              </button>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-4">
-              <MediaApiStat label="Channels" value={`${mediaAttributionHandoff.metrics.channels}`} />
-              <MediaApiStat label="Provider req" value={`${mediaAttributionHandoff.metrics.requests}`} />
-              <MediaApiStat label="Conversions" value={`${mediaAttributionHandoff.metrics.conversions}`} />
-              <MediaApiStat
-                label="Value"
-                value={formatProviderAnalyticsValue(
-                  mediaAttributionHandoff.metrics.conversionValue,
-                  mediaAttributionHandoff.metrics.currency,
-                )}
-              />
-            </div>
-            {mediaAttributionHandoff.missingEvidence.length > 0 ? (
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
-                {mediaAttributionHandoff.missingEvidence.slice(0, 3).map((item) => (
-                  <div key={item} className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
-                {mediaAttributionHandoff.channels.slice(0, 3).map((channel) => (
-                  <div key={`${channel.source}:${channel.attributionWindow}`} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-                    <div className="truncate font-semibold text-foreground">{channel.source}</div>
-                    <div className="mt-1 text-muted-foreground">
-                      {channel.attributionWindow} · {channel.conversions} conv · {formatProviderAnalyticsValue(channel.conversionValue, channel.currency)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </details>
-
-        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-control-map-details" data-default-collapsed="true">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Media control map</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Jump links for upload, API, storage, folders, bulk controls, and font delivery.</span>
-            </span>
-            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
-            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
-          </summary>
-          <div className="border-t border-border p-4">
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {MEDIA_CONTROL_AREAS.map((area) => (
-                <a
-                  key={area.title}
-                  href={area.href}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
-                </a>
-              ))}
-            </div>
-          </div>
-        </details>
-
-        <details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-connected-workflows-details" data-default-collapsed="true">
-          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Connected media workflows</span>
-              <span className="mt-1 block text-sm text-muted-foreground">Route assets into editors, storefronts, downloads, and storage configuration.</span>
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {MEDIA_USAGE_SURFACES.length} surfaces
-              </span>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show workflows</span>
-              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
-            </span>
-          </summary>
-          <div className="border-t border-border p-4">
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              {MEDIA_USAGE_SURFACES.map((surface) => (
-                <Link
-                  key={surface.title}
-                  to={surface.route}
-                  search={surface.route === '/settings' ? undefined : activeSiteRouteSearch}
-                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-                >
-                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </details>
       </section>
 
-      <div id="media-upload" className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] scroll-mt-24">
+      {error && (
+        <Notice tone="warning" className="mb-6">
+          {error}
+        </Notice>
+      )}
+
+      {bulkNotice && (
+        <Notice tone="success" className="mb-6">
+          {bulkNotice}
+        </Notice>
+      )}
+
+      {isLoading ? (
+        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Loading media library...
+        </div>
+      ) : null}
+
+      <MediaUploadQueue rows={uploadRows} active={isUploading} stopping={isStoppingUploads} onStop={() => {
+        if (!uploadBatchRef.current) return;
+        uploadBatchRef.current.stopped = true;
+        setIsStoppingUploads(true);
+      }} />
+
+      <MediaUploadTransfers key={`${siteId}:${currentAdmin?.id || 'anonymous'}`} siteId={siteId} enabled={canCreateMedia && !isUploading} revision={recentUploadSummary?.completedAt ? Date.parse(recentUploadSummary.completedAt) : 0} />
+      <details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-upload-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Upload options and drop files</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<div id="media-upload" className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] scroll-mt-24">
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -4624,9 +4546,10 @@ function MediaPage() {
               )}
               {recentUploadSummary.failed > 0 && (
                 <div className="mt-2 text-xs text-amber-700">
-                  {recentUploadSummary.failed} failed: {recentUploadSummary.failures[0] || 'Upload failed.'}
+                  {recentUploadSummary.failed} {recentUploadSummary.failed === 1 ? 'needs' : 'need'} attention: {recentUploadSummary.failures[0] || 'Upload could not be confirmed. Check the library before trying again.'}
                 </div>
               )}
+              {recentUploadSummary.stopped > 0 && <p className="mt-2 text-xs text-muted-foreground">{recentUploadSummary.stopped} not started. Select those files again to upload them.</p>}
             </div>
           )}
         </div>
@@ -4728,27 +4651,1109 @@ function MediaPage() {
             </div>
           </div>
         </div>
+      </div></div>
+      </details>
+
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-[minmax(240px,2fr)_minmax(120px,1fr)_minmax(120px,1fr)]" data-testid="media-library-filters" role="group" aria-label="Media library filters">
+        <input
+          type="text"
+          value={searchQuery}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const q = event.target.value;
+            setSearchQuery(q);
+            updateMediaRouteSearch({ q: q || undefined });
+          }}
+          className="col-span-2 min-h-11 min-w-0 rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-1"
+          placeholder="Search filenames, captions, alt text, or tags"
+          aria-label="Search media"
+        />
+        <input
+          type="text"
+          value={tagFilter}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const tag = event.target.value;
+            setTagFilter(tag);
+            updateMediaRouteSearch({ tag: tag || undefined });
+          }}
+          className="min-h-11 min-w-0 rounded-lg border bg-background px-3 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          placeholder="Exact tag"
+          aria-label="Filter media by exact tag"
+          data-testid="media-tag-filter"
+        />
+        <select
+          value={selectedFolderId === undefined ? 'all' : selectedFolderId === null ? 'root' : selectedFolderId}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const folderId = event.target.value === 'all' ? undefined : event.target.value === 'root' ? null : event.target.value;
+            setSelectedFolderId(folderId);
+            updateMediaRouteSearch({ folderId: folderSelectionToRoute(folderId) });
+          }}
+          className="min-h-11 min-w-0 rounded-lg border bg-background px-3 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Filter media by folder"
+          data-testid="media-folder-filter"
+        >
+          <option value="all">All folders</option>
+          <option value="root">Root folder</option>
+          {folderOptions.map(folder => <option key={folder.id} value={folder.id}>{folder.label}</option>)}
+        </select>
+        <MediaLinkedTargetFilter
+          target={linkedTarget}
+          pages={referenceTargetSnapshot?.siteId === siteId ? referenceTargetSnapshot.pages : []}
+          posts={referenceTargetSnapshot?.siteId === siteId ? referenceTargetSnapshot.posts : []}
+          loading={referenceTargetSnapshot?.siteId !== siteId || referenceTargetSnapshot.loading}
+          error={referenceTargetSnapshot?.siteId === siteId ? referenceTargetSnapshot.error : undefined}
+          disabled={isMediaLibraryBusy}
+          onChange={target => {
+            setSelectedMediaIds([]); setSelectedAsset(null);
+            updateMediaRouteSearch({ linkedPageId: undefined, linkedPostId: undefined, assetId: undefined, ...mediaLinkedTargetQuery(target) });
+          }}
+        />
+        <select
+          value={typeFilter}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const type = event.target.value as MediaTypeFilter;
+            setTypeFilter(type);
+            updateMediaRouteSearch({ type });
+          }}
+          className="min-h-11 min-w-0 rounded-lg border bg-background px-3 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Media type filter"
+        >
+          <option value="all">All types</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+          <option value="audio">Audio</option>
+          <option value="file">Documents and other files</option>
+          <option value="font">Fonts</option>
+          <option value="other">Other files</option>
+        </select>
+        <select
+          value={visibilityFilter}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const visibility = event.target.value as MediaVisibilityFilter;
+            setVisibilityFilter(visibility);
+            updateMediaRouteSearch({ visibility });
+          }}
+          className="min-h-11 min-w-0 rounded-lg border bg-background px-3 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Media visibility filter"
+        >
+          <option value="all">All visibility</option>
+          <option value="public">Public</option>
+          <option value="private">Private</option>
+        </select>
+        <select
+          value={usageFilter}
+          disabled={isMediaLibraryBusy}
+          onChange={(event) => {
+            if (isMediaLibraryBusy) return;
+            const usage = event.target.value as MediaUsageFilter;
+            setUsageFilter(usage);
+            updateMediaRouteSearch({ usage });
+          }}
+          className="min-h-11 min-w-0 rounded-lg border bg-background px-3 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Media usage filter"
+          data-testid="media-usage-filter"
+        >
+          <option value="all">All usage</option><option value="unused">Unused</option><option value="referenced">Referenced</option><option value="replaced">Replaced</option><option value="quarantined">Quarantined</option>
+        </select>
       </div>
 
-      {error && (
-        <Notice tone="warning" className="mb-6">
-          {error}
-        </Notice>
-      )}
-
-      {bulkNotice && (
-        <Notice tone="success" className="mb-6">
-          {bulkNotice}
-        </Notice>
-      )}
-
       {isLoading ? (
-        <div className="mb-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Loading media library...
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {Array.from({ length: 10 }).map((_, index) => (
+            <div key={index} className="rounded-xl border border-border bg-card p-3">
+              <div className="aspect-square rounded-lg bg-muted animate-pulse" />
+              <div className="mt-3 h-4 w-3/4 rounded bg-muted animate-pulse" />
+              <div className="mt-2 h-3 w-1/2 rounded bg-muted animate-pulse" />
+            </div>
+          ))}
         </div>
-      ) : null}
+      ) : displayedFiles.length > 0 ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4" data-testid="media-library-grid">
+          {displayedFiles.map((file) => (
+            <div
+              key={file.id}
+              data-testid="media-library-card"
+              className={cn(
+                'group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md',
+                selectedMediaSet.has(file.id) ? 'border-primary ring-2 ring-primary/20' : 'border-border',
+              )}
+            >
+              <label
+                className="absolute left-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background/95 shadow-sm backdrop-blur"
+                title={canBulkSelectMedia ? `Select ${file.name}` : bulkSelectionPermissionTitle}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedMediaSet.has(file.id)}
+                  disabled={isMediaLibraryBusy || !canBulkSelectMedia}
+                  title={canBulkSelectMedia ? undefined : bulkSelectionPermissionTitle}
+                  onChange={() => toggleMediaSelection(file.id)}
+                  className="h-3.5 w-3.5 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={`Select ${file.name}`}
+                />
+                <span className="sr-only">Select {file.name}</span>
+              </label>
+              <div className="aspect-square bg-muted flex items-center justify-center relative">
+                <MediaAssetPreview file={file} />
 
-      <Panel className="mb-6 scroll-mt-24" id="media-api">
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button
+                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    title={canEditMedia ? 'Edit metadata' : editPermissionTitle}
+                    onClick={() => {
+                      if (isMediaLibraryBusy || !canEditMedia) return;
+                      openMetadataEditor(file);
+                    }}
+                    aria-label={`Edit metadata for ${file.name}`}
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  {file.visibility !== 'private' && (
+                    <>
+                      <button
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isMediaLibraryBusy}
+                        onClick={() => void copyMediaApiText(getAssetDeliveryUrl(file), `${file.name} delivery URL`)}
+                        title="Copy delivery URL"
+                        aria-label={`Copy delivery URL for ${file.name}`}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <a
+                        href={getAssetDeliveryUrl(file)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring"
+                        title="Open delivered file"
+                        aria-label={`Open delivered file for ${file.name}`}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    </>
+                  )}
+                  <button
+                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isMediaLibraryBusy || !canDeleteMedia}
+                    onClick={() => {
+                      if (isMediaLibraryBusy || !canDeleteMedia) return;
+                      setPendingDeleteAsset(file);
+                    }}
+                    title={canDeleteMedia ? 'Delete media' : deletePermissionTitle}
+                    aria-label={`Delete ${file.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Info */}
+              <div className="p-3">
+                <div className="flex items-start gap-2">
+                  <MediaTypeIcon type={file.type} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => openMetadataEditor(file)}
+                      disabled={isMediaLibraryBusy}
+                      className="min-h-11 w-full truncate rounded text-left text-sm font-medium hover:underline focus-ring disabled:cursor-not-allowed disabled:opacity-60"
+                      title={file.name}
+                      aria-label={`Open details for ${file.name}`}
+                      data-testid="media-asset-details-trigger"
+                    >{file.name}</button>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{mediaTypeLabel(file.type)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{file.size}</span>
+                      <StatusBadge status={file.visibility || 'public'} className="px-1.5 py-0 text-[10px]" />
+                    </div>
+                  </div>
+                </div>
+                {file.folderId && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {getFolderPath(file.folderId)}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={ImageIcon}
+          title={files.length === 0 && !hasActiveMediaFilters ? 'Library is empty' : 'No assets match this view'}
+          description={files.length === 0 && !hasActiveMediaFilters ? 'Upload some files to get started.' : 'Change the usage, search, type, visibility, or folder filters to broaden the view.'}
+        />
+      )}
+
+      <div
+        className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+        data-testid="media-library-pagination"
+      >
+        <div>
+          <div className="text-sm font-semibold text-foreground">Loaded media window</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Loaded {loadedMediaCount} of {matchingMediaTotal} matching asset{matchingMediaTotal === 1 ? '' : 's'} from the API. Bulk actions apply to selected loaded assets.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
+            onClick={() => void loadLibrary({ mode: 'append' })}
+          >
+            Load more
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
+            onClick={() => void loadLibrary({ mode: 'all' })}
+          >
+            Load all matching
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isMediaLibraryBusy}
+            onClick={() => void loadLibrary()}
+          >
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      <details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-folder-management-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Folder management</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<div id="media-folders" className="mb-6 rounded-xl border border-border bg-card p-4 scroll-mt-24">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 font-semibold">
+            <Folder className="h-4 w-4" />
+            <span>Folders</span>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
+            <select
+              value={newFolderParentId}
+              disabled={isMediaLibraryBusy || !canCreateMedia}
+              title={canCreateMedia ? undefined : createPermissionTitle}
+              onChange={(event) => setNewFolderParentId(event.target.value)}
+              className="w-full max-w-[180px] rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="New folder parent"
+            >
+              <option value="root">Root</option>
+              {folderOptions.map((folder) => (
+                <option key={folder.id} value={folder.id}>{folder.label}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={newFolderName}
+              disabled={isMediaLibraryBusy || !canCreateMedia}
+              title={canCreateMedia ? undefined : createPermissionTitle}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void handleCreateFolder();
+                }
+              }}
+              className={cn(
+                'w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+                newFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
+              )}
+              placeholder="New folder name"
+              aria-label="New folder name"
+              aria-invalid={Boolean(newFolderNameInlineError)}
+              aria-describedby={newFolderNameInlineError ? 'media-new-folder-name-error' : undefined}
+              data-testid="media-new-folder-name-input"
+            />
+            <button
+              type="button"
+              disabled={isMediaLibraryBusy || !canCreateMedia}
+              title={canCreateMedia ? undefined : createPermissionTitle}
+              onClick={() => void handleCreateFolder()}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Create media folder"
+              data-testid="media-new-folder-create"
+            >
+              <FolderPlus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+        </div>
+        {newFolderNameInlineError ? (
+          <p id="media-new-folder-name-error" className="mb-3 text-xs font-medium text-destructive" data-testid="media-new-folder-name-error">
+            {newFolderNameInlineError}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (isMediaLibraryBusy) return;
+              setSelectedFolderId(undefined);
+              updateMediaRouteSearch({ folderId: undefined });
+            }}
+            disabled={isMediaLibraryBusy}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+              selectedFolderId === undefined ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+            )}
+          >
+            All media
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (isMediaLibraryBusy) return;
+              setSelectedFolderId(null);
+              updateMediaRouteSearch({ folderId: 'root' });
+            }}
+            disabled={isMediaLibraryBusy}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+              selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+            )}
+          >
+            Root
+          </button>
+	          {folderOptions.map((folder) => (
+	            <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
+	              {editingFolderId === folder.id ? (
+	                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 px-1.5 py-1 sm:min-w-[360px]">
+	                  <input
+	                    type="text"
+	                    value={editingFolderName}
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    title={canEditMedia ? undefined : editPermissionTitle}
+	                    onChange={(event) => setEditingFolderName(event.target.value)}
+	                    onKeyDown={(event) => {
+	                      if (event.key === 'Enter') {
+	                        event.preventDefault();
+	                        void handleRenameFolder(folder.id);
+	                      }
+	                      if (event.key === 'Escape') {
+	                        event.preventDefault();
+	                        cancelEditingFolder();
+	                      }
+	                    }}
+	                    className={cn(
+	                      'h-8 min-w-[150px] flex-1 rounded-md border bg-background px-2 text-sm',
+	                      editingFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
+	                    )}
+	                    aria-label={`Rename folder ${folder.name}`}
+	                    aria-invalid={Boolean(editingFolderNameInlineError)}
+	                    aria-describedby={editingFolderNameInlineError ? `media-folder-rename-error-${folder.id}` : undefined}
+	                    data-testid="media-folder-rename-input"
+	                    autoFocus
+	                  />
+	                  <select
+	                    value={editingFolderParentId}
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    title={canEditMedia ? undefined : editPermissionTitle}
+	                    onChange={(event) => setEditingFolderParentId(event.target.value)}
+	                    className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+	                    aria-label={`Parent folder for ${folder.name}`}
+	                  >
+	                    <option value="root">Root</option>
+	                    {getFolderParentOptions(folder.id).map((parentFolder) => (
+	                      <option key={parentFolder.id} value={parentFolder.id}>{parentFolder.label}</option>
+	                    ))}
+	                  </select>
+	                  <button
+	                    type="button"
+	                    disabled={isMediaLibraryBusy || !canEditMedia}
+	                    onClick={() => void handleRenameFolder(folder.id)}
+	                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+	                    title={canEditMedia ? 'Save folder name' : editPermissionTitle}
+	                    aria-label={`Save folder name for ${folder.name}`}
+	                    data-testid="media-folder-rename-save"
+	                  >
+	                    <Save className="h-3.5 w-3.5" />
+	                  </button>
+	                  <button
+	                    type="button"
+	                    disabled={isMediaLibraryBusy}
+	                    onClick={cancelEditingFolder}
+	                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
+	                    title="Cancel rename"
+	                    aria-label={`Cancel renaming ${folder.name}`}
+	                  >
+	                    <X className="h-3.5 w-3.5" />
+	                  </button>
+	                  {editingFolderNameInlineError ? (
+	                    <p id={`media-folder-rename-error-${folder.id}`} className="basis-full px-1 text-xs font-medium text-destructive" data-testid="media-folder-rename-error">
+	                      {editingFolderNameInlineError}
+	                    </p>
+	                  ) : null}
+	                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isMediaLibraryBusy) return;
+                      setSelectedFolderId(folder.id);
+                      updateMediaRouteSearch({ folderId: folder.id });
+                    }}
+                    disabled={isMediaLibraryBusy}
+                    title={`${folderSubtreeAssetCounts.get(folder.id) || 0} asset${(folderSubtreeAssetCounts.get(folder.id) || 0) === 1 ? '' : 's'} including descendant folders; ${folderAssetCounts.get(folder.id) || 0} direct.`}
+                    className={cn(
+                      'px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
+                      selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                    )}
+                  >
+                    <span className="font-medium">{folder.label}</span>
+                    <span className="ml-2 font-mono text-xs text-muted-foreground">
+                      {folderSubtreeAssetCounts.get(folder.id) || 0}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEditingFolder(folder)}
+                    disabled={isMediaLibraryBusy || !canEditMedia}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    title={canEditMedia ? 'Rename folder' : editPermissionTitle}
+                    aria-label={`Rename folder ${folder.name}`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isMediaLibraryBusy || !canDeleteMedia) return;
+                      setPendingDeleteFolder(folder);
+                    }}
+                    disabled={isMediaLibraryBusy || !canDeleteMedia}
+                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    title={canDeleteMedia ? 'Delete folder' : deletePermissionTitle}
+                    aria-label={`Delete folder ${folder.name}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div></div>
+      </details>
+
+      {files.length > 0 && (
+        <details className="mb-4 rounded-lg border border-border bg-card" open={selectedMediaAssets.length > 0 ? true : undefined} data-testid="media-bulk-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Bulk management · {selectedMediaAssets.length} selected</summary><Panel className="mb-6 scroll-mt-24" id="media-bulk">
+          <PanelHeader
+            title="Bulk management"
+            description={bulkManagementDescription}
+            icon={<CheckSquare className="size-4" />}
+            action={
+              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                {selectedMediaAssets.length} selected{hiddenSelectedMediaCount > 0 ? `, ${hiddenSelectedMediaCount} hidden` : ''}
+              </span>
+            }
+          />
+          <PanelContent>
+            <div
+              className="grid gap-4"
+              role="group"
+              aria-label="Media bulk actions"
+              aria-describedby={`${mediaBulkSelectionStatusId} ${mediaBulkActionStatusId}`}
+              data-testid="media-bulk-toolbar"
+              data-action-state={mediaBulkGroupActionState}
+              data-action-status={mediaBulkGroupActionStatus}
+              data-selected-count={selectedMediaAssets.length}
+              data-visible-selected-count={visibleSelectedMediaCount}
+              data-hidden-selected-count={hiddenSelectedMediaCount}
+              data-visible-asset-count={displayedFiles.length}
+              data-matching-asset-count={matchingMediaTotal}
+              data-bulk-change-ready={mediaBulkUpdateReady ? 'true' : 'false'}
+              data-bulk-delete-ready={mediaBulkDeleteReady ? 'true' : 'false'}
+            >
+              <span id={mediaBulkSelectionStatusId} className="sr-only" data-testid="media-bulk-selection-status" aria-live="polite">
+                {mediaBulkSelectionStatus}
+              </span>
+              <span id={mediaBulkActionStatusId} className="sr-only" data-testid="media-bulk-action-status" aria-live="polite">
+                {mediaBulkActionStatus}
+              </span>
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_200px_200px_auto_auto]">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(mediaBulkAddVisibleDisabledReason)}
+                    title={mediaBulkAddVisibleDisabledReason || undefined}
+                    aria-describedby={mediaBulkActionStatusId}
+                    onClick={handleSelectVisibleMedia}
+                    data-action-state={mediaBulkAddVisibleDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkAddVisibleDisabledReason || mediaBulkSelectionStatus}
+                    data-disabled-reason={mediaBulkAddVisibleDisabledReason || undefined}
+                    data-testid="media-bulk-add-visible-button"
+                  >
+                    Add visible loaded
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={Boolean(mediaBulkLoadMatchingDisabledReason)}
+                    title={mediaBulkLoadMatchingDisabledReason || 'Load every matching asset and add it to the bulk selection'}
+                    aria-describedby={mediaBulkActionStatusId}
+                    onClick={() => void handleLoadAndSelectMatchingMedia()}
+                    data-action-state={mediaBulkLoadMatchingDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkLoadMatchingDisabledReason || mediaBulkSelectionStatus}
+                    data-disabled-reason={mediaBulkLoadMatchingDisabledReason || undefined}
+                    data-testid="media-bulk-load-select-matching"
+                  >
+                    Load and select matching
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={Boolean(mediaBulkClearSelectionDisabledReason)}
+                    title={mediaBulkClearSelectionDisabledReason || 'Clear selected media assets'}
+                    aria-describedby={mediaBulkActionStatusId}
+                    onClick={handleClearSelection}
+                    data-action-state={mediaBulkClearSelectionDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkClearSelectionDisabledReason || mediaBulkSelectionStatus}
+                    data-disabled-reason={mediaBulkClearSelectionDisabledReason || undefined}
+                    data-testid="media-bulk-clear-selection"
+                  >
+                    Clear
+                  </Button>
+                  {hiddenSelectedMediaCount > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={Boolean(mediaBulkBusyReason)}
+                      title={mediaBulkBusyReason || 'Clear hidden selected media assets'}
+                      aria-describedby={mediaBulkActionStatusId}
+                      onClick={handleClearHiddenSelection}
+                      data-action-state={mediaBulkBusyReason ? 'blocked' : 'ready'}
+                      data-action-status={mediaBulkBusyReason || mediaBulkSelectionStatus}
+                      data-disabled-reason={mediaBulkBusyReason || undefined}
+                      data-testid="media-bulk-clear-hidden-selection"
+                    >
+                      Clear hidden
+                    </Button>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Add visible assets from the current filters, or load every matching result before selecting so folder, tag, safety, and delete actions cover the full filtered set.
+                    Selected hidden assets remain selected and are included in bulk actions until cleared.
+                  </p>
+                </div>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Visibility
+                  <select
+                    value={bulkVisibility}
+                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
+                    title={mediaBulkEditControlDisabledReason || undefined}
+                    onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk visibility"
+                    aria-describedby={mediaBulkActionStatusId}
+                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
+                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
+                    data-testid="media-bulk-visibility-select"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Folder
+                  <select
+                    value={bulkFolderId}
+                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
+                    title={mediaBulkEditControlDisabledReason || undefined}
+                    onChange={(event) => setBulkFolderId(event.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk folder"
+                    aria-describedby={mediaBulkActionStatusId}
+                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
+                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
+                    data-testid="media-bulk-folder-select"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="root">Root</option>
+                    {folderOptions.map((folder) => (
+                      <option key={folder.id} value={folder.id}>{folder.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                  Safety
+                  <select
+                    value={bulkSafetyAction}
+                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
+                    title={mediaBulkEditControlDisabledReason || undefined}
+                    onChange={(event) => setBulkSafetyAction(
+                      event.target.value === 'quarantine' || event.target.value === 'release'
+                        ? event.target.value
+                        : 'keep',
+                    )}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    aria-label="Bulk safety action"
+                    aria-describedby={mediaBulkActionStatusId}
+                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
+                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
+                    data-testid="media-bulk-safety-select"
+                  >
+                    <option value="keep">No change</option>
+                    <option value="quarantine">Quarantine</option>
+                    <option value="release">Release quarantine</option>
+                  </select>
+                </label>
+
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={Boolean(mediaBulkApplyDisabledReason)}
+                    onClick={() => void handleBulkUpdate()}
+                    className="w-full whitespace-nowrap"
+                    title={mediaBulkApplyDisabledReason || 'Apply bulk media changes'}
+                    aria-describedby={mediaBulkActionStatusId}
+                    data-action-state={mediaBulkApplyDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkActionStatus}
+                    data-disabled-reason={mediaBulkApplyDisabledReason || undefined}
+                    data-testid="media-bulk-apply-changes"
+                  >
+                    {isBulkUpdating ? 'Applying...' : 'Apply changes'}
+                  </Button>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    disabled={Boolean(mediaBulkDeleteDisabledReason)}
+                    onClick={() => void handleBulkDelete()}
+                    className="w-full whitespace-nowrap"
+                    iconStart={<Trash2 className="size-4" />}
+                    title={mediaBulkDeleteDisabledReason || 'Delete selected media assets'}
+                    aria-describedby={mediaBulkActionStatusId}
+                    data-action-state={mediaBulkDeleteDisabledReason ? 'blocked' : 'ready'}
+                    data-action-status={mediaBulkActionStatus}
+                    data-disabled-reason={mediaBulkDeleteDisabledReason || undefined}
+                    data-testid="media-bulk-delete-selected"
+                  >
+                    Delete selected
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_minmax(220px,0.55fr)]">
+                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                    Tag action
+                    <select
+                      value={bulkTagMode}
+                      disabled={Boolean(mediaBulkEditControlDisabledReason)}
+                      title={mediaBulkEditControlDisabledReason || undefined}
+                      onChange={(event) => setBulkTagMode(event.target.value as typeof bulkTagMode)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      aria-label="Bulk tag action"
+                      aria-describedby={mediaBulkActionStatusId}
+                      data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
+                      data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
+                      data-testid="media-bulk-tag-action-select"
+                    >
+                      <option value="keep">No tag change</option>
+                      <option value="merge">Add to existing tags</option>
+                      <option value="replace">Replace all tags</option>
+                      <option value="clear">Clear all tags</option>
+                    </select>
+                  </label>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
+                      <span>Tags</span>
+                      <span className="font-mono">{bulkTagList.length}/{DEFAULT_MAX_TAGS}</span>
+                    </div>
+                    <div
+                      aria-describedby={mediaBulkActionStatusId}
+                      data-testid="media-bulk-tags-control"
+                      data-action-state={mediaBulkTagInputDisabledReason ? 'blocked' : 'ready'}
+                      data-action-status={mediaBulkTagInputDisabledReason || mediaBulkActionStatus}
+                      data-disabled-reason={mediaBulkTagInputDisabledReason || undefined}
+                    >
+                      <TagInput
+                        tags={bulkTagList}
+                        onChange={setBulkTagList}
+                        placeholder="Add campaign, hero, product..."
+                        ariaLabel="Bulk media tags"
+                        disabled={Boolean(mediaBulkTagInputDisabledReason)}
+                        className={mediaBulkTagInputDisabledReason ? 'opacity-60' : undefined}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+                    <div className="font-medium text-foreground">Tag preview</div>
+                    <p className="mt-1 leading-5">
+                      {bulkTagMode === 'merge' && 'Selected assets keep their existing tags and receive the tags listed here.'}
+                      {bulkTagMode === 'replace' && 'Selected assets will use only the tags listed here.'}
+                      {bulkTagMode === 'clear' && 'Selected assets will have every tag removed.'}
+                      {bulkTagMode === 'keep' && 'Choose a tag action to update selected assets in the same batch as folder or visibility changes.'}
+                      {bulkSafetyAction === 'quarantine' && ' Selected assets will be forced private and blocked from public delivery, transforms, and signed URLs.'}
+                      {bulkSafetyAction === 'release' && ' Selected assets will clear quarantine metadata and restore previous visibility unless a visibility change is also selected.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </PanelContent>
+        </Panel></details>
+      )}
+
+      {fontGroups.length > 0 && (
+        <details className="mb-4 rounded-lg border border-border bg-card" data-testid="media-font-delivery-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Font delivery and families</summary><Panel className="mb-6 scroll-mt-24" id="media-fonts">
+          <PanelHeader
+            title="Font families"
+            description="Registered uploaded fonts grouped by family, variants, fallback stack, and frontend delivery visibility."
+            icon={<Type className="size-4" />}
+            action={
+              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
+                {fontGroups.length} {fontGroups.length === 1 ? 'family' : 'families'}
+              </span>
+            }
+          />
+          <PanelContent>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {fontGroups.map((group) => (
+                <div key={group.family} className="rounded-lg border border-border bg-muted/30 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p
+                        className="truncate text-base font-semibold"
+                        style={{ fontFamily: `"${group.family}", ${group.fallback}` }}
+                      >
+                        {group.family}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        "{group.family}", {group.fallback}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const firstAsset = group.assets[0];
+                        if (firstAsset) {
+                          openMetadataEditor(firstAsset);
+                        }
+                      }}
+                      className="shrink-0"
+                    >
+                      Edit
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {group.variants.map((variant) => (
+                      <span key={variant} className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
+                        {variant}
+                      </span>
+                    ))}
+                  </div>
+
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Fallback stack</dt>
+                      <dd className="truncate font-mono text-xs" title={group.fallback}>{group.fallback}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Display</dt>
+                      <dd className="font-mono text-xs">{group.display}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Public files</dt>
+                      <dd className="font-mono text-xs">{group.publicCount}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Private files</dt>
+                      <dd className="font-mono text-xs">{group.privateCount}</dd>
+                    </div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          </PanelContent>
+        </Panel></details>
+      )}
+
+      <section className="mt-8 border-t border-border pt-5" id="media-operations" aria-labelledby="media-operations-title" data-testid="media-library-operations">
+        <h2 id="media-operations-title" className="text-base font-semibold">Library operations</h2>
+        <p className="mb-4 mt-1 text-sm text-muted-foreground">Inspect storage, delivery, readiness and activity when you need them.</p>
+        <details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-readiness-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Library readiness and workflow</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Library readiness</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Checks whether media can be uploaded, organized, transformed, protected, and delivered to custom frontends.
+                </p>
+              </div>
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {files.length} assets
+              </span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  'h-full rounded-full',
+                  mediaLibraryReadiness.score >= 80 ? 'bg-emerald-500' : 'bg-amber-500',
+                )}
+                style={{ width: `${mediaLibraryReadiness.score}%` }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {mediaLibraryReadiness.checks.map((check) => (
+                <MediaReadinessCheck key={check.label} {...check} />
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold">Media workflow</h3>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {mediaLibraryReadiness.workflow.map((step, index) => (
+                <MediaWorkflowStep key={step.label} index={index + 1} {...step} />
+              ))}
+            </div>
+          </div>
+        </div></div>
+      </details><details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-operation-action-plan-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Media operation action plan</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Storage, scanner, quota, attribution, organization, and font readiness handoff.</span>
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-semibold',
+                mediaOperationActionPlan.attention ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700',
+              )}
+              >
+                {mediaOperationActionPlan.readyCount}/{mediaOperationActionPlan.totalCount} ready
+              </span>
+              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                {mediaOperationActionPlan.schemaVersion}
+              </span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show plan</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide plan</span>
+            </span>
+          </summary>
+          <div className="border-t border-border p-4" data-testid="media-operation-action-plan">
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              {mediaOperationActionPlan.summary}
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {mediaOperationActionPlan.actions.map((action) => (
+                <a
+                  key={action.key}
+                  href={action.href}
+                  className={cn(
+                    'rounded-md border px-3 py-2 text-left transition hover:border-primary/40 hover:bg-primary/5',
+                    action.ready ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold text-foreground">{action.label}</span>
+                    <span className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {action.mode}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{action.reason}</p>
+                </a>
+              ))}
+            </div>
+          </div>
+        </details>
+<details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-attribution-handoff-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Attribution handoff</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Provider, CDN, and campaign-channel evidence for media ROI dashboards.</span>
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-semibold capitalize',
+                mediaAttributionHandoff.status === 'ready'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : mediaAttributionHandoff.status === 'partial'
+                    ? 'bg-amber-50 text-amber-700'
+                    : 'bg-muted text-muted-foreground',
+              )}
+              >
+                {mediaAttributionHandoff.status.replace(/-/g, ' ')}
+              </span>
+              <span className="rounded-md border border-border bg-muted px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                {mediaAttributionHandoff.schemaVersion}
+              </span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show attribution</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide attribution</span>
+            </span>
+          </summary>
+          <div
+            className="border-t border-border p-4"
+            data-testid="media-attribution-handoff"
+            data-attribution-schema={mediaAttributionHandoff.schemaVersion}
+            data-attribution-status={mediaAttributionHandoff.status}
+            data-attribution-channels={mediaAttributionHandoff.metrics.channels}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-3xl rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                {mediaAttributionHandoff.summary}
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyMediaAttributionHandoff()}
+                disabled={isMediaLibraryBusy || !canExportMediaActivity}
+                title={!canExportMediaActivity ? activityPermissionTitle : 'Copy media attribution handoff'}
+                aria-label="Copy media attribution handoff"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Copy className="size-3.5" />
+                Copy attribution
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-4">
+              <MediaApiStat label="Channels" value={`${mediaAttributionHandoff.metrics.channels}`} />
+              <MediaApiStat label="Provider req" value={`${mediaAttributionHandoff.metrics.requests}`} />
+              <MediaApiStat label="Conversions" value={`${mediaAttributionHandoff.metrics.conversions}`} />
+              <MediaApiStat
+                label="Value"
+                value={formatProviderAnalyticsValue(
+                  mediaAttributionHandoff.metrics.conversionValue,
+                  mediaAttributionHandoff.metrics.currency,
+                )}
+              />
+            </div>
+            {mediaAttributionHandoff.missingEvidence.length > 0 ? (
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {mediaAttributionHandoff.missingEvidence.slice(0, 3).map((item) => (
+                  <div key={item} className="rounded-md border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {mediaAttributionHandoff.channels.slice(0, 3).map((channel) => (
+                  <div key={`${channel.source}:${channel.attributionWindow}`} className="rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+                    <div className="truncate font-semibold text-foreground">{channel.source}</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {channel.attributionWindow} · {channel.conversions} conv · {formatProviderAnalyticsValue(channel.conversionValue, channel.currency)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+<details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-control-map-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Media control map</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Jump links for upload, API, storage, folders, bulk controls, and font delivery.</span>
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show map</span>
+            <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide map</span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {MEDIA_CONTROL_AREAS.map((area) => (
+                <a
+                  key={area.title}
+                  href={area.href}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{area.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{area.detail}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </details>
+<details className="group mt-4 overflow-hidden rounded-lg border border-border bg-background" data-testid="media-connected-workflows-details" data-default-collapsed="true">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              <span className="block text-sm font-semibold text-foreground">Connected media workflows</span>
+              <span className="mt-1 block text-sm text-muted-foreground">Route assets into editors, storefronts, downloads, and storage configuration.</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                {MEDIA_USAGE_SURFACES.length} surfaces
+              </span>
+              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:hidden">Show workflows</span>
+              <span className="hidden rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground group-open:inline-flex">Hide workflows</span>
+            </span>
+          </summary>
+          <div className="border-t border-border p-4">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {MEDIA_USAGE_SURFACES.map((surface) => (
+                <Link
+                  key={surface.title}
+                  to={surface.route}
+                  search={surface.route === '/settings' ? undefined : activeSiteRouteSearch}
+                  className="rounded-lg border border-border bg-card px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="text-sm font-semibold text-foreground">{surface.title}</div>
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground">{surface.detail}</div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </details><details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-api-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Frontend media API</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<Panel className="mb-6 scroll-mt-24" id="media-api">
         <PanelHeader
           title="Frontend media API"
           description="Public delivery endpoints and private upload contract for custom frontends, editors, and storefronts."
@@ -4813,9 +5818,14 @@ function MediaPage() {
             <MediaApiSnippet label="Provider analytics ingest" value={adminMediaProviderAnalyticsUrl} />
           </div>
         </PanelContent>
-      </Panel>
-
-      <Panel className="mb-6 scroll-mt-24" id="media-storage">
+      </Panel></div>
+      </details><details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-storage-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Storage health and configuration</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<Panel className="mb-6 scroll-mt-24" id="media-storage">
         <PanelHeader
           title="Storage health"
           description="Runtime provider, Supabase storage capability, and site quota for files served to custom frontends."
@@ -5645,9 +6655,14 @@ function MediaPage() {
           )}
           </div>
         </PanelContent>
-      </Panel>
-
-      <Panel className="mb-6 scroll-mt-24" id="media-analytics">
+      </Panel></div>
+      </details><details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-analytics-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Usage analytics and attribution</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<Panel className="mb-6 scroll-mt-24" id="media-analytics">
         <PanelHeader
           title="Usage analytics"
           description="Reference coverage, delivery visibility, type mix, and replacement activity for the currently loaded library."
@@ -5994,9 +7009,14 @@ function MediaPage() {
             </div>
           </div>
         </PanelContent>
-      </Panel>
-
-      <Panel className="mb-6 scroll-mt-24" id="media-activity" data-testid="media-library-activity">
+      </Panel></div>
+      </details><details className="mb-4 overflow-hidden rounded-lg border border-border bg-card" data-testid="media-activity-details" data-default-collapsed="true">
+        <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span>Media activity and audit</span>
+          <span className="text-xs font-medium text-muted-foreground">Show controls</span>
+        </summary>
+        <div className="border-t border-border p-4">
+<Panel className="mb-6 scroll-mt-24" id="media-activity" data-testid="media-library-activity">
         <PanelHeader
           title="Media activity"
           description="Review recent uploads, edits, replacements, transform preparation, bindings, quarantine changes, and deletions across the library."
@@ -6171,807 +7191,8 @@ function MediaPage() {
             </div>
           </div>
         </PanelContent>
-      </Panel>
-
-      <div className="mb-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
-        <input
-          type="text"
-          value={searchQuery}
-          disabled={isMediaLibraryBusy}
-          onChange={(event) => {
-            if (isMediaLibraryBusy) return;
-            const q = event.target.value;
-            setSearchQuery(q);
-            updateMediaRouteSearch({ q: q || undefined });
-          }}
-          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-          placeholder="Search filenames, captions, alt text, or tags"
-          aria-label="Search media"
-        />
-        <input
-          type="text"
-          value={tagFilter}
-          disabled={isMediaLibraryBusy}
-          onChange={(event) => {
-            if (isMediaLibraryBusy) return;
-            const tag = event.target.value;
-            setTagFilter(tag);
-            updateMediaRouteSearch({ tag: tag || undefined });
-          }}
-          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-          placeholder="Exact tag"
-          aria-label="Filter media by exact tag"
-          data-testid="media-tag-filter"
-        />
-        <select
-          value={typeFilter}
-          disabled={isMediaLibraryBusy}
-          onChange={(event) => {
-            if (isMediaLibraryBusy) return;
-            const type = event.target.value as MediaTypeFilter;
-            setTypeFilter(type);
-            updateMediaRouteSearch({ type });
-          }}
-          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-          aria-label="Media type filter"
-        >
-          <option value="all">All types</option>
-          <option value="image">Images</option>
-          <option value="video">Videos</option>
-          <option value="audio">Audio</option>
-          <option value="file">Documents</option>
-          <option value="font">Fonts</option>
-          <option value="other">Other files</option>
-        </select>
-        <select
-          value={visibilityFilter}
-          disabled={isMediaLibraryBusy}
-          onChange={(event) => {
-            if (isMediaLibraryBusy) return;
-            const visibility = event.target.value as MediaVisibilityFilter;
-            setVisibilityFilter(visibility);
-            updateMediaRouteSearch({ visibility });
-          }}
-          className="rounded-lg border bg-background px-4 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-          aria-label="Media visibility filter"
-        >
-          <option value="all">All visibility</option>
-          <option value="public">Public</option>
-          <option value="private">Private</option>
-        </select>
-      </div>
-
-      <div
-        className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
-        data-testid="media-library-pagination"
-      >
-        <div>
-          <div className="text-sm font-semibold text-foreground">Loaded media window</div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Loaded {loadedMediaCount} of {matchingMediaTotal} matching asset{matchingMediaTotal === 1 ? '' : 's'} from the API. Bulk actions apply to selected loaded assets.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
-            onClick={() => void loadLibrary({ mode: 'append' })}
-          >
-            Load more
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={isMediaLibraryBusy || !hasUnloadedMedia}
-            onClick={() => void loadLibrary({ mode: 'all' })}
-          >
-            Load all matching
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={isMediaLibraryBusy}
-            onClick={() => void loadLibrary()}
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      <div id="media-folders" className="mb-6 rounded-xl border border-border bg-card p-4 scroll-mt-24">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 font-semibold">
-            <Folder className="h-4 w-4" />
-            <span>Folders</span>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2">
-            <select
-              value={newFolderParentId}
-              disabled={isMediaLibraryBusy || !canCreateMedia}
-              title={canCreateMedia ? undefined : createPermissionTitle}
-              onChange={(event) => setNewFolderParentId(event.target.value)}
-              className="w-full max-w-[180px] rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="New folder parent"
-            >
-              <option value="root">Root</option>
-              {folderOptions.map((folder) => (
-                <option key={folder.id} value={folder.id}>{folder.label}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={newFolderName}
-              disabled={isMediaLibraryBusy || !canCreateMedia}
-              title={canCreateMedia ? undefined : createPermissionTitle}
-              onChange={(event) => setNewFolderName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void handleCreateFolder();
-                }
-              }}
-              className={cn(
-                'w-full max-w-xs rounded-lg border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
-                newFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
-              )}
-              placeholder="New folder name"
-              aria-label="New folder name"
-              aria-invalid={Boolean(newFolderNameInlineError)}
-              aria-describedby={newFolderNameInlineError ? 'media-new-folder-name-error' : undefined}
-              data-testid="media-new-folder-name-input"
-            />
-            <button
-              type="button"
-              disabled={isMediaLibraryBusy || !canCreateMedia}
-              title={canCreateMedia ? undefined : createPermissionTitle}
-              onClick={() => void handleCreateFolder()}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Create media folder"
-              data-testid="media-new-folder-create"
-            >
-              <FolderPlus className="h-4 w-4" />
-              Add
-            </button>
-          </div>
-        </div>
-        {newFolderNameInlineError ? (
-          <p id="media-new-folder-name-error" className="mb-3 text-xs font-medium text-destructive" data-testid="media-new-folder-name-error">
-            {newFolderNameInlineError}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (isMediaLibraryBusy) return;
-              setSelectedFolderId(undefined);
-              updateMediaRouteSearch({ folderId: undefined });
-            }}
-            disabled={isMediaLibraryBusy}
-            className={cn(
-              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
-              selectedFolderId === undefined ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
-            )}
-          >
-            All media
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (isMediaLibraryBusy) return;
-              setSelectedFolderId(null);
-              updateMediaRouteSearch({ folderId: 'root' });
-            }}
-            disabled={isMediaLibraryBusy}
-            className={cn(
-              'rounded-lg border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
-              selectedFolderId === null ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
-            )}
-          >
-            Root
-          </button>
-	          {folderOptions.map((folder) => (
-	            <div key={folder.id} className="inline-flex min-h-10 overflow-hidden rounded-lg border border-border bg-background">
-	              {editingFolderId === folder.id ? (
-	                <div className="flex min-w-[360px] flex-wrap items-center gap-1 px-1.5 py-1">
-	                  <input
-	                    type="text"
-	                    value={editingFolderName}
-	                    disabled={isMediaLibraryBusy || !canEditMedia}
-	                    title={canEditMedia ? undefined : editPermissionTitle}
-	                    onChange={(event) => setEditingFolderName(event.target.value)}
-	                    onKeyDown={(event) => {
-	                      if (event.key === 'Enter') {
-	                        event.preventDefault();
-	                        void handleRenameFolder(folder.id);
-	                      }
-	                      if (event.key === 'Escape') {
-	                        event.preventDefault();
-	                        cancelEditingFolder();
-	                      }
-	                    }}
-	                    className={cn(
-	                      'h-8 min-w-[150px] flex-1 rounded-md border bg-background px-2 text-sm',
-	                      editingFolderNameInlineError && 'border-destructive focus-visible:outline-destructive',
-	                    )}
-	                    aria-label={`Rename folder ${folder.name}`}
-	                    aria-invalid={Boolean(editingFolderNameInlineError)}
-	                    aria-describedby={editingFolderNameInlineError ? `media-folder-rename-error-${folder.id}` : undefined}
-	                    data-testid="media-folder-rename-input"
-	                    autoFocus
-	                  />
-	                  <select
-	                    value={editingFolderParentId}
-	                    disabled={isMediaLibraryBusy || !canEditMedia}
-	                    title={canEditMedia ? undefined : editPermissionTitle}
-	                    onChange={(event) => setEditingFolderParentId(event.target.value)}
-	                    className="h-8 min-w-[140px] rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-	                    aria-label={`Parent folder for ${folder.name}`}
-	                  >
-	                    <option value="root">Root</option>
-	                    {getFolderParentOptions(folder.id).map((parentFolder) => (
-	                      <option key={parentFolder.id} value={parentFolder.id}>{parentFolder.label}</option>
-	                    ))}
-	                  </select>
-	                  <button
-	                    type="button"
-	                    disabled={isMediaLibraryBusy || !canEditMedia}
-	                    onClick={() => void handleRenameFolder(folder.id)}
-	                    className="inline-flex size-8 items-center justify-center rounded-md text-primary hover:bg-primary/10 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-	                    title={canEditMedia ? 'Save folder name' : editPermissionTitle}
-	                    aria-label={`Save folder name for ${folder.name}`}
-	                    data-testid="media-folder-rename-save"
-	                  >
-	                    <Save className="h-3.5 w-3.5" />
-	                  </button>
-	                  <button
-	                    type="button"
-	                    disabled={isMediaLibraryBusy}
-	                    onClick={cancelEditingFolder}
-	                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:opacity-50"
-	                    title="Cancel rename"
-	                    aria-label={`Cancel renaming ${folder.name}`}
-	                  >
-	                    <X className="h-3.5 w-3.5" />
-	                  </button>
-	                  {editingFolderNameInlineError ? (
-	                    <p id={`media-folder-rename-error-${folder.id}`} className="basis-full px-1 text-xs font-medium text-destructive" data-testid="media-folder-rename-error">
-	                      {editingFolderNameInlineError}
-	                    </p>
-	                  ) : null}
-	                </div>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isMediaLibraryBusy) return;
-                      setSelectedFolderId(folder.id);
-                      updateMediaRouteSearch({ folderId: folder.id });
-                    }}
-                    disabled={isMediaLibraryBusy}
-                    title={`${folderSubtreeAssetCounts.get(folder.id) || 0} asset${(folderSubtreeAssetCounts.get(folder.id) || 0) === 1 ? '' : 's'} including descendant folders; ${folderAssetCounts.get(folder.id) || 0} direct.`}
-                    className={cn(
-                      'px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60',
-                      selectedFolderId === folder.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                    )}
-                  >
-                    <span className="font-medium">{folder.label}</span>
-                    <span className="ml-2 font-mono text-xs text-muted-foreground">
-                      {folderSubtreeAssetCounts.get(folder.id) || 0}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startEditingFolder(folder)}
-                    disabled={isMediaLibraryBusy || !canEditMedia}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    title={canEditMedia ? 'Rename folder' : editPermissionTitle}
-                    aria-label={`Rename folder ${folder.name}`}
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isMediaLibraryBusy || !canDeleteMedia) return;
-                      setPendingDeleteFolder(folder);
-                    }}
-                    disabled={isMediaLibraryBusy || !canDeleteMedia}
-                    className="border-l border-border px-2 text-muted-foreground hover:bg-red-50 hover:text-red-600 focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    title={canDeleteMedia ? 'Delete folder' : deletePermissionTitle}
-                    aria-label={`Delete folder ${folder.name}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {files.length > 0 && (
-        <Panel className="mb-6 scroll-mt-24" id="media-bulk">
-          <PanelHeader
-            title="Bulk management"
-            description={bulkManagementDescription}
-            icon={<CheckSquare className="size-4" />}
-            action={
-              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
-                {selectedMediaAssets.length} selected{hiddenSelectedMediaCount > 0 ? `, ${hiddenSelectedMediaCount} hidden` : ''}
-              </span>
-            }
-          />
-          <PanelContent>
-            <div
-              className="grid gap-4"
-              role="group"
-              aria-label="Media bulk actions"
-              aria-describedby={`${mediaBulkSelectionStatusId} ${mediaBulkActionStatusId}`}
-              data-testid="media-bulk-toolbar"
-              data-action-state={mediaBulkGroupActionState}
-              data-action-status={mediaBulkGroupActionStatus}
-              data-selected-count={selectedMediaAssets.length}
-              data-visible-selected-count={visibleSelectedMediaCount}
-              data-hidden-selected-count={hiddenSelectedMediaCount}
-              data-visible-asset-count={displayedFiles.length}
-              data-matching-asset-count={matchingMediaTotal}
-              data-bulk-change-ready={mediaBulkUpdateReady ? 'true' : 'false'}
-              data-bulk-delete-ready={mediaBulkDeleteReady ? 'true' : 'false'}
-            >
-              <span id={mediaBulkSelectionStatusId} className="sr-only" data-testid="media-bulk-selection-status" aria-live="polite">
-                {mediaBulkSelectionStatus}
-              </span>
-              <span id={mediaBulkActionStatusId} className="sr-only" data-testid="media-bulk-action-status" aria-live="polite">
-                {mediaBulkActionStatus}
-              </span>
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_200px_200px_auto_auto]">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(mediaBulkAddVisibleDisabledReason)}
-                    title={mediaBulkAddVisibleDisabledReason || undefined}
-                    aria-describedby={mediaBulkActionStatusId}
-                    onClick={handleSelectVisibleMedia}
-                    data-action-state={mediaBulkAddVisibleDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkAddVisibleDisabledReason || mediaBulkSelectionStatus}
-                    data-disabled-reason={mediaBulkAddVisibleDisabledReason || undefined}
-                    data-testid="media-bulk-add-visible-button"
-                  >
-                    Add visible loaded
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={Boolean(mediaBulkLoadMatchingDisabledReason)}
-                    title={mediaBulkLoadMatchingDisabledReason || 'Load every matching asset and add it to the bulk selection'}
-                    aria-describedby={mediaBulkActionStatusId}
-                    onClick={() => void handleLoadAndSelectMatchingMedia()}
-                    data-action-state={mediaBulkLoadMatchingDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkLoadMatchingDisabledReason || mediaBulkSelectionStatus}
-                    data-disabled-reason={mediaBulkLoadMatchingDisabledReason || undefined}
-                    data-testid="media-bulk-load-select-matching"
-                  >
-                    Load and select matching
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={Boolean(mediaBulkClearSelectionDisabledReason)}
-                    title={mediaBulkClearSelectionDisabledReason || 'Clear selected media assets'}
-                    aria-describedby={mediaBulkActionStatusId}
-                    onClick={handleClearSelection}
-                    data-action-state={mediaBulkClearSelectionDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkClearSelectionDisabledReason || mediaBulkSelectionStatus}
-                    data-disabled-reason={mediaBulkClearSelectionDisabledReason || undefined}
-                    data-testid="media-bulk-clear-selection"
-                  >
-                    Clear
-                  </Button>
-                  {hiddenSelectedMediaCount > 0 && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={Boolean(mediaBulkBusyReason)}
-                      title={mediaBulkBusyReason || 'Clear hidden selected media assets'}
-                      aria-describedby={mediaBulkActionStatusId}
-                      onClick={handleClearHiddenSelection}
-                      data-action-state={mediaBulkBusyReason ? 'blocked' : 'ready'}
-                      data-action-status={mediaBulkBusyReason || mediaBulkSelectionStatus}
-                      data-disabled-reason={mediaBulkBusyReason || undefined}
-                      data-testid="media-bulk-clear-hidden-selection"
-                    >
-                      Clear hidden
-                    </Button>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Add visible assets from the current filters, or load every matching result before selecting so folder, tag, safety, and delete actions cover the full filtered set.
-                    Selected hidden assets remain selected and are included in bulk actions until cleared.
-                  </p>
-                </div>
-
-                <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                  Visibility
-                  <select
-                    value={bulkVisibility}
-                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
-                    title={mediaBulkEditControlDisabledReason || undefined}
-                    onChange={(event) => setBulkVisibility(event.target.value === 'public' || event.target.value === 'private' ? event.target.value : 'keep')}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                    aria-label="Bulk visibility"
-                    aria-describedby={mediaBulkActionStatusId}
-                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
-                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
-                    data-testid="media-bulk-visibility-select"
-                  >
-                    <option value="keep">No change</option>
-                    <option value="public">Public</option>
-                    <option value="private">Private</option>
-                  </select>
-                </label>
-
-                <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                  Folder
-                  <select
-                    value={bulkFolderId}
-                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
-                    title={mediaBulkEditControlDisabledReason || undefined}
-                    onChange={(event) => setBulkFolderId(event.target.value)}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                    aria-label="Bulk folder"
-                    aria-describedby={mediaBulkActionStatusId}
-                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
-                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
-                    data-testid="media-bulk-folder-select"
-                  >
-                    <option value="keep">No change</option>
-                    <option value="root">Root</option>
-                    {folderOptions.map((folder) => (
-                      <option key={folder.id} value={folder.id}>{folder.label}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                  Safety
-                  <select
-                    value={bulkSafetyAction}
-                    disabled={Boolean(mediaBulkEditControlDisabledReason)}
-                    title={mediaBulkEditControlDisabledReason || undefined}
-                    onChange={(event) => setBulkSafetyAction(
-                      event.target.value === 'quarantine' || event.target.value === 'release'
-                        ? event.target.value
-                        : 'keep',
-                    )}
-                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                    aria-label="Bulk safety action"
-                    aria-describedby={mediaBulkActionStatusId}
-                    data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
-                    data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
-                    data-testid="media-bulk-safety-select"
-                  >
-                    <option value="keep">No change</option>
-                    <option value="quarantine">Quarantine</option>
-                    <option value="release">Release quarantine</option>
-                  </select>
-                </label>
-
-                <div className="flex items-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(mediaBulkApplyDisabledReason)}
-                    onClick={() => void handleBulkUpdate()}
-                    className="w-full whitespace-nowrap"
-                    title={mediaBulkApplyDisabledReason || 'Apply bulk media changes'}
-                    aria-describedby={mediaBulkActionStatusId}
-                    data-action-state={mediaBulkApplyDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkActionStatus}
-                    data-disabled-reason={mediaBulkApplyDisabledReason || undefined}
-                    data-testid="media-bulk-apply-changes"
-                  >
-                    {isBulkUpdating ? 'Applying...' : 'Apply changes'}
-                  </Button>
-                </div>
-
-                <div className="flex items-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="danger"
-                    disabled={Boolean(mediaBulkDeleteDisabledReason)}
-                    onClick={() => void handleBulkDelete()}
-                    className="w-full whitespace-nowrap"
-                    iconStart={<Trash2 className="size-4" />}
-                    title={mediaBulkDeleteDisabledReason || 'Delete selected media assets'}
-                    aria-describedby={mediaBulkActionStatusId}
-                    data-action-state={mediaBulkDeleteDisabledReason ? 'blocked' : 'ready'}
-                    data-action-status={mediaBulkActionStatus}
-                    data-disabled-reason={mediaBulkDeleteDisabledReason || undefined}
-                    data-testid="media-bulk-delete-selected"
-                  >
-                    Delete selected
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-border bg-muted/30 p-3">
-                <div className="grid gap-3 xl:grid-cols-[180px_minmax(0,1fr)_minmax(220px,0.55fr)]">
-                  <label className="space-y-1 text-xs font-medium text-muted-foreground">
-                    Tag action
-                    <select
-                      value={bulkTagMode}
-                      disabled={Boolean(mediaBulkEditControlDisabledReason)}
-                      title={mediaBulkEditControlDisabledReason || undefined}
-                      onChange={(event) => setBulkTagMode(event.target.value as typeof bulkTagMode)}
-                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                      aria-label="Bulk tag action"
-                      aria-describedby={mediaBulkActionStatusId}
-                      data-action-state={mediaBulkEditControlDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={mediaBulkEditControlDisabledReason || mediaBulkActionStatus}
-                      data-disabled-reason={mediaBulkEditControlDisabledReason || undefined}
-                      data-testid="media-bulk-tag-action-select"
-                    >
-                      <option value="keep">No tag change</option>
-                      <option value="merge">Add to existing tags</option>
-                      <option value="replace">Replace all tags</option>
-                      <option value="clear">Clear all tags</option>
-                    </select>
-                  </label>
-
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-3 text-xs font-medium text-muted-foreground">
-                      <span>Tags</span>
-                      <span className="font-mono">{bulkTagList.length}/{DEFAULT_MAX_TAGS}</span>
-                    </div>
-                    <div
-                      aria-describedby={mediaBulkActionStatusId}
-                      data-testid="media-bulk-tags-control"
-                      data-action-state={mediaBulkTagInputDisabledReason ? 'blocked' : 'ready'}
-                      data-action-status={mediaBulkTagInputDisabledReason || mediaBulkActionStatus}
-                      data-disabled-reason={mediaBulkTagInputDisabledReason || undefined}
-                    >
-                      <TagInput
-                        tags={bulkTagList}
-                        onChange={setBulkTagList}
-                        placeholder="Add campaign, hero, product..."
-                        ariaLabel="Bulk media tags"
-                        disabled={Boolean(mediaBulkTagInputDisabledReason)}
-                        className={mediaBulkTagInputDisabledReason ? 'opacity-60' : undefined}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-                    <div className="font-medium text-foreground">Tag preview</div>
-                    <p className="mt-1 leading-5">
-                      {bulkTagMode === 'merge' && 'Selected assets keep their existing tags and receive the tags listed here.'}
-                      {bulkTagMode === 'replace' && 'Selected assets will use only the tags listed here.'}
-                      {bulkTagMode === 'clear' && 'Selected assets will have every tag removed.'}
-                      {bulkTagMode === 'keep' && 'Choose a tag action to update selected assets in the same batch as folder or visibility changes.'}
-                      {bulkSafetyAction === 'quarantine' && ' Selected assets will be forced private and blocked from public delivery, transforms, and signed URLs.'}
-                      {bulkSafetyAction === 'release' && ' Selected assets will clear quarantine metadata and restore previous visibility unless a visibility change is also selected.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </PanelContent>
-        </Panel>
-      )}
-
-      {fontGroups.length > 0 && (
-        <Panel className="mb-6 scroll-mt-24" id="media-fonts">
-          <PanelHeader
-            title="Font families"
-            description="Registered uploaded fonts grouped by family, variants, fallback stack, and frontend delivery visibility."
-            icon={<Type className="size-4" />}
-            action={
-              <span className="rounded bg-muted px-2.5 py-1 font-mono text-xs text-muted-foreground">
-                {fontGroups.length} {fontGroups.length === 1 ? 'family' : 'families'}
-              </span>
-            }
-          />
-          <PanelContent>
-            <div className="grid gap-3 lg:grid-cols-2">
-              {fontGroups.map((group) => (
-                <div key={group.family} className="rounded-lg border border-border bg-muted/30 p-4">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p
-                        className="truncate text-base font-semibold"
-                        style={{ fontFamily: `"${group.family}", ${group.fallback}` }}
-                      >
-                        {group.family}
-                      </p>
-                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
-                        "{group.family}", {group.fallback}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const firstAsset = group.assets[0];
-                        if (firstAsset) {
-                          openMetadataEditor(firstAsset);
-                        }
-                      }}
-                      className="shrink-0"
-                    >
-                      Edit
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {group.variants.map((variant) => (
-                      <span key={variant} className="rounded bg-background px-2 py-1 font-mono text-xs text-muted-foreground">
-                        {variant}
-                      </span>
-                    ))}
-                  </div>
-
-                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Fallback stack</dt>
-                      <dd className="truncate font-mono text-xs" title={group.fallback}>{group.fallback}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Display</dt>
-                      <dd className="font-mono text-xs">{group.display}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Public files</dt>
-                      <dd className="font-mono text-xs">{group.publicCount}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Private files</dt>
-                      <dd className="font-mono text-xs">{group.privateCount}</dd>
-                    </div>
-                  </dl>
-                </div>
-              ))}
-            </div>
-          </PanelContent>
-        </Panel>
-      )}
-
-      {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {Array.from({ length: 10 }).map((_, index) => (
-            <div key={index} className="rounded-xl border border-border bg-card p-3">
-              <div className="aspect-square rounded-lg bg-muted animate-pulse" />
-              <div className="mt-3 h-4 w-3/4 rounded bg-muted animate-pulse" />
-              <div className="mt-2 h-3 w-1/2 rounded bg-muted animate-pulse" />
-            </div>
-          ))}
-        </div>
-      ) : displayedFiles.length > 0 ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4" data-testid="media-library-grid">
-          {displayedFiles.map((file) => (
-            <div
-              key={file.id}
-              data-testid="media-library-card"
-              className={cn(
-                'group relative overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md',
-                selectedMediaSet.has(file.id) ? 'border-primary ring-2 ring-primary/20' : 'border-border',
-              )}
-            >
-              <label
-                className="absolute left-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-lg border border-border bg-background/95 shadow-sm backdrop-blur"
-                title={canBulkSelectMedia ? `Select ${file.name}` : bulkSelectionPermissionTitle}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedMediaSet.has(file.id)}
-                  disabled={isMediaLibraryBusy || !canBulkSelectMedia}
-                  title={canBulkSelectMedia ? undefined : bulkSelectionPermissionTitle}
-                  onChange={() => toggleMediaSelection(file.id)}
-                  className="h-3.5 w-3.5 rounded border-border text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label={`Select ${file.name}`}
-                />
-                <span className="sr-only">Select {file.name}</span>
-              </label>
-              <div className="aspect-square bg-muted flex items-center justify-center relative">
-                <MediaAssetPreview file={file} />
-
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                  <button
-                    className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isMediaLibraryBusy || !canEditMedia}
-                    title={canEditMedia ? 'Edit metadata' : editPermissionTitle}
-                    onClick={() => {
-                      if (isMediaLibraryBusy || !canEditMedia) return;
-                      openMetadataEditor(file);
-                    }}
-                    aria-label={`Edit metadata for ${file.name}`}
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  {file.visibility !== 'private' && (
-                    <>
-                      <button
-                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={isMediaLibraryBusy}
-                        onClick={() => void copyMediaApiText(getAssetDeliveryUrl(file), `${file.name} delivery URL`)}
-                        title="Copy delivery URL"
-                        aria-label={`Copy delivery URL for ${file.name}`}
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <a
-                        href={getAssetDeliveryUrl(file)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 bg-white rounded-lg text-slate-700 hover:bg-slate-100 focus-ring"
-                        title="Open delivered file"
-                        aria-label={`Open delivered file for ${file.name}`}
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </>
-                  )}
-                  <button
-                    className="p-2 bg-white rounded-lg text-red-600 hover:bg-red-50 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isMediaLibraryBusy || !canDeleteMedia}
-                    onClick={() => {
-                      if (isMediaLibraryBusy || !canDeleteMedia) return;
-                      setPendingDeleteAsset(file);
-                    }}
-                    title={canDeleteMedia ? 'Delete media' : deletePermissionTitle}
-                    aria-label={`Delete ${file.name}`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Info */}
-              <div className="p-3">
-                <div className="flex items-start gap-2">
-                  <MediaTypeIcon type={file.type} className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate" title={file.name}>{file.name}</p>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                      <span>{mediaTypeLabel(file.type)}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{file.size}</span>
-                      <StatusBadge status={file.visibility || 'public'} className="px-1.5 py-0 text-[10px]" />
-                    </div>
-                  </div>
-                </div>
-                {file.folderId && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {getFolderPath(file.folderId)}
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon={ImageIcon}
-          title={files.length === 0 ? 'Library is empty' : 'No assets match this view'}
-          description={files.length === 0 ? 'Upload some files to get started.' : 'Change the usage, search, type, visibility, or folder filters to broaden the view.'}
-        />
-      )}
+      </Panel></div>
+      </details></section>
 
       {selectedAsset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -6986,10 +7207,10 @@ function MediaPage() {
               }`}
             </style>
           )}
-          <div className="w-full max-w-5xl rounded-xl border border-border bg-background shadow-xl" data-testid="media-details-dialog">
-            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xl" data-testid="media-details-dialog" role="dialog" aria-modal="true" aria-labelledby="media-details-title">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold">Media details</h2>
+                <h2 id="media-details-title" className="text-lg font-semibold">Media details</h2>
                 <p className="text-sm text-muted-foreground">{selectedAsset.type} · {selectedAsset.size}</p>
               </div>
               <button
@@ -7001,14 +7222,14 @@ function MediaPage() {
                   updateMediaRouteSearch({ assetId: undefined });
                 }}
                 disabled={isMediaMutationBusy}
-                className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Close media details"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="grid max-h-[75vh] gap-5 overflow-y-auto p-5 md:grid-cols-[220px_1fr]">
+            <div className="flex min-h-0 flex-col gap-5 overflow-y-auto p-5 [&>*]:min-w-0 [&>*]:shrink-0 md:grid md:auto-rows-max md:grid-cols-[220px_minmax(0,1fr)]">
               <div className="aspect-square overflow-hidden rounded-lg bg-muted">
                 {selectedAssetPreviewBlockedReason ? (
                   <MediaPreviewBlocked reason={selectedAssetPreviewBlockedReason} />
@@ -7624,9 +7845,9 @@ function MediaPage() {
                   </div>
                   <label className={cn(
                     'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted',
-                    (isMediaMutationBusy || !canEditMedia) && 'pointer-events-none opacity-60',
+                    (isMediaMutationBusy || !canEditMedia || Boolean(uploadRuntimeDisabledReason)) && 'pointer-events-none opacity-60',
                   )}
-                    title={canEditMedia ? undefined : editPermissionTitle}
+                    title={!canEditMedia ? editPermissionTitle : uploadRuntimeDisabledReason || undefined}
                   >
                     <Upload className="size-4" />
                     {isReplacingAsset ? 'Replacing...' : 'Replace file'}
@@ -7634,7 +7855,8 @@ function MediaPage() {
                       type="file"
                       className="sr-only"
                       accept={replacementAcceptForAsset(selectedAsset.type)}
-                      disabled={isMediaMutationBusy || !canEditMedia}
+                      aria-describedby={uploadRuntimeDisabledReason ? 'media-replacement-configuration-status' : undefined}
+                      disabled={isMediaMutationBusy || !canEditMedia || Boolean(uploadRuntimeDisabledReason)}
                       onChange={(event) => {
                         void handleReplaceAsset(event.target.files);
                         event.currentTarget.value = '';
@@ -7642,6 +7864,12 @@ function MediaPage() {
                     />
                   </label>
                 </div>
+
+                {uploadRuntimeDisabledReason && (
+                  <Notice tone="warning" className="mb-3">
+                    <p id="media-replacement-configuration-status" role="status">{uploadRuntimeDisabledReason}</p>
+                  </Notice>
+                )}
 
                 {assetReplacementError && (
                   <Notice tone="warning" className="mb-3">
@@ -8547,7 +8775,7 @@ function MediaPage() {
             </div>
 
             <div
-              className="flex items-center justify-between border-t border-border px-5 py-4"
+              className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border px-5 py-3"
               role="group"
               aria-label={`Actions for ${selectedAsset.name}`}
               aria-describedby={selectedAssetActionStatusId}
@@ -8570,7 +8798,7 @@ function MediaPage() {
                 data-action-state={selectedAssetDeleteDisabledReason ? 'blocked' : 'ready'}
                 data-disabled-reason={selectedAssetDeleteDisabledReason || undefined}
                 data-testid="media-selected-delete-button"
-                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Trash2 className="h-4 w-4" />
                 Delete
@@ -8585,7 +8813,7 @@ function MediaPage() {
                 data-disabled-reason={selectedAssetSaveDisabledReason || undefined}
                 data-testid="media-selected-save-button"
                 onClick={() => void handleSaveMetadata()}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save className="h-4 w-4" />
                 {isSavingMetadata ? 'Saving...' : 'Save details'}
@@ -8611,10 +8839,20 @@ function MediaPage() {
               <div>
                 <h2 id="media-delete-asset-title" className="text-lg font-semibold text-foreground">Delete {pendingDeleteAsset.name}?</h2>
                 <p id="media-delete-asset-description" className="mt-1 text-sm text-muted-foreground">
-                  This removes the file from the media library and from public delivery. Check references first if the asset is used on pages or posts.
+                  This removes the file from the media library and public delivery. The server blocks deletion while content references remain.
                 </p>
               </div>
             </div>
+            <MediaDeletionImpactView references={deleteImpact?.mediaId === pendingDeleteAsset.id ? deleteImpact.references : knownMediaDeletionReferences(pendingDeleteAsset)} />
+            {deleteImpact?.mediaId === pendingDeleteAsset.id ? <div className="mt-4 space-y-3">
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={deleteOverrideAcknowledged} onChange={(event) => setDeleteOverrideAcknowledged(event.target.checked)} disabled={isDeletingAsset} data-testid="media-delete-override-acknowledge" />
+                Delete anyway; I understand these references will break.
+              </label>
+              <label className="block text-sm" htmlFor="media-delete-override-reason">Deletion reason (required for override)</label>
+              <textarea id="media-delete-override-reason" value={deleteOverrideReason} onChange={(event) => setDeleteOverrideReason(event.target.value)} maxLength={500} disabled={isDeletingAsset} className="min-h-20 w-full rounded-md border bg-background p-2 text-sm" placeholder="Explain why the referenced file must be removed." />
+              <p className="text-xs text-muted-foreground">The override reason and affected references are recorded in the audit log.</p>
+            </div> : null}
             <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
               <span>{pendingDeleteAsset.type}</span>
               <span aria-hidden="true">·</span>
@@ -8634,12 +8872,12 @@ function MediaPage() {
               <button
                 type="button"
                 onClick={() => void handleDeleteAsset(pendingDeleteAsset)}
-                disabled={isDeletingAsset || !canDeleteMedia}
+                disabled={isDeletingAsset || !canDeleteMedia || Boolean(deleteImpact && (!deleteOverrideAcknowledged || deleteOverrideReason.trim().length < 8))}
                 title={canDeleteMedia ? undefined : deletePermissionTitle}
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-ring disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label={`Confirm deleting ${pendingDeleteAsset.name}`}
               >
-                {isDeletingAsset ? 'Deleting...' : 'Delete asset'}
+                {isDeletingAsset ? 'Deleting...' : deleteImpact ? 'Delete with override' : hasMediaReferences(pendingDeleteAsset) ? 'Review deletion' : 'Delete asset'}
               </button>
             </div>
           </div>
@@ -8664,9 +8902,15 @@ function MediaPage() {
                   Delete {selectedMediaAssets.length} selected asset{selectedMediaAssets.length === 1 ? '' : 's'}?
                 </h2>
                 <p id="media-bulk-delete-description" className="mt-1 text-sm text-muted-foreground">
-                  Selected files will be removed from Backy storage and frontend media APIs.
+                  Unreferenced files will be removed from Backy storage and frontend media APIs. Referenced files stay selected and require individual review.
                 </p>
               </div>
+            </div>
+            <div className="mt-3 max-h-48 overflow-y-auto">
+              {selectedMediaAssets.filter(hasMediaReferences).map((asset) => <div key={asset.id} className="mb-3">
+                <p className="break-all text-sm font-medium">{asset.name}</p>
+                <MediaDeletionImpactView references={knownMediaDeletionReferences(asset)} />
+              </div>)}
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -10251,6 +10495,12 @@ const mediaReferenceCount = (asset: MediaAsset): number => (
   (asset.targetPostIds?.length || 0) +
   (asset.targetCollectionRecordIds?.length || 0)
 );
+
+const knownMediaDeletionReferences = (asset: MediaAsset): MediaDeletionReference[] => [
+  ...(asset.targetPageIds || []).map((targetId): MediaDeletionReference => ({ scope: 'page', targetId })),
+  ...(asset.targetPostIds || []).map((targetId): MediaDeletionReference => ({ scope: 'post', targetId })),
+  ...(asset.targetCollectionRecordIds || []).map((targetId): MediaDeletionReference => ({ scope: 'collectionRecord', targetId })),
+];
 
 const hasMediaReferences = (asset: MediaAsset): boolean => (
   mediaReferenceCount(asset) > 0

@@ -201,6 +201,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section metadata API error:", error);
     return errorResponse(
       500,
@@ -289,6 +291,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ) as BackyJsonObject;
       const updated = (
         await repositories.reusableSections.update(site.id, section.id, {
+          expectedSection: section,
           metadata,
           updatedBy,
         })
@@ -388,6 +391,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ? body.updatedBy.trim()
         : section.updatedBy || null;
     const updated = updateReusableSection(site.id, section.id, {
+      expectedSection: section,
       metadata: buildReusableSectionUpdateMetadata(section, patch.metadata, {
         actor: updatedBy,
         requestId,
@@ -435,6 +439,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section metadata update API error:", error);
     return errorResponse(
       500,

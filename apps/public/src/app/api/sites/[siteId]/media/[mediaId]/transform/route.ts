@@ -3,10 +3,11 @@ import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
-import { publicMediaFilePath } from '@/lib/mediaResponsive';
-import { getMediaStorageAdapter } from '@/lib/mediaStorage';
+import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
+import sharp from 'sharp';
 import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { getRepositorySitePublication } from '@/lib/repositorySitePublication';
 
 interface RouteParams {
   params: Promise<{
@@ -81,8 +82,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const quality = qualityResult.value;
 
     const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
-    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
-    const site = repositorySite || getSiteByIdOrSlug(siteId);
+    const site = repositories
+      ? await getRepositorySitePublication(repositories.sites, siteId)
+      : getSiteByIdOrSlug(siteId);
 
     const publishState = site as { isPublished?: boolean; status?: string } | null;
     if (!site || (publishState?.isPublished === false || (publishState?.isPublished === undefined && publishState?.status !== 'published'))) {
@@ -111,7 +113,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       quality,
     });
     const commonHeaders = {
-      'cache-control': 'public, max-age=60, stale-while-revalidate=300',
+      'cache-control': 'no-store',
+      'cdn-cache-control': 'no-store',
+      'vercel-cdn-cache-control': 'no-store',
       vary: 'Accept, Origin',
       'x-backy-cache-scope': 'discovery',
       'x-backy-cache-revision': cacheMetadata.cacheRevision,
@@ -169,16 +173,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
     }
 
-    const transformUrl = new URL('/_next/image', request.url);
-    transformUrl.searchParams.set('url', publicMediaFilePath(site.id, media.id));
-    transformUrl.searchParams.set('w', String(width));
-    transformUrl.searchParams.set('q', String(quality));
-
-    const response = NextResponse.redirect(transformUrl, 307);
-    Object.entries(commonHeaders).forEach(([key, value]) => {
-      response.headers.set(key, value);
+    // Next's optimizer keeps a separate cache even when upstream is no-store.
+    // Generate missing variants inside this guarded route instead.
+    const storagePath = getMediaStoragePathFromMedia(site.id, media);
+    if (!storagePath) return errorResponse(404, 'MEDIA_FILE_NOT_FOUND', 'Media file could not be resolved from storage.', requestId);
+    const storage = await getMediaStorageAdapter();
+    const original = await storage.read(storagePath);
+    const buffer = await sharp(original, { limitInputPixels: 32_000_000 })
+      .rotate().resize({ width, withoutEnlargement: true }).webp({ quality }).toBuffer();
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: { ...commonHeaders, 'content-type': 'image/webp', 'content-length': String(buffer.byteLength) },
     });
-    return response;
   } catch (error) {
     console.error('Public media transform API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

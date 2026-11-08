@@ -1,3 +1,6 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { invalidEditorMediaReference } from "@/lib/editorMediaAdmission";
+import { getMediaById } from "@/lib/backyStore";
 /**
  * Admin blog post detail endpoint.
  *
@@ -8,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
+  BackyContentConflictError,
   canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
@@ -37,6 +41,8 @@ import {
 import { postRevisionSnapshot } from "@/lib/repositoryContentWorkflow";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+
+import { runCommittedMutationFollowUp, hasFailedWebhookDelivery } from "@/lib/committedMutationFollowUp";
 
 export const runtime = "nodejs";
 
@@ -451,6 +457,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (contentValidationError) {
         return contentValidationError;
       }
+      const invalidMedia = await invalidEditorMediaReference(site.id, body, (id, mediaId) => repositories.media.getById(id, mediaId), { nativeUuidIds: true });
+      if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
       const expectedUpdatedAt =
         typeof body.expectedUpdatedAt === "string"
           ? body.expectedUpdatedAt.trim()
@@ -529,20 +537,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         slug: nextSlug,
         status,
       });
-      await repositories.contentWorkflows.createRevision({
-        siteId: site.id,
-        targetType: "post",
-        targetId: post.id,
+      const beforeUpdateRevision = {
         snapshot: postRevisionSnapshot(post),
         note:
           typeof body.revisionNote === "string" &&
           body.revisionNote.trim().length > 0
             ? body.revisionNote
             : "Before update",
-        operation: "update",
+        operation: "update" as const,
         createdBy: request.headers.get("x-backy-actor") || "admin",
-      });
+      };
       const updated = await repositories.posts.update(site.id, post.id, {
+        expectedUpdatedAt: expectedUpdatedAt || post.updatedAt,
+        expectedContent: post.content,
+        beforeUpdateRevision,
         title: body.title === undefined ? undefined : title,
         slug: body.slug === undefined ? undefined : nextSlug,
         excerpt:
@@ -567,7 +575,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         revisionNote:
           typeof body.revisionNote === "string" ? body.revisionNote : undefined,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      const completionWarnings: string[] = [];
+      const cacheInvalidation = await runCommittedMutationFollowUp(completionWarnings, "CONTENT_CACHE_INVALIDATION_PENDING", () => recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -577,8 +586,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           reason: "post-updated",
           requestId,
         },
-      );
-      await recordAdminAudit({
+      )) ?? null;
+      await runCommittedMutationFollowUp(completionWarnings, "CONTENT_AUDIT_PENDING", () => recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "post",
@@ -588,8 +597,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         after: postAuditMetadata(updated.item),
         metadata: updateAuditMetadata(updated.item, body),
         requestId,
-      });
-      await deliverPostContentWebhook({
+      }));
+      await runCommittedMutationFollowUp(completionWarnings, "CONTENT_WEBHOOK_DELIVERY_PENDING", () => deliverPostContentWebhook({
         repositories,
         site,
         action: "blog.post.updated",
@@ -600,7 +609,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ),
         requestId,
         actor: access.session?.user.id,
-      });
+      }), hasFailedWebhookDelivery);
 
       return NextResponse.json({
         success: true,
@@ -608,6 +617,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data: {
           post: adminPostFromRepositoryPost(updated.item),
           cacheInvalidation,
+          completionWarnings,
         },
       });
     }
@@ -638,6 +648,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (contentValidationError) {
       return contentValidationError;
     }
+    const invalidMedia = await invalidEditorMediaReference(site.id, body, getMediaById);
+    if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
     const expectedUpdatedAt =
       typeof body.expectedUpdatedAt === "string"
         ? body.expectedUpdatedAt.trim()
@@ -709,6 +721,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const updated = updateAdminBlogPost(site.id, post.id, {
       ...body,
+      expectedUpdatedAt: expectedUpdatedAt || undefined,
+      expectedContent: expectedUpdatedAt ? post.content : undefined,
       ...(nextSlug ? { slug: nextSlug } : {}),
       ...(scheduledAt !== undefined ? { scheduledAt } : {}),
     });
@@ -716,7 +730,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, "POST_NOT_FOUND", "Post not found", requestId);
     }
-    await recordAdminAudit({
+    const completionWarnings: string[] = [];
+    await runCommittedMutationFollowUp(completionWarnings, "CONTENT_AUDIT_PENDING", () => recordAdminAudit({
       siteId: site.id,
       entity: "post",
       entityId: post.id,
@@ -725,8 +740,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       after: postAuditMetadata(updated),
       metadata: updateAuditMetadata(updated, body),
       requestId,
-    });
-    await deliverPostContentWebhook({
+    }));
+    await runCommittedMutationFollowUp(completionWarnings, "CONTENT_WEBHOOK_DELIVERY_PENDING", () => deliverPostContentWebhook({
       site: site as unknown as Site,
       action: "blog.post.updated",
       before: post,
@@ -736,16 +751,31 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ),
       requestId,
       actor: access.session?.user.id,
-    });
+    }), hasFailedWebhookDelivery);
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         post: updated,
+        completionWarnings,
       },
     });
   } catch (error) {
+    if (
+      error instanceof BackyContentConflictError ||
+      (isRecord(error) && error.code === "CONTENT_REVISION_CONFLICT")
+    ) {
+      return errorResponse(
+        409,
+        "BLOG_VERSION_CONFLICT",
+        "This post changed during the save. Reload the latest backend copy before saving again.",
+        requestId,
+        { reloadRequired: true },
+      );
+    }
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin blog update API error:", error);
     return errorResponse(
       500,
@@ -888,6 +918,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin blog delete API error:", error);
     return errorResponse(
       500,

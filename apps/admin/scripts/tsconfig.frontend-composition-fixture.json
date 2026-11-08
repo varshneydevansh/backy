@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["./frontend-composition-runtime-fixture.tsx"],
+  "references": []
+}

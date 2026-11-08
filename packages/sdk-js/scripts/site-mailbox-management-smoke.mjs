@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createBackyClient,BackyApiError} from '../dist/index.js';
+const calls=[];let response=Response.json({success:true,requestId:'synthetic',data:{}});
+const client=createBackyClient({baseUrl:'https://admin.fixture.invalid/api',siteId:'site/a',defaultHeaders:{authorization:'Bearer ignored','x-backy-admin-key':'ignored',cookie:'ignored'},fetch:async(url,init)=>{calls.push({url:new URL(url),init});return response.clone();}});
+await client.adminSiteMailboxManagement();assert.equal(calls.at(-1).url.pathname,'/api/admin/sites/site%2Fa/settings/mailbox-management');
+await client.inspectAdminSiteMailboxManagement('domain/a');assert.equal(calls.at(-1).url.pathname,'/api/admin/sites/site%2Fa/settings/mailbox-management/domain%2Fa/inspect');assert.deepEqual(JSON.parse(calls.at(-1).init.body),{});
+await client.createAdminSiteMailbox('domain/a',{idempotencyKey:'synthetic-create-key',localPart:'new',password:'SyntheticPass123!',orderId:'ignored',apiToken:'ignored'});assert.deepEqual(JSON.parse(calls.at(-1).init.body),{idempotencyKey:'synthetic-create-key',localPart:'new',password:'SyntheticPass123!'});
+await client.createAdminSiteMailboxAlias('domain/a',{idempotencyKey:'synthetic-alias-key',localPart:'info',targetBindingId:'primary',mailboxId:'ignored'});assert.deepEqual(JSON.parse(calls.at(-1).init.body),{idempotencyKey:'synthetic-alias-key',localPart:'info',targetBindingId:'primary'});
+await client.adminSiteMailboxManagementAttempts('domain/a');assert(calls.at(-1).url.pathname.endsWith('/domain%2Fa/attempts'));
+for(const{init,url}of calls){assert.equal(init.credentials,'include');assert.equal(init.cache,'no-store');assert.equal(init.redirect,'error');assert(!url.search);for(const header of['authorization','x-backy-admin-key','cookie'])assert(!init.headers.has(header));}
+response=Response.json({success:false,requestId:'denied',error:{code:'MAILBOX_MANAGEMENT_IDEMPOTENCY_CONFLICT',message:'Refused'}},{status:409});const before=calls.length;await assert.rejects(client.createAdminSiteMailbox('domain-a',{idempotencyKey:'synthetic-create-key',localPart:'new',password:'SyntheticPass123!'}),error=>error instanceof BackyApiError&&error.status===409);assert.equal(calls.length,before+1);
+console.log('Mailbox management SDK PASS:5 scoped operations, encoded identifiers, explicit cookie transport, whitelisted transient creation fields and no automatic retry. Synthetic transport only.');

@@ -1,4 +1,5 @@
 import { normalizePublicOrigin } from './publicOriginPolicy';
+import { createBackyDataFigureSample, type BackyDataFigureKey } from '@backy-cms/core';
 
 const interactiveEnvValue = (keys: string[]): string => {
   for (const key of keys) {
@@ -112,6 +113,85 @@ export const buildInteractiveComponentManifestContract = () => {
       postMessageProtocol: 'backy.interactive-component.v1',
       fallbackRequired: true,
       unknownComponentBehavior: 'render-static-fallback',
+      lifecycle: {
+        "schemaVersion": "backy.interactive-component-lifecycle.v1",
+        "traffic": "control",
+        "completionIsDiagnosticTelemetry": false,
+        "initializationFields": [
+          "props",
+          "controls",
+          "propsSchema",
+          "dataBindings",
+          "fallback"
+        ],
+        "messages": {
+          "init": {
+            "type": "backy.interactive-component.init",
+            "direction": "parent-to-sandbox",
+            "successfulRender": false,
+            "meaning": "enqueue mount or update with the current authored payload",
+            "receiverAction": "validate parent and exact identity, then enqueue"
+          },
+          "ready": {
+            "type": "backy.interactive-component.ready",
+            "direction": "sandbox-to-parent",
+            "successfulRender": false,
+            "meaning": "module imported or persisted document restored; mount/update has not completed",
+            "receiverAction": "send initialization without clearing an existing runtime error"
+          },
+          "rendered": {
+            "type": "backy.interactive-component.rendered",
+            "direction": "sandbox-to-parent",
+            "successfulRender": true,
+            "meaning": "awaited mount/update completed in the active, undisposed lifecycle generation",
+            "receiverAction": "clear runtime error and hide fallback without sending another initialization"
+          },
+          "resize": {
+            "type": "backy.interactive-component.resize",
+            "direction": "sandbox-to-parent",
+            "successfulRender": false,
+            "meaning": "height measurement; may precede an update failure",
+            "receiverAction": "clamp and update height without clearing runtime error"
+          },
+          "error": {
+            "type": "backy.interactive-component.error",
+            "direction": "sandbox-to-parent",
+            "successfulRender": false,
+            "meaning": "module, mount/update, cleanup or runtime failure",
+            "receiverAction": "keep authored fallback and readable runtime error until successful completion"
+          }
+        },
+        "receiverValidation": {
+          "sandboxInputSource": "parent",
+          "hostReplySource": "current-iframe-contentWindow",
+          "identityFields": [
+            "protocol",
+            "componentKey",
+            "version"
+          ],
+          "identityMatch": "exact",
+          "mismatchAction": "ignore"
+        },
+        "cleanup": {
+          "beforeRemount": true,
+          "disposalEvents": [
+            "pagehide",
+            "unload"
+          ],
+          "disposeOnce": true,
+          "lateAsyncMount": "run its returned cleanup without a rendered reply",
+          "staleGeneration": "suppress queued updates and successful completion after disposal",
+          "persistedRestore": "pageshow with persisted=true sends ready; the host initializes a new mount"
+        },
+        "fallback": {
+          "onMountOrUpdateFailure": "show authored fallback and runtime error",
+          "onRecovery": "hide fallback and clear error only after successful rendered completion"
+        },
+        "review": {
+          "newSandboxLoadRechecksApproval": true,
+          "proactiveRunningFrameRevocation": false
+        }
+      },
       bundleModule: {
         schemaVersion: 'backy.interactive-component-module.v1',
         format: 'self-contained-es-module',
@@ -148,6 +228,8 @@ export type BackyInteractiveComponentRegistryEntry = {
   allowedDataScopes: string[];
   requiredFields: string[];
   controls: Array<Record<string, unknown>>;
+  defaultProps?: Record<string, unknown>;
+  propsSchema?: Record<string, unknown>;
   fallback: {
     required: boolean;
     supported: string[];
@@ -241,6 +323,27 @@ const sandboxAnimationCompatibility: BackyInteractiveComponentRegistryEntry['com
   browserSupport: ['modern evergreen browsers with iframe sandbox support'],
   reducedMotion: 'required',
 };
+
+const nativeDataFigureEntry = (componentKey: BackyDataFigureKey, displayName: string): BackyInteractiveComponentRegistryEntry => ({
+  componentKey,
+  displayName,
+  type: 'interactiveFigure',
+  status: 'active',
+  version: '1.0.0',
+  renderMode: 'trusted-component',
+  source: 'built-in',
+  description: `${displayName} with editable inline JSON/CSV rows or a published public-read collection. Native configuration uses props.records and props.source with ${componentKey === 'backy.table.data' ? 'explicit props.columns [{key,label}]' : 'props.xField and props.yFields'}. Collection sources require explicit declared scalar fields and load all published rows up to 5,000; unavailable or incomplete data shows an error without stale rows. ${componentKey === 'backy.table.data' ? 'Search, sort and paginate the data.' : 'Toggle series, inspect data points and open the accessible data view.'} No custom JavaScript is needed. Legacy line-chart content without native configuration retains its authored static fallback until reconfigured.`,
+  allowedDataScopes: ['collections', 'page', 'blog'],
+  requiredFields: ['componentKey', 'props'],
+  defaultProps: { ...createBackyDataFigureSample(componentKey), version: '1.0.0' },
+  controls: [{ key: 'title', label: 'Title', type: 'text', defaultValue: 'Sample data — replace with your own' }],
+  fallback: { required: false, supported: ['title', 'text', 'html', 'imageUrl', 'alt', 'ariaLabel'] },
+  security: { adminApiAccess: false, parentDomAccess: false, parentCookieAccess: false, secretsInPayload: false, communication: 'postMessage-only' },
+  integrity: { signed: false, signatureRequiredForCustomCode: true },
+  dependencyPolicy: builtInDependencyPolicy,
+  compatibility: { ...trustedFigureCompatibility, renderTargets: componentKey === 'backy.chart.line' ? ['trusted-component', 'static-fallback'] : ['trusted-component'], animationLibraries: ['Backy native SVG charts and semantic tables'] },
+  dataBindingPresets: [],
+});
 
 export const buildPublicInteractiveComponentRegistry = (
   siteId: string,
@@ -377,58 +480,9 @@ export const buildPublicInteractiveComponentRegistry = (
         { id: 'stepper-from-collection', label: 'Collection walkthrough', scope: 'collections', targetPath: 'props.steps', mode: 'list' },
       ],
     },
-    {
-      componentKey: 'backy.chart.line',
-      displayName: 'Line chart',
-      type: 'interactiveFigure',
-      status: 'active',
-      version: '1.0.0',
-      renderMode: 'trusted-component',
-      source: 'built-in',
-      description: 'Data-bound responsive line chart for collection, page, or blog datasets.',
-      allowedDataScopes: ['collections', 'page', 'blog'],
-      requiredFields: ['componentKey', 'version', 'props', 'dataBindings', 'fallback'],
-      controls: [
-        {
-          key: 'series',
-          label: 'Series',
-          type: 'select',
-          options: [],
-          required: true,
-        },
-      ],
-      fallback: {
-        required: true,
-        supported: ['title', 'text', 'html', 'imageUrl', 'alt', 'ariaLabel'],
-      },
-      security: {
-        adminApiAccess: false,
-        parentDomAccess: false,
-        parentCookieAccess: false,
-        secretsInPayload: false,
-        communication: 'postMessage-only',
-      },
-      integrity: {
-        signed: false,
-        signatureRequiredForCustomCode,
-      },
-      runtime: {
-        sandboxUrl: null,
-        bundleUrl: null,
-        iframeSandbox: undefined,
-        allowedPermissions: [],
-        postMessageProtocol: 'backy.interactive-component.v1',
-      },
-      dependencyPolicy: builtInDependencyPolicy,
-      compatibility: {
-        ...trustedFigureCompatibility,
-        animationLibraries: ['Backy renderer', 'chart primitives'],
-      },
-      dataBindingPresets: [
-        { id: 'chart-series', label: 'Collection series', scope: 'collections', targetPath: 'props.series', mode: 'list' },
-        { id: 'chart-summary', label: 'Metric summary', scope: 'collections', targetPath: 'fallback.text', mode: 'aggregate' },
-      ],
-    },
+    nativeDataFigureEntry('backy.chart.line', 'Line chart'),
+    nativeDataFigureEntry('backy.chart.bar', 'Bar chart'),
+    nativeDataFigureEntry('backy.table.data', 'Data table'),
     {
       componentKey: 'backy.figure.timeline',
       displayName: 'Timeline figure',

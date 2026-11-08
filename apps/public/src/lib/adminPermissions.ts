@@ -198,7 +198,9 @@ export function buildUserPermissionMatrix(
     description: group.description,
     permissions: group.permissions.map((permission) => {
       const roleAllows = permission.roles.includes(user.role);
-      const override = overrideByKey.get(permission.key) || null;
+      const ownerOnlyBlocked = permission.roles.length === 1
+        && permission.roles[0] === 'owner' && user.role !== 'owner';
+      const override = ownerOnlyBlocked ? null : overrideByKey.get(permission.key) || null;
       const allowed = canSignIn && (override ? override === 'allow' : roleAllows);
       const source = !canSignIn
         ? 'status' as const
@@ -215,13 +217,15 @@ export function buildUserPermissionMatrix(
         override,
         reason: !canSignIn
           ? `${user.status} accounts cannot use admin permissions until activated.`
-          : override === 'allow'
-            ? 'Explicit override allows this capability.'
-            : override === 'deny'
-              ? 'Explicit override denies this capability.'
-              : roleAllows
-                ? `${user.role} role includes this capability.`
-                : `${user.role} role does not include this capability.`,
+          : ownerOnlyBlocked
+            ? 'Only workspace owners can use this capability; permission overrides cannot grant ownership.'
+            : override === 'allow'
+              ? 'Explicit override allows this capability.'
+              : override === 'deny'
+                ? 'Explicit override denies this capability.'
+                : roleAllows
+                  ? `${user.role} role includes this capability.`
+                  : `${user.role} role does not include this capability.`,
       };
     }),
   }));

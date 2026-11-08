@@ -18,7 +18,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
-import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { collectionRecordValidationIssuesFromError, normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import {
   removeRepositoryCollectionRecordMediaReferences,
@@ -242,7 +242,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
@@ -303,6 +303,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       visitorWritePolicy: updatePolicyResponse,
     }, requestId);
   } catch (error) {
+    const issues = collectionRecordValidationIssuesFromError(error);
+    if (issues) return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid.', requestId, issues);
     console.error('Public collection record update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -374,7 +376,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 

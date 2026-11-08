@@ -1,0 +1,11 @@
+{
+  "extends": "../../public/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../../public/src/*"],
+      "@backy-cms/core": ["../../../packages/core/src/index.ts"],
+      "@backy/storage": ["../../../packages/storage/src/index.ts"]
+    }
+  },
+  "include": ["delivery-review-browser-fixture.mts"]
+}

@@ -35,7 +35,7 @@ async function request(path, init) {
 function assertCorsAndRequestId(result) {
   assert(result.response.headers.get('access-control-allow-origin') === adminDevOrigin, `${result.url} missing CORS header`);
   assert(result.response.headers.get('x-backy-request-id'), `${result.url} missing request id header`);
-  assert(result.response.headers.get('cache-control') === 'no-store', `${result.url} expected admin no-store cache control`);
+  assert(result.response.headers.get('cache-control') === 'private, no-store', `${result.url} expected private admin no-store cache control`);
   assert(result.response.headers.get('x-backy-cache-scope') === 'admin', `${result.url} expected admin cache scope`);
   assert(result.response.headers.get('x-backy-admin-contract-version') === 'backy.admin.v1', `${result.url} missing admin contract version`);
 }

@@ -11,9 +11,11 @@ import { NextRequest } from 'next/server';
 import type { BackyPost } from '@backy-cms/core';
 import { getBlogPosts, getSiteByIdOrSlug, validatePreviewToken } from '@/lib/backyStore';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import { publicDocumentMetadata } from '@/lib/publicDocumentMetadata';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
+import { publicBlogArchive } from '@/lib/publicBlogArchive';
 
 interface RouteParams {
     params: Promise<{
@@ -110,6 +112,7 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
 
 const publicPost = <TPost extends { meta?: unknown }>(post: TPost) => ({
     ...post,
+    meta: publicDocumentMetadata(post.meta),
     frontendDesign: frontendDesignProvenanceFromMetadata(post.meta),
 });
 
@@ -151,6 +154,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
+        if (searchParams.has('profile')) return publicBlogArchive(request, siteId, requestId);
         const slug = searchParams.get('slug');
         const previewToken = searchParams.get('previewToken');
         const limitFilter = parseBoundedInteger(searchParams.get('limit'), 10, 1, 100);
@@ -229,7 +233,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 }, {
                     requestId,
                     request,
-                    cache: previewToken ? 'private' : 'discovery',
+                    cache: previewToken ? 'private' : 'render',
                     siteId: site.id,
                     cacheRevision,
                 });
@@ -301,7 +305,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }, {
                 requestId,
                 request,
-                cache: 'discovery',
+                cache: 'render',
                 siteId: site.id,
                 cacheRevision,
             });
@@ -353,7 +357,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }, {
                 requestId,
                 request,
-                cache: previewToken ? 'private' : 'discovery',
+                cache: previewToken ? 'private' : 'render',
                 siteId: site.id,
             });
         }
@@ -393,7 +397,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }, {
             requestId,
             request,
-            cache: 'discovery',
+            cache: 'render',
             siteId: site.id,
         });
     } catch (error) {

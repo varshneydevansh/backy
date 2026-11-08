@@ -1,3 +1,4 @@
+import { normalizeBackyJsonObject } from '@backy-cms/core';
 import type { BackyCollectionField, BackyCollectionFieldType, BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
 
 export type AdminCollectionFieldParseResult =
@@ -130,6 +131,7 @@ export const parseAdminCollectionFields = (
     }
 
     fields.push({
+      ...normalizeBackyJsonObject(rawField),
       id: normalizeFieldId(rawField, index, key),
       key,
       label: label || key,

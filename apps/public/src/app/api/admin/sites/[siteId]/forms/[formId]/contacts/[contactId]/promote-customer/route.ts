@@ -254,6 +254,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'CONTACT_NOT_QUALIFIED', 'Mark this contact qualified before promoting it.', requestId);
       }
 
+      if(!repositories.forms.withContactFollowup)return errorResponse(503,'VISITOR_PRIVACY_FENCE_UNAVAILABLE','Persisted contact privacy fencing is unavailable.',requestId);
+      return await repositories.forms.withContactFollowup(site.id,contact.id,async()=>{
       const email = normalizeEmail(contact.email);
       if (!email || !email.includes('@')) {
         return errorResponse(400, 'CONTACT_MISSING_EMAIL', 'Promoting a contact to customer requires a valid contact email.', requestId);
@@ -351,6 +353,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         collection: customerCollection,
         record,
       }, { status: existingRecord ? 200 : 201 });
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -466,6 +469,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       record,
     }, { status: existingRecord ? 200 : 201 });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This contact was fenced by local visitor erasure. No promotion was performed.',requestId);
     console.error('Admin contact customer promotion API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["./nested-layout-runtime-fixture.tsx"],
+  "references": []
+}

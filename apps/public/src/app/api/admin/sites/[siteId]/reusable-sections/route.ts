@@ -172,6 +172,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    const pageNumber = (value: string | null, fallback: number) => value !== null && /^\d+$/.test(value) && Number.isSafeInteger(Number(value)) ? Number(value) : fallback;
+    const limit = Math.max(1, Math.min(100, pageNumber(searchParams.get("limit"), 100)));
+    const offset = Math.max(0, pageNumber(searchParams.get("offset"), 0));
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -200,8 +203,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         category: searchParams.get("category") || undefined,
         tag: searchParams.get("tag") || undefined,
         search: searchParams.get("search") || undefined,
-        limit: 100,
-        offset: 0,
+        limit,
+        offset,
       });
 
       return NextResponse.json({
@@ -239,7 +242,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        sections,
+        sections: sections.slice(offset, offset + limit),
+        pagination: { total: sections.length, limit, offset, hasMore: offset + limit < sections.length },
       },
     });
   } catch (error) {

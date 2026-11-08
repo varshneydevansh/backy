@@ -94,8 +94,6 @@ const parseShareValue = (values: Record<string, unknown>, field?: string): strin
   return null;
 };
 
-const normalizeIdentifier = (value: string) => value.trim().toLowerCase();
-
 const toJsonRecord = (value: Record<string, unknown>): Record<string, BackyJsonValue> => (
   value as Record<string, BackyJsonValue>
 );
@@ -125,43 +123,8 @@ const buildRepositoryContactShare = async (
   const notes = parseShareValue(submission.values, resolvedShare.notesField);
   if (!name && !email && !phone) return null;
 
-  const existing = resolvedShare.dedupeByEmail !== false && email
-    ? (await repositories.forms.listContacts({
-        siteId: form.siteId,
-        formId: form.id,
-        search: email,
-        limit: 100,
-        offset: 0,
-      })).items.find((contact) => normalizeIdentifier(contact.email || '') === normalizeIdentifier(email))
-    : null;
-  const mergedNotes = [existing?.notes, notes].filter(Boolean).join(existing?.notes ? '\n' : '');
-
-  if (existing) {
-    return (await repositories.forms.updateContact(form.siteId, existing.id, {
-      name: name ?? existing.name,
-      email: email ?? existing.email,
-      phone: phone ?? existing.phone,
-      notes: mergedNotes,
-      sourceValues: submission.values,
-      status: 'new',
-    })).item;
-  }
-
-  return (await repositories.forms.createContact({
-    siteId: form.siteId,
-    formId: form.id,
-    pageId: submission.pageId ?? null,
-    postId: submission.postId ?? null,
-    name,
-    email,
-    phone,
-    notes,
-    sourceValues: submission.values,
-    status: 'new',
-    sourceSubmissionId: submission.id,
-    requestId: submission.requestId,
-    sourceIpHash: submission.ipHash,
-  })).item;
+  if (!repositories.forms.shareContactFromSubmission) throw Object.assign(new Error('Persisted contact contributor provenance unavailable'),{code:'VISITOR_PRIVACY_FENCE_UNAVAILABLE'});
+  return (await repositories.forms.shareContactFromSubmission(form.siteId,form.id,submission.id,{siteId:form.siteId,formId:form.id,pageId:submission.pageId??null,postId:submission.postId??null,name,email,phone,notes,sourceValues:submission.values,status:'new',requestId:submission.requestId,sourceIpHash:submission.ipHash},resolvedShare.dedupeByEmail!==false)).item;
 };
 
 const createRepositoryCollectionRecordFromSubmission = async (
@@ -308,7 +271,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const submission = getSubmissionById(submissionId);
-    if (!submission || submission.formId !== form.id) {
+    if (!submission || submission.formId !== form.id || submission.siteId !== site.id) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
@@ -319,6 +282,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       submission,
     });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This source was fenced by local visitor erasure. No copy or follow-up was performed.',requestId);
     console.error('Admin form submission API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -358,8 +322,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
       }
 
+      const nextStatus=body.status;
+      if(!repositories.forms.withSubmissionFollowup)return errorResponse(503,'VISITOR_PRIVACY_FENCE_UNAVAILABLE','Persisted submission privacy fencing is unavailable.',requestId);
+      return await repositories.forms.withSubmissionFollowup(site.id,form.id,submission.id,async()=>{
       let updated = (await repositories.forms.updateSubmission(site.id, submission.id, {
-        status: body.status,
+        status: nextStatus,
         reviewedBy: body.reviewedBy,
         reviewedAt: new Date().toISOString(),
         adminNotes: body.adminNotes,
@@ -406,6 +373,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data: { submission: updated },
         submission: updated,
       });
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -419,7 +387,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const submission = getSubmissionById(submissionId);
-    if (!submission || submission.formId !== form.id) {
+    if (!submission || submission.formId !== form.id || submission.siteId !== site.id) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
@@ -480,6 +448,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       submission: updated,
     });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This source was fenced by local visitor erasure. No copy or follow-up was performed.',requestId);
     console.error('Admin form submission API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

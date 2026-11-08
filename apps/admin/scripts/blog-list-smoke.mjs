@@ -192,7 +192,8 @@ const assertBlogTaxonomyEmptyStatesUseSharedComponent = () => {
   );
   assert(
     source.includes('const createPostLinkDisabled = !canEditBlog') &&
-      source.includes("templateSource: 'backy-canvas' as const") &&
+      source.includes('const createPostSearch = useMemo(() => ({') &&
+      !/const createPostSearch = useMemo\([\s\S]*?templateSource[\s\S]*?\}\), \[activeSiteId\]\)/.test(source) &&
       source.includes("const createPostActionStatusId = 'blog-create-action-status';") &&
       source.includes('const createPostActionDisabledReason = createPostLinkDisabled') &&
       source.includes('const createPostActionStatus = createPostActionDisabledReason') &&
@@ -1008,7 +1009,7 @@ const assertBlogCommandCreateOpensWorkspace = async (client, title, postId) => {
     if (
       state.path === '/blog/new' &&
       state.search.includes(`siteId=${encodeURIComponent(SITE_ID)}`) &&
-      state.search.includes('templateSource=backy-canvas') &&
+      !state.search.includes('templateSource=backy-canvas') &&
       state.search.includes('focus=canvas') &&
       state.ready &&
       (

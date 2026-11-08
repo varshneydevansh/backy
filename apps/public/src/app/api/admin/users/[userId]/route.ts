@@ -1,3 +1,4 @@
+import { operatorLifecycleErrorResponse } from '@/lib/adminUserLifecycle';
 /**
  * Admin user detail endpoint.
  *
@@ -7,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminAuthPolicySettings,
@@ -173,6 +174,8 @@ export async function PATCH(
       const nextEmail = body.email === undefined ? current.email : normalizeEmail(body.email);
       const nextRole = body.role === undefined ? current.role : normalizeRole(body.role);
       const nextStatus = body.status === undefined ? current.status : normalizeStatus(body.status);
+      const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: current.role, nextRole });
+      if (ownerError) return ownerError;
       const authPolicySettings = await getAdminAuthPolicySettings();
 
       if (body.fullName !== undefined && (typeof body.fullName !== 'string' || !body.fullName.trim())) {
@@ -208,10 +211,7 @@ export async function PATCH(
         return errorResponse(409, 'EMAIL_CONFLICT', 'A user with this email already exists', requestId);
       }
 
-      const allUsers = (await repositories.users.list({ limit: 100, offset: 0 })).items;
-      if (wouldRemoveLastAdminAuthority(allUsers, current, { role: nextRole, status: nextStatus })) {
-        return lastAdminError(requestId);
-      }
+      // Final authority admission is performed atomically by the repository.
 
       const user = (await repositories.users.update(userId, {
         ...(body.fullName !== undefined ? { fullName: String(body.fullName).trim() } : {}),
@@ -255,6 +255,8 @@ export async function PATCH(
     const nextEmail = body.email === undefined ? current.email : normalizeEmail(body.email);
     const nextRole = body.role === undefined ? current.role : normalizeRole(body.role);
     const nextStatus = body.status === undefined ? current.status : normalizeStatus(body.status);
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: current.role, nextRole });
+    if (ownerError) return ownerError;
     const authPolicySettings = await getAdminAuthPolicySettings();
 
     if (body.fullName !== undefined && (typeof body.fullName !== 'string' || !body.fullName.trim())) {
@@ -328,6 +330,8 @@ export async function PATCH(
       },
     });
   } catch (error) {
+    const lifecycleError = operatorLifecycleErrorResponse(error, requestId);
+    if (lifecycleError) return lifecycleError;
     console.error('Admin user update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -354,10 +358,10 @@ export async function DELETE(
         return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
       }
 
-      const allUsers = (await repositories.users.list({ limit: 100, offset: 0 })).items;
-      if (wouldRemoveLastAdminAuthority(allUsers, current, null)) {
-        return lastAdminError(requestId);
-      }
+      const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: current.role });
+      if (ownerError) return ownerError;
+
+      // Final authority admission is performed atomically by the repository.
 
       const deleted = await repositories.users.delete(userId);
 
@@ -393,6 +397,9 @@ export async function DELETE(
       return errorResponse(404, 'USER_NOT_FOUND', 'User not found', requestId);
     }
 
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: current.role });
+    if (ownerError) return ownerError;
+
     if (wouldRemoveLastAdminAuthority(listAdminUsers(), current, null)) {
       return lastAdminError(requestId);
     }
@@ -424,6 +431,8 @@ export async function DELETE(
       },
     });
   } catch (error) {
+    const lifecycleError = operatorLifecycleErrorResponse(error, requestId);
+    if (lifecycleError) return lifecycleError;
     console.error('Admin user delete API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

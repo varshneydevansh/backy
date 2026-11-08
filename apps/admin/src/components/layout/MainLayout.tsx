@@ -17,6 +17,7 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { getHeaderPageTitle } from './headerModel';
 import { cn } from '@/lib/utils';
+import { useCanonicalSites } from '@/hooks/useCanonicalSites';
 
 // ============================================
 // TYPES
@@ -84,6 +85,7 @@ const getDefaultSidebarCollapsed = (pathname: string) => (
  * @returns Layout component
  */
 export function MainLayout({ children }: MainLayoutProps) {
+  const siteDirectory = useCanonicalSites();
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
   const routeSearch = routerState.location.search as Record<string, unknown>;
@@ -322,6 +324,10 @@ export function MainLayout({ children }: MainLayoutProps) {
             data-testid="admin-content-frame"
             data-layout-contract={isEditorWorkspace ? 'editor-route-unframed' : 'ordinary-route-contained'}
           >
+            {siteDirectory.error && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+              <span>Could not refresh available websites: {siteDirectory.error}</span>
+              <button type="button" className="min-h-11 rounded-md border px-3 font-medium" onClick={siteDirectory.retry}>Retry websites</button>
+            </div>}
             {children}
             {!isEditorWorkspace && (
               <AdminShellFooter

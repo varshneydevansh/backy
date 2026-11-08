@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { NextRequest, NextResponse } from 'next/server';
+import * as coreNamespace from '@backy-cms/core';
+const { DEFAULT_SITE_SETTINGS } = (coreNamespace as any).default || coreNamespace;
+const require=createRequire(import.meta.url);
+function load(relative:string,mocks:Record<string,any>){const filename=fileURLToPath(new URL(relative,import.meta.url));const compiled=ts.transpileModule(readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;const module={exports:{} as any};vm.runInNewContext(compiled,{module,exports:module.exports,Request,Response,Headers,URL,process,console:{error(){}},require:(id:string)=>id in mocks?mocks[id]:require(id)},{filename});return module.exports;}
+const navigation=load('../src/lib/navigation.ts',{}),complete=load('../src/lib/collectionExportPagination.ts',{});
+const pages=Array.from({length:205},(_,i)=>({id:'page-'+i,siteId:'site-proof',title:'Page '+i,slug:'page-'+i,status:'published',isHomepage:false}));
+let site:any={id:'site-proof',slug:'proof',name:'Proof',settings:structuredClone(DEFAULT_SITE_SETTINGS)},mode='valid',writes=0,audits=0,denial=0;const offsets:number[]=[];
+const repositories={sites:{getById:async(id:string)=>id===site.id?site:null,getBySlug:async(id:string)=>id===site.slug?site:null,update:async(_id:string,input:any)=>{writes++;site={...site,...input};return{item:site};}},pages:{list:async(input:any)=>{assert.equal(input.siteId,site.id);assert.equal(input.includeUnpublished,true);assert.equal(input.status,'all');offsets.push(input.offset);if(mode==='throw'&&input.offset>0)throw Error('private provider failure');let items=pages.slice(input.offset,input.offset+100);if(mode==='duplicate'&&input.offset===100)items=[pages[0],...items.slice(1)];if(mode==='foreign'&&input.offset===100)items=[{...items[0],siteId:'foreign'},...items.slice(1)];return{items,pagination:{total:mode==='drift'&&input.offset>0?206:205,limit:100,offset:input.offset,hasMore:input.offset+items.length<205}};}}};
+const mocks={'@/lib/navigation':navigation,'@/lib/collectionExportPagination':complete,'@/lib/backyStore':{},'@/lib/repositoryRuntime':{shouldUseDemoStoreFallback:()=>false,getRequiredDatabaseRepositories:async()=>repositories},'@/lib/adminAccess':{requireAdminAccess:async(_r:any,requestId:string)=>denial?NextResponse.json({success:false,requestId,error:{code:'DENIED',message:'Denied'}},{status:denial}):{session:{user:{id:'fixture'}}}},'@/lib/adminAudit':{recordAdminAudit:async()=>{audits++;}},'@/lib/cacheInvalidation':{recordSiteCacheInvalidation:async()=>({status:'recorded'})},'@/lib/siteWebhookDelivery':{deliverSiteWebhooks:async()=>({status:'skipped'})}};
+const route=load('../src/app/api/admin/sites/[siteId]/navigation/route.ts',mocks);
+let checks=0;async function call(method:string,status:number,body?:any){const response=await route[method](new NextRequest('http://fixture.invalid/api/admin/sites/site-proof/navigation',{method,...(body?{headers:{'content-type':'application/json'},body:JSON.stringify(body)}:{})}),{params:Promise.resolve({siteId:'site-proof'})});assert.equal(response.status,status,method+' '+mode);const result=await response.json();checks++;return result;}
+const input={primary:[{id:'tail',type:'page',pageId:'page-204',label:'Last page',children:[]}],footer:[]};
+await call('PATCH',200,{navigation:input});assert.deepEqual(offsets,[0,100,200]);assert.equal(writes,1);assert.equal(audits,1);offsets.length=0;
+const result=await call('GET',200);assert.equal(result.data.navigation.resolved.primary[0].pageId,'page-204');assert.equal(result.data.navigation.resolved.primary[0].path,'/page-204');assert.deepEqual(offsets,[0,100,200]);
+for(mode of ['drift','duplicate','foreign','throw']){const before=writes,beforeAudit=audits;const failure=await call('PATCH',503,{navigation:input});assert.equal(failure.error.code,'NAVIGATION_INVENTORY_INCOMPLETE');assert.equal(JSON.stringify(failure).includes('private provider failure'),false);assert.equal(writes,before);assert.equal(audits,beforeAudit);await call('GET',503);}
+mode='valid';await call('PATCH',400,{primary:[{id:'foreign',type:'page',pageId:'foreign',label:'Invalid'}]});await call('PATCH',400,{primary:[{id:'missing',type:'page',label:'Invalid'}]});denial=401;await call('GET',401);denial=403;await call('PATCH',403,{navigation:input});
+console.log('Navigation complete-inventory actual handler checks passed: '+checks+'; 205 pages, exact offsets, tail resolution/save, incomplete read no-write, missing page and auth denial. Repository adapter fixture, not live database.');

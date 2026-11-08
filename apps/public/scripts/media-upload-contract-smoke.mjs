@@ -31,6 +31,7 @@ const uploadPolicy = read('../src/lib/mediaUploadPolicy.ts');
 const publicMediaResource = read('../src/lib/publicMediaResource.ts');
 const repositoryRuntime = read('../src/lib/repositoryRuntime.ts');
 const repositoryMediaReferenceSync = read('../src/lib/repositoryMediaReferenceSync.ts');
+const collectionRecordAdmission = read('../src/lib/collectionRecordAdmission.ts');
 const adminCollectionRecordsRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/route.ts');
 const adminCollectionRecordDetailRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/[recordId]/route.ts');
 const adminCollectionRecordBulkRoute = read('../src/app/api/admin/sites/[siteId]/collections/[collectionId]/records/bulk/route.ts');
@@ -186,9 +187,14 @@ assert(
     repositoryRuntime.includes('posts.create(input, context)') &&
     repositoryRuntime.includes('posts.update(siteId, postId, input, context)') &&
     repositoryRuntime.includes('posts.delete(siteId, postId, context)') &&
-    repositoryRuntime.includes('collections.createRecord(input, context)') &&
-    repositoryRuntime.includes('collections.updateRecord(siteId, collectionId, recordId, input, context)') &&
-    repositoryRuntime.includes('collections.deleteRecord(siteId, collectionId, recordId, context)') &&
+    repositoryRuntime.includes('collectionRepository.createRecord(input, context)') &&
+    repositoryRuntime.includes('collectionRepository.updateRecord(siteId, collectionId, recordId, input, context)') &&
+    repositoryRuntime.includes('collectionRepository.deleteRecord(siteId, collectionId, recordId, context)') &&
+    repositoryRuntime.includes('mutate(input.siteId, writer => recordWriter(writer).createRecord(input, context))') &&
+    repositoryRuntime.includes('mutate(siteId, writer => recordWriter(writer).updateRecord(siteId, collectionId, recordId, input, context))') &&
+    repositoryRuntime.includes('mutate(siteId, writer => recordWriter(writer).deleteRecord(siteId, collectionId, recordId, context))') &&
+    repositoryRuntime.includes('return repositories.withMediaReferenceMutation(siteId, operation)') &&
+    repositoryRuntime.includes("code: 'MEDIA_REFERENCE_SCOPE_MISMATCH'") &&
     repositoryRuntime.includes('syncRepositoryPageMediaReferences') &&
     repositoryRuntime.includes('removeRepositoryPageMediaReferences') &&
     repositoryRuntime.includes('syncRepositoryPostMediaReferences') &&
@@ -199,17 +205,24 @@ assert(
   'Database repository runtime must decorate page, post, and collection-record mutations with central media reference sync.',
 );
 assert(
-  adminCollectionRecordsRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
-    adminCollectionRecordDetailRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
-    adminCollectionRecordDetailRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
+  adminCollectionRecordsRoute.includes('withRepositoryCollectionRecordAdmission(repositories.collections, site.id, collection.id') &&
+    adminCollectionRecordsRoute.includes('await repository.createRecord({') &&
+    adminCollectionRecordDetailRoute.includes('withRepositoryCollectionRecordAdmission(repositories.collections, site.id, collection.id') &&
+    adminCollectionRecordDetailRoute.includes('await repository.updateRecord(') &&
+    adminCollectionRecordDetailRoute.includes('await repositories.collections.deleteRecord(') &&
+    collectionRecordAdmission.includes('return repository.withRecordWriteLock(siteId, collectionId, operation)') &&
+    collectionRecordAdmission.includes('throw new CollectionRecordAdmissionUnavailableError()') &&
+    repositoryRuntime.includes('operation(recordWriter(writer, scoped), collection, context)') &&
     publicCollectionRecordsRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
     publicCollectionRecordDetailRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
     publicCollectionRecordDetailRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
-    adminCollectionRecordBulkRoute.includes('removeRepositoryCollectionRecordMediaReferences') &&
-    adminCollectionRecordBulkRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
+    adminCollectionRecordBulkRoute.includes('await repositories.collections.deleteRecord(site.id, collection.id, record.id)') &&
+    adminCollectionRecordBulkRoute.includes('await repositories.collections.updateRecord(site.id, collection.id, record.id,') &&
     adminCollectionRecordImportRoute.includes('syncRepositoryCollectionRecordMediaReferences') &&
-    adminCollectionsImportRoute.includes('syncRepositoryCollectionRecordMediaReferences'),
-  'Admin and public repository collection-record mutation routes must sync media references after create/update/delete/bulk/import.',
+    adminCollectionsImportRoute.includes('await repositories.collections.applyImport(site.id, operations)') &&
+    repositoryRuntime.includes('(scoped, writer) => recordWriter(writer, scoped)') &&
+    repositoryRuntime.includes('for (const record of retainedRecords)'),
+  'Admin repository collection-record writes must use admitted/decorated writers for atomic media sync; legacy explicit public and record-import sync paths must remain intact.',
 );
 assert(
   publicMediaRoute.includes("searchParams.has('folderId')") &&
@@ -224,7 +237,8 @@ assert(
   'Public media list route must reject invalid global filters instead of silently returning all assets.',
 );
 assert(
-  publicMediaRoute.includes('const visibleMedia = mediaPayload.media') &&
+  publicMediaRoute.includes('const mediaItems = await readCompleteMediaInventory(site.id, async pagination =>') &&
+    publicMediaRoute.includes('const visibleMedia = mediaItems') &&
     publicMediaRoute.includes('filter((item) => mediaMatchesRequestedType(item, mediaType))') &&
     publicMediaRoute.includes('filter((item) => !isMediaQuarantined(item))') &&
     publicMediaRoute.includes('paginateMedia(site.id, visibleMedia, limit, offset, folders)'),
@@ -275,7 +289,10 @@ assert(
 assert(
   mediaRoute.includes('buildPublicMediaOrganization') &&
     mediaRoute.includes('withAdminMediaOrganization') &&
-    mediaRoute.includes('paginateMedia(filtered, limit, offset, folders)') &&
+    mediaRoute.includes('const payload = Array.isArray(result)') &&
+    mediaRoute.includes('paginateMedia(result') &&
+    mediaRoute.includes('.map((item) => withAdminMediaOrganization(item, folders))') &&
+    mediaRoute.includes('media: result.items.map(item => withAdminMediaOrganization(item, folders))') &&
     mediaRoute.includes('media: withAdminMediaOrganization(') &&
     mediaDetailRoute.includes('buildPublicMediaOrganization') &&
     mediaDetailRoute.includes('withAdminMediaOrganization') &&
@@ -400,7 +417,7 @@ assert(
 );
 assert(
   openApiRoute.includes('"400"') &&
-    openApiRoute.includes('Invalid media type, scope, global, limit, or offset filter') &&
+    openApiRoute.includes('Invalid media type, scope, linked association, global, limit, or offset filter') &&
     openApiRoute.includes('#/components/schemas/ErrorEnvelope'),
   'Public OpenAPI media list route must document invalid media filter error envelopes.',
 );
@@ -463,8 +480,9 @@ assert(
 assert(
   openApiRoute.includes('Stable media file delivery validator for If-None-Match revalidation') &&
     openApiRoute.includes('Media file cache entry unchanged for the supplied ETag') &&
-    openApiRoute.includes('Stable media transform redirect validator for If-None-Match revalidation') &&
-    openApiRoute.includes('Media transform redirect unchanged for the supplied ETag') &&
+    (openApiRoute.includes('Stable media transform validator for If-None-Match revalidation') ||
+      openApiRoute.includes('Stable media transform redirect validator for If-None-Match revalidation')) &&
+    openApiRoute.includes('Media transform unchanged for the supplied ETag') &&
     openApiRoute.includes('"X-Backy-Cache-Revision"'),
   'Public OpenAPI media file and transform routes must document ETag, 304, and cache revision headers for custom frontend revalidation.',
 );
@@ -579,8 +597,8 @@ assert(
 assert(
   apiContracts.includes('Public media file responses emit `ETag` and `x-backy-cache-revision`') &&
     apiContracts.includes('matching `If-None-Match` returns `304` without streaming bytes') &&
-    apiContracts.includes('Transform redirects emit `ETag` and `x-backy-cache-revision`') &&
-    apiContracts.includes('matching `If-None-Match` returns `304` without redirecting or counting another transform delivery'),
+    apiContracts.includes('Transform responses emit `ETag` and `x-backy-cache-revision`') &&
+    apiContracts.includes('matching `If-None-Match` returns `304` without streaming or counting another transform delivery'),
   'API contract docs must describe public media file and transform cache revalidation semantics.',
 );
 assert(

@@ -1,6 +1,11 @@
 import React, { useMemo, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { RichTextWorkspace } from '../RichTextWorkspace';
+import { measureRichTextWorkspaceContent } from '../richTextWorkspaceSizing';
 import { cn } from '@/lib/utils';
 import { BackyEditor, PlateEditor } from '@backy-cms/editor';
+import type { BackyDataFigureLoader, BackyDataFigureCollection } from '@backy-cms/core';
+import { useRichTextAuthoring } from '../RichTextAuthoringContext';
 import { useActiveEditor } from '../ActiveEditorContext';
 
 const makeContentFingerprint = (value: unknown): string => {
@@ -35,25 +40,38 @@ interface RichTextBlockProps {
     content: any; // JSON or HTML
     onChange: (content: any) => void;
     isEditable?: boolean;
+    interactivePreview?: boolean;
+    authoredWidth?: number;
+    onFitContentHeight?: (height: number) => void;
+    onRequestClose?: () => void;
     className?: string;
     placeholder?: string;
     onBlur?: () => void;
     defaultType?: string;
     style?: React.CSSProperties;
     elementId?: string;
+    loadDataFigureRecords?: BackyDataFigureLoader;
+    dataFigureCollections?: BackyDataFigureCollection[];
 }
 
 export function RichTextBlock({
     content,
     onChange,
     isEditable = false,
+    interactivePreview = false,
+    authoredWidth,
+    onFitContentHeight,
+    onRequestClose,
     className,
     placeholder = "Type '/' for commands...",
     defaultType = 'p',
     onBlur,
     elementId,
+    loadDataFigureRecords,
+    dataFigureCollections,
     style,
 }: RichTextBlockProps) {
+    const authoring = useRichTextAuthoring();
     const { setActiveEditor, clearActiveEditor, storeSelection, registerContentSync } = useActiveEditor();
     const editorRef = useRef<PlateEditor | null>(null);
     const editorHostRef = useRef<HTMLDivElement>(null);
@@ -87,7 +105,9 @@ export function RichTextBlock({
     // Ensure content is valid Slate JSON
     const initialValue = useMemo(() => {
         if (Array.isArray(content) && content.length > 0) {
-            return content;
+            // Plate's node-id insertion can annotate input nodes; never lend it
+            // the canonical page/document object, including in previews.
+            return JSON.parse(JSON.stringify(content));
         }
         // Fallback for string content or empty
         return [{ type: defaultType, children: [{ text: typeof content === 'string' ? content : '' }] }];
@@ -120,6 +140,7 @@ export function RichTextBlock({
     }, [initialValueFingerprint]);
 
     const syncContentFromEditor = useCallback((editor: PlateEditor) => {
+        if (!isEditable) return;
         const children = (editor as unknown as { children?: unknown }).children;
         if (!Array.isArray(children)) {
             return;
@@ -131,9 +152,12 @@ export function RichTextBlock({
         }
 
         onChange(nextContent);
-    }, [onChange, shouldIgnoreUnchangedEditorContent]);
+    }, [isEditable, onChange, shouldIgnoreUnchangedEditorContent]);
 
     const handleContentChange = useCallback((value: any) => {
+        // A read-only preview can normalize its own Slate tree. That must never
+        // replace author-owned content or race a simultaneously mounted writer.
+        if (!isEditable) return;
         const children = (editorRef.current as unknown as { children?: unknown } | null)?.children;
         const nextContent = isEditable && Array.isArray(children)
             ? JSON.parse(JSON.stringify(children))
@@ -268,6 +292,12 @@ export function RichTextBlock({
         unregisterContentSync,
     ]);
 
+    // Refresh the save target without treating a new host closure as a new editor.
+    useEffect(() => {
+        registerCurrentContentSync(editorRef.current);
+        return unregisterContentSync;
+    }, [registerCurrentContentSync, unregisterContentSync]);
+
     const handleFocus = useCallback(() => {
         if (!isEditable) {
             return;
@@ -359,11 +389,11 @@ export function RichTextBlock({
         };
     }, [clearActiveEditor, unregisterContentSync]);
 
-  return (
+  const editorView = (
     <div
       ref={editorHostRef}
       data-element-id={elementId || undefined}
-      className={cn("h-full w-full", className)}
+      className={cn("h-full min-h-0 w-full", className)}
       style={style}
       data-backy-text-editor="true"
             data-backy-text-editor-editable={String(!!isEditable)}
@@ -384,11 +414,31 @@ export function RichTextBlock({
                 onEditorReady={handleEditorReady}
                 onMouseDown={handleEditorMouseDown}
                 showPortalToolbar={false}
+                showToolbar={isEditable && !!authoring}
+                interactiveComponents={authoring?.interactiveComponents}
+                interactiveComponentsLoading={authoring?.interactiveComponentsLoading}
+                interactiveComponentsError={authoring?.interactiveComponentsError}
+                onReloadInteractiveComponents={authoring?.onReloadInteractiveComponents}
+                renderInteractiveComponent={authoring?.renderInteractiveComponent}
+                onRequestMedia={authoring && elementId ? (kind) => authoring.requestMedia(elementId, kind) : undefined}
+                loadDataFigureRecords={loadDataFigureRecords}
+                dataFigureCollections={dataFigureCollections}
                 className={cn(
                     // Critical: pointer-events-none when NOT editable to allow Dragging from parent
-                    !isEditable && "pointer-events-none"
+                    !isEditable && !interactivePreview && "pointer-events-none"
                 )}
             />
         </div>
     );
+    if (!isEditable || !authoring || typeof document === 'undefined') return editorView;
+    const finish = () => { if (editorRef.current) syncContentFromEditor(editorRef.current); onRequestClose?.(); };
+    const fit = () => {
+      if (!editorHostRef.current || !authoredWidth || !onFitContentHeight) return;
+      if (editorRef.current) syncContentFromEditor(editorRef.current);
+      window.requestAnimationFrame(() => { if (!editorHostRef.current) return; const height = measureRichTextWorkspaceContent(editorHostRef.current, authoredWidth); if (height !== null) onFitContentHeight(height); });
+    };
+    return <>
+      <div data-backy-text-workspace-anchor="true" data-element-id={elementId} className="flex h-full w-full items-center justify-center border border-dashed border-teal-600 bg-teal-50 px-3 text-center text-sm text-teal-900">Editing in text workspace</div>
+      {createPortal(<RichTextWorkspace elementId={elementId} onDone={finish} onFit={onFitContentHeight ? fit : undefined}>{editorView}</RichTextWorkspace>, document.body)}
+    </>;
 }

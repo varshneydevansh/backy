@@ -1,3 +1,5 @@
+import { collectCompleteFormsInventory, FormsInventoryIncompleteError } from '@/lib/formsInventory';
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
 import { NextRequest, NextResponse } from 'next/server';
 import { DEFAULT_SITE_SETTINGS, type BackyJsonObject, type Contact, type FormDefinition, type SiteContactSavedList, type SiteContactSavedListFilters, type SiteSettings } from '@backy-cms/core';
 import { recordAdminAudit } from '@/lib/adminAudit';
@@ -21,8 +23,6 @@ type ContactListPayload = {
   listId?: string;
 };
 
-const PAGE_LIMIT = 100;
-const MAX_PAGES = 100;
 const CONTACT_STATUSES = ['all', 'new', 'contacted', 'qualified', 'archived'] as const;
 const CONTACT_QUALITIES = ['all', 'missing-email', 'missing-phone', 'needs-notes', 'has-source-values', 'ready-to-promote', 'duplicate-email'] as const;
 
@@ -183,20 +183,6 @@ const buildListResponse = (savedLists: SiteContactSavedList[], forms: FormDefini
   })
 );
 
-const fetchRepositoryContacts = async (
-  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
-  siteId: string,
-) => {
-  const contacts: Contact[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const offset = page * PAGE_LIMIT;
-    const result = await repositories.forms.listContacts({ siteId, limit: PAGE_LIMIT, offset });
-    contacts.push(...result.items);
-    if (!result.pagination.hasMore || contacts.length >= result.pagination.total) break;
-  }
-  return contacts;
-};
-
 const parseJsonBody = async (request: NextRequest): Promise<ContactListPayload> => {
   try {
     const body = await request.json();
@@ -219,8 +205,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
       if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
 
-      const forms = (await repositories.forms.list({ siteId: site.id, limit: PAGE_LIMIT, offset: 0 })).items;
-      const contacts = await fetchRepositoryContacts(repositories, site.id);
+      const forms = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.list({ siteId: site.id, ...pagination }));
+      const contacts = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.listContacts({ siteId: site.id, ...pagination }));
       const savedLists = normalizeSavedLists(siteSettings(site.settings));
       const lists = buildListResponse(savedLists, forms, contacts);
 
@@ -231,12 +217,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
 
     const forms = listFormsBySite(site.id);
-    const contacts = forms.flatMap((form) => listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
+    const contacts = (await Promise.all(forms.map(form => collectCompleteFormsInventory(site.id, async pagination => { const result = listFormContacts(form.id, { ...pagination, siteId: site.id }); return { items: result.contacts, pagination: result.pagination }; }, item => item.formId === form.id)))).flat();
     const savedLists = normalizeSavedLists(siteSettings(site.settings));
     const lists = buildListResponse(savedLists, forms, contacts);
 
     return NextResponse.json({ success: true, requestId, data: { lists, count: lists.length }, lists });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin contact lists API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -261,6 +248,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
       if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
 
+      const forms = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.list({ siteId: site.id, ...pagination }));
+      const contacts = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.listContacts({ siteId: site.id, ...pagination }));
       const settings = siteSettings(site.settings);
       const savedLists = normalizeSavedLists(settings);
       const existing = body.id ? savedLists.find((list) => list.id === body.id) : undefined;
@@ -273,7 +262,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         updatedAt: now,
       };
       const nextLists = existing ? savedLists.map((item) => (item.id === list.id ? list : item)) : [list, ...savedLists];
-      const updated = await repositories.sites.update(site.id, { settings: nextSettingsWithLists(settings, nextLists) });
+      const updated = await repositories.sites.update(site.id, { settings: unrelatedSiteSettingsPatch(nextSettingsWithLists(settings, nextLists)) });
       await recordAdminAudit({
         repositories,
         siteId: site.id,
@@ -286,8 +275,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         metadata: auditMetadata(requestId, list.filters),
         requestId,
       });
-      const forms = (await repositories.forms.list({ siteId: site.id, limit: PAGE_LIMIT, offset: 0 })).items;
-      const contacts = await fetchRepositoryContacts(repositories, site.id);
       const lists = buildListResponse(normalizeSavedLists(siteSettings(updated.item.settings)), forms, contacts);
 
       return NextResponse.json({ success: true, requestId, data: { list, lists, created: !existing, updated: Boolean(existing) }, list, lists }, { status: existing ? 200 : 201 });
@@ -296,6 +283,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
     if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
 
+    const forms = listFormsBySite(site.id);
+    const contacts = (await Promise.all(forms.map(form => collectCompleteFormsInventory(site.id, async pagination => { const result = listFormContacts(form.id, { ...pagination, siteId: site.id }); return { items: result.contacts, pagination: result.pagination }; }, item => item.formId === form.id)))).flat();
     const settings = siteSettings(site.settings);
     const savedLists = normalizeSavedLists(settings);
     const existing = body.id ? savedLists.find((list) => list.id === body.id) : undefined;
@@ -308,7 +297,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       updatedAt: now,
     };
     const nextLists = existing ? savedLists.map((item) => (item.id === list.id ? list : item)) : [list, ...savedLists];
-    const updated = updateAdminSite(site.id, { settings: nextSettingsWithLists(settings, nextLists) });
+    const updated = updateAdminSite(site.id, { settings: unrelatedSiteSettingsPatch(nextSettingsWithLists(settings, nextLists)) });
     if (!updated) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     await recordAdminAudit({
       siteId: site.id,
@@ -321,12 +310,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       metadata: auditMetadata(requestId, list.filters),
       requestId,
     });
-    const forms = listFormsBySite(site.id);
-    const contacts = forms.flatMap((form) => listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
     const lists = buildListResponse(normalizeSavedLists(siteSettings(updated.settings)), forms, contacts);
 
     return NextResponse.json({ success: true, requestId, data: { list, lists, created: !existing, updated: Boolean(existing) }, list, lists }, { status: existing ? 200 : 201 });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin contact list save API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -352,7 +340,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       const savedLists = normalizeSavedLists(settings);
       const removed = savedLists.find((list) => list.id === listId);
       const nextLists = savedLists.filter((list) => list.id !== listId);
-      await repositories.sites.update(site.id, { settings: nextSettingsWithLists(settings, nextLists) });
+      await repositories.sites.update(site.id, { settings: unrelatedSiteSettingsPatch(nextSettingsWithLists(settings, nextLists)) });
       if (removed) {
         await recordAdminAudit({
           repositories,
@@ -376,7 +364,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const settings = siteSettings(site.settings);
     const savedLists = normalizeSavedLists(settings);
     const removed = savedLists.find((list) => list.id === listId);
-    const updated = updateAdminSite(site.id, { settings: nextSettingsWithLists(settings, savedLists.filter((list) => list.id !== listId)) });
+    const updated = updateAdminSite(site.id, { settings: unrelatedSiteSettingsPatch(nextSettingsWithLists(settings, savedLists.filter((list) => list.id !== listId))) });
     if (!updated) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     if (removed) {
       await recordAdminAudit({
@@ -393,6 +381,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, requestId, data: { deleted: Boolean(removed), listId } });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin contact list delete API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

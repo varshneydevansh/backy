@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { currentBuilderContractGaps } from './current-builder-contract.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
@@ -17,6 +18,7 @@ const productionUrl =
   '';
 const siteId = process.env.BACKY_VERCEL_PRODUCTION_SITE_ID || 'site-demo';
 const requireLive = process.env.BACKY_VERCEL_REQUIRE_LIVE_PRODUCTION === '1';
+const requireCurrentBuilderContract = process.env.BACKY_VERCEL_REQUIRE_CURRENT_BUILDER_CONTRACT === '1';
 const adminEmail = process.env.BACKY_VERCEL_ADMIN_EMAIL || '';
 const adminPassword = process.env.BACKY_VERCEL_ADMIN_PASSWORD || '';
 const adminMfaCode =
@@ -51,6 +53,7 @@ const handoff = read('packages/core/src/custom-frontend-agent-handoff.ts');
 const manifestSchema = read('specs/ai-frontend-contract/frontend-manifest.schema.json');
 const openApiRoute = read('apps/public/src/app/api/sites/[siteId]/openapi/route.ts');
 const productionEnvGuard = read('scripts/vercel-public-production-env-guard.mjs');
+const adminOriginReleasePolicy = read('scripts/vercel-admin-origin-policy.mjs');
 const publicNextConfig = read('apps/public/next.config.js');
 const publicRepositoryRuntime = read('apps/public/src/lib/repositoryRuntime.ts');
 const adminSessionStore = read('apps/public/src/lib/admin-auth/sessionStore.ts');
@@ -92,6 +95,8 @@ includesAll(
     'BACKY_VERCEL_ADMIN_EMAIL',
     'BACKY_VERCEL_REQUIRE_LIVE_ADMIN_AUTH=1',
     'Vercel production builds run a public env guard before Next.js builds',
+    'BACKY_ADMIN_TRUSTED_ORIGINS',
+    'Environment-name metadata alone does not validate values',
     'npm run test:vercel-production-readiness',
     '/api/sites/site-demo/agent-handoff',
     '/api/sites?identifier=site-demo',
@@ -181,14 +186,23 @@ includesAll(
     'BACKY_ALLOW_PRODUCTION_DEMO_MODE',
     'BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH',
     'must not be enabled for production release builds',
+    'validateAdminOriginProductionEnv(process.env)',
+    'deployed admin cookie/CORS behavior still requires runtime proof',
   ],
   'Public production env guard source',
 );
+includesAll(adminOriginReleasePolicy, [
+  "'BACKY_ADMIN_TRUSTED_ORIGINS'",
+  "'NEXT_PUBLIC_BACKY_ADMIN_TRUSTED_ORIGINS'",
+  "'VITE_BACKY_ADMIN_TRUSTED_ORIGINS'",
+  'must include the origin of NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
+  'origins.some((origin) => !origin)',
+], 'Production admin origin release policy preserves strict configuration and server-only authority');
 
 includesAll(
   publicNextConfig,
   [
-    "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
+    "transpilePackages: ['@backy-cms/core', '@backy-cms/editor', '@backy/db', '@backy/storage']",
   ],
   'Public production Next config bundles Backy workspace packages into Vercel functions',
 );
@@ -447,7 +461,7 @@ const checkLiveAdminAuth = async (baseUrl) => {
 const checkLiveProduction = async () => {
   if (!productionUrl) {
     const message = 'BACKY_VERCEL_PRODUCTION_URL is not set; skipping live production URL proof.';
-    if (requireLive || requireLiveAdminAuth) fail(message);
+    if (requireLive || requireLiveAdminAuth || requireCurrentBuilderContract) fail(message);
     else warn(message);
     return;
   }
@@ -541,6 +555,14 @@ const checkLiveProduction = async () => {
   }
 
   const render = await parseJsonResponse(endpoints.render);
+  const contractGaps = currentBuilderContractGaps(agentHandoff?.data?.handoff ?? agentHandoff?.data, openapi);
+  if (contractGaps.length) {
+    const message = `Deployed builder contract is behind current source: ${contractGaps.join(', ')}. Existing connection checks do not certify these features.`;
+    if (requireCurrentBuilderContract) fail(message);
+    else warn(message);
+  } else {
+    pass('Production advertises the current bounded builder contracts (declarations only)');
+  }
   if (render) {
     assert(render.success === true, 'Production render returns success=true');
     assert(

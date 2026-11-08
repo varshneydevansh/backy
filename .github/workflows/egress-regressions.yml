@@ -1,0 +1,36 @@
+name: Offline egress regressions
+on:
+  pull_request:
+    paths: ['packages/core/**', 'packages/db/**', 'packages/storage/**', 'apps/public/**', '.github/workflows/egress-regressions.yml', 'scripts/offline-egress-network-guard.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: egress-regressions-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Build local contracts and storage
+        run: |
+          npm run build --workspace @backy-cms/core
+          npm run build --workspace @backy/db
+          npm run build --workspace @backy/storage
+      - name: Test metadata SQL and file HEAD without provider access
+        env:
+          BACKY_POSTGRES_BIN_DIR: /usr/lib/postgresql/16/bin
+        run: |
+          export NODE_OPTIONS="--import=$PWD/scripts/offline-egress-network-guard.mjs"
+          for test in search-metadata collection-search site-search blog-archive-metadata page-admission-metadata canvas-source-metadata; do
+            node_modules/.bin/tsx --tsconfig packages/db/tsconfig.visitor-smoke.json "packages/db/scripts/$test-postgres-isolated.mts"
+          done
+          node_modules/.bin/tsx apps/public/scripts/search-metadata-smoke.mts
+          node_modules/.bin/tsx apps/public/scripts/media-file-streaming-smoke.mts

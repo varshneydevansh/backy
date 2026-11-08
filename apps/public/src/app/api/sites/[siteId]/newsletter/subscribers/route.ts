@@ -1,15 +1,16 @@
 import { NextRequest } from 'next/server';
 import type { Contact, FormDefinition } from '@backy-cms/core';
-import { createContactRecord, getSiteByIdOrSlug, listFormContacts, listFormsBySite } from '@/lib/backyStore';
+import { createContactRecord, getSiteByIdOrSlug, listFormContacts, listFormsBySite, validateAndClassifyFormSubmission } from '@/lib/backyStore';
 import { normalizeContactEmail, validateOptionalContactEmail } from '@/lib/contactEmailPolicy';
 import {
-  NEWSLETTER_SUBSCRIBE_SCHEMA_VERSION,
+  NEWSLETTER_SUBSCRIBER_RECEIPT_SCHEMA_VERSION,
   buildNewsletterContactFields,
   buildNewsletterSourceValues,
-  buildNewsletterSubscriberPayload,
   isNewsletterForm,
 } from '@/lib/newsletterSubscribers';
 import { publicContractJson } from '@/lib/publicContractResponse';
+import { isPublicFormAudience } from '@/lib/publicFormAudienceAccess';
+import { verifyFormCaptcha } from '@/lib/formCaptcha';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -30,6 +31,9 @@ type NewsletterPublicBody = {
   consentText?: unknown;
   formId?: unknown;
   values?: unknown;
+  honeypot?: unknown;
+  startedAt?: unknown;
+  captchaToken?: unknown;
 };
 
 const PAGE_LIMIT = 100;
@@ -61,7 +65,7 @@ const jsonResponse = <TBody,>(body: TBody, request: NextRequest, requestId: stri
     request,
     requestId,
     cache: status >= 400 ? 'error' : 'private',
-    schemaVersion: NEWSLETTER_SUBSCRIBE_SCHEMA_VERSION,
+    schemaVersion: NEWSLETTER_SUBSCRIBER_RECEIPT_SCHEMA_VERSION,
   })
 );
 
@@ -90,10 +94,11 @@ const readNewsletterBodyField = (body: NewsletterPublicBody, key: string): unkno
   return values[key];
 };
 
-const findNewsletterForm = (forms: FormDefinition[], formId?: string): FormDefinition | null => (
+const findNewsletterForm = (forms: FormDefinition[], siteId: string, formId?: string): FormDefinition | null => (
   forms
-    .filter((form) => form.isActive)
+    .filter((form) => form.siteId === siteId && form.isActive === true)
     .filter(isNewsletterForm)
+    .filter(isPublicFormAudience)
     .find((form) => (formId ? form.id === formId : true)) || null
 );
 
@@ -128,24 +133,62 @@ const findRepositoryContactByEmail = async (
   return undefined;
 };
 
-const subscriberCreatedResponse = (
+// Public acknowledgements deliberately disclose no subscriber identity or stored state.
+const subscriberReceivedResponse = (
   request: NextRequest,
   requestId: string,
-  contact: Contact,
-  form: FormDefinition,
-  existing: boolean,
+  operation: 'subscribe' | 'unsubscribe',
 ) => jsonResponse({
   success: true,
   requestId,
   data: {
-    schemaVersion: NEWSLETTER_SUBSCRIBE_SCHEMA_VERSION,
-    subscriber: buildNewsletterSubscriberPayload(contact, form),
-    existing,
-    deliveryBoundary: 'Backy captured the subscriber; email delivery, unsubscribe enforcement, bounces, and DNS authentication stay provider-backed.',
+    schemaVersion: NEWSLETTER_SUBSCRIBER_RECEIPT_SCHEMA_VERSION,
+    received: true,
+    operation,
+    deliveryBoundary: 'Backy received the request. This does not confirm email delivery or synchronization with an email provider.',
   },
-  subscriber: buildNewsletterSubscriberPayload(contact, form),
-  existing,
-}, request, requestId, existing ? 200 : 201);
+}, request, requestId);
+
+const validateNewsletterCapture = async (
+  request: NextRequest,
+  requestId: string,
+  form: FormDefinition,
+  body: NewsletterPublicBody,
+  values: Record<string, unknown>,
+) => {
+  const supportedKeys = new Set(['email', 'name', 'topics', 'source', 'signup_source', 'consent', 'consentText']);
+  const formValues = { ...values, first_name: values.name };
+  supportedKeys.add('first_name');
+  const nameField = form.contactShare?.enabled ? form.contactShare.nameField : undefined;
+  if (typeof nameField === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,99}$/.test(nameField) && !['constructor', 'prototype'].includes(nameField) && !supportedKeys.has(nameField) && form.fields.some((field) => field.key === nameField)) {
+    supportedKeys.add(nameField);
+    Object.assign(formValues, { [nameField]: values.name });
+  }
+  if (form.fields.some((field) => (field.required || field.validation?.some((rule) => rule.type === 'required')) && !supportedKeys.has(field.key))) {
+    return errorResponse(503, 'NEWSLETTER_FORM_UNSUPPORTED', 'This newsletter form requires a different submission flow.', request, requestId);
+  }
+  if (form.enableCaptcha === true) {
+    const verification = await verifyFormCaptcha({
+      token: textValue(readNewsletterBodyField(body, 'captchaToken')),
+      requestId,
+      siteId: form.siteId,
+      formId: form.id,
+    });
+    if (!verification.ok) {
+      const unavailable = ['CAPTCHA_NOT_CONFIGURED', 'CAPTCHA_UNAVAILABLE', 'CAPTCHA_TIMEOUT'].includes(verification.errorCode || '');
+      return errorResponse(unavailable ? 503 : 422, unavailable ? 'NEWSLETTER_VERIFICATION_UNAVAILABLE' : 'NEWSLETTER_VERIFICATION_REQUIRED', unavailable ? 'Newsletter verification is unavailable.' : 'Complete newsletter verification before submitting.', request, requestId);
+    }
+  }
+  const startedAt = readNewsletterBodyField(body, 'startedAt');
+  const classification = validateAndClassifyFormSubmission(form, formValues, {
+    honeypot: textValue(readNewsletterBodyField(body, 'honeypot')),
+    startedAt: typeof startedAt === 'number' || typeof startedAt === 'string' ? startedAt : undefined,
+    requestId,
+    ipHash: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip'),
+  });
+  if (!classification.ok) return errorResponse(422, 'NEWSLETTER_SUBMISSION_REJECTED', 'Check the newsletter form and try again.', request, requestId);
+  return null;
+};
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -167,13 +210,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const consentText = textValue(readNewsletterBodyField(body, 'consentText'));
     const formId = textValue(readNewsletterBodyField(body, 'formId'));
     const now = new Date().toISOString();
+    const values = { email: emailPolicy.email, name, topics, source, signup_source: source, consent, consentText };
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
       if (!site || !site.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', request, requestId);
-      const form = findNewsletterForm(await fetchRepositoryForms(repositories, site.id), formId);
+      const form = findNewsletterForm(await fetchRepositoryForms(repositories, site.id), site.id, formId);
       if (!form) return errorResponse(404, 'NEWSLETTER_FORM_NOT_CONFIGURED', 'Newsletter signup is not configured for this site.', request, requestId);
+      const validationResponse = await validateNewsletterCapture(request, requestId, form, body, values);
+      if (validationResponse) return validationResponse;
       const existing = await findRepositoryContactByEmail(repositories, site.id, form.id, emailPolicy.email);
       const sourceValues = buildNewsletterSourceValues({
         existingSourceValues: existing?.sourceValues,
@@ -218,13 +264,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ...newsletterFields,
             requestId,
           })).item;
-      return subscriberCreatedResponse(request, requestId, contact, form, Boolean(existing));
+      if (!contact) throw new Error('Newsletter capture was not persisted.');
+      return subscriberReceivedResponse(request, requestId, 'subscribe');
     }
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site || !site.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', request, requestId);
-    const form = findNewsletterForm(listFormsBySite(site.id), formId);
+    const form = findNewsletterForm(listFormsBySite(site.id), site.id, formId);
     if (!form) return errorResponse(404, 'NEWSLETTER_FORM_NOT_CONFIGURED', 'Newsletter signup is not configured for this site.', request, requestId);
+    const validationResponse = await validateNewsletterCapture(request, requestId, form, body, values);
+    if (validationResponse) return validationResponse;
     const result = createContactRecord({
       siteId: site.id,
       formId: form.id,
@@ -256,7 +305,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       sourceSubmissionId: undefined,
       sourceIpHash: null,
     }, { upsertByEmail: true });
-    return subscriberCreatedResponse(request, requestId, result.contact, form, result.existing);
+    if (!result.contact) throw new Error('Newsletter capture was not persisted.');
+    return subscriberReceivedResponse(request, requestId, 'subscribe');
   } catch (error) {
     console.error('Public newsletter signup API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', request, requestId);
@@ -281,10 +331,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
       if (!site || !site.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', request, requestId);
-      const form = findNewsletterForm(await fetchRepositoryForms(repositories, site.id), formId);
+      const form = findNewsletterForm(await fetchRepositoryForms(repositories, site.id), site.id, formId);
       if (!form) return errorResponse(404, 'NEWSLETTER_FORM_NOT_CONFIGURED', 'Newsletter signup is not configured for this site.', request, requestId);
       const existing = await findRepositoryContactByEmail(repositories, site.id, form.id, emailPolicy.email);
-      if (!existing) return errorResponse(404, 'NEWSLETTER_SUBSCRIBER_NOT_FOUND', 'Newsletter subscriber was not found.', request, requestId);
+      if (!existing) return subscriberReceivedResponse(request, requestId, 'unsubscribe');
       const contact = (await repositories.forms.updateContact(site.id, existing.id, {
         status: 'archived',
         sourceValues: buildNewsletterSourceValues({
@@ -302,17 +352,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         }),
         requestId,
       })).item;
-      return subscriberCreatedResponse(request, requestId, contact, form, true);
+      if (!contact) throw new Error('Newsletter unsubscribe was not persisted.');
+      return subscriberReceivedResponse(request, requestId, 'unsubscribe');
     }
 
     const site = getSiteByIdOrSlug(siteId);
     if (!site || !site.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', request, requestId);
-    const form = findNewsletterForm(listFormsBySite(site.id), formId);
+    const form = findNewsletterForm(listFormsBySite(site.id), site.id, formId);
     if (!form) return errorResponse(404, 'NEWSLETTER_FORM_NOT_CONFIGURED', 'Newsletter signup is not configured for this site.', request, requestId);
     const normalizedEmail = normalizeContactEmail(emailPolicy.email);
-    const existing = listFormContacts(form.id, { limit: Number.MAX_SAFE_INTEGER, offset: 0 }).contacts
+    const existing = listFormContacts(form.id, { siteId: site.id, limit: Number.MAX_SAFE_INTEGER, offset: 0 }).contacts
       .find((contact) => normalizeContactEmail(contact.email) === normalizedEmail);
-    if (!existing) return errorResponse(404, 'NEWSLETTER_SUBSCRIBER_NOT_FOUND', 'Newsletter subscriber was not found.', request, requestId);
+    if (!existing) return subscriberReceivedResponse(request, requestId, 'unsubscribe');
     const result = createContactRecord({
       ...existing,
       status: 'archived',
@@ -333,7 +384,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       sourceSubmissionId: existing.sourceSubmissionId,
       sourceIpHash: existing.sourceIpHash,
     }, { upsertByEmail: true });
-    return subscriberCreatedResponse(request, requestId, result.contact, form, true);
+    if (!result.contact) throw new Error('Newsletter unsubscribe was not persisted.');
+    return subscriberReceivedResponse(request, requestId, 'unsubscribe');
   } catch (error) {
     console.error('Public newsletter unsubscribe API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', request, requestId);

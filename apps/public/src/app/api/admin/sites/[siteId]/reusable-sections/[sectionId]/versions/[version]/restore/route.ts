@@ -19,7 +19,9 @@ import {
 } from "@/lib/repositoryRuntime";
 import {
   buildReusableSectionUpdateMetadata,
+  restoreReusableSectionTemplateProvenance,
   listReusableSectionVersions,
+  isRestorableReusableSectionVersion,
   reusableSectionConflict,
   reusableSectionVersionFromMetadata,
   type ReusableSectionVersionEntry,
@@ -98,7 +100,7 @@ const mergeRestoreMetadata = (
   metadata: unknown,
   target: ReusableSectionVersionEntry,
 ): BackyJsonObject => {
-  const base = isRecord(metadata) ? { ...metadata } : {};
+  const base = restoreReusableSectionTemplateProvenance(metadata, target);
   const reusableSection = isRecord(base.reusableSection)
     ? { ...base.reusableSection }
     : {};
@@ -248,6 +250,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      if (!isRestorableReusableSectionVersion(target)) return errorResponse(400, "VALIDATION_ERROR", "This historical section snapshot cannot be restored safely. Review or reimport a complete composition.", requestId);
+
       const slugConflict = await repositories.reusableSections.getBySlug(
         site.id,
         target.slug,
@@ -264,6 +268,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       const updated = (
         await repositories.reusableSections.update(site.id, section.id, {
+          expectedSection: section,
           name: target.name,
           slug: target.slug,
           description: target.description ?? null,
@@ -377,6 +382,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    if (!isRestorableReusableSectionVersion(target)) return errorResponse(400, "VALIDATION_ERROR", "This historical section snapshot cannot be restored safely. Review or reimport a complete composition.", requestId);
+
     const slugConflict = getReusableSectionByIdOrSlug(site.id, target.slug);
     if (slugConflict && slugConflict.id !== section.id) {
       return errorResponse(
@@ -389,6 +396,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = updateReusableSection(site.id, section.id, {
+      expectedSection: section,
       name: target.name,
       slug: target.slug,
       description: target.description ?? null,
@@ -453,6 +461,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     );
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section version restore API error:", error);
     return errorResponse(
       500,

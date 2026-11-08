@@ -11,6 +11,7 @@ import {
   listReusableSections,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { readReusableSectionInventory, ReusableSectionInventoryError } from '@/lib/reusableSectionInventory';
 
 export const runtime = 'nodejs';
 
@@ -86,18 +87,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const result = await repositories.reusableSections.list({
+      const items = await readReusableSectionInventory(site.id, pagination => repositories.reusableSections.list({
         siteId: site.id,
         status,
         category: searchParams.get('category') || undefined,
         tag: searchParams.get('tag') || undefined,
         search: searchParams.get('search') || undefined,
-        limit: 1000,
-        offset: 0,
-      });
+        ...pagination,
+      }));
       const sections = ids
-        ? result.items.filter((section) => ids.has(section.id) || ids.has(section.slug))
-        : result.items;
+        ? items.filter((section) => ids.has(section.id) || ids.has(section.slug))
+        : items;
       const payload = exportPayload({ requestId, siteId: site.id, siteSlug: site.slug, sections: sections as unknown as Record<string, unknown>[] });
       return NextResponse.json(payload, {
         headers: {
@@ -124,6 +124,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof ReusableSectionInventoryError) return errorResponse(503, error.code, error.message, requestId);
     console.error('Admin reusable section export API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

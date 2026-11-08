@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonObject, Contact } from '@backy-cms/core';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import {
   getAdminAuthPolicySettings,
   validateAdminEmailDomainPolicy,
@@ -196,12 +196,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return errorResponse(409, 'CONTACT_NOT_QUALIFIED', 'Mark this contact qualified before promoting it.', requestId);
       }
 
+      if(!repositories.forms.withContactFollowup)return errorResponse(503,'VISITOR_PRIVACY_FENCE_UNAVAILABLE','Persisted contact privacy fencing is unavailable.',requestId);
+      return await repositories.forms.withContactFollowup(site.id,contact.id,async()=>{
       const email = normalizeEmail(contact.email);
       if (!email || !email.includes('@')) {
         return errorResponse(400, 'CONTACT_MISSING_EMAIL', 'Promoting a contact to user requires a valid contact email.', requestId);
       }
 
       const existingUser = await repositories.users.getByEmail(email);
+      const ownerError = requireAdminOwnerManagementAccess(userAccess, requestId, { currentRole: existingUser?.role, nextRole: role });
+      if (ownerError) return ownerError;
       if (!existingUser) {
         const emailPolicy = await validateAdminEmailDomainPolicy(email, authPolicySettings);
         if (!emailPolicy.ok) {
@@ -298,6 +302,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         user,
         invite,
       }, { status: existingUser ? 200 : 201 });
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -320,6 +325,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const existingUser = getAdminUserByEmail(email);
+    const ownerError = requireAdminOwnerManagementAccess(userAccess, requestId, { currentRole: existingUser?.role, nextRole: role });
+    if (ownerError) return ownerError;
     if (!existingUser) {
       const emailPolicy = await validateAdminEmailDomainPolicy(email, authPolicySettings);
       if (!emailPolicy.ok) {
@@ -407,6 +414,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       invite,
     }, { status: existingUser ? 200 : 201 });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This contact was fenced by local visitor erasure. No promotion was performed.',requestId);
     console.error('Admin contact promotion API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -1,6 +1,8 @@
+import { requireSiteVisitor, VisitorAccessError } from './visitor-auth/routes';
+import { visitorCookieName } from './visitor-auth/session';
+import type { BackySiteVisitor } from '@backy-cms/core';
 import type { Comment } from '@backy-cms/core';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from './adminAccess';
 import { isContentPublished } from '@backy-cms/core';
 import { getAdminPageById, getAdminBlogPostById } from './backyStore';
 import type { getRequiredDatabaseRepositories } from './repositoryRuntime';
@@ -23,15 +25,16 @@ export async function isCommentPubliclyVisible(
 }
 
 export const hasCommentCredentials = (request: NextRequest): boolean => Boolean(
-  request.headers.get('authorization') || request.headers.get('x-backy-admin-session') ||
+  (request.headers.get('authorization') && !/^Bearer bkv_/.test(request.headers.get('authorization') || '')) || request.headers.get('x-backy-admin-session') ||
   request.headers.get('x-backy-admin-key') || request.headers.get('x-api-key') ||
   request.cookies.get('backy_admin_session')?.value,
 );
 
-export const resolveCommentUserId = async (request: NextRequest, requestId: string): Promise<string | NextResponse> => {
-  if (!hasCommentCredentials(request)) return '';
-  const access = await requireAdminAccess(request, requestId, { permission: 'comments.view' });
-  return access instanceof NextResponse ? access : access.session?.user.id || '';
+export const resolveCommentVisitor = async (request: NextRequest, requestId: string, siteId: string): Promise<BackySiteVisitor | null | NextResponse> => {
+  const hasVisitorCredentials = request.headers.get('x-backy-visitor-session') || /^Bearer bkv_/.test(request.headers.get('authorization') || '') || request.cookies.get(visitorCookieName(siteId))?.value;
+  if (!hasVisitorCredentials) return null;
+  try { return await requireSiteVisitor(request, siteId); }
+  catch (error) { return NextResponse.json({ success: false, requestId, error: { code: error instanceof VisitorAccessError ? error.code : 'VISITOR_AUTH_UNAVAILABLE', message: error instanceof VisitorAccessError ? error.message : 'Visitor authentication unavailable.' } }, { status: error instanceof VisitorAccessError ? error.status : 503, headers: { 'cache-control': 'private, no-store' } }); }
 };
 
 // Allowlist visitor-visible fields: future moderation/identity fields stay private.

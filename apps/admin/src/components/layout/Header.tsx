@@ -128,7 +128,7 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
 
   const selectedSiteId = getSiteSelectionFromSearch(sites);
   const activeSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)),
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
@@ -647,7 +647,9 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
     ? `Signed in as ${accountDisplayName}. Role ${accountRoleLabel}. Permissions from ${accountPermissionSource}. Profile available. ${canOpenAccountSettings ? 'Settings available.' : accountSettingsDisabledReason} Sign out available.`
     : `Signed in as Guest. Role ${accountRoleLabel}. Permissions from ${accountPermissionSource}. Profile available. ${accountSettingsDisabledReason} Sign out unavailable: No signed-in admin session.`;
   const siteSwitchStatusId = 'header-site-switcher-status';
-  const siteSwitchStatus = `${activeSiteName} is active. Switch site from this control without signing out.`;
+  const siteSwitchStatus = activeSite
+    ? `${activeSiteName} is active. Switch site from this control without signing out.`
+    : `The selected site is unavailable. Choose an accessible site from this control.`;
   const siteDomainStatus = `Open domain and subdomain setup for ${activeSiteName}. ${activeSiteDomainLabel}.`;
 
   const loadGlobalSearch = useCallback(async () => {
@@ -1123,6 +1125,9 @@ export function Header({ mobileSidebarOpen, onSidebarToggle }: HeaderProps) {
                   data-action-state="ready"
                   data-action-status={siteSwitchStatus}
                 >
+                  {!activeSite && (
+                    <option value={activeSiteId} disabled>Unavailable site — choose a workspace</option>
+                  )}
                   {sites.map((site) => {
                     const optionSiteId = site.publicSiteId || site.id;
                     const optionMeta = getSitePrimaryHost(site, { fallbackSiteId: optionSiteId });

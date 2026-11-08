@@ -1,7 +1,11 @@
+import { withVisitorPrivacyDeletion, visitorPrivacyDeletionErrorResponse } from '@/lib/visitorPrivacyTeardown';
+import { formDefinitionWithVersion } from '@/lib/formDefinitionVersion';
+import type { BackyFormUpdateInput } from '@backy-cms/core';
 import { NextRequest, NextResponse } from 'next/server';
 import type { FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { deleteAdminForm, getFormById, getSiteByIdOrSlug, updateAdminForm } from '@/lib/backyStore';
+import { prepareFormAttachmentDeletion, finishFormAttachmentDeletion } from '@/lib/formAttachmentLifecycle';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { parseFormFields } from '@/lib/adminFormFieldPolicy';
 import { validateAdminFormCollectionTarget } from '@/lib/adminFormCollectionTargetPolicy';
@@ -149,9 +153,10 @@ const mergeSettingsPatch = (
   };
 };
 
-const normalizePatchInput = (body: Record<string, unknown>, actorId: string | null): Partial<FormDefinition> => {
-  const input: Partial<FormDefinition> = {
+const normalizePatchInput = (body: Record<string, unknown>, actorId: string | null): BackyFormUpdateInput => {
+  const input: BackyFormUpdateInput = {
     updatedBy: actorId,
+    ...(typeof body.expectedVersion === 'string' ? { expectedVersion: body.expectedVersion } : {}),
   };
   const settings = parseRecord<Record<string, unknown>>(body.settings) || {};
   const spamSettings = parseRecord<FormDefinition['spamSettings'] & Record<string, unknown>>(body.spamSettings);
@@ -206,7 +211,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
       }
 
-      return NextResponse.json({ success: true, requestId, data: { form }, form });
+      return NextResponse.json({ success: true, requestId, data: { form: formDefinitionWithVersion(form) }, form: formDefinitionWithVersion(form) });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -219,7 +224,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
-    return NextResponse.json({ success: true, requestId, data: { form }, form });
+    return NextResponse.json({ success: true, requestId, data: { form: formDefinitionWithVersion(form) }, form: formDefinitionWithVersion(form) });
   } catch (error) {
     console.error('Admin form detail API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
@@ -236,6 +241,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId, formId } = await params;
     const body = await parseJsonBody(request);
+    if ('expectedVersion' in body && (typeof body.expectedVersion !== 'string' || !/^form-v1:[a-f0-9]{64}$/.test(body.expectedVersion))) return errorResponse(400, 'INVALID_FORM_DEFINITION_VERSION', 'Reload the form before saving.', requestId);
     const configurationError = formConfigurationValidationError(body, requestId);
     if (configurationError) {
       return configurationError;
@@ -257,11 +263,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const existing = await repositories.forms.getById(site.id, formId);
-      if (!existing) {
-        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
-      }
-
+      if (!repositories.forms.withDefinitionWriteLock) return errorResponse(503, 'FORM_DEFINITION_WRITE_UNAVAILABLE', 'Guarded form storage is unavailable.', requestId);
+      let existing: FormDefinition | undefined;
+      const updated = await repositories.forms.withDefinitionWriteLock(site.id, formId, async (writer, current, scoped) => {
+        existing = current;
       const updateInput = input.settings
         ? {
           ...input,
@@ -271,12 +276,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           ),
         }
         : input;
-      if ('collectionTarget' in updateInput) {
+      if ('collectionTarget' in updateInput || 'fields' in updateInput) {
         const collectionTargetValidation = await validateAdminFormCollectionTarget({
           siteId: site.id,
-          collectionTarget: updateInput.collectionTarget,
+          collectionTarget: updateInput.collectionTarget === undefined ? existing.collectionTarget : updateInput.collectionTarget,
           formFields: updateInput.fields || existing.fields,
-          repositories,
+          repositories: scoped,
         });
         if (!collectionTargetValidation.ok) {
           return errorResponse(
@@ -288,7 +293,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
         updateInput.collectionTarget = collectionTargetValidation.collectionTarget;
       }
-      const updated = (await repositories.forms.update(site.id, formId, updateInput)).item;
+        return (await writer.update(site.id, formId, updateInput)).item;
+      });
+      if (updated instanceof NextResponse) return updated;
       await recordAdminAudit({
         repositories,
         siteId: site.id,
@@ -304,7 +311,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
         requestId,
       });
-      return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
+      return NextResponse.json({ success: true, requestId, data: { form: formDefinitionWithVersion(updated) }, form: formDefinitionWithVersion(updated) });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -317,10 +324,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
-    if ('collectionTarget' in input) {
+    if ('collectionTarget' in input || 'fields' in input) {
       const collectionTargetValidation = await validateAdminFormCollectionTarget({
         siteId: site.id,
-        collectionTarget: input.collectionTarget,
+        collectionTarget: input.collectionTarget === undefined ? existing.collectionTarget : input.collectionTarget,
         formFields: input.fields || existing.fields,
       });
       if (!collectionTargetValidation.ok) {
@@ -353,8 +360,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
 
-    return NextResponse.json({ success: true, requestId, data: { form: updated }, form: updated });
+    return NextResponse.json({ success: true, requestId, data: { form: formDefinitionWithVersion(updated) }, form: formDefinitionWithVersion(updated) });
   } catch (error) {
+    if ((error as any)?.code === 'FORM_DEFINITION_CONFLICT') return errorResponse(409, 'FORM_DEFINITION_CONFLICT', 'The form changed. Reload before saving.', requestId);
+    if ((error as any)?.code === 'FORM_NOT_FOUND') return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found.', requestId);
+    if ((error as any)?.code === 'FORM_DEFINITION_WRITE_UNAVAILABLE') return errorResponse(503, 'FORM_DEFINITION_WRITE_UNAVAILABLE', 'Guarded form storage is unavailable.', requestId);
     console.error('Admin form update API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -367,6 +377,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     return access;
   }
 
+  let logicalDeleted = false;
+  let restoreActive: (() => Promise<void>) | null = null;
+  const pendingResponse = () => NextResponse.json({ success: true, requestId, data: { deleted: true, cleanupPending: true, retry: 'Repeat this authorized DELETE to resume private attachment cleanup.' }, deleted: true, cleanupPending: true }, { status: 202 });
   try {
     const { siteId, formId } = await params;
     if (!shouldUseDemoStoreFallback()) {
@@ -376,12 +389,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
+      return await withVisitorPrivacyDeletion(repositories, site.id, formId, async () => {
       const existing = await repositories.forms.getById(site.id, formId);
       if (!existing) {
-        return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+        logicalDeleted = true;
+        const cleanup = await finishFormAttachmentDeletion(site.id, formId, repositories);
+        if (!cleanup.found) return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+        return cleanup.cleanupPending ? pendingResponse() : NextResponse.json({ success: true, requestId, data: { deleted: true, cleanupPending: false }, deleted: true, cleanupPending: false });
       }
-
-      await repositories.forms.delete(site.id, formId);
+      if (existing.siteId !== site.id) return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      if (existing.isActive) {
+        restoreActive = async () => { await repositories.forms.update(site.id, existing.id, { isActive: true }); };
+        await repositories.forms.update(site.id, existing.id, { isActive: false });
+      }
+      const cleanupPrepared = await prepareFormAttachmentDeletion(site.id, existing.id, repositories);
+      if (!await repositories.forms.delete(site.id, existing.id)) throw new Error('Form deletion failed');
+      logicalDeleted = true;
       await recordAdminAudit({
         repositories,
         siteId: site.id,
@@ -392,10 +415,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         metadata: {
           title: existing.title || existing.name || existing.id,
           fieldCount: existing.fields.length,
+          attachmentCleanupQueued: cleanupPrepared,
         },
         requestId,
       });
-      return NextResponse.json({ success: true, requestId, data: { deleted: true }, deleted: true });
+      const cleanup = cleanupPrepared ? await finishFormAttachmentDeletion(site.id, existing.id, repositories) : { cleanupPending: false };
+      return cleanup.cleanupPending ? pendingResponse() : NextResponse.json({ success: true, requestId, data: { deleted: true, cleanupPending: false }, deleted: true, cleanupPending: false });
+      });
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -405,13 +431,22 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const existing = getFormById(site.id, formId);
     if (!existing) {
-      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      logicalDeleted = true;
+      const cleanup = await finishFormAttachmentDeletion(site.id, formId, null);
+      if (!cleanup.found) return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      return cleanup.cleanupPending ? pendingResponse() : NextResponse.json({ success: true, requestId, data: { deleted: true, cleanupPending: false }, deleted: true, cleanupPending: false });
     }
-
-    const deleted = deleteAdminForm(site.id, formId);
+    if (existing.siteId !== site.id) return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+    if (existing.isActive) {
+      restoreActive = async () => { if (!updateAdminForm(site.id, existing.id, { isActive: true })) throw new Error('Form recovery failed'); };
+      if (!updateAdminForm(site.id, existing.id, { isActive: false })) throw new Error('Form deactivation failed');
+    }
+    const cleanupPrepared = await prepareFormAttachmentDeletion(site.id, existing.id, null);
+    const deleted = deleteAdminForm(site.id, existing.id);
     if (!deleted) {
-      return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
+      throw new Error('Form deletion failed');
     }
+    logicalDeleted = true;
     await recordAdminAudit({
       siteId: site.id,
       entity: 'form',
@@ -421,13 +456,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       metadata: {
         title: existing.title || existing.name || existing.id,
         fieldCount: existing.fields.length,
+        attachmentCleanupQueued: cleanupPrepared,
       },
       requestId,
     });
 
-    return NextResponse.json({ success: true, requestId, data: { deleted: true }, deleted: true });
+    const cleanup = cleanupPrepared ? await finishFormAttachmentDeletion(site.id, existing.id, null) : { cleanupPending: false };
+    return cleanup.cleanupPending ? pendingResponse() : NextResponse.json({ success: true, requestId, data: { deleted: true, cleanupPending: false }, deleted: true, cleanupPending: false });
   } catch (error) {
-    console.error('Admin form delete API error:', error);
-    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
+    const privacyError = visitorPrivacyDeletionErrorResponse(error, requestId, 'form'); if (privacyError) return privacyError;
+    if (logicalDeleted) return pendingResponse();
+    if (restoreActive) {
+      try { await restoreActive(); } catch {
+        return errorResponse(503, 'FORM_DELETE_RECOVERY_REQUIRED', 'The form was not deleted and remains deactivated. Restore repository access, then reactivate the form or retry this authorized DELETE.', requestId);
+      }
+    }
+    return errorResponse(503, 'FORM_ATTACHMENT_CLEANUP_UNAVAILABLE', 'The form was not deleted. Unable to verify or persist private attachment cleanup; retry this authorized DELETE.', requestId);
   }
 }

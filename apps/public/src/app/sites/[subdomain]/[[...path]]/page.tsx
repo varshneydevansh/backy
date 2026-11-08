@@ -39,6 +39,7 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { buildCollectionItemPath, buildCollectionListPath } from '@/lib/collectionRoutes';
 import { resolveSiteRoute, type ResolvedSiteRoute } from '@/lib/routeResolver';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
+import { withPublicDataFigureDatasets } from '@/lib/publicDataFigureHydration';
 import {
     canonicalPathForRepositoryPage,
     isRepositoryContentPubliclyReadable,
@@ -241,6 +242,7 @@ function repositoryPageContentWithContext(page: BackyPage, dataSource?: RenderDa
         elements: resolveElementDataBindings(page.siteId, page.content.elements, { dataSource }) as unknown as PageContent['elements'],
         canvasSize: isRecord(page.content.metadata?.canvasSize)
             ? {
+                ...page.content.metadata.canvasSize,
                 width: Number(page.content.metadata.canvasSize.width) || 1200,
                 height: Number(page.content.metadata.canvasSize.height) || 900,
             }
@@ -558,7 +560,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
             return { title: 'Page Not Found' };
         }
 
-        const page = await getRepositoryPage(hostedSite, route.resource.slug, previewToken);
+        const page = await getRepositoryPage(hostedSite, route.locale?.basePath || route.path, previewToken);
         if (!page) {
             return { title: 'Page Not Found' };
         }
@@ -649,7 +651,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
         return { title: 'Page Not Found' };
     }
 
-    const page = await getPage(site.id, route.resource.slug, previewToken);
+    const page = await getPage(site.id, route.locale?.basePath || route.path, previewToken);
     if (!page) {
         return { title: 'Page Not Found' };
     }
@@ -735,7 +737,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
             notFound();
         }
 
-        const page = await getRepositoryPage(hostedSite, route.resource.slug, previewToken);
+        const page = await getRepositoryPage(hostedSite, route.locale?.basePath || route.path, previewToken);
         if (!page) {
             notFound();
         }
@@ -759,7 +761,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
         return (
             <>
                 <PageRenderer
-                    content={repositoryPageContentWithContext(page, dataSource)}
+                    content={repositoryPageContentWithContext(page, await withPublicDataFigureDatasets(site.id, page.content, hostedSite.repositories.collections, dataSource))}
                     theme={repositoryTheme(site)}
                     fontAssets={await getRepositoryFontAssets(hostedSite)}
                     siteId={site.id}
@@ -787,7 +789,7 @@ export default async function SitePage({ params, searchParams }: PageProps) {
 
     const fontAssets = getHostedFontAssets(site.id);
     if (route.type === 'page') {
-        const page = await getPage(site.id, route.resource.slug, previewToken);
+        const page = await getPage(site.id, route.locale?.basePath || route.path, previewToken);
         if (!page) {
             notFound();
         }

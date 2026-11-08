@@ -1,4 +1,9 @@
+import { FormDesignHistoryPanel } from '@/components/forms/FormDesignHistoryPanel';
+import { FormTemplatePackImportPanel } from '@/components/forms/FormTemplatePackImportPanel';
+import { ImportedFormLayoutEditor } from '@/components/forms/ImportedFormLayoutEditor';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { getCompleteFormWithSubmissions } from '@/lib/formManagementInventory';
+import { FormSubmissionAttachments, submissionAttachments } from '@/components/forms/FormSubmissionAttachments';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -26,7 +31,6 @@ import {
 import {
   getAdminApiBase,
   getSiteFrontendDesign,
-  getFormWithSubmissions,
   getUserPermissions,
   applyFormConsentRetention,
   createFormEmbedBlock,
@@ -38,8 +42,10 @@ import {
   listFormsWithMetadata,
   createForm,
   deleteForm,
+  listFormAttachmentCleanup,
   retryFormEmailDelivery,
   retryFormWebhookDelivery,
+  recordFormDeliveryReview,
   updateForm,
   updateFormSubmission,
   type Collection,
@@ -54,12 +60,16 @@ import {
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import type { SiteSettings } from '@backy-cms/core';
-import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { buildFormSubmissionExample } from '@backy-cms/core';
+import { adminPermissionReason } from '@/lib/adminPermissionUi';
+import { isFormsPermissionAllowedForSite, type FormsPermissionKey } from '@/lib/formsPermissions';
+import { createWorkspaceLoadAuthority } from '@/lib/workspaceLoadAuthority';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { DeliveryReviewDialog, DeliveryReviewBadge, isDeliveryReviewable } from '@/components/delivery/DeliveryReviewDialog';
 import { Button } from '@/components/ui/Button';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -74,7 +84,6 @@ type FormSourceFilter = 'all' | 'page' | 'blog' | 'embedded';
 type FormStateFilter = 'all' | 'active' | 'inactive';
 type FormDestinationFilter = 'all' | 'contacts' | 'collections' | 'inbox-only';
 type FormReadinessFilter = 'all' | 'ready' | 'needs-work';
-type FormsPermissionKey = 'forms.view' | 'forms.create' | 'forms.edit' | 'forms.manage' | 'forms.export' | 'forms.delete' | 'collections.view' | 'activity.export';
 type FormLaunchReadinessStatus = 'ready' | 'attention' | 'blocked';
 type FormPageTemplateSearch = {
   siteId: string;
@@ -157,6 +166,8 @@ interface FormLaunchReadinessHandoff {
     succeeded: number;
     failed: number;
     queued: number;
+    pending?: number;
+    uncertain?: number;
   };
   consent: {
     fields: number;
@@ -177,6 +188,7 @@ interface FormLaunchReadinessHandoff {
     excludedFields: string[];
   };
   samplePayload: Record<string, unknown> | null;
+  submissionTransport: ReturnType<typeof buildFormSubmissionExample>['submissionTransport'] | null;
   checks: FormLaunchReadinessCheck[];
   actionPlan: FormLaunchActionPlan;
   nextSteps: string[];
@@ -930,16 +942,23 @@ function FormsRoute() {
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null);
   const [isRetryingDeliveryId, setIsRetryingDeliveryId] = useState<string | null>(null);
+  const [deliveryReview, setDeliveryReview] = useState<{ event: FormDeliveryEvent; formId: string; contextKey: string } | null>(null);
   const [isApplyingConsentRetention, setIsApplyingConsentRetention] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [isCloningForm, setIsCloningForm] = useState(false);
   const [isCreatingEmbedBlock, setIsCreatingEmbedBlock] = useState(false);
   const [createdEmbedSectionId, setCreatedEmbedSectionId] = useState<string | null>(null);
   const [isSavingForm, setIsSavingForm] = useState(false);
+  const [isRestoringFormDesign, setIsRestoringFormDesign] = useState(false);
+  const [formLayoutDirty, setFormLayoutDirty] = useState(false);
+  const [isSavingFormLayout, setIsSavingFormLayout] = useState(false);
   const [isDeletingFormId, setIsDeletingFormId] = useState<string | null>(null);
   const [pendingDeleteForm, setPendingDeleteForm] = useState<FormDefinition | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingAttachmentCleanup, setPendingAttachmentCleanup] = useState<Array<{ siteId: string; formId: string; title: string }>>([]);
+  const [isRetryingAttachmentCleanup, setIsRetryingAttachmentCleanup] = useState(false);
+  const [attachmentCleanupError, setAttachmentCleanupError] = useState<string | null>(null);
   const [noticeCanvasAction, setNoticeCanvasAction] = useState<FormCanvasNoticeAction | null>(null);
   const [preparedQuickCreate, setPreparedQuickCreate] = useState<FormsQuickCreateIntent | null>(null);
   const handledQuickCreateRef = useRef('');
@@ -952,34 +971,57 @@ function FormsRoute() {
   const [formsPostgresCommandOptions, setFormsPostgresCommandOptions] = useState<FormsPostgresCertificationCommandOptions>(
     DEFAULT_FORMS_POSTGRES_CERTIFICATION_COMMAND_OPTIONS,
   );
-  const canUseFormsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseFormsRoleDefaults;
-  const isFormsPermissionAllowed = (key: FormsPermissionKey) => (
-    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, FORMS_PERMISSION_ROLE_DEFAULTS)
-    || (canUseFormsRoleDefaults && Boolean(currentAdmin && FORMS_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
-  );
-  const canViewForms = isFormsPermissionAllowed('forms.view');
-  const canCreateForms = isFormsPermissionAllowed('forms.create');
-  const canEditForms = isFormsPermissionAllowed('forms.edit');
-  const canManageForms = isFormsPermissionAllowed('forms.manage');
-  const canExportForms = isFormsPermissionAllowed('forms.export');
-  const canDeleteForms = isFormsPermissionAllowed('forms.delete');
-  const canViewCollections = isFormsPermissionAllowed('collections.view');
-  const canExportActivity = isFormsPermissionAllowed('activity.export');
-  const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const createPermissionTitle = canCreateForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const editPermissionTitle = canEditForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS);
-  const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);
-  const isFormsBusy = isLoading || isFormMutationBusy;
-
   const activeSite = useMemo(
     () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const isPermissionMatrixPending = isPermissionsLoading;
+  const isFormsPermissionAllowed = (key: FormsPermissionKey) => (
+    isFormsPermissionAllowedForSite(permissionMatrix, currentAdmin?.id, activeSiteId, key, isPermissionsLoading)
+  );
+  const canViewForms = isFormsPermissionAllowed('forms.view');
+  const canCreateForms = isFormsPermissionAllowed('forms.create');
+  const canEditForms = isFormsPermissionAllowed('forms.edit');
+  const canManageForms = isFormsPermissionAllowed('forms.manage');
+  const canReviewDelivery = currentAdmin?.role === 'owner' && canManageForms;
+  const deliveryReviewContext = JSON.stringify([activeSiteId, currentAdmin?.id, currentAdmin?.role, canReviewDelivery, routeSearch.siteId, selectedFormId]);
+  useEffect(() => { setDeliveryReview(null); }, [deliveryReviewContext]);
+  const canExportForms = isFormsPermissionAllowed('forms.export');
+  const canDeleteForms = isFormsPermissionAllowed('forms.delete');
+  const canViewCollections = isFormsPermissionAllowed('collections.view');
+  const canExportActivity = isFormsPermissionAllowed('activity.export');
+  const formLoadAuthority = useRef(createWorkspaceLoadAuthority());
+  const deferredFormLoad = useRef(false);
+  // A route/site/user transition invalidates staged reads before effects run.
+  formLoadAuthority.current.setContext(JSON.stringify([
+    activeSiteId, currentAdmin?.id, routeSearch.siteId,
+    canViewForms, canViewCollections, canExportActivity, isPermissionMatrixPending,
+  ]));
+  const viewPermissionTitle = canViewForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.view', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const createPermissionTitle = canCreateForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.create', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const editPermissionTitle = canEditForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.edit', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const managePermissionTitle = canManageForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const exportPermissionTitle = canExportForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.export', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const deletePermissionTitle = canDeleteForms ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'forms.delete', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const formSaveContext = JSON.stringify([activeSiteId, selectedFormId, routeSearch.siteId, routeSearch.formId, currentAdmin?.id, canEditForms]);
+  const formSaveAuthority = useRef({ context: formSaveContext, epoch: 0 });
+  if (formSaveAuthority.current.context !== formSaveContext) { formSaveAuthority.current.context = formSaveContext; formSaveAuthority.current.epoch++; }
+  useEffect(() => { setIsSavingForm(false); setIsRestoringFormDesign(false); setIsSavingFormLayout(false); setFormLayoutDirty(false); }, [formSaveContext]);
+  const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || isRestoringFormDesign || isSavingFormLayout || Boolean(isDeletingFormId);
+  const isFormsBusy = isLoading || isFormMutationBusy;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!canDeleteForms || isPermissionsLoading) return;
+    setAttachmentCleanupError(null);
+    void listFormAttachmentCleanup(activeSiteId).then((jobs) => {
+      if (!cancelled) setPendingAttachmentCleanup((current) => [...current.filter((job) => job.siteId !== activeSiteId), ...jobs.map((job) => ({ siteId: activeSiteId, formId: job.formId, title: job.formId }))]);
+    }).catch((cleanupError) => {
+      if (!cancelled) setAttachmentCleanupError(cleanupError instanceof Error ? cleanupError.message : 'Unable to read private file cleanup status');
+    });
+    return () => { cancelled = true; };
+  }, [activeSiteId, canDeleteForms, isPermissionsLoading]);
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
@@ -1071,9 +1113,9 @@ function FormsRoute() {
       ? 'This form is owned by a page or blog canvas. Open the source canvas to change fields.'
       : !canEditForms
         ? editPermissionTitle || 'Your account cannot edit forms.'
-        : formBuilderBusyDisabledReason;
+        : formBuilderBusyDisabledReason || (formLayoutDirty ? 'Save the captured layout before editing form fields.' : '');
   const formBuilderResetDisabledReason = formBuilderEditDisabledReason || (!formDraftDirty ? 'No builder changes to reset.' : '');
-  const formBuilderSaveDisabledReason = formBuilderEditDisabledReason || (!formDraftDirty ? 'Change the standalone form before saving.' : '');
+  const formBuilderSaveDisabledReason = formBuilderEditDisabledReason || (formLayoutDirty ? 'Save the captured layout before saving form fields.' : '') || (!formDraftDirty ? 'Change the standalone form before saving.' : '');
   const formBuilderActionStatus = [
     formBuilderResetDisabledReason ? `Reset unavailable: ${formBuilderResetDisabledReason}` : 'Reset available.',
     formBuilderSaveDisabledReason ? `Save form unavailable: ${formBuilderSaveDisabledReason}` : 'Save form available.',
@@ -1138,16 +1180,11 @@ function FormsRoute() {
     () => selectedFormSamplePayload ? JSON.stringify(selectedFormSamplePayload, null, 2) : '',
     [selectedFormSamplePayload],
   );
-  const selectedFormCurlExample = useMemo(
-    () => selectedForm && selectedFormSubmitUrl && selectedFormSamplePayloadText
-      ? [
-          `curl -X POST ${toSingleQuotedShellString(selectedFormSubmitUrl)}`,
-          "  -H 'content-type: application/json'",
-          `  --data ${toSingleQuotedShellString(selectedFormSamplePayloadText)}`,
-        ].join(' \\\n')
-      : '',
-    [selectedForm, selectedFormSamplePayloadText, selectedFormSubmitUrl],
+  const selectedFormSubmissionExample = useMemo(
+    () => selectedForm && selectedFormSamplePayload ? buildFormSubmissionExample({ fields: selectedForm.fields, payload: selectedFormSamplePayload, submitUrl: selectedFormSubmitUrl }) : null,
+    [selectedForm, selectedFormSamplePayload, selectedFormSubmitUrl],
   );
+  const selectedFormCurlExample = selectedFormSubmissionExample?.curl || '';
   const selectedFormReadiness = useMemo<FormReadinessSummary>(() => {
     if (!selectedForm) {
       return {
@@ -1158,6 +1195,7 @@ function FormsRoute() {
     }
 
     const hasFields = selectedForm.fields.length > 0;
+    const requiresIdentity = formRequiresContactIdentity(selectedForm);
     const hasRequiredIdentity = formHasRequiredIdentity(selectedForm);
     const hasSpamGuard = formHasSpamGuard(selectedForm);
     const hasDestination = formHasDestination(selectedForm);
@@ -1177,10 +1215,12 @@ function FormsRoute() {
         ready: hasFields,
       },
       {
-        label: 'Lead identity',
-        detail: hasRequiredIdentity
-          ? 'Email or phone field is available for contact workflows.'
-          : 'Add email or phone if this should create contacts.',
+        label: 'Contact identity',
+        detail: !requiresIdentity
+          ? 'Inbox and collection submissions do not require contact identity.'
+          : hasRequiredIdentity
+            ? 'A current email or phone field is mapped for contact sharing.'
+            : 'Map an email or phone field before relying on contact sharing.',
         ready: hasRequiredIdentity,
       },
       {
@@ -1401,6 +1441,8 @@ function FormsRoute() {
     failed: selectedDeliveryEvents.filter((event) => event.status === 'failed').length,
     succeeded: selectedDeliveryEvents.filter((event) => event.status === 'succeeded').length,
     queued: selectedDeliveryEvents.filter((event) => event.status === 'queued').length,
+    pending: selectedDeliveryEvents.filter((event) => event.status === 'pending').length,
+    uncertain: selectedDeliveryEvents.filter((event) => event.status === 'uncertain').length,
   }), [selectedDeliveryEvents]);
   const filteredSubmissions = useMemo(
     () => selectedSubmissions.filter((submission) => {
@@ -1945,6 +1987,7 @@ function FormsRoute() {
         validation: field.validation,
       })),
       samplePayload: selectedFormSamplePayload,
+      submissionTransport: selectedFormSubmissionExample?.submissionTransport,
       curl: selectedFormCurlExample,
     } : null,
     forms: filteredForms.map((form) => {
@@ -2085,6 +2128,7 @@ function FormsRoute() {
       };
     }
 
+    setPermissionMatrix(null);
     setIsPermissionsLoading(true);
     getUserPermissions(currentAdmin.id)
       .then((matrix) => {
@@ -2110,9 +2154,13 @@ function FormsRoute() {
     };
   }, [currentAdmin?.id]);
 
+  const formImportSiteRef = useRef(activeSiteId);
+  formImportSiteRef.current = activeSiteId;
   const loadForms = async () => {
-    if (isFormsBusy) return;
     if (!canViewForms) {
+      formLoadAuthority.current.invalidate();
+      deferredFormLoad.current = false;
+      setIsLoading(false);
       setForms([]);
       setCollections([]);
       setInboxByForm({});
@@ -2125,17 +2173,30 @@ function FormsRoute() {
       return;
     }
 
+    if (isFormMutationBusy) {
+      deferredFormLoad.current = true;
+      return;
+    }
+    deferredFormLoad.current = false;
+
     setIsLoading(true);
+    setForms([]);
+    setCollections([]);
+    setDeliveryEventsByForm({});
+    setFormsAnalytics(null);
+    setFormsAuditLogs([]);
+    setInboxByForm({});
     setError(null);
     setNotice(null);
 
-    try {
+    await formLoadAuthority.current.run(async (isCurrent) => {
       const [loadedFormsResult, loadedCollections, loadedAnalytics, loadedAuditResult] = await Promise.all([
         listFormsWithMetadata(activeSiteId),
         canViewCollections ? listCollections(activeSiteId).catch(() => []) : Promise.resolve([]),
         getFormsAnalytics(activeSiteId, { days: 14 }).catch(() => null),
         canExportActivity ? listAdminAuditLogs({ siteId: activeSiteId, limit: 40 }).catch(() => null) : Promise.resolve(null),
       ]);
+      if (!isCurrent()) return;
       const loadedForms = loadedFormsResult.forms;
       const nextInbox: Record<string, FormInbox> = Object.fromEntries(
         loadedForms.map((form): [string, FormInbox] => [form.id, {
@@ -2158,11 +2219,12 @@ function FormsRoute() {
 
       if (selectedDetailForm) {
         const [selectedDetail, selectedDeliveryEvents] = await Promise.all([
-          getFormWithSubmissions(activeSiteId, selectedDetailForm.id, { limit: 100 }).catch(() => null),
+          getCompleteFormWithSubmissions(activeSiteId, selectedDetailForm.id),
           listFormDeliveryEvents(activeSiteId, selectedDetailForm.id, { limit: 50 })
             .then((result) => result.events)
             .catch(() => []),
         ]);
+        if (!isCurrent()) return;
         setInboxByForm((current) => ({
           ...current,
           [selectedDetailForm.id]: {
@@ -2177,14 +2239,12 @@ function FormsRoute() {
         }));
       }
 
-      setIsLoading(false);
-
       const remainingForms = selectedDetailForm
         ? loadedForms.filter((form) => form.id !== selectedDetailForm.id)
         : loadedForms;
       const inboxPairs = await Promise.all(
         remainingForms.map(async (form) => {
-          const detail = await getFormWithSubmissions(activeSiteId, form.id, { limit: 100 }).catch(() => null);
+          const detail = await getCompleteFormWithSubmissions(activeSiteId, form.id);
           return [form.id, {
             form: detail?.form || form,
             submissions: detail?.submissions.data || [],
@@ -2202,10 +2262,11 @@ function FormsRoute() {
           }
         }),
       );
+      if (!isCurrent()) return;
       setInboxByForm((current) => ({ ...current, ...Object.fromEntries(inboxPairs) }));
       setDeliveryEventsByForm((current) => ({ ...current, ...Object.fromEntries(deliveryPairs) }));
-    } catch (loadError) {
-      if (isAdminPermissionDeniedError(loadError)) {
+    }, {
+      error: (loadError) => {
         setForms([]);
         setCollections([]);
         setInboxByForm({});
@@ -2213,11 +2274,10 @@ function FormsRoute() {
         setFormsAnalytics(null);
         setFormsPersistenceCertification(null);
         setFormsAuditLogs([]);
-      }
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load forms');
-    } finally {
-      setIsLoading(false);
-    }
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load forms');
+      },
+      finish: () => setIsLoading(false),
+    });
   };
 
   const openFormPageTemplate = (template: PageTemplateHandoff) => {
@@ -2300,6 +2360,7 @@ function FormsRoute() {
 
     try {
       const created = await createForm(activeSiteId, {
+        frontendDesignTemplateId: template.id,
         name: `${normalizeFieldKey(template.id) || 'frontend-form'}-${Date.now().toString(36)}`,
         title: blueprint.title,
         description: blueprint.description,
@@ -2485,11 +2546,44 @@ function FormsRoute() {
   ]);
 
   useEffect(() => {
+    setForms([]);
+    setCollections([]);
+    setInboxByForm({});
+    setDeliveryEventsByForm({});
+    setFormsAnalytics(null);
+    setFormsPersistenceCertification(null);
+    setFormsAuditLogs([]);
+    setSelectedFormId(routeSearch.formId || null);
+    setSelectedSubmissionIds([]);
+    setFormDraft(null);
+    setFormDraftSubmitted(false);
+    setPendingDeleteForm(null);
+    setCreatedEmbedSectionId(null);
+    setNoticeCanvasAction(null);
+    setPreparedQuickCreate(null);
+    setError(null);
+    setNotice(null);
+    setIsLoading(false);
+    // Form selection is read for the transition only; it does not reset drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSiteId, currentAdmin?.id, canViewForms]);
+
+  useEffect(() => () => formLoadAuthority.current.invalidate(), []);
+
+  useEffect(() => {
     if (!isPermissionMatrixPending) {
       void loadForms();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId, canViewForms, isPermissionMatrixPending]);
+  }, [activeSiteId, currentAdmin?.id, routeSearch.siteId, canViewForms, canViewCollections, canExportActivity, isPermissionMatrixPending]);
+
+  useEffect(() => {
+    if (!isFormMutationBusy && !isPermissionMatrixPending && deferredFormLoad.current) {
+      void loadForms();
+    }
+    // Replay only reads deferred by a mutation, preserving unrelated builder drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFormMutationBusy, isPermissionMatrixPending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2815,7 +2909,7 @@ function FormsRoute() {
   };
 
   const saveFormDraft = async () => {
-    if (isFormsBusy || !selectedForm || !formDraft || !selectedFormIsStandalone) return;
+    if (isFormsBusy || formLayoutDirty || !selectedForm || !formDraft || !selectedFormIsStandalone) return;
     if (!canEditForms) {
       setError(editPermissionTitle || 'Your account cannot update forms.');
       setNotice(null);
@@ -2847,12 +2941,16 @@ function FormsRoute() {
       return;
     }
 
+    const saveEpoch = formSaveAuthority.current.epoch;
+    const saveIsCurrent = () => formSaveAuthority.current.epoch === saveEpoch;
     setIsSavingForm(true);
     setError(null);
     setNotice(null);
 
     try {
-      const updated = await updateForm(activeSiteId, selectedForm.id, payload);
+      const updated = await updateForm(activeSiteId, selectedForm.id, { ...payload, expectedVersion: selectedForm.version });
+      if (!saveIsCurrent()) return;
+      if (updated.id !== selectedForm.id || updated.siteId !== activeSiteId) throw Error('Form save returned a different workspace. Reload before continuing.');
       setForms((current) => current.map((form) => (form.id === updated.id ? updated : form)));
       setInboxByForm((current) => {
         const inbox = current[updated.id];
@@ -2870,9 +2968,9 @@ function FormsRoute() {
       setFormDraftSubmitted(false);
       setNotice('Form settings and fields saved.');
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
+      if (saveIsCurrent()) setError(saveError instanceof Error ? saveError.message : 'Unable to save form');
     } finally {
-      setIsSavingForm(false);
+      if (saveIsCurrent()) setIsSavingForm(false);
     }
   };
 
@@ -2965,7 +3063,8 @@ function FormsRoute() {
     setNotice(null);
 
     try {
-      await deleteForm(activeSiteId, deletedForm.id);
+      const deletion = await deleteForm(activeSiteId, deletedForm.id);
+      if (deletion.cleanupPending) setPendingAttachmentCleanup((current) => [...current.filter((job) => job.siteId !== activeSiteId || job.formId !== deletedForm.id), { siteId: activeSiteId, formId: deletedForm.id, title: deletedForm.title || deletedForm.name }]);
       setForms((current) => current.filter((form) => form.id !== deletedForm.id));
       setInboxByForm((current) => {
         const rest = { ...current };
@@ -2985,7 +3084,7 @@ function FormsRoute() {
         status: undefined,
         submissionQ: undefined,
       });
-      setNotice(`${deletedForm.title || deletedForm.name} deleted.`);
+      setNotice(deletion.cleanupPending ? `${deletedForm.title || deletedForm.name} deleted. Private attachment cleanup is pending; retry below.` : `${deletedForm.title || deletedForm.name} deleted.`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete form');
     } finally {
@@ -3035,13 +3134,13 @@ function FormsRoute() {
 
     try {
       const result = channel === 'email'
-        ? await retryFormEmailDelivery(activeSiteId, selectedForm.id, event.submissionId)
-        : await retryFormWebhookDelivery(activeSiteId, selectedForm.id, event.submissionId);
+        ? await retryFormEmailDelivery(activeSiteId, selectedForm.id, event.submissionId, event.id)
+        : await retryFormWebhookDelivery(activeSiteId, selectedForm.id, event.submissionId, event.id);
       await refreshFormDeliveryEvents(selectedForm.id);
-      if (result.delivery.status === 'succeeded') {
+      if (result.delivery.status === 'succeeded' && result.delivery.durableState !== 'pending' && !result.delivery.completionWarnings?.length) {
         setNotice(`${channel === 'email' ? 'Email' : 'Webhook'} retry succeeded for ${event.submissionId}.`);
       } else {
-        setError(result.delivery.error || `${channel === 'email' ? 'Email' : 'Webhook'} retry finished with ${result.delivery.status}.`);
+        setError(result.delivery.durableState==='pending'?'Provider result observed, but its durable outcome is pending. Do not replay; investigate the retained attempt.':result.delivery.completionWarnings?.length?'Delivery completed with follow-up warnings. Its retained attempt must not be replayed.':result.delivery.error || `${channel === 'email' ? 'Email' : 'Webhook'} retry finished with ${result.delivery.status}.`);
       }
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : `Unable to retry ${channel === 'email' ? 'email' : 'webhook'} delivery`);
@@ -3714,6 +3813,24 @@ function FormsRoute() {
           </div>
         </div>
       )}
+      {pendingAttachmentCleanup.filter((job) => job.siteId === activeSiteId).map((job) => (
+        <div key={job.formId} className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>Private file cleanup pending for {job.title}. Referenced files stay protected. Form ID: <span className="font-mono">{job.formId}</span></span>
+          <Button size="sm" variant="outline" disabled={!canDeleteForms || isRetryingAttachmentCleanup} onClick={async () => {
+            setIsRetryingAttachmentCleanup(true);
+            setError(null);
+            try {
+              const result = await deleteForm(job.siteId, job.formId);
+              if (!result.cleanupPending) {
+                setPendingAttachmentCleanup((current) => current.filter((candidate) => candidate.siteId !== job.siteId || candidate.formId !== job.formId));
+                setNotice(`Private attachment cleanup completed for ${job.title}.`);
+              } else setNotice(`Cleanup remains pending for ${job.title}. Remove surviving references or restore private storage, then retry.`);
+            } catch (retryError) { setError(retryError instanceof Error ? retryError.message : 'Unable to retry private attachment cleanup'); }
+            finally { setIsRetryingAttachmentCleanup(false); }
+          }} aria-label={`Retry private file cleanup for ${job.title}`}>Retry file cleanup</Button>
+        </div>
+      ))}
+      {attachmentCleanupError && <div role="status" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{attachmentCleanupError}</div>}
 
       <span id={formsCreateActionStatusId} className="sr-only" data-testid="forms-create-action-status" aria-live="polite">
         {formsCreateActionStatus}
@@ -4770,6 +4887,7 @@ function FormsRoute() {
           }
         />
         <PanelContent>
+          <FormTemplatePackImportPanel key={activeSiteId} siteId={activeSiteId} canImport={canCreateForms} onApplied={async data => { if(data.siteId!==formImportSiteRef.current)return; await loadForms(); if(data.siteId!==formImportSiteRef.current)return; const first=data.forms[0]?.form; if(first){setSelectedFormId(first.id);setFormDraft(cloneFormDefinition(first));} }} />
           {frontendFormTemplates.length > 0 || frontendDesignLoading || frontendDesignError ? (
             <div
               className="mb-5 rounded-lg border border-teal-200 bg-teal-50/50 p-4"
@@ -5398,6 +5516,7 @@ function FormsRoute() {
                   }
                 />
                 <PanelContent>
+                  {selectedForm && selectedFormIsStandalone && <ImportedFormLayoutEditor key={`${activeSiteId}:${selectedForm.id}`} siteId={activeSiteId} form={selectedForm} canEdit={canEditForms && !isFormsBusy && !formDraftDirty} onUnsavedChangesChange={setFormLayoutDirty} onSaveBusyChange={setIsSavingFormLayout} scopeKey={formSaveContext} onSaved={loadForms} />}
                   {formDraft && (
                     <div className="mb-5 rounded-lg border border-border bg-background p-4" data-testid="form-builder-panel">
                       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -5473,7 +5592,7 @@ function FormsRoute() {
                       )}
 
                       <fieldset
-                        disabled={isFormsBusy || !selectedFormIsStandalone || !canEditForms}
+                        disabled={isFormsBusy || formLayoutDirty || !selectedFormIsStandalone || !canEditForms}
                         title={formBuilderEditDisabledReason || undefined}
                         aria-describedby={formBuilderActionStatusId}
                         data-action="forms.builder.edit"
@@ -6704,7 +6823,9 @@ function FormsRoute() {
                           Frontend form API
                         </div>
                         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                          Use the definition endpoint to render fields in any frontend, then POST validated values to the submission endpoint.
+                          {selectedFormSubmissionExample?.submissionTransport.contentType === 'multipart/form-data'
+                            ? 'Submit file bytes as multipart/form-data: one payload part containing JSON text fields, plus files named by their declared field keys. Repeat file parts for multiple files; do not set the multipart Content-Type header yourself.'
+                            : 'Use the definition endpoint to render fields in any frontend, then POST JSON values to the submission endpoint.'}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -6795,9 +6916,10 @@ function FormsRoute() {
                       </div>
                     )}
                     <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                      <ApiSnippet label="Sample submission payload" value={selectedFormSamplePayloadText} />
+                      <ApiSnippet label={selectedFormSubmissionExample?.submissionTransport.contentType === 'multipart/form-data' ? 'Multipart payload part (JSON text fields)' : 'Sample JSON submission payload'} value={selectedFormSamplePayloadText} />
                       <ApiSnippet label="cURL submit example" value={selectedFormCurlExample} />
                     </div>
+                    {selectedFormSubmissionExample?.submissionTransport.contentType === 'multipart/form-data' && <p className="mt-2 text-xs text-muted-foreground">Replace the example PDF paths with files allowed by the site. Maximum 5 files and 4 MB total; upload and safety scan policies may apply lower limits. File IDs, URLs and saved attachment references are not accepted as uploads.</p>}
                   </div>
 
                   <div className="mb-5 rounded-lg border border-border bg-muted/30 p-4">
@@ -6909,12 +7031,13 @@ function FormsRoute() {
                         </Button>
                       </div>
                     </div>
+                    <p className="mt-3 text-xs text-muted-foreground">Durable notification attempts; showing recent records. Pending, uncertain and consumed sources cannot be replayed. Older audit-only records remain in Activity.</p>
                     {selectedDeliveryEvents.length === 0 ? (
                       <div className="mt-4">
                         <EmptyState
                           icon={Inbox}
                           title="No delivery events yet"
-                          description="Webhook and email delivery attempts, retries, and provider responses for this form will appear here."
+                          description="Durable webhook and email attempts appear here. Older audit-only events remain in Activity; pending or uncertain attempts cannot be replayed."
                         />
                       </div>
                     ) : (
@@ -6927,6 +7050,8 @@ function FormsRoute() {
                             canManageForms={canManageForms}
                             disabledReason={managePermissionTitle}
                             onRetry={() => void handleRetryDeliveryEvent(event)}
+                            canReviewDelivery={canReviewDelivery && !isFormsBusy}
+                            onReview={() => setDeliveryReview({ event, formId: selectedForm.id, contextKey: deliveryReviewContext })}
                           />
                         ))}
                       </div>
@@ -7035,10 +7160,18 @@ function FormsRoute() {
               </Panel>
             )}
 
+            {selectedForm && selectedFormIsStandalone && <FormDesignHistoryPanel siteId={activeSiteId} formId={selectedForm.id} currentVersion={selectedForm.version}
+              canView={canViewForms} canEdit={canEditForms} hasUnsavedChanges={formDraftDirty || formLayoutDirty} onRestoreBusyChange={setIsRestoringFormDesign}
+              onRestored={(form, warnings) => {
+                setForms(current => current.map(item => item.id === form.id ? form : item));
+                setInboxByForm(current => current[form.id] ? { ...current, [form.id]: { ...current[form.id], form } } : current);
+                setFormDraft(cloneFormDefinition(form)); setFormDraftSubmitted(false);
+                setNotice(warnings.length ? `Form design restored; follow-up pending: ${warnings.join(', ')}.` : 'Form design restored. Current operations and submissions were retained.');
+              }} />}
             <Panel id="forms-inbox" className="overflow-hidden scroll-mt-24">
               <PanelHeader
                 title="Submission inbox"
-                description={`${filteredSubmissions.length}/${selectedSubmissions.length} visible`}
+                description={selectedInbox ? `${filteredSubmissions.length}/${selectedSubmissions.length} visible · complete inbox` : 'Inbox not loaded'}
                 icon={<Inbox className="size-4" />}
                 action={
                   <div className="flex flex-wrap items-center gap-2">
@@ -7232,6 +7365,14 @@ function FormsRoute() {
             </Panel>
           </div>
         </div>
+      )}
+      {deliveryReview && deliveryReview.contextKey === deliveryReviewContext && canReviewDelivery && (
+        <DeliveryReviewDialog key={deliveryReviewContext} event={deliveryReview.event} contextKey={deliveryReviewContext} canReview={canReviewDelivery}
+          onSave={body => recordFormDeliveryReview(activeSiteId, deliveryReview.formId, deliveryReview.event, body)}
+          onSaved={({ attempt }) => setDeliveryEventsByForm(current => ({ ...current,
+            [deliveryReview.formId]: (current[deliveryReview.formId] || []).map(event => event.id === attempt.id ? attempt : event),
+          }))}
+          onClose={() => setDeliveryReview(null)} />
       )}
       {pendingDeleteForm && (
         <div
@@ -7532,15 +7673,19 @@ function FormDeliveryEventCard({
   canManageForms,
   disabledReason,
   onRetry,
+  canReviewDelivery,
+  onReview,
 }: {
   event: FormDeliveryEvent;
   isRetrying: boolean;
   canManageForms: boolean;
   disabledReason?: string;
   onRetry: () => void;
+  canReviewDelivery: boolean;
+  onReview: () => void;
 }) {
   const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'webhook';
-  const retryable = event.status === 'failed' && Boolean(event.submissionId);
+  const retryable = event.status === 'failed' && Boolean(event.submissionId) && event.metadata?.retryAdmitted !== true;
   const isRetryEvent = event.metadata?.retry === true;
   const actionLabel = isRetrying ? 'Retrying' : channel === 'email' ? 'Retry email' : 'Retry';
   const statusClass = event.status === 'succeeded'
@@ -7587,13 +7732,15 @@ function FormDeliveryEventCard({
           <div className="mt-1 truncate text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Target:</span> {event.target}
           </div>
+          {(event.status==='pending'||event.status==='uncertain'||event.metadata?.retryAdmitted===true)&&<p className="mt-2 text-xs text-muted-foreground">{event.metadata?.retryAdmitted===true?'Retry already admitted. Inspect its newer attempt.':'Provider completion is unverified. Investigate before any retry; this attempt cannot be replayed.'}</p>}
+          <DeliveryReviewBadge event={event} />
           {event.error && (
             <div className="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
               {event.error}
             </div>
           )}
         </div>
-        <Button
+        {retryable ? <Button
           size="sm"
           variant={retryable ? 'danger' : 'outline'}
           disabled={!retryable || isRetrying || !canManageForms}
@@ -7606,7 +7753,8 @@ function FormDeliveryEventCard({
           data-testid="forms-webhook-retry-button"
         >
           {actionLabel}
-        </Button>
+        </Button> : null}
+        {canReviewDelivery && event.submissionId && isDeliveryReviewable(event) ? <Button variant="outline" size="sm" onClick={onReview} data-testid="forms-delivery-review">Review without resend</Button> : null}
       </div>
     </div>
   );
@@ -7694,11 +7842,12 @@ function SubmissionCard({
         {previewFields.map((field) => (
           <div key={field.key} className="min-w-0 rounded-lg bg-muted px-3 py-2">
             <div className="text-xs font-medium text-muted-foreground">{field.label}</div>
-            <div className="mt-1 truncate text-sm">{formatSubmissionValue(submission.values[field.key])}</div>
+            <div className="mt-1 truncate text-sm">{field.type === 'file' ? submissionAttachments({ value: submission.values[field.key] }).map((attachment) => attachment.filename).join(', ') || formatSubmissionValue(submission.values[field.key]) : formatSubmissionValue(submission.values[field.key])}</div>
           </div>
         ))}
       </div>
 
+      <FormSubmissionAttachments siteId={submission.siteId} formId={submission.formId} submissionId={submission.id} values={submission.values} />
       {(submission.requestId || submission.collectionRecord) && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {submission.requestId && <span className="rounded bg-muted px-2 py-1 font-mono">{submission.requestId}</span>}
@@ -7734,11 +7883,17 @@ const getFormFrontendTemplateId = (form: FormDefinition): string | undefined => 
     : undefined
 );
 
-const formHasRequiredIdentity = (form: FormDefinition): boolean => (
-  form.fields.some((field) => (
-    ['email', 'tel'].includes(field.type) || ['email', 'phone'].includes(field.key)
-  ))
+const formRequiresContactIdentity = (form: FormDefinition): boolean => (
+  form.contactShare?.enabled === true
 );
+
+const formHasRequiredIdentity = (form: FormDefinition): boolean => {
+  if (!formRequiresContactIdentity(form)) return true;
+  const contactShare = normalizeFormContactShare(form.contactShare, form.fields);
+  return [contactShare?.emailField, contactShare?.phoneField].some((key) => (
+    Boolean(key) && form.fields.some((field) => normalizeFieldKey(field.key) === key && field.type !== 'file')
+  ));
+};
 
 const formHasSpamGuard = (form: FormDefinition): boolean => (
   Boolean(form.enableHoneypot || form.enableCaptcha)
@@ -7795,7 +7950,7 @@ const buildFormLaunchActionPlan = (checks: FormLaunchReadinessCheck[]): FormLaun
     if (nextAction === 'select-form') return 'Select or create a form before copying a launch handoff.';
     if (nextAction === 'activate-form') return 'Activate the form so the public definition and submission APIs can be used.';
     if (nextAction === 'add-fields') return 'Add at least one form field before publishing this frontend contract.';
-    if (nextAction === 'add-identity-field') return 'Add an email or phone field before relying on contact or account-style routing.';
+    if (nextAction === 'add-identity-field') return 'Map a current email or phone field before relying on contact sharing.';
     if (nextAction === 'add-spam-guard') return 'Enable honeypot or captcha before exposing this form to high-traffic public surfaces.';
     if (nextAction === 'route-destination') return 'Choose contact sharing or collection writes when the form should power leads, registrations, or dynamic records.';
     if (nextAction === 'configure-delivery') return 'Configure email or webhook delivery if external systems need immediate notification.';
@@ -7894,6 +8049,7 @@ const buildFormLaunchReadinessHandoff = ({
         excludedFields: ['submission.values', 'ipHash', 'userAgent', 'reviewNotes', 'delivery.providerResponse', 'databaseUrl'],
       },
       samplePayload: null,
+      submissionTransport: null,
       checks,
       actionPlan,
       nextSteps: actionPlan.blockers.length ? actionPlan.blockers : actionPlan.attention,
@@ -7901,10 +8057,12 @@ const buildFormLaunchReadinessHandoff = ({
   }
 
   const hasFields = form.fields.length > 0;
+  const requiresIdentity = formRequiresContactIdentity(form);
   const hasIdentity = formHasRequiredIdentity(form);
   const hasSpamGuard = formHasSpamGuard(form);
   const hasDestination = formHasDestination(form);
   const hasDelivery = Boolean(form.notificationEmail || form.notificationWebhook);
+  const unknownDeliveryCount = (deliveryMetrics.queued || 0) + (deliveryMetrics.pending || 0) + (deliveryMetrics.uncertain || 0);
   const analyticsSubmissionCount = analytics?.submissions ?? 0;
   const requiredFieldCount = form.fields.filter((field) => field.required).length;
   const checks: FormLaunchReadinessCheck[] = [
@@ -7926,11 +8084,13 @@ const buildFormLaunchReadinessHandoff = ({
     },
     {
       key: 'identity-routing',
-      label: 'Lead identity',
+      label: 'Contact identity',
       status: hasIdentity ? 'ready' : 'blocked',
-      detail: hasIdentity
-        ? 'Email or phone data is available for contact, account, or follow-up workflows.'
-        : 'Add an email or phone field before relying on contact or account-style routing.',
+      detail: !requiresIdentity
+        ? 'Inbox and collection submissions do not require contact identity.'
+        : hasIdentity
+          ? 'A current email or phone field is mapped for contact sharing.'
+          : 'Map a current email or phone field before relying on contact sharing.',
     },
     {
       key: 'spam-moderation',
@@ -7954,8 +8114,12 @@ const buildFormLaunchReadinessHandoff = ({
     {
       key: 'delivery-handoff',
       label: 'Delivery handoff',
-      status: hasDelivery || deliveryMetrics.total > 0 ? 'ready' : 'attention',
-      detail: hasDelivery
+      status: unknownDeliveryCount > 0 || deliveryMetrics.failed > 0 ? 'attention' : hasDelivery || deliveryMetrics.total > 0 ? 'ready' : 'attention',
+      detail: unknownDeliveryCount > 0
+        ? `${unknownDeliveryCount} delivery attempt${unknownDeliveryCount === 1 ? '' : 's'} have unverified provider completion. Investigate pending or uncertain attempts; do not replay them.`
+        : deliveryMetrics.failed > 0
+          ? `${deliveryMetrics.failed} failed delivery attempt${deliveryMetrics.failed === 1 ? '' : 's'} require outcome review. Retry only verified failures whose source has not been consumed.`
+          : hasDelivery
         ? `${form.notificationEmail ? 'Email delivery' : ''}${form.notificationEmail && form.notificationWebhook ? ' and ' : ''}${form.notificationWebhook ? 'webhook delivery' : ''} configured; ${deliveryMetrics.total} delivery event${deliveryMetrics.total === 1 ? '' : 's'} and ${analyticsSubmissionCount} analytics submission${analyticsSubmissionCount === 1 ? '' : 's'} tracked.`
         : `No email or webhook destination is configured; ${analyticsSubmissionCount} analytics submission${analyticsSubmissionCount === 1 ? '' : 's'} remain available in the Backy inbox.`,
     },
@@ -8027,6 +8191,7 @@ const buildFormLaunchReadinessHandoff = ({
       excludedFields: ['submission.values', 'ipHash', 'userAgent', 'reviewNotes', 'delivery.providerResponse', 'databaseUrl'],
     },
     samplePayload,
+    submissionTransport: samplePayload ? buildFormSubmissionExample({ fields: form.fields, payload: samplePayload }).submissionTransport : null,
     checks,
     actionPlan,
     nextSteps: nextSteps.length
@@ -8056,21 +8221,23 @@ const buildFormDeliveryHandoff = ({
   events: FormDeliveryEvent[];
 }): FormDeliveryHandoff => {
   const eventEndpoint = form
-    ? `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=form-submission&formId=${encodeURIComponent(form.id)}`
+    ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/delivery-attempts`
     : `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=form-submission`;
   const retryBase = form
     ? `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms/${encodeURIComponent(form.id)}/submissions/{submissionId}`
     : '';
   const hasDeliveryConfig = Boolean(form?.notificationEmail || form?.notificationWebhook);
   const hasFailedEvents = deliveryMetrics.failed > 0;
+  const hasUnknownEvents = events.some(event => event.status === 'pending' || event.status === 'uncertain' || event.status === 'queued');
   const retryableSubmissionIds = [...new Set(events
-    .filter((event) => event.status === 'failed' && Boolean(event.submissionId))
+    .filter((event) => event.status === 'failed' && Boolean(event.submissionId) && event.metadata?.retryAdmitted !== true)
     .map((event) => event.submissionId as string))];
   const nextSteps = [
     !form ? 'Select a form before exporting delivery handoff evidence.' : null,
     form && !hasDeliveryConfig ? 'Configure notification email or webhook delivery before launch.' : null,
-    hasFailedEvents ? 'Retry or inspect failed delivery events from the Forms workspace.' : null,
-    form && hasDeliveryConfig && !hasFailedEvents ? 'Delivery handoff is ready for custom admin consoles and operator review.' : null,
+    hasFailedEvents ? 'Retry only verified failed, unconsumed delivery attempts from the Forms workspace.' : null,
+    events.some(event=>event.status==='pending'||event.status==='uncertain')?'Investigate unknown provider completion; pending and uncertain attempts must not be replayed.':null,
+    form && hasDeliveryConfig && !hasFailedEvents && !hasUnknownEvents ? 'Delivery handoff is ready for custom admin consoles and operator review.' : null,
   ].filter((step): step is string => Boolean(step));
 
   return {
@@ -8105,7 +8272,7 @@ const buildFormDeliveryHandoff = ({
       requestId: event.requestId || null,
       submissionId: event.submissionId || null,
       retry: event.metadata?.retry === true,
-      retryable: event.status === 'failed' && Boolean(event.submissionId),
+      retryable: event.status === 'failed' && Boolean(event.submissionId) && event.metadata?.retryAdmitted !== true,
       hasTarget: Boolean(event.target),
       hasError: Boolean(event.error),
       createdAt: event.createdAt,
@@ -8115,7 +8282,7 @@ const buildFormDeliveryHandoff = ({
       retryableSubmissionIds,
     },
     actionPlan: {
-      status: form && hasDeliveryConfig && !hasFailedEvents ? 'ready' : 'attention',
+      status: form && hasDeliveryConfig && !hasFailedEvents && !events.some(event=>event.status==='pending'||event.status==='uncertain') ? 'ready' : 'attention',
       nextSteps,
     },
     privacy: {
@@ -8197,7 +8364,7 @@ const normalizeFormCollectionTarget = (
   if (!collectionTarget) return collectionTarget;
 
   const allowedFormFieldKeys = formFieldKeySet(fields);
-  const collectionId = collectionTarget.collectionId.trim();
+  const collectionId = typeof collectionTarget.collectionId === 'string' ? collectionTarget.collectionId.trim() : '';
   const slugFieldKey = collectionTarget.slugField ? normalizeFieldKey(collectionTarget.slugField) : '';
   const slugField = slugFieldKey && allowedFormFieldKeys.has(slugFieldKey)
     ? slugFieldKey
@@ -9198,6 +9365,7 @@ const buildFormUpdatePayload = (form: FormDefinition) => {
       const validation = normalizeValidationRules({ ...field, type });
 
       return {
+        ...field,
         key: normalizeFieldKey(field.key) || `field_${index + 1}`,
         label: field.label.trim() || `Field ${index + 1}`,
         type,
@@ -9263,7 +9431,7 @@ const buildSampleContactShareOverride = (
 const buildSampleSubmissionPayload = (form: FormDefinition) => {
   const contactShareOverride = buildSampleContactShareOverride(form);
 
-  return {
+  return buildFormSubmissionExample({ fields: form.fields, payload: {
     values: Object.fromEntries(form.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
     requestId: `web-${form.id}-request`,
     startedAt: Date.now() - 8000,
@@ -9274,7 +9442,7 @@ const buildSampleSubmissionPayload = (form: FormDefinition) => {
         ...contactShareOverride,
       },
     } : {}),
-  };
+  } }).payload;
 };
 
 const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown => {
@@ -9301,7 +9469,7 @@ const sampleFormFieldValue = (field: FormDefinition['fields'][number]): unknown 
     case 'textarea':
       return field.placeholder || 'Sample message from a custom frontend.';
     case 'file':
-      return 'media_asset_id_or_signed_upload_reference';
+      return undefined;
     default:
       return field.placeholder || field.label || 'Sample value';
   }
@@ -9311,12 +9479,12 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
   const contactShare = normalizeFormContactShare(template.contactShare, template.fields);
   const collectionTarget = normalizeFormCollectionTarget(template.collectionTarget, template.fields);
   const contactShareOverride = buildSampleContactShareOverride({ ...template, contactShare });
-  const samplePayload = {
+  const example = buildFormSubmissionExample({ fields: template.fields, payload: {
     values: Object.fromEntries(template.fields.map((field) => [field.key, sampleFormFieldValue(field)])),
     requestId: `web-${template.id}-request`,
     startedAt: Date.now() - 8000,
     ...(contactShareOverride ? { contactShareOverride } : {}),
-  };
+  } });
 
   return {
     schemaVersion: 'backy.form-template.v1',
@@ -9365,13 +9533,10 @@ function buildTemplateManifest(template: FormTemplateBlueprint) {
       templateSource: 'backy-canvas',
       focus: 'canvas',
     },
-    samplePayload,
+    samplePayload: example.payload,
+    submissionTransport: example.submissionTransport,
   };
 }
-
-const toSingleQuotedShellString = (value: string): string => (
-  `'${value.replace(/'/g, "'\\''")}'`
-);
 
 const getEnvValue = (key: string): string => {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};

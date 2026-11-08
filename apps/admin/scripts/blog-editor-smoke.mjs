@@ -691,10 +691,26 @@ const launchChrome = () => {
   return { childProcess, userDataDir };
 };
 
+// These smokes exercise layout controls explicitly; new blog posts open in Write.
+const activateArticleLayout = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="blog-mode-layout"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      if (button.getAttribute('aria-pressed') !== 'true') button.click();
+      return true;
+    })()`);
+    if (selected) { await sleep(50); return; }
+    await sleep(200);
+  }
+  throw new Error('Blog Layout editing mode did not become available');
+};
+
 const waitForEditor = async (client, postId) => {
   await client.send('Page.navigate', {
     url: `${ADMIN_BASE_URL}/blog/${encodeURIComponent(postId)}?siteId=${encodeURIComponent(SITE_ID)}`,
   });
+  await activateArticleLayout(client);
 
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const state = await evaluate(client, `(() => {

@@ -1,3 +1,4 @@
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
 /**
  * Admin site SEO defaults endpoint.
  *
@@ -688,10 +689,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const updated = await repositories.sites.update(site.id, {
-        settings: {
+        settings: unrelatedSiteSettingsPatch({
           ...site.settings,
           seo: validation.seo,
-        },
+        }),
       });
       await recordAdminAudit({
         repositories,
@@ -768,10 +769,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = updateAdminSite(site.id, {
-      settings: {
+      settings: unrelatedSiteSettingsPatch({
         ...settings,
         seo: validation.seo,
-      },
+      }),
     });
 
     if (!updated) {

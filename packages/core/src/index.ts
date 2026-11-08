@@ -19,11 +19,20 @@ export * from './types';
 export * from './content-contract';
 export * from './content-migrations';
 export * from './code-highlight';
+export * from './video-source';
 export * from './custom-frontend-agent-handoff';
 export * from './repositories';
+export * from './site-backup';
+export * from './site-duplication';
+export * from './operator-site-grant-commit';
 export * from './theme-tokens';
 export * from './publication';
 export * from './product-design';
+export * from './form-design';
+export * from './collection-design';
+export * from './frontend-design-templates';
+export * from './canvas-layout';
+export * from './frontend-compatibility';
 
 // ============================================
 // CONSTANTS
@@ -603,3 +612,45 @@ export function adjustBrightness(hex: string, percent: number): string {
 
   return rgbToHex(adjust(rgb.r), adjust(rgb.g), adjust(rgb.b));
 }
+
+export * from './data-figures';
+
+export * from './data-figure-source';
+
+export * from './template-history';
+export * from './form-submission-examples';
+
+export * from './visitor-accounts';
+export * from './media-storage-jobs';
+export * from './media-links';
+
+export * from './comment-lifecycle';
+
+export * from './frontend-composition-import';
+
+export * from './form-template-pack';
+
+export * from './comment-delivery';
+
+export * from './form-delivery';
+export * from './delivery-reconciliation';
+
+export * from './template-instances';
+
+export * from './animation-sequence';
+
+export * from './visitor-privacy';
+
+export * from './newsletter-campaign';
+
+export * from './site-mailbox';
+
+export * from './media-upload-session';
+
+export * from './visitor-erasure';
+
+export * from './commerce-entitlements';
+
+export * from './site-mailbox-management';
+
+export * from './collection-search';

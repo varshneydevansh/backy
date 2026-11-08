@@ -230,6 +230,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, requestId, data: { section } });
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section detail API error:", error);
     return errorResponse(
       500,
@@ -350,6 +352,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ) as BackyJsonObject;
       const updated = (
         await repositories.reusableSections.update(site.id, section.id, {
+          expectedSection: section,
           ...(typeof body.name === "string" && body.name.trim()
             ? { name: body.name.trim() }
             : {}),
@@ -513,6 +516,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         : section.updatedBy || null;
     const updated = updateReusableSection(site.id, section.id, {
       ...body,
+      expectedSection: section,
       ...(nextSlug ? { slug: nextSlug } : {}),
       metadata: buildReusableSectionUpdateMetadata(section, body.metadata, {
         actor: updatedBy,
@@ -565,6 +569,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section update API error:", error);
     return errorResponse(
       500,
@@ -723,6 +729,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "REUSABLE_SECTION_VERSION_CONFLICT") return errorResponse(409, code, "Reusable section changed after it was read. Reload and retry.", requestId);
     console.error("Admin reusable section delete API error:", error);
     return errorResponse(
       500,

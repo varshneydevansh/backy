@@ -72,6 +72,10 @@ export function resolveBackyDataRuntimeConfig(
         if (!config.url) {
             throw new Error('Database mode requires BACKY_DATABASE_URL, DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL.');
         }
+        if (type === 'postgres') {
+            const sslCaPem = valueFor(env, 'BACKY_DATABASE_SSL_CA_PEM');
+            if (sslCaPem) config.sslCaPem = sslCaPem;
+        }
     }
 
     const name = valueFor(env, 'BACKY_DATABASE_NAME');

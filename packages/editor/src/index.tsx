@@ -4,6 +4,7 @@ import { ReactEditor } from 'slate-react';
 import { Plate, PlateContent, ParagraphPlugin, usePlateEditor } from '@udecode/plate/react';
 import type { PlateEditor } from '@udecode/plate/react';
 import { createSlatePlugin, KEYS } from '@udecode/plate';
+import { BACKY_CODE_HIGHLIGHT_THEMES, normalizeBackyCodeLanguage, resolveBackyVideoSource, tokenizeBackyCodeLine } from '@backy-cms/core';
 import { BaseBoldPlugin, BaseItalicPlugin, BaseUnderlinePlugin, BaseCodePlugin, BaseStrikethroughPlugin } from '@udecode/plate-basic-marks';
 import { BaseBlockquotePlugin } from '@udecode/plate-block-quote';
 import { BaseCodeBlockPlugin } from '@udecode/plate-code-block';
@@ -13,7 +14,7 @@ import { BaseListPlugin } from '@udecode/plate-list';
 import { BaseEquationPlugin } from '@udecode/plate-math';
 
 import { BaseTextAlignPlugin } from '@udecode/plate-alignment';
-import { BaseFontBackgroundColorPlugin, BaseFontColorPlugin, BaseFontSizePlugin } from '@udecode/plate-font';
+import { BaseFontBackgroundColorPlugin, BaseFontColorPlugin, BaseFontFamilyPlugin, BaseFontSizePlugin } from '@udecode/plate-font';
 import { BaseIndentPlugin } from '@udecode/plate-indent';
 import { BaseAutoformatPlugin } from '@udecode/plate-autoformat';
 
@@ -24,11 +25,21 @@ import { applyInlineMarkdownShortcut, applyInlineMarkdownShortcutOnInput } from 
 import { normalizeNestedRichTextLists, normalizeRichTextListIndent } from './listNormalization';
 
 import { cn } from './utils';
+import { shouldHandleBackyDocumentInput } from './inputEvents';
+import { DataFigure } from './DataFigure';
+import { InteractiveComponentBlock } from './InteractiveComponentBlock';
+import type { BackyInteractiveComponentNode, BackyInteractiveRegistryEntry, BackyInteractiveComponentRenderer } from './interactiveComponent';
+export type { BackyInteractiveComponentNode, BackyInteractiveRegistryEntry, BackyInteractiveComponentRenderer } from './interactiveComponent';
+import type { BackyDataFigureConfig, BackyDataFigureCollection, BackyDataFigureLoader } from '@backy-cms/core';
+export type { BackyDataFigureConfig, BackyDataFigureCollection, BackyDataFigureLoader } from '@backy-cms/core';
+import { normalizeToolbarUrl } from './ui/toolbarEditing';
+import type { BackyMediaRequest } from './ui/toolbarEditing';
+export type { BackyMediaSelection, BackyMediaRequest } from './ui/toolbarEditing';
 
 const BackyImagePlugin = createSlatePlugin({
     key: KEYS.img,
     node: {
-        dangerouslyAllowAttributes: ['alt', 'width', 'height'],
+        dangerouslyAllowAttributes: ['alt', 'width', 'height', 'caption'],
         isElement: true,
         isVoid: true,
     },
@@ -41,6 +52,58 @@ const BackyMediaEmbedPlugin = createSlatePlugin({
         isVoid: true,
     },
 });
+
+export const BackyInteractiveComponentPlugin = createSlatePlugin({ key: 'interactive_component', node: { isElement: true, isVoid: true } });
+
+export const BackyDataFigurePlugin = createSlatePlugin({ key: 'data_figure', node: { isElement: true, isVoid: true } });
+
+const BackyLegacyLinkPlugin = createSlatePlugin({ key: 'link', node: { isElement: true, isInline: true } });
+
+const BackyCollapsiblePlugin = createSlatePlugin({
+    key: 'collapsible',
+    node: { isElement: true },
+});
+
+/** Decorations split token ranges across the existing Slate leaves; never replace code text DOM. */
+export const decorateBackyCodeLine = (editor: Editor, entry: [any, number[]]): Array<SlateRange & { backyCodeToken: string }> => {
+    const [line, path] = entry;
+    if (line?.type !== 'code_line' || !path.length) return [];
+    const parent = Node.parent(editor, path) as any;
+    if (parent?.type !== 'code_block') return [];
+    const tokens = tokenizeBackyCodeLine(Node.string(line), normalizeBackyCodeLanguage(parent.lang || parent.language || 'text'));
+    const leaves = Array.from(Node.texts(line));
+    const ranges: Array<SlateRange & { backyCodeToken: string }> = [];
+    let tokenStart = 0;
+    for (const token of tokens) {
+        const tokenEnd = tokenStart + token.text.length;
+        let leafStart = 0;
+        for (const [leaf, relativePath] of leaves) {
+            const leafEnd = leafStart + leaf.text.length;
+            const start = Math.max(tokenStart, leafStart);
+            const end = Math.min(tokenEnd, leafEnd);
+            if (end > start && token.type !== 'plain') ranges.push({
+                anchor: { path: [...path, ...relativePath], offset: start - leafStart },
+                focus: { path: [...path, ...relativePath], offset: end - leafStart },
+                backyCodeToken: token.type,
+            });
+            leafStart = leafEnd;
+        }
+        tokenStart = tokenEnd;
+    }
+    return ranges;
+};
+
+const BackyCodeHighlightPlugin = createSlatePlugin({
+    key: 'backyCodeHighlight',
+    decorate: ({ editor, entry }) => decorateBackyCodeLine(editor as unknown as Editor, entry as [any, number[]]),
+});
+
+const safeRichMediaUrl = (value: unknown): string => {
+    const source = typeof value === 'string' ? value.trim() : '';
+    if (!source || /[\u0000-\u0020\u007f\\]/.test(source) || source.startsWith('//')) return '';
+    if (/^\/(?!\/)/.test(source)) return source;
+    try { return ['https:', 'http:'].includes(new URL(source).protocol) ? source : ''; } catch { return ''; }
+};
 
 // Re-export for use in PropertyPanel
 export { AdvancedToolbar } from './ui/AdvancedToolbar';
@@ -55,6 +118,17 @@ export type BackyEditorProps = {
     readOnly?: boolean;
     className?: string;
     placeholder?: string;
+    /** Accessible name for the document editing surface. */
+    ariaLabel?: string;
+    /** Open the host application media library; null cancels insertion. */
+    onRequestMedia?: BackyMediaRequest;
+    loadDataFigureRecords?: BackyDataFigureLoader;
+    dataFigureCollections?: BackyDataFigureCollection[];
+    interactiveComponents?: BackyInteractiveRegistryEntry[];
+    interactiveComponentsLoading?: boolean;
+    interactiveComponentsError?: string;
+    onReloadInteractiveComponents?: () => void;
+    renderInteractiveComponent?: BackyInteractiveComponentRenderer;
     onBlur?: (event?: React.FocusEvent) => void;
     /** Show inline toolbar (default: false for canvas use) */
     showToolbar?: boolean;
@@ -96,6 +170,15 @@ export const BackyEditor = ({
     readOnly,
     className,
     placeholder,
+    ariaLabel = 'Rich text content',
+    onRequestMedia,
+    loadDataFigureRecords,
+    dataFigureCollections,
+    interactiveComponents = [],
+    interactiveComponentsLoading,
+    interactiveComponentsError,
+    onReloadInteractiveComponents,
+    renderInteractiveComponent,
     onBlur,
     showToolbar = false,
     showPortalToolbar = false,
@@ -106,6 +189,10 @@ export const BackyEditor = ({
     onKeyUp,
     onMouseDown,
 }: BackyEditorProps) => {
+    const richElementRendererRef = useRef<((props: any) => React.ReactNode) | null>(null);
+    const RichElement = useMemo(() => function RichElement(props: any) {
+        return richElementRendererRef.current?.(props) ?? null;
+    }, []);
 
     const plugins = useMemo(() => [
         ParagraphPlugin,
@@ -116,11 +203,16 @@ export const BackyEditor = ({
         BaseCodePlugin,
         BaseBlockquotePlugin,
         BaseCodeBlockPlugin,
+        BackyCodeHighlightPlugin,
         BaseHeadingPlugin,
         BaseLinkPlugin,
+        BackyLegacyLinkPlugin,
         BaseListPlugin,
         BackyImagePlugin,
         BackyMediaEmbedPlugin,
+        BackyDataFigurePlugin,
+        BackyInteractiveComponentPlugin,
+        BackyCollapsiblePlugin,
         BaseEquationPlugin,
 
         // Advanced
@@ -128,6 +220,7 @@ export const BackyEditor = ({
         BaseFontColorPlugin,
         BaseFontBackgroundColorPlugin,
         BaseFontSizePlugin,
+        BaseFontFamilyPlugin,
         BaseIndentPlugin,
         BaseAutoformatPlugin,
     ], []);
@@ -139,6 +232,7 @@ export const BackyEditor = ({
 
     const editor = usePlateEditor({
         plugins,
+        components: { [KEYS.link]: RichElement, link: RichElement, [KEYS.codeBlock]: RichElement, [KEYS.codeLine]: RichElement, [KEYS.img]: RichElement, [KEYS.mediaEmbed]: RichElement, collapsible: RichElement, data_figure: RichElement, interactive_component: RichElement },
         value: normalizedValue as any[],
     });
     const rootRef = useRef<HTMLDivElement | null>(null);
@@ -307,12 +401,12 @@ export const BackyEditor = ({
         }
     };
 
-    // Expose editor instance when ready
+    // Readiness belongs to the editor lifetime. A new host closure is not a new editor.
+    const onEditorReadyRef = useRef(onEditorReady);
+    onEditorReadyRef.current = onEditorReady;
     useEffect(() => {
-        if (editor && onEditorReady) {
-            onEditorReady(editor);
-        }
-    }, [editor, onEditorReady]);
+        if (editor) onEditorReadyRef.current?.(editor);
+    }, [editor]);
 
     const handleListIndentShortcut = (event: React.KeyboardEvent, step: number): boolean => {
         if (!step || readOnly) {
@@ -567,6 +661,7 @@ export const BackyEditor = ({
     };
 
     const handleKeyDown = (event: React.KeyboardEvent) => {
+        if (!shouldHandleBackyDocumentInput(event)) return;
         if (event.key === 'Tab' && handleListIndentShortcut(event, event.shiftKey ? -1 : 1)) {
             return;
         }
@@ -586,7 +681,8 @@ export const BackyEditor = ({
         onKeyDown?.(event);
     };
 
-    const handleInput = () => {
+    const handleInput = (event: React.FormEvent) => {
+        if (!shouldHandleBackyDocumentInput(event)) return;
         handleInlineMarkdownShortcuts();
     };
 
@@ -635,18 +731,61 @@ export const BackyEditor = ({
         if (leaf.backgroundColor) style.backgroundColor = leaf.backgroundColor;
 
         if (leaf.align) style.textAlign = leaf.align;
+        if (typeof leaf.backyCodeToken === 'string' && leaf.backyCodeToken in BACKY_CODE_HIGHLIGHT_THEMES.dark) {
+            style.color = BACKY_CODE_HIGHLIGHT_THEMES.dark[leaf.backyCodeToken as keyof typeof BACKY_CODE_HIGHLIGHT_THEMES.dark];
+        }
 
         return (
-            <span {...attributes} style={style}>
+            <span {...attributes} style={style} data-backy-code-token={typeof leaf.backyCodeToken === 'string' ? leaf.backyCodeToken : undefined}>
                 {children}
             </span>
         );
+    };
+
+    const preventControlSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); }
     };
 
     const renderElement = (props: any) => {
         const { attributes, children, element } = props;
         const type = (element?.type as string | undefined) || 'p';
         const elementStyle = (props.style || {}) as React.CSSProperties;
+        const updateNode = (patch: Record<string, unknown>) => {
+            if (readOnly) return;
+            // Plate uses its own Slate DOM bindings; the renderer receives that exact node path.
+            const path = Array.isArray(props.path) ? props.path : editor.api.findPath(element);
+            if (!path) return;
+            Transforms.setNodes(editor as any, patch, { at: path });
+        };
+        if (type === 'interactive_component') {
+            return <div {...attributes} data-backy-rich-interactive-node="true" style={{ ...elementStyle, minWidth: 0 }}>
+                <div contentEditable={false}><InteractiveComponentBlock node={element as BackyInteractiveComponentNode} readOnly={readOnly} onChange={readOnly ? undefined : updateNode} renderComponent={renderInteractiveComponent} /></div>{children}
+            </div>;
+        }
+        if (type === 'data_figure') {
+            return <div {...attributes} data-backy-rich-data-figure="true" style={{ ...elementStyle, minWidth: 0 }}>
+                <div contentEditable={false}><DataFigure config={element as BackyDataFigureConfig} editable={!readOnly} onChange={readOnly ? undefined : updateNode} loadRecords={loadDataFigureRecords} collections={dataFigureCollections} /></div>
+                {children}
+            </div>;
+        }
+        if (type === 'code_block') {
+            const language = typeof element.lang === 'string' ? element.lang : typeof element.language === 'string' ? element.language : 'text';
+            return <div {...attributes} data-backy-rich-code-block="true" style={{ margin: '0.75em 0' }}>
+                <div contentEditable={false} className="flex items-center justify-between gap-3 rounded-t-lg border border-b-0 border-slate-200 bg-slate-50 px-3 text-xs text-slate-500" style={{ minHeight: 44 }}>
+                    <span>Code</span><label className="flex min-w-0 items-center gap-2">Language {readOnly ? <span>{language}</span> : <input onKeyDown={preventControlSubmit} aria-label="Code language" data-testid="backy-rich-code-language" value={language} onChange={(event) => updateNode({ lang: event.target.value })} className="min-h-11 w-32 rounded-md border-0 bg-transparent px-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-teal-600" />}</label>
+                </div>
+                <pre style={{ ...elementStyle, margin: 0, padding: 12, overflowX: 'auto', whiteSpace: 'pre', background: '#0f172a', color: '#e2e8f0', borderRadius: '0 0 6px 6px' }}><code data-language={normalizeBackyCodeLanguage(language)}>{children}</code></pre>
+            </div>;
+        }
+        if (type === 'code_line') return <span {...attributes} data-backy-rich-code-line="true" style={{ ...elementStyle, display: 'block', minHeight: '1em' }}>{children}</span>;
+        if (type === 'collapsible') {
+            const title = typeof element.title === 'string' ? element.title : 'Details';
+            return <details {...attributes} open={!readOnly || element.defaultOpen === true} data-backy-rich-collapsible="true" style={{ ...elementStyle, borderLeft: '2px solid #cbd5e1', paddingLeft: 16, margin: '1em 0' }}>
+                <summary contentEditable={false}>{readOnly ? title : <input onKeyDown={preventControlSubmit} aria-label="Collapsible title" data-testid="backy-rich-collapsible-title" value={title} onChange={(event) => updateNode({ title: event.target.value })} placeholder="Section title" className="min-h-11 w-[calc(100%-1.5rem)] rounded-md border-0 bg-transparent px-2 text-base font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-teal-600" />}</summary>
+                {!readOnly && <label contentEditable={false} className="flex min-h-11 items-center gap-2 text-xs text-slate-500"><input type="checkbox" checked={element.defaultOpen === true} onChange={(event) => updateNode({ defaultOpen: event.target.checked })} />Starts open on the website</label>}
+                <div style={{ marginTop: 4 }}>{children}</div>
+            </details>;
+        }
         const tableNodeType = type === 'table'
             ? 'table'
             : type === 'tr'
@@ -967,22 +1106,48 @@ export const BackyEditor = ({
         }
 
         if (type === 'img' || type === 'image') {
-            const src = (element as any)?.url || (element as any)?.src || '';
+            const src = safeRichMediaUrl(element.url || element.src);
+            const caption = typeof element.caption === 'string' ? element.caption : '';
             return (
-                <img
-                    {...attributes}
-                    src={src}
-                    alt={(element as any)?.alt || ''}
-                    style={elementStyle}
-                />
+                <figure {...attributes} data-backy-rich-image="true" style={{ ...elementStyle, margin: '1em 0' }}>
+                    <div contentEditable={false}>
+                        {src ? <img src={src} alt={element.alt || ''} style={{ maxWidth: '100%', height: 'auto' }} /> : <p>Missing or blocked image source</p>}
+                        {caption && <figcaption>{caption}</figcaption>}
+                        {!readOnly && <details className="mt-2 text-xs text-slate-500"><summary className="min-h-11 cursor-pointer py-3">Image options</summary>
+                            <label className="mb-2 block">Image source<input onKeyDown={preventControlSubmit} aria-label="Image source" value={typeof element.url === 'string' ? element.url : element.src || ''} onChange={(event) => updateNode({ url: event.target.value })} className="mt-1 block min-h-11 w-full rounded-md border bg-white px-3 text-sm text-slate-700" /></label>
+                            <label className="mb-2 block">Alternative text<input onKeyDown={preventControlSubmit} aria-label="Image alternative text" value={element.alt || ''} onChange={(event) => updateNode({ alt: event.target.value })} className="mt-1 block min-h-11 w-full rounded-md border bg-white px-3 text-sm text-slate-700" /></label>
+                            <label className="block">Caption<input onKeyDown={preventControlSubmit} aria-label="Image caption" data-testid="backy-rich-image-caption" value={caption} onChange={(event) => updateNode({ caption: event.target.value })} placeholder="Add a caption" className="mt-1 block min-h-11 w-full rounded-md border bg-white px-3 text-sm text-slate-700" /></label>
+                        </details>}
+                    </div>
+                    {children}
+                </figure>
             );
+        }
+
+        if (type === 'media_embed') {
+            const source = typeof element.url === 'string' ? element.url : typeof element.src === 'string' ? element.src : '';
+            const media = resolveBackyVideoSource(source, { controls: true });
+            const caption = typeof element.caption === 'string' ? element.caption : '';
+            return <figure {...attributes} data-backy-rich-media="true" style={{ ...elementStyle, margin: '1em 0' }}>
+                <div contentEditable={false}>
+                    {media.kind === 'empty' || media.kind === 'invalid' ? <p>{media.message}</p> : media.kind === 'native'
+                        ? <video src={media.src} controls preload="metadata" style={{ width: '100%' }} />
+                        : <iframe src={media.src} title={typeof element.title === 'string' ? element.title : 'Embedded video'} loading="lazy" sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen style={{ width: '100%', aspectRatio: '16 / 9', border: 0 }} />}
+                    {caption && <figcaption>{caption}</figcaption>}
+                    {!readOnly && <details className="mt-2 text-xs text-slate-500"><summary className="min-h-11 cursor-pointer py-3">Video options</summary>
+                        <label className="mb-2 block">Video source<input onKeyDown={preventControlSubmit} aria-label="Video URL" data-testid="backy-rich-media-url" value={source} onChange={(event) => updateNode({ url: event.target.value })} className="mt-1 block min-h-11 w-full rounded-md border bg-white px-3 text-sm text-slate-700" /></label>
+                        <label className="block">Caption<input onKeyDown={preventControlSubmit} aria-label="Video caption" data-testid="backy-rich-media-caption" value={caption} onChange={(event) => updateNode({ caption: event.target.value })} className="mt-1 block min-h-11 w-full rounded-md border bg-white px-3 text-sm text-slate-700" /></label>
+                    </details>}
+                </div>
+                {children}
+            </figure>;
         }
 
         if (type === 'a' || type === 'link') {
             return (
                 <a
                     {...attributes}
-                    href={(element as any)?.url || '#'}
+                    href={normalizeToolbarUrl(typeof element.url === 'string' ? element.url : '', 'link') || undefined}
                     style={elementStyle}
                 >
                     {children}
@@ -1035,6 +1200,7 @@ export const BackyEditor = ({
         );
     };
 
+    richElementRendererRef.current = renderElement;
     return (
         <div ref={rootRef} className={cn("relative h-full flex flex-col", className)}>
             <Plate
@@ -1042,12 +1208,13 @@ export const BackyEditor = ({
                 onChange={({ value }) => onChange?.(value)}
                 readOnly={readOnly}
             >
-                {showToolbar && !readOnly && <AdvancedToolbar className="sticky top-0 z-10" />}
+                {showToolbar && !readOnly && <AdvancedToolbar className="sticky top-0 z-10" onRequestMedia={onRequestMedia} onFocusEditor={() => rootRef.current?.querySelector<HTMLElement>('[data-slate-editor="true"]')?.focus({ preventScroll: true })} interactiveComponents={interactiveComponents} interactiveComponentsLoading={interactiveComponentsLoading} interactiveComponentsError={interactiveComponentsError} onReloadInteractiveComponents={onReloadInteractiveComponents} />}
                 {showPortalToolbar && !readOnly && <PortalToolbar />}
                 {showToolbar && !readOnly && <FloatingToolbar />}
 
                 <div className="flex-1 overflow-y-auto p-1">
                     <PlateContent
+                        aria-label={ariaLabel}
                         placeholder={placeholder ?? "Type..."}
                         onBlur={onBlur}
                         onFocus={onFocus}
@@ -1064,3 +1231,6 @@ export const BackyEditor = ({
         </div>
     );
 };
+
+export { createToolbarFocusScheduler } from './ui/toolbarEditing';
+export { insertRichArticleBlock } from './ui/richBlockTransforms';

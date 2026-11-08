@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+import { registeredComponentProps } from './registeredComponentModel';
 /**
  * ============================================================================
  * BACKY CMS - COMPONENT LIBRARY
@@ -44,9 +46,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { ComponentLibraryItem } from '@/types/editor';
+import type { ComponentLibraryChild, ComponentLibraryItem } from '@/types/editor';
 import { CANVAS_COMPONENT_LIBRARY } from '@/components/editor/editorCatalog';
-import type { ReusableSection } from '@/lib/adminContentApi';
+import type { ReusableSection, InteractiveComponentRegistryEntry } from '@/lib/adminContentApi';
 
 // ============================================
 // COMPONENT LIBRARY ITEMS
@@ -62,13 +64,19 @@ const FAVORITES_STORAGE_KEY = 'backy.editor.componentLibrary.favorites';
 const VIEW_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.viewMode';
 const SHELL_MODE_STORAGE_KEY = 'backy.editor.componentLibrary.shellMode';
 const RECENT_ITEM_LIMIT = 6;
-const SECTION_STARTER_ITEM_KEYS = ['hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];
+const SECTION_STARTER_ITEM_KEYS = ['site-header-section', 'hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];
 const ESSENTIAL_ITEM_KEYS = new Set([
+  'site-header-section',
+  'collapsible',
   'heading',
   'text',
   'button',
   'image',
+  'video',
   'audio',
+  'technical-code-snippet',
+  'quote',
+  'list',
   'box',
   'section',
   'columns',
@@ -82,6 +90,7 @@ const ESSENTIAL_ITEM_KEYS = new Set([
 const COMPONENT_LIBRARY_CATEGORIES = [
   { id: ESSENTIALS_CATEGORY_ID, name: 'Essentials', color: 'bg-emerald-500' },
   { id: SECTIONS_CATEGORY_ID, name: 'Sections', color: 'bg-teal-500' },
+  { id: 'registered', name: 'Site components', color: 'bg-teal-500' },
   { id: RECENT_CATEGORY_ID, name: 'Recent', color: 'bg-cyan-500' },
   { id: FAVORITES_CATEGORY_ID, name: 'Favorites', color: 'bg-yellow-400' },
   { id: 'basic', name: 'Basic', color: 'bg-blue-500' },
@@ -100,14 +109,44 @@ const PRIMARY_COMPONENT_CATEGORY_IDS = new Set<string>([
   RECENT_CATEGORY_ID,
   FAVORITES_CATEGORY_ID,
   'saved',
+  'registered',
 ]);
 const SEARCH_NEUTRAL_CATEGORY_IDS = new Set<string>([
   ESSENTIALS_CATEGORY_ID,
   RECENT_CATEGORY_ID,
   FAVORITES_CATEGORY_ID,
 ]);
-const COMPONENT_CATEGORY_BUTTON_CLASS = 'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors';
-const COMPONENT_VIEW_MODE_BUTTON_CLASS = 'inline-flex h-7 min-w-7 items-center justify-center rounded-md border px-1.5 text-xs font-semibold transition-colors';
+const COMPONENT_CATEGORY_BUTTON_CLASS = 'inline-flex min-h-11 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-2 text-xs font-medium transition-colors';
+const COMPONENT_VIEW_MODE_BUTTON_CLASS = 'inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors';
+
+/** Registry metadata configures existing supported blocks; frontend React remains frontend-owned. */
+export const createRegisteredComponentLibraryItems = (components: InteractiveComponentRegistryEntry[]): ComponentLibraryItem[] => {
+  const seen = new Set<string>();
+  return components.flatMap((component) => {
+    if (component.status !== 'active' || !component.componentKey || !component.version
+      || !['interactiveFigure', 'codeComponent'].includes(component.type)
+      || !['trusted-component', 'sandbox-iframe', 'static-fallback'].includes(component.renderMode)) return [];
+    const id = `registered:${component.type}:${encodeURIComponent(component.componentKey)}:${encodeURIComponent(component.version)}`;
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const title = component.displayName || component.componentKey;
+    const text = component.description || '';
+    return [{ id, type: component.type as ComponentLibraryItem['type'], name: title,
+      icon: 'Code', category: 'registered',
+      description: `${text ? `${text} · ` : ''}${component.componentKey} · ${component.version} · ${component.renderMode}`,
+      defaultSize: { width: 640, height: 360 },
+      defaultProps: registeredComponentProps(component),
+    }];
+  });
+};
+
+interface LibraryLayerTree { children?: ReadonlyArray<LibraryLayerTree>; }
+const countNestedLibraryLayers = (nodes: ReadonlyArray<LibraryLayerTree>, depth = 0): number => (
+  depth > 20 ? 0 : nodes.reduce((count, node) => count + 1 + countNestedLibraryLayers(node.children || [], depth + 1), 0)
+);
+const getLibraryLayerCount = (item: ComponentLibraryItem): number => (
+  countNestedLibraryLayers(item.defaultChildren || item.reusableContent?.elements || [])
+);
 
 const getLibraryCategory = (item: ComponentLibraryItem): string => item.category || 'basic';
 const getLibraryItemKey = (item: ComponentLibraryItem): string => String(item.id ?? item.type);
@@ -117,16 +156,24 @@ const getLibraryItemDomKey = (item: ComponentLibraryItem): string => (
 const isReusableLibraryItem = (item: ComponentLibraryItem): boolean => (
   Boolean(item.reusableContent?.sectionId) || getLibraryCategory(item) === 'saved'
 );
-const isSectionLibraryItem = (item: ComponentLibraryItem): boolean => (
-  item.type === 'section' || Boolean(item.reusableContent?.sectionId)
+export const isSectionLibraryItem = (item: ComponentLibraryItem): boolean => (
+  item.type === 'section' || (['header', 'footer'].includes(item.type) && Boolean(item.defaultChildren?.length)) || Boolean(item.reusableContent?.sectionId)
 );
 const isEssentialLibraryItem = (item: ComponentLibraryItem): boolean => (
   ESSENTIAL_ITEM_KEYS.has(getLibraryItemKey(item))
 );
-const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean => (
+const childMatchesSearch = (child: ComponentLibraryChild, query: string, depth = 0): boolean => (
+  depth < 20 && (
+    child.type.toLowerCase().includes(query) || Boolean(child.name?.toLowerCase().includes(query)) ||
+    Boolean(child.children?.some((nested) => childMatchesSearch(nested, query, depth + 1)))
+  )
+);
+export const itemMatchesSearch = (item: ComponentLibraryItem, normalizedSearchQuery: string): boolean => (
   normalizedSearchQuery.length === 0 ||
   item.name.toLowerCase().includes(normalizedSearchQuery) ||
-  Boolean(item.description?.toLowerCase().includes(normalizedSearchQuery))
+  Boolean(item.description?.toLowerCase().includes(normalizedSearchQuery)) ||
+  (item.type === 'collapsible' && ['accordion', 'details', 'expandable'].some((alias) => alias.includes(normalizedSearchQuery))) ||
+  Boolean(item.defaultChildren?.some((child) => childMatchesSearch(child, normalizedSearchQuery)))
 );
 const normalizeReusableSectionDedupeValue = (value: string | null | undefined): string => (
   (value || '').trim().toLowerCase().replace(/\s+/g, ' ')
@@ -230,6 +277,9 @@ function createComponentLibraryDragImage(item: ComponentLibraryItem, isTileMode:
 // ============================================
 
 interface ComponentLibraryProps {
+  interactiveComponents?: InteractiveComponentRegistryEntry[];
+  interactiveComponentsLoading?: boolean;
+  interactiveComponentsError?: string | null;
   /** Callback when a component is dragged */
   onDragStart?: (item: ComponentLibraryItem) => void;
   /** Callback when a library component drag finishes or is cancelled */
@@ -257,6 +307,9 @@ interface ComponentLibraryProps {
  * Users can drag components onto the canvas.
  */
 export function ComponentLibrary({
+  interactiveComponents = [],
+  interactiveComponentsLoading = false,
+  interactiveComponentsError = null,
   onDragStart,
   onDragEnd,
   reusableSections = [],
@@ -274,6 +327,7 @@ export function ComponentLibrary({
   onRenameReusableSection,
   onDeleteReusableSection,
 }: ComponentLibraryProps) {
+  const libraryRailRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(ESSENTIALS_CATEGORY_ID);
   const [previewItemKey, setPreviewItemKey] = useState<string | null>(null);
@@ -369,6 +423,7 @@ export function ComponentLibrary({
             libraryDuplicateIds: group.slice(1).map((duplicate) => duplicate.id),
           },
           sectionId: section.id,
+          siteId: section.siteId,
           slug: section.slug,
           name: section.name,
           sourceUpdatedAt: section.updatedAt,
@@ -384,10 +439,11 @@ export function ComponentLibrary({
     };
   }, [reusableSections]);
   const reusableItems = reusableLibraryState.items;
+  const registeredItems = useMemo(() => createRegisteredComponentLibraryItems(interactiveComponents), [interactiveComponents]);
 
   const libraryItems = useMemo(
-    () => [...LIBRARY_ITEMS, ...reusableItems],
-    [reusableItems],
+    () => [...LIBRARY_ITEMS, ...reusableItems, ...registeredItems],
+    [reusableItems, registeredItems],
   );
 
   useEffect(() => {
@@ -631,6 +687,9 @@ export function ComponentLibrary({
     if (selectedCategory === SECTIONS_CATEGORY_ID) {
       return 'Section presets and saved sections appear here. Show all components to keep building.';
     }
+    if (selectedCategory === 'registered') {
+      return 'This site has no active supported components in its registry. Registered components use the frontend runtime or an approved sandbox; React source stays in the frontend.';
+    }
     return 'Show all components or switch categories to find content blocks, layout blocks, media, forms, commerce, and reusable sections.';
   }, [activeCategoryName, isGlobalSearch, searchQuery, selectedCategory]);
 
@@ -668,7 +727,7 @@ export function ComponentLibrary({
       aria-label={`${cat.name} components, ${categoryItemCounts[cat.id] || 0} available`}
     >
       <span className="flex min-w-0 items-center gap-1">
-        <span className={cn('h-2 w-2 rounded-full', cat.color)} />
+        <span className="h-1.5 w-1.5 rounded-full bg-current opacity-40" />
         <span className="truncate">{cat.name}</span>
       </span>
       <span className="shrink-0 opacity-70">{categoryItemCounts[cat.id] || 0}</span>
@@ -683,6 +742,7 @@ export function ComponentLibrary({
           ? 'w-[min(32rem,100vw)] min-w-0 max-w-full lg:w-[clamp(22rem,28vw,32rem)] lg:min-w-[22rem] lg:max-w-[32rem]'
           : 'w-[min(18rem,100vw)] min-w-0 max-w-full lg:w-[clamp(15rem,16vw,18rem)] lg:min-w-[15rem] lg:max-w-[18rem]',
       )}
+      ref={libraryRailRef}
       data-testid="editor-component-library"
       data-component-library-density={shellMode}
       data-component-library-shell-mode={shellMode}
@@ -712,7 +772,7 @@ export function ComponentLibrary({
             aria-describedby={componentLibraryActionStatusId}
             data-action-state="ready"
             data-action-status={componentLibraryActionStatus}
-            className="inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="inline-flex min-h-11 items-center gap-1 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary"
             title={shellMode === 'expanded' ? 'Switch to compact Add Elements rail' : 'Switch to expanded Add Elements browser'}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
@@ -726,6 +786,7 @@ export function ComponentLibrary({
           <input
             type="text"
             placeholder="Search components..."
+            aria-label="Search components"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             data-testid="editor-component-search"
@@ -733,8 +794,8 @@ export function ComponentLibrary({
             data-action-state="ready"
             data-action-status={componentLibraryActionStatus}
             className={cn(
-              'w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-slate-200 bg-slate-50',
-              'focus:outline-none focus:ring-2 focus:ring-sky-500'
+              'min-h-11 w-full pl-8 pr-3 py-2 text-sm rounded-md border border-slate-200 bg-slate-50',
+              'focus:outline-none focus:ring-2 focus:ring-primary'
             )}
           />
         </div>
@@ -765,7 +826,7 @@ export function ComponentLibrary({
             >
               <span className="flex min-w-0 items-center gap-1.5">
                 <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Page sections</span>
+                <span className="truncate">Composed sections</span>
               </span>
               <span className="shrink-0 rounded bg-white/70 px-1.5 py-0.5 text-[10px] font-bold text-teal-800">
                 {categoryItemCounts[SECTIONS_CATEGORY_ID] || 0}
@@ -781,7 +842,7 @@ export function ComponentLibrary({
               {sectionStarterItems.map((item) => {
                 const itemKey = getLibraryItemKey(item);
                 const itemDomKey = getLibraryItemDomKey(item);
-                const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+                const childCount = getLibraryLayerCount(item);
                 const starterActionStatus = disabled
                   ? `Add unavailable: ${disabledReason || 'Editor changes are currently unavailable.'}`
                   : `Add ${item.name} to canvas available from Page sections.`;
@@ -804,6 +865,8 @@ export function ComponentLibrary({
                     data-disabled-reason={disabled ? disabledReason || 'Editor changes are currently unavailable.' : undefined}
                     className="group inline-flex min-h-14 min-w-0 flex-col items-start justify-between rounded-md border border-teal-100 bg-white px-2 py-1.5 text-left text-[11px] font-semibold text-slate-800 shadow-sm transition-colors hover:border-teal-300 hover:bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
                     title={item.description || item.name}
+                    onMouseEnter={() => setPreviewItemKey(itemKey)}
+                    onFocus={() => setPreviewItemKey(itemKey)}
                   >
                     <span className="flex w-full min-w-0 items-center justify-between gap-1">
                       <span className="truncate">{item.name}</span>
@@ -821,7 +884,7 @@ export function ComponentLibrary({
       </div>
 
       {/* Category Filters */}
-      <div className="border-b border-slate-200 p-2">
+      <div className="max-h-[38%] shrink-0 overflow-y-auto border-b border-slate-200 p-2 [scrollbar-gutter:stable]">
         <div
           className="mb-2 flex items-center justify-between gap-2 px-1 text-[11px] font-medium text-slate-500"
           data-testid="editor-component-library-summary"
@@ -1008,7 +1071,7 @@ export function ComponentLibrary({
             data-action-status={componentLibraryActionStatus}
             data-disabled-reason={saveSelectionDisabledReason || undefined}
             className={cn(
-              'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
+              'inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-xs font-medium transition-colors',
               canSaveSelection && !isSavingReusableSection && !disabled
                 ? 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                 : 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -1028,7 +1091,7 @@ export function ComponentLibrary({
             data-action-state={reusableSectionsLoading ? 'busy' : refreshReusableSectionsDisabledReason ? 'blocked' : 'ready'}
             data-action-status={componentLibraryActionStatus}
             data-disabled-reason={refreshReusableSectionsDisabledReason || undefined}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
             title="Refresh saved sections"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', reusableSectionsLoading && 'animate-spin')} />
@@ -1038,6 +1101,8 @@ export function ComponentLibrary({
         {reusableSectionsError && (
           <p className="mt-2 text-xs text-red-600">{reusableSectionsError}</p>
         )}
+        {interactiveComponentsLoading && <p className="mt-2 text-xs text-slate-500" role="status" data-testid="editor-component-registry-loading">Loading site components…</p>}
+        {interactiveComponentsError && <p className="mt-2 text-xs text-red-600" role="alert" data-testid="editor-component-registry-error">Site components could not load: {interactiveComponentsError}</p>}
       </div>
 
       {/* Components List */}
@@ -1048,7 +1113,7 @@ export function ComponentLibrary({
         )}
         data-testid="editor-component-list"
         data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}
-        data-component-preview-reserved-space="rail-footer"
+        data-component-preview-reserved-space="none"
         data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}
       >
         {Object.entries(groupedItemsWithFavorites).map(([category, items]) => (
@@ -1129,7 +1194,7 @@ export function ComponentLibrary({
       </div>
 
       {componentPreviewVisible && previewItem && (
-        <ComponentPreviewPane item={previewItem} />
+        <ComponentPreviewPopover item={previewItem} anchor={libraryRailRef.current} />
       )}
     </div>
   );
@@ -1178,18 +1243,43 @@ function getPreviewBaseStyle(item: ComponentLibraryItem): CSSProperties {
   };
 }
 
+/** Hover details must never resize or cover the rail's pointer targets. */
+export function componentPreviewPosition(rect: { left: number; right: number; top: number }, viewport: { width: number; height: number }): CSSProperties | null {
+  const width = 288, gap = 8;
+  const left = rect.right + gap + width <= viewport.width - gap ? rect.right + gap
+    : rect.left - gap - width >= gap ? rect.left - gap - width : null;
+  // Compact screens already have a preview in each tile; keep their actions visible.
+  if (left === null) return null;
+  return { position: 'fixed', left, top: Math.max(gap, Math.min(rect.top, viewport.height - 200)), width, zIndex: 100 };
+}
+
+function ComponentPreviewPopover({ item, anchor }: { item: ComponentLibraryItem; anchor: HTMLDivElement | null }) {
+  const [position, setPosition] = useState<CSSProperties | null>(null);
+  useEffect(() => {
+    if (!anchor) return;
+    const update = () => setPosition(componentPreviewPosition(anchor.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight }));
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(anchor);
+    return () => { window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); observer?.disconnect(); };
+  }, [anchor]);
+  return position ? createPortal(<div style={position} className="pointer-events-none" data-component-preview-stable-list="true"><ComponentPreviewPane item={item} /></div>, document.body) : null;
+}
+
 function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
   const itemKey = getLibraryItemKey(item);
   const size = item.defaultSize || { width: 240, height: 120 };
   const category = getLibraryCategory(item);
-  const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+  const childCount = getLibraryLayerCount(item);
 
   return (
     <div
-      className="pointer-events-none shrink-0 max-h-[min(12rem,38vh)] overflow-hidden border-t border-slate-200 bg-slate-50/95 p-2.5 shadow-[0_-18px_36px_rgba(15,23,42,0.08)]"
+      className="pointer-events-none max-h-[min(12rem,38vh)] overflow-hidden rounded-md border border-slate-200 bg-slate-50/95 p-2.5 shadow-lg"
       data-testid="editor-component-preview"
       data-component-preview={itemKey}
-      data-component-preview-placement="rail-footer"
+      data-component-preview-placement="beside-rail"
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -1215,36 +1305,55 @@ function ComponentPreviewPane({ item }: { item: ComponentLibraryItem }) {
   );
 }
 
-function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
+const wrapPreviewText = (text: string, width: number, fontSize: number): string[] => {
+  const capacity = Math.max(1, Math.floor(width / Math.max(1, fontSize * 0.55)));
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (line && line.length + word.length + 1 > capacity) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+};
+
+function ComposedPreviewChild({ child, depth }: { child: ComponentLibraryChild; depth: number }) {
+  if (depth > 20) return null;
+  const props = child.props || {};
+  const label = typeof props.label === 'string' ? props.label : typeof props.content === 'string' ? props.content : child.name || child.type;
+  const isText = ['text', 'heading', 'paragraph', 'link', 'button'].includes(child.type);
+  const fontSize = Number(props.fontSize) || (child.type === 'heading' ? 28 : 16);
+  return (
+    <g transform={`translate(${child.x} ${child.y})`} data-preview-child-type={child.type}>
+      {!isText || child.type === 'button' ? <rect width={child.width} height={child.height}
+        rx={getPreviewRadius(props.borderRadius, 2)} fill={getPreviewColor(props.backgroundColor, child.type === 'image' ? '#e2e8f0' : 'transparent')}
+        stroke={getPreviewColor(props.borderColor, child.type === 'image' ? '#94a3b8' : 'transparent')} /> : null}
+      {isText && <text x={child.type === 'button' ? child.width / 2 : 0} y={Math.min(child.height - 4, fontSize + 5)}
+        textAnchor={child.type === 'button' ? 'middle' : 'start'} fontSize={fontSize} fontWeight={String(props.fontWeight || 500)}
+        fill={getPreviewColor(props.color, '#334155')}>{wrapPreviewText(label, child.width, fontSize).map((line, index) => <tspan key={index} x={child.type === 'button' ? child.width / 2 : 0} dy={index === 0 ? 0 : fontSize * (Number(props.lineHeight) || 1.3)}>{line}</tspan>)}</text>}
+      {child.type === 'image' && <path d={`M0 ${child.height} L${child.width * .4} ${child.height * .35} L${child.width * .65} ${child.height * .7} L${child.width} ${child.height * .2}`} fill="none" stroke="#94a3b8" strokeWidth={2} />}
+      {child.children?.map((nested, index) => <ComposedPreviewChild key={index} child={nested} depth={depth + 1} />)}
+    </g>
+  );
+}
+
+export function ComponentPreviewArtwork({ item }: { item: ComponentLibraryItem }) {
   const props = item.defaultProps || {};
   const baseStyle = getPreviewBaseStyle(item);
-  const childCount = item.defaultChildren?.length || item.reusableContent?.elements?.length || 0;
+  const childCount = getLibraryLayerCount(item);
   const resolvedType = item.type;
 
   if (item.defaultChildren?.length) {
+    const width = item.defaultSize?.width || 1200;
+    const height = item.defaultSize?.height || 400;
     return (
-      <div
-        className="relative h-20 w-44 overflow-hidden rounded"
-        style={{
-          backgroundColor: baseStyle.backgroundColor,
-          border: `${baseStyle.borderWidth}px ${baseStyle.borderStyle} ${baseStyle.borderColor}`,
-          borderRadius: baseStyle.borderRadius,
-        }}
-      >
-        {item.defaultChildren.slice(0, 6).map((child, index) => (
-          <div
-            key={`${item.id ?? item.type}-preview-child-${index}`}
-            className="absolute rounded-sm border border-white/60 bg-slate-200/90"
-            style={{
-              left: `${Math.max(3, Math.min(82, (child.x / Math.max(item.defaultSize?.width || 1, 1)) * 100))}%`,
-              top: `${Math.max(4, Math.min(78, (child.y / Math.max(item.defaultSize?.height || 1, 1)) * 100))}%`,
-              width: `${Math.max(10, Math.min(42, (child.width / Math.max(item.defaultSize?.width || 1, 1)) * 100))}%`,
-              height: `${Math.max(8, Math.min(34, (child.height / Math.max(item.defaultSize?.height || 1, 1)) * 100))}%`,
-              backgroundColor: getPreviewColor(child.props?.backgroundColor, index % 2 === 0 ? '#dbeafe' : '#dcfce7'),
-            }}
-          />
-        ))}
-      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${item.name} composition preview`}
+        className="h-20 w-44" data-component-composition-preview={getLibraryItemKey(item)}>
+        <rect width={width} height={height} fill={baseStyle.backgroundColor} stroke={baseStyle.borderColor} />
+        {item.defaultChildren.map((child, index) => <ComposedPreviewChild key={index} child={child} depth={0} />)}
+      </svg>
     );
   }
 
@@ -1607,7 +1716,7 @@ function LibraryItem({
       className={cn(
         'group cursor-grab rounded-md border bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500',
         isTileMode
-          ? 'flex min-h-[9.25rem] flex-col gap-2 border-slate-200 p-2 shadow-sm hover:border-slate-300 hover:bg-white'
+          ? 'flex min-h-[10rem] flex-col gap-2 border-slate-200 p-2 hover:border-primary/40 hover:bg-accent/20'
           : 'flex items-center gap-2 border-transparent p-1.5 hover:border-slate-200 hover:bg-slate-50',
         'active:cursor-grabbing',
         disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent active:cursor-not-allowed'
@@ -1639,6 +1748,7 @@ function LibraryItem({
             {item.description}
           </p>
         )}
+        {getLibraryCategory(item) === 'registered' && <span className="mt-1 inline-block text-[11px] font-medium text-primary">Site component · {String(item.defaultProps?.version || '')}</span>}
         {reusableDuplicateCount > 0 && (
           <p className="truncate text-[11px] font-medium text-sky-700">
             {reusableDuplicateCount} older duplicate{reusableDuplicateCount === 1 ? '' : 's'} hidden
@@ -1661,7 +1771,7 @@ function LibraryItem({
             }}
             disabled={disabled}
             className={cn(
-              'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors',
+              'inline-flex h-11 w-11 items-center justify-center rounded-md transition-colors',
               isFavorite
                 ? 'text-yellow-500 hover:bg-yellow-50'
                 : 'text-slate-400 hover:bg-white hover:text-yellow-500',
@@ -1689,7 +1799,7 @@ function LibraryItem({
               onAddItem?.();
             }}
             disabled={disabled}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-md text-primary transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
             title={disabled ? disabledReason : `Add ${item.name} to canvas`}
             aria-label={`Add ${item.name} to canvas`}
             aria-describedby={describedBy}

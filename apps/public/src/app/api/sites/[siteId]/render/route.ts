@@ -8,6 +8,8 @@ import { NextRequest } from 'next/server';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
 import {
   getBlogPosts,
+  getMediaById,
+  getMediaList,
   getCollectionRecordByIdOrSlug,
   getPageByPath,
   getSiteByIdOrSlug,
@@ -26,15 +28,25 @@ import {
   buildPublicCollectionListRenderPayload,
   buildPublicRenderPayload,
   type RenderDataSource,
+  discoverVisitorMediaRoots,
+  type VisitorRenderTarget,
 } from '@/lib/renderPayload';
-import { publicContractJson } from '@/lib/publicContractResponse';
+import { publicContractJson as canonicalPublicContractJson, type PublicContractResponseOptions } from '@/lib/publicContractResponse';
+import { projectRuntimeRenderPayload, RUNTIME_RENDER_SCHEMA } from '@/lib/runtimeRenderPayload';
+import { projectVisitorRenderPayload, responseProfile } from '@/lib/visitorResponseProfile';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath } from '@/lib/routeResolver';
 import { matchCollectionItemRoute, matchCollectionListRoute } from '@/lib/collectionRoutes';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { collectPublishedNavigationPages } from '@/lib/repositoryNavigationPages';
+import { CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import { resolveLocalizedRoutePath } from '@/lib/siteLocalization';
+import {withCollectionFrontendDesign,withCollectionRecordFrontendDesign} from '@/lib/publicCollectionResources';
+import { hydrateVisitorMediaDataSource, memoryVisitorMediaRepository, VisitorMediaDependenciesError } from '@/lib/visitorMediaDependencies';
+import { deferVisitorCollectionReads, VisitorCollectionDependenciesError, type PrepareVisitorCollections } from '@/lib/visitorCollectionDependencies';
+import { withPublicDataFigureDatasets } from '@/lib/publicDataFigureHydration';
 
 interface RouteParams {
   params: Promise<{
@@ -44,9 +56,22 @@ interface RouteParams {
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const RENDER_SCHEMA_VERSION = 'backy.content-payload.v1';
-const SUPPORTED_RENDER_SCHEMA_VERSIONS = [RENDER_SCHEMA_VERSION] as const;
+const SUPPORTED_RENDER_SCHEMA_VERSIONS = [RENDER_SCHEMA_VERSION, RUNTIME_RENDER_SCHEMA] as const;
 const RENDER_VERSION_HEADERS = {
+  vary: 'Accept, Origin, x-backy-accept-schema-version, x-backy-schema-version',
   'x-backy-supported-schema-versions': SUPPORTED_RENDER_SCHEMA_VERSIONS.join(', '),
+};
+
+// Project before ETag/cache-revision calculation; the canonical builders and
+// saved documents remain unchanged. Private previews never enter this branch.
+const publicContractJson = <TBody>(body: TBody, options: PublicContractResponseOptions) => {
+  const projected = options.schemaVersion === RUNTIME_RENDER_SCHEMA ? projectRuntimeRenderPayload(body) : body;
+  const visitor = options.cache === 'render' && options.schemaVersion === RUNTIME_RENDER_SCHEMA
+    && options.request && responseProfile(new URL(options.request.url).searchParams) === 'visitor';
+  if (!visitor) return canonicalPublicContractJson(projected, options);
+  const headers = new Headers(options.headers);
+  headers.set('x-backy-response-profile', 'visitor');
+  return canonicalPublicContractJson(projectVisitorRenderPayload(projected), { ...options, headers });
 };
 
 const normalizePublicRouteHost = (value: string | null | undefined): string | null => {
@@ -161,15 +186,9 @@ const repositoryNavigation = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   site: Site,
 ) => {
-  const pages = await repositories.pages.list({
-    siteId: site.id,
-    includeUnpublished: false,
-    status: 'published',
-    limit: 100,
-    offset: 0,
-  });
+  const pages = await collectPublishedNavigationPages(repositories.pages, site.id);
 
-  return buildSiteNavigation(site.settings, pages.items.filter(isPubliclyReadable));
+  return buildSiteNavigation(site.settings, pages.filter(isPubliclyReadable));
 };
 
 const withRepositoryNavigation = async <TPayload extends { data?: { navigation?: unknown } }>(
@@ -286,7 +305,7 @@ const repositoryCollectionToStoreCollection = (collection: BackyCollection): Sto
     publicUpdate: collection.permissions.publicUpdate === true,
     publicDelete: collection.permissions.publicDelete === true,
   },
-  metadata: isRecord(collection.metadata) ? collection.metadata : undefined,
+  metadata: withCollectionFrontendDesign(collection).metadata as StoreCollection['metadata'],
   createdAt: collection.createdAt,
   updatedAt: collection.updatedAt,
 });
@@ -297,7 +316,7 @@ const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreColl
   collectionId: record.collectionId,
   slug: record.slug,
   status: record.status,
-  values: record.values,
+  values: withCollectionRecordFrontendDesign(record).values as StoreCollectionRecord['values'],
   createdAt: record.createdAt,
   updatedAt: record.updatedAt,
   publishedAt: record.publishedAt || null,
@@ -307,38 +326,49 @@ const repositoryRecordToStoreRecord = (record: BackyCollectionRecord): StoreColl
 async function buildRepositoryRenderDataSource(
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   site: Site,
-): Promise<RenderDataSource> {
-  const collections = await repositories.collections.list({
-    siteId: site.id,
-    status: 'published',
-    includeUnpublished: false,
-    limit: 100,
-    offset: 0,
-  });
-  const storeCollections = collections.items
-    .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
-    .map(repositoryCollectionToStoreCollection);
-  const recordsByCollection = new Map<string, StoreCollectionRecord[]>();
+  visitor = false,
+): Promise<{ dataSource: RenderDataSource; prepareCollections?: PrepareVisitorCollections }> {
+  // Independent public media and collection reads share the same fresh request.
+  // Promise.all observes both failures; cache revision is still read afterward.
+  const [{ storeCollections, recordsByCollection }, media] = await Promise.all([
+    (async () => {
+      const collections = await repositories.collections.list({
+        siteId: site.id,
+        status: 'published',
+        includeUnpublished: false,
+        limit: 100,
+        offset: 0,
+      });
+      const storeCollections = collections.items
+        .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
+        .map(repositoryCollectionToStoreCollection);
+      const recordsByCollection = new Map<string, StoreCollectionRecord[]>();
 
-  await Promise.all(storeCollections.map(async (collection) => {
-    const records = await repositories.collections.listRecords({
-      siteId: site.id,
-      collectionId: collection.id,
-      status: 'published',
-      includeUnpublished: false,
-      limit: 1000,
-      offset: 0,
-    });
-    recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
-  }));
+      if (!visitor) await Promise.all(storeCollections.map(async (collection) => {
+        const records = await repositories.collections.listRecords({
+          siteId: site.id,
+          collectionId: collection.id,
+          status: 'published',
+          includeUnpublished: false,
+          limit: 1000,
+          offset: 0,
+        });
+        recordsByCollection.set(collection.id, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+      }));
 
-  const media = await repositories.media.list({
-    siteId: site.id,
-    visibility: 'public',
-    limit: 1000,
-  });
+      return { storeCollections, recordsByCollection };
+    })(),
+    (async () => {
+      if (visitor) return { items: [], pagination: { total: 0, limit: 0, offset: 0, hasMore: false } };
+      return await repositories.media.list({
+        siteId: site.id,
+        visibility: 'public',
+        limit: 1000,
+      });
+    })(),
+  ]);
 
-  return {
+  const dataSource: RenderDataSource = {
     getCollectionByIdOrSlug: (_siteId, collectionIdOrSlug) => (
       storeCollections.find((collection) => (
         collection.id === collectionIdOrSlug || collection.slug === collectionIdOrSlug
@@ -384,6 +414,16 @@ async function buildRepositoryRenderDataSource(
       },
     }),
   };
+  if (!visitor) return { dataSource };
+  const deferred = deferVisitorCollectionReads(site.id, storeCollections.map(collection => collection.id), dataSource, async collectionId => {
+    // Keep the existing effective record window and query semantics. This
+    // change removes unrelated reads; it does not widen a dataset or page.
+    const records = await repositories.collections.listRecords({
+      siteId: site.id, collectionId, status: 'published', includeUnpublished: false, limit: 1000, offset: 0,
+    });
+    recordsByCollection.set(collectionId, records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord));
+  });
+  return { dataSource: deferred.source, prepareCollections: deferred.prepare };
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -410,6 +450,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    if (previewToken !== null && negotiatedSchema.schemaVersion === RUNTIME_RENDER_SCHEMA) {
+      return errorResponse(406, 'RUNTIME_PREVIEW_UNSUPPORTED',
+        'Private previews require the canonical render schema', requestId);
+    }
+
+    const profile = responseProfile(searchParams);
+    if (profile === 'invalid') {
+      return errorResponse(400, 'UNSUPPORTED_RESPONSE_PROFILE', 'Unsupported response profile', requestId);
+    }
+    if (profile === 'visitor' && (previewToken !== null || negotiatedSchema.schemaVersion !== RUNTIME_RENDER_SCHEMA)) {
+      return errorResponse(406, 'VISITOR_PROFILE_UNSUPPORTED',
+        'Visitor responses require public runtime rendering', requestId);
+    }
+
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -422,7 +476,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const localized = resolveLocalizedRoutePath(site.settings, requestedPath, { host: routeHost });
       path = localized.path;
       const publicPath = localized.originalPath;
-      const dataSource = await buildRepositoryRenderDataSource(repositories, site);
+      const { dataSource, prepareCollections } = await buildRepositoryRenderDataSource(repositories, site, profile === 'visitor');
+      const routeDataSource = async (target: VisitorRenderTarget, source: RenderDataSource = dataSource) => {
+        if (profile !== 'visitor') return source;
+        const collectionSource = prepareCollections
+          ? await prepareCollections(source, prepared => discoverVisitorMediaRoots(storeSite, target, prepared, true)) : source;
+        return hydrateVisitorMediaDataSource(repositories.media, site.id, collectionSource,
+          prepared => discoverVisitorMediaRoots(storeSite, target, prepared));
+      };
       const renderCacheRevision = previewToken
         ? undefined
         : await repositories.cacheInvalidations.latestRevision({ siteId: site.id }) || undefined;
@@ -458,7 +519,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               path: publicPath,
               locale: localized.locale.code,
               canonicalPath: publicPath,
-              dataSource,
+              dataSource: await routeDataSource({ kind: 'post', post: repositoryPostToStorePost(post) },
+                await withPublicDataFigureDatasets(site.id, post.content, repositories.collections, dataSource)),
             }),
             repositories,
             site,
@@ -501,7 +563,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               path: publicPath,
               locale: localized.locale.code,
               canonicalPath: publicPath,
-              dataSource,
+              dataSource: await routeDataSource({ kind: 'page', page: repositoryPageToStorePage(page) },
+                await withPublicDataFigureDatasets(site.id, page.content, repositories.collections, dataSource)),
             }),
             repositories,
             site,
@@ -543,7 +606,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               storeSite,
               repositoryCollectionToStoreCollection(collection),
               records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord),
-              { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath, dataSource },
+              { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath,
+                dataSource: await routeDataSource({ kind: 'list', collection: repositoryCollectionToStoreCollection(collection),
+                  records: records.items.filter(isPubliclyReadable).map(repositoryRecordToStoreRecord) }) },
             ),
             repositories,
             site,
@@ -578,7 +643,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 storeSite,
                 repositoryCollectionToStoreCollection(collection),
                 repositoryRecordToStoreRecord(record),
-                { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath, dataSource },
+                { requestId, path: publicPath, locale: localized.locale.code, canonicalPath: publicPath,
+                  dataSource: await routeDataSource({ kind: 'item', collection: repositoryCollectionToStoreCollection(collection),
+                    record: repositoryRecordToStoreRecord(record) }) },
               ),
               repositories,
               site,
@@ -603,6 +670,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
+
+    const demoDataSource = async (target: VisitorRenderTarget) => profile === 'visitor'
+      ? hydrateVisitorMediaDataSource(memoryVisitorMediaRepository({ getMediaById, getMediaList }), site.id, {},
+        source => discoverVisitorMediaRoots(site, target, source))
+      : undefined;
 
     const localized = resolveLocalizedRoutePath(site.settings, requestedPath, { host: routeHost });
     path = localized.path;
@@ -642,6 +714,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           path: publicPath,
           locale: localized.locale.code,
           canonicalPath: publicPath,
+          dataSource: await demoDataSource({ kind: 'post', post }),
         }),
         {
           requestId,
@@ -682,6 +755,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           path: publicPath,
           locale: localized.locale.code,
           canonicalPath: publicPath,
+          dataSource: await demoDataSource({ kind: 'page', page }),
         }),
         {
           requestId,
@@ -706,6 +780,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           path: publicPath,
           locale: localized.locale.code,
           canonicalPath: publicPath,
+          dataSource: await demoDataSource({ kind: 'list', collection, records }),
         }),
         {
           requestId,
@@ -730,6 +805,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             path: publicPath,
             locale: localized.locale.code,
             canonicalPath: publicPath,
+            dataSource: await demoDataSource({ kind: 'item', collection, record }),
           }),
           {
             requestId,
@@ -745,6 +821,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return errorResponse(404, 'PAGE_NOT_FOUND', 'Page not found', requestId);
   } catch (error) {
+    if (error instanceof VisitorMediaDependenciesError || error instanceof VisitorCollectionDependenciesError) {
+      return errorResponse(503, error.code, error.message, requestId);
+    }
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'NAVIGATION_INVENTORY_INCOMPLETE', 'Unable to read a complete navigation inventory. Retry after content changes finish.', requestId);
     console.error('Render payload API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

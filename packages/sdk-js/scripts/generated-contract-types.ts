@@ -1,3 +1,5 @@
+import type {GeneratedBackyOpenApiAdminPageSaveEnvelope,GeneratedBackyOpenApiAdminBlogPostSaveEnvelope} from "../src/generated-contract-types";
+import type { BackyCommentMutationResponse } from "../src/index";
 import type {
   BackyLocaleStrategy,
   BackyInteractiveComponentsContract,
@@ -177,6 +179,7 @@ import type {
   BackyCommerceOrderAnalyticsResponse,
   BackyCommerceOrderStatusAccess,
   BackyCommerceOrderStatusHandoffResponse,
+  BackyAdminCommerceOrderStatusHandoffResponse,
   BackyCommerceOrderFulfillmentResponse,
   BackyCommerceOrderProviderRefundResponse,
   BackyCommerceOrderQuoteResponse,
@@ -391,6 +394,7 @@ import type {
   GeneratedBackyOpenApiInteractiveComponentRegistry,
   GeneratedBackyOpenApiInteractiveComponentRegistryEnvelope,
   GeneratedBackyOpenApiInteractiveComponentRegistryEntry,
+  GeneratedBackyOpenApiBackyRichInteractiveComponentNode,
   GeneratedBackyOpenApiInteractiveComponentRegistryPagination,
   GeneratedBackyOpenApiInteractiveComponentRuntime,
   GeneratedBackyOpenApiInteractiveComponentSecurity,
@@ -958,7 +962,7 @@ type CommentMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["comment"]>, BackySiteCommentResponse>
 >;
 type UpdateCommentMethodReturnsContract = Assert<
-  Equal<AwaitedReturn<BackyClient["updateComment"]>, BackySiteCommentResponse>
+  Equal<AwaitedReturn<BackyClient["updateComment"]>, BackyCommentMutationResponse>
 >;
 type DeleteCommentMethodReturnsContract = Assert<
   Equal<
@@ -976,7 +980,7 @@ type AdminPageMethodReturnsContract = Assert<
   Equal<AwaitedReturn<BackyClient["adminPage"]>, BackyAdminPageResponse>
 >;
 type UpdateAdminPageMethodReturnsContract = Assert<
-  Equal<AwaitedReturn<BackyClient["updateAdminPage"]>, BackyAdminPageResponse>
+  Equal<AwaitedReturn<BackyClient["updateAdminPage"]>, GeneratedBackyOpenApiAdminPageSaveEnvelope>
 >;
 type DeleteAdminPageMethodReturnsContract = Assert<
   Equal<
@@ -1097,7 +1101,7 @@ type AdminBlogPostMethodReturnsContract = Assert<
 type UpdateAdminBlogPostMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["updateAdminBlogPost"]>,
-    BackyAdminBlogPostResponse
+    GeneratedBackyOpenApiAdminBlogPostSaveEnvelope
   >
 >;
 type DeleteAdminBlogPostMethodReturnsContract = Assert<
@@ -1573,7 +1577,7 @@ type CommerceOrderAnalyticsMethodReturnsContract = Assert<
 type CommerceOrderStatusHandoffMethodReturnsContract = Assert<
   Equal<
     AwaitedReturn<BackyClient["commerceOrderStatusHandoff"]>,
-    BackyCommerceOrderStatusHandoffResponse
+    BackyAdminCommerceOrderStatusHandoffResponse
   >
 >;
 type CommerceOrderPublicStatusHandoffMethodReturnsContract = Assert<
@@ -1928,6 +1932,7 @@ const componentTypeContracts = [
   componentTypeContractFixture("text", "typography", "Text", ["props.content", "props.fontSize", "props.fontWeight", "props.color", "props.lineHeight", "props.textAlign"], { content: "Text", fontSize: 18, fontWeight: 400, color: "#334155", lineHeight: 1.55, textAlign: "left" }),
   componentTypeContractFixture("paragraph", "typography", "Paragraph", ["props.content", "props.fontSize", "props.color", "props.lineHeight", "props.textAlign"], { content: "Paragraph text", fontSize: 18, color: "#334155", lineHeight: 1.65, textAlign: "left" }),
   componentTypeContractFixture("quote", "typography", "Quote", ["props.content", "props.cite", "props.fontSize", "props.color", "props.lineHeight", "props.fontStyle"], { content: "Quote text", cite: "", fontSize: 24, color: "#111827", lineHeight: 1.45, fontStyle: "italic" }),
+  componentTypeContractFixture("collapsible", "typography", "Collapsible section", ["props.title", "props.defaultOpen", "props.content", "props.fontSize", "props.color", "props.lineHeight"], { title: "Details", defaultOpen: false, content: [{ type: "p", children: [{ text: "Add supporting details here." }] }], fontSize: 16, color: "#334155", lineHeight: 1.6 }),
   componentTypeContractFixture("list", "typography", "List", ["props.items", "props.content", "props.listType", "props.fontSize", "props.color", "props.gap"], { items: ["List item"], content: "", listType: "unordered", fontSize: 18, color: "#334155", gap: 8 }),
   componentTypeContractFixture("button", "typography", "Button", ["props.content", "props.label", "props.href", "props.target", "props.rel", "props.variant", "props.action", "props.fileMediaId", "props.backgroundColor", "props.color", "props.borderRadius", "props.fontSize", "props.fontWeight"], { content: "Button", label: "Button", href: "/", target: "_self", rel: "", variant: "primary", action: "navigate", fileMediaId: "", backgroundColor: "#111827", color: "#ffffff", borderRadius: 8, fontSize: 16, fontWeight: 700 }),
   componentTypeContractFixture("link", "typography", "Link", ["props.content", "props.href", "props.target", "props.rel", "props.download", "props.fileMediaId", "props.color", "props.fontSize", "props.underline"], { content: "Link", href: "/", target: "_self", rel: "", download: false, fileMediaId: "", color: "#2563eb", fontSize: 16, underline: true }),
@@ -2265,7 +2270,7 @@ const sdkAdminSite = {
   name: "Demo Site",
   description: "A Backy-powered site",
   customDomain: "demo.example.test",
-  status: "draft",
+  status: "draft" as const,
   isPublished: false,
   teamId: "team_demo",
   settings: {
@@ -2311,6 +2316,7 @@ const sdkAdminSiteDeleteEnvelope = {
   requestId: "req_admin_site_delete",
   data: {
     deleted: true,
+    completionWarnings: [],
     siteId: "site_demo",
   },
 } satisfies BackyAdminSiteDeleteResponse;
@@ -2320,9 +2326,7 @@ const sdkAdminSiteReadinessEnvelope = {
   requestId: "req_admin_site_readiness",
   data: {
     readiness: {
-      id: "site_demo",
-      status: "attention",
-      checks: [],
+      site: {id:"site_demo",slug:"demo",name:"Demo",status:"published",isPublished:true},score:100,statusLabel:"ready",summary:{errors:0,warnings:0,notices:0,totalChecks:1,passedChecks:1,pages:0,publishedPages:0,posts:0,collections:0,media:0,reusableSections:0},pages:[],posts:[],checks:[],
     },
   },
 } satisfies BackyAdminSiteReadinessResponse;
@@ -2338,10 +2342,14 @@ const sdkAdminSiteDuplicateEnvelope = {
       name: "Demo Site Copy",
     },
     pagesCopied: 3,
+    copiedResourceScope: { copied: ["pages"], notCopied: ["media-and-file-bytes"], retainedReferences: "Authored references remain references" },
+    concurrencyBoundary: "postgres-table-locks",
+    completionWarnings: [],
   },
 } satisfies BackyAdminSiteDuplicateResponse;
 
-const sdkAdminFrontendDesign = {
+import type { GeneratedBackyOpenApiAdminTemplateRegistryEntry, GeneratedBackyOpenApiAdminTemplateRegistrySummary, GeneratedBackyOpenApiAdminFrontendDesignEnvelope, GeneratedBackyOpenApiAdminTemplateRegistryEnvelope } from '../src/generated-contract-types';
+const sdkAdminFrontendDesign: GeneratedBackyOpenApiFrontendDesignContract = {
   schemaVersion: "backy.frontend-design.v1",
   status: "captured",
   source: {
@@ -2398,10 +2406,11 @@ const sdkAdminFrontendDesign = {
   updatedAt: "2026-05-21T00:00:00.000Z",
 };
 
-const sdkTemplateRegistryEntry = {
+const sdkTemplateRegistryEntry: GeneratedBackyOpenApiAdminTemplateRegistryEntry = {
   id: "template_home",
   type: "page",
   name: "Homepage",
+  isDefault: false,
   description: null,
   routePattern: "/",
   status: "active",
@@ -2438,7 +2447,7 @@ const sdkTemplateRegistryEntry = {
   },
 };
 
-const sdkTemplateRegistrySummary = {
+const sdkTemplateRegistrySummary: GeneratedBackyOpenApiAdminTemplateRegistrySummary = {
   schemaVersion: "backy.template-registry.v1",
   status: "captured",
   templateCount: 1,
@@ -2731,6 +2740,18 @@ const sdkAdminInteractiveComponentMigrationEnvelope = {
   requestId: "req_admin_interactive_component_migration",
   data: {
     dryRun: true,
+    outcome: "complete",
+    failedTargets: [],
+    completionWarnings: [],
+    retry: { required: false, reloadPreview: false, message: null },
+    concurrencyBoundary: "database-row-lock",
+    reviewedPreview: {
+      siteId: "site_demo",
+      source: { componentKey: "backy.figure.rounds", version: "1.0.0" },
+      target: { componentKey: "backy.figure.rounds", version: "1.1.0" },
+      targetFingerprint: "reviewed-target-fingerprint",
+      targets: [{ targetType: "page", targetId: "page_home", contentFingerprint: "reviewed-content-fingerprint" }],
+    },
     source: {
       componentKey: "backy.figure.rounds",
       version: "1.0.0",
@@ -3274,8 +3295,8 @@ const sdkAdminNavigationEnvelope = {
           },
         ],
         layout: {
-          header: "centered",
-          footer: "columns",
+          header: { variant: "centered" },
+          footer: { variant: "columns" },
         },
       },
       resolved: {
@@ -3462,6 +3483,10 @@ const sdkAdminUserBulkEnvelope = {
     deleted: 0,
     userIds: [sdkAdminUser.id],
     users: [sdkAdminUser],
+    outcome: "complete",
+    completionWarnings: [],
+    failedTargets: [],
+    reloadRequired: false,
   },
 } satisfies BackyAdminUserBulkResponse;
 
@@ -4292,7 +4317,7 @@ const sdkAdminCollection = {
   siteId: "site_demo",
   slug: "projects",
   name: "Projects",
-  status: "published",
+  status: "published" as const,
   permissions: {
     publicRead: true,
     publicCreate: false,
@@ -4301,13 +4326,13 @@ const sdkAdminCollection = {
     {
       key: "title",
       label: "Title",
-      type: "text",
+      type: "text" as const,
       required: true,
     },
     {
       key: "slug",
       label: "Slug",
-      type: "slug",
+      type: "slug" as const,
       unique: true,
     },
   ],
@@ -4765,6 +4790,10 @@ const sdkAdminReusableSectionVersionsEnvelope = {
     versions: [
       {
         version: 2,
+        category: "general",
+        status: "active",
+        tags: [],
+        content: sdkAdminReusableSection.content,
         name: "Hero Block",
         slug: "hero-block",
         updatedAt: "2026-05-21T00:00:00.000Z",
@@ -4870,6 +4899,8 @@ const sdkAdminReusableSectionInstancesRefreshEnvelope = {
   requestId: "req_admin_reusable_section_instances_refresh",
   data: {
     dryRun: true,
+    reviewedPreview: { schemaVersion: 'backy.reusable-section-propagation-preview.v1', siteId: 'site_demo', sectionId: 'section_hero', sourceFingerprint: 'a'.repeat(64), inventoryFingerprint: 'b'.repeat(64), scope: { targetType: 'page', targetId: null, includeProducts: false }, targets: [{ type: 'page', id: 'page_home', updatedAt: '2026-05-21T00:00:00.000Z', contentFingerprint: 'c'.repeat(64) }] },
+    outcome: 'complete', completionWarnings: [], concurrencyBoundary: 'database-serializable-transaction',
     sectionId: "section_hero",
     sourceUpdatedAt: "2026-05-21T00:00:00.000Z",
     refreshedTargets: [
@@ -5198,7 +5229,8 @@ const sdkCommerceOrderAnalyticsEnvelope = {
     analytics: {
       schemaVersion: "backy.order-analytics.v1",
       generatedAt: "2026-05-21T00:00:00.000Z",
-      recordLimit: 1000,
+      recordLimit: 12,
+      inventoryComplete: true,
       orderCount: 12,
       revenue: {
         grossTotal: 12345,
@@ -5413,7 +5445,7 @@ const sdkCommerceProductProviderSyncEnvelope = {
       source: "admin-product-provider-sync-api",
       operatorGate:
         "BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification",
-      syncSchemaVersion: "backy.commerce-product-provider-sync.v1",
+      syncSchemaVersion: "backy.commerce-product-sync.v1",
       site: {
         id: "site_demo",
         slug: "demo",
@@ -11908,9 +11940,9 @@ const sdkAdminFormEnvelope = {
 
 const sdkAdminFormDeleteEnvelope = {
   success: true,
-  requestId: "req_admin_form_delete",
+  requestId: "req_admin_form_delete", deleted: true, cleanupPending: false,
   data: {
-    deleted: true,
+    deleted: true, cleanupPending: false,
   },
 } satisfies BackyAdminFormDeleteResponse;
 
@@ -11927,7 +11959,7 @@ const sdkAdminFormEmbedBlockEnvelope = {
   success: true,
   requestId: "req_admin_form_embed_block",
   data: {
-    section: sdkAdminReusableSection,
+    section: { id: "section_form", slug: "form-embed", name: "Form embed", content: { elements: [] } },
     embed: {
       definitionUrl: "/api/sites/site_demo/forms/form_contact/definition",
       submitUrl: "/api/sites/site_demo/forms/form_contact/submissions",
@@ -11948,12 +11980,9 @@ const sdkAdminFormsAnalyticsEnvelope = {
       name: "Demo",
     },
     analytics: {
-      schemaVersion: "backy.forms-analytics.v1",
-      totals: {
-        forms: 1,
-        submissions: 1,
-        contacts: 1,
-      },
+      summary: { forms: 1, submissions: 1 },
+      trend: [], forms: [],
+      leads: { summary: { contacts: 1 }, segments: [], savedLists: [], forms: [] },
     },
     generatedAt: "2026-05-21T00:00:00.000Z",
   },
@@ -11970,7 +11999,7 @@ const sdkAdminFormContactSegmentsEnvelope = {
     },
     formId: "form_contact",
     analytics: {
-      schemaVersion: "backy.form-contact-segments.v1",
+      forms: [],
       summary: {
         contacts: 1,
       },
@@ -11988,6 +12017,7 @@ const sdkAdminFormContactListsEnvelope = {
       {
         id: "newsletter",
         name: "Newsletter",
+        createdAt: "2026-05-21T00:00:00.000Z", updatedAt: "2026-05-21T00:00:00.000Z",
         count: 1,
         filters: {
           status: "qualified",
@@ -12005,6 +12035,7 @@ const sdkAdminFormContactListMutationEnvelope = {
     list: {
       id: "newsletter",
       name: "Newsletter",
+        createdAt: "2026-05-21T00:00:00.000Z", updatedAt: "2026-05-21T00:00:00.000Z",
       filters: {
         status: "qualified",
       },
@@ -12013,6 +12044,7 @@ const sdkAdminFormContactListMutationEnvelope = {
       {
         id: "newsletter",
         name: "Newsletter",
+        createdAt: "2026-05-21T00:00:00.000Z", updatedAt: "2026-05-21T00:00:00.000Z", filters: {},
       },
     ],
     created: true,
@@ -12050,6 +12082,10 @@ const sdkAdminFormDeliveryRetryEnvelope = {
   data: {
     delivery: {
       attempted: true,
+      channel: "webhook",
+      attemptId: "attempt-proof",
+      durableState: "succeeded",
+      completionWarnings: [],
       target: "https://example.com/form-webhook",
       status: "succeeded",
       statusCode: 200,
@@ -12059,6 +12095,7 @@ const sdkAdminFormDeliveryRetryEnvelope = {
       },
     },
     submission: formSubmission,
+    completionWarnings: [],
   },
 } satisfies BackyAdminFormDeliveryRetryResponse;
 
@@ -12403,6 +12440,12 @@ const sdkAdminMediaListEnvelope = {
   requestId: "req_admin_media",
   data: {
     media: [mediaAsset],
+    uploadReadiness: {
+      schemaVersion: "backy.media-upload-readiness.v1",
+      state: "admissible",
+      evidence: "configuration-only",
+      blockingReasons: [],
+    },
     quota: {
       limitBytes: 1_000_000,
       usedBytes: 82_000,
@@ -12850,6 +12893,7 @@ const commentBulkUpdateEnvelope = {
   success: true,
   requestId: "req_comment_bulk",
   data: {
+    siteId: "site_demo", updatedCount: 1, missingIds: [], completionWarnings: [], concurrencyBoundary: "database-site-row-lock",
     updated: [comment],
   },
 } satisfies GeneratedBackyOpenApiCommentBulkUpdateEnvelope;
@@ -12883,6 +12927,7 @@ const commentBlocklistDeleteEnvelope = {
     deleted: [commentBlocklistEntry],
     deletedCount: 1,
     missingIds: [],
+    completionWarnings: [], concurrencyBoundary: "database-site-row-lock",
   },
 } satisfies GeneratedBackyOpenApiCommentBlocklistDeleteEnvelope;
 
@@ -12898,6 +12943,7 @@ const commentReportEnvelope = {
   success: true,
   requestId: "req_comment_report",
   data: {
+    completionWarnings: [],
     comment,
     report: {
       reason: "spam",
@@ -13003,12 +13049,15 @@ const commentDeliveryRetryEnvelope = {
       channel: "webhook",
       target: "https://example.com/comment-webhook",
       status: "succeeded",
+      attemptId: "delivery-success",
+      durableState: "succeeded",
       statusCode: 200,
       provider: "webhook",
       metadata: {
         retry: true,
       },
     },
+    completionWarnings: [],
     retryOf: "event_comment_delivery_failed",
     comment,
   },
@@ -13022,9 +13071,12 @@ const sdkCommentDeliveryRetryEnvelope = {
       attempted: true,
       channel: "email",
       target: "mailto:moderator@example.com",
-      status: "queued",
+      status: "uncertain",
+      attemptId: "delivery-uncertain",
+      durableState: "uncertain",
       provider: "email",
     },
+    completionWarnings: [],
     retryOf: "event_comment_email_failed",
     comment,
   },
@@ -14277,6 +14329,23 @@ const interactiveRegistryEntry = {
   ],
 } satisfies GeneratedBackyOpenApiInteractiveComponentRegistryEntry;
 
+const richInteractiveWidget = {
+  type: "interactive_component",
+  id: "saved-article-widget",
+  componentKey: "fixture.reviewed-widget",
+  version: "1.0.0",
+  elementType: "codeComponent",
+  props: { count: 7, authoredExtension: { preserve: true } },
+  controls: [{ key: "count", label: "Count", type: "number", value: 7 }],
+  propsSchema: { type: "object", properties: { count: { type: "number" } } },
+  fallback: { title: "Widget summary", text: "Readable article fallback" },
+  renderCapabilities: { hydrationMode: "sandbox-iframe" },
+  dataBindings: [],
+  children: [{ text: "" }],
+  customMetadata: { preserve: true },
+} satisfies GeneratedBackyOpenApiBackyRichInteractiveComponentNode;
+void richInteractiveWidget;
+
 const interactiveRegistryEnvelope = {
   success: true,
   requestId: "req_interactive_registry",
@@ -15274,3 +15343,266 @@ void (null as unknown as ManifestEnvelopeDataIsManifest);
 void (null as unknown as RenderEnvelopeDataIsPayload);
 void (null as unknown as EditableMapEntry);
 void generatedBackyContractTypeSources;
+
+// Cleanup is a discriminated 200/202 result; retries retain the deleted form identity.
+import type {
+  GeneratedBackyOpenApiFormAttachmentCleanupEnvelope,
+  GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope,
+  GeneratedBackyOpenApiAdminFormDeletePendingEnvelope,
+} from '../src/generated-contract-types';
+const cleanupQueue: GeneratedBackyOpenApiFormAttachmentCleanupEnvelope = {
+  success: true, requestId: 'cleanup-types', data: { siteId: 'site-proof', jobs: [{ formId: 'form-proof', attachmentCount: 2 }] },
+};
+const completedFormDelete: GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope = {
+  success: true, requestId: 'cleanup-types', data: { deleted: true, cleanupPending: false }, deleted: true, cleanupPending: false,
+};
+const pendingFormDelete: GeneratedBackyOpenApiAdminFormDeletePendingEnvelope = {
+  success: true, requestId: 'cleanup-types', data: { deleted: true, cleanupPending: true, retry: 'Repeat this authorized DELETE to resume private attachment cleanup.' }, deleted: true, cleanupPending: true,
+};
+// @ts-expect-error A pending response cannot be advertised as completed.
+const invalidCompletedDelete: GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope = pendingFormDelete;
+// @ts-expect-error A pending response requires its explicit retry instruction.
+const invalidPendingDelete: GeneratedBackyOpenApiAdminFormDeletePendingEnvelope['data'] = { deleted: true, cleanupPending: true };
+// @ts-expect-error The private queue deliberately excludes filenames and storage paths.
+const invalidCleanupJob: GeneratedBackyOpenApiFormAttachmentCleanupEnvelope['data']['jobs'][number] = { formId: 'form-proof', attachmentCount: 1, filename: 'private.txt' };
+void [cleanupQueue, completedFormDelete, pendingFormDelete, invalidCompletedDelete, invalidPendingDelete, invalidCleanupJob];
+
+import type {
+  GeneratedBackyOpenApiAdminPageCreateRequest,
+  GeneratedBackyOpenApiAdminPageUpdateRequest,
+  GeneratedBackyOpenApiAdminBlogPostCreateRequest,
+  GeneratedBackyOpenApiAdminBlogPostUpdateRequest,
+  GeneratedBackyOpenApiAdminPageListEnvelope,
+  GeneratedBackyOpenApiAdminPagePreviewEnvelope,
+  GeneratedBackyOpenApiAdminBlogPostPreviewEnvelope,
+  GeneratedBackyOpenApiAdminCanvasElement,
+  GeneratedBackyOpenApiAdminContentVersionRequest,
+} from '../src/generated-contract-types';
+const lifecyclePageCreate: GeneratedBackyOpenApiAdminPageCreateRequest = {
+  title: 'Typed page', status: 'draft', frontendDesignTemplateId: 'registered-template',
+  content: { elements: [{ id: 'rich', type: 'paragraph', width: 600, responsive: { mobile: { width: 320 } }, props: { content: [] }, metadata: { nestedExtension: { retained: true } } }], canvasSize: { width: 1200, height: 800, layout: 'fluid' }, dataBindings: { source: 'collection' }, animations: { intro: 'fade' } },
+  meta: { frontendDesignTokens: { color: 'teal' }, nestedExtension: { retained: true } },
+};
+const lifecyclePageUpdate: GeneratedBackyOpenApiAdminPageUpdateRequest = { expectedUpdatedAt: '2026-10-04T00:00:00Z', content: lifecyclePageCreate.content };
+const lifecyclePostCreate: GeneratedBackyOpenApiAdminBlogPostCreateRequest = { title: 'Typed article', content: 'Legacy blog string', categoryIds: ['category'], tagIds: ['tag'] };
+const lifecyclePostUpdate: GeneratedBackyOpenApiAdminBlogPostUpdateRequest = { expectedUpdatedAt: '2026-10-04T00:00:00Z', meta: lifecyclePageCreate.meta };
+const lifecycleVersion: GeneratedBackyOpenApiAdminContentVersionRequest = { expectedUpdatedAt: '2026-10-04T00:00:00Z' };
+const lifecyclePageList: GeneratedBackyOpenApiAdminPageListEnvelope = { success: true, requestId: 'typed-lifecycle', data: { pages: [{ id: 'page', title: 'Typed page', slug: 'typed-page' }], pagination: { total: 1, limit: 100, offset: 0, hasMore: false } } };
+const lifecyclePagePreview: GeneratedBackyOpenApiAdminPagePreviewEnvelope = { success: true, requestId: 'typed-lifecycle', data: { previewToken: '', expiresAt: '', targetType: 'page', targetId: 'page', hostedUrl: '', pageApiUrl: '', renderUrl: '' } };
+const lifecyclePostPreview: GeneratedBackyOpenApiAdminBlogPostPreviewEnvelope = { success: true, requestId: 'typed-lifecycle', data: { previewToken: '', expiresAt: '', targetType: 'post', targetId: 'post', hostedUrl: '', postApiUrl: '' } };
+// @ts-expect-error New pages require a title.
+const lifecycleMissingTitle: GeneratedBackyOpenApiAdminPageCreateRequest = { slug: 'missing-title' };
+// @ts-expect-error Pages reject legacy blog string content.
+const lifecycleLegacyPage: GeneratedBackyOpenApiAdminPageCreateRequest = { title: 'Page', content: 'legacy' };
+// @ts-expect-error Extensible element metadata belongs in props/metadata, not unsupported root keys.
+const lifecycleUnsupportedRoot: GeneratedBackyOpenApiAdminCanvasElement = { id: 'element', type: 'paragraph', unsupportedRoot: true };
+// @ts-expect-error Preview target discriminants distinguish pages from posts.
+const lifecycleWrongPreview: GeneratedBackyOpenApiAdminPagePreviewEnvelope['data']['targetType'] = 'post';
+void [lifecyclePageCreate, lifecyclePageUpdate, lifecyclePostCreate, lifecyclePostUpdate, lifecycleVersion, lifecyclePageList, lifecyclePagePreview, lifecyclePostPreview, lifecycleMissingTitle, lifecycleLegacyPage, lifecycleUnsupportedRoot, lifecycleWrongPreview];
+
+// Authenticated registry DTOs preserve nested authoring state independently of public projection.
+import type {
+  GeneratedBackyOpenApiAdminInteractiveComponentCreateRequest,
+  GeneratedBackyOpenApiAdminInteractiveComponentUpdateRequest,
+  GeneratedBackyOpenApiAdminInteractiveComponentResource,
+  GeneratedBackyOpenApiAdminInteractiveComponentBundleRequest,
+  GeneratedBackyOpenApiAdminInteractiveComponentReviewRequest,
+  GeneratedBackyOpenApiAdminInteractiveComponentMigrationRequest,
+  GeneratedBackyOpenApiAdminInteractiveComponentExportPackage,
+  GeneratedBackyOpenApiAdminInteractiveComponentListEnvelope,
+  GeneratedBackyOpenApiAdminInteractiveComponentRollbackEnvelope,
+} from '../src/generated-contract-types';
+const registryCreate: GeneratedBackyOpenApiAdminInteractiveComponentCreateRequest = {
+  componentKey: 'fixture.widget', version: '1.2.0', displayName: 'Typed widget', type: 'codeComponent', status: 'disabled', reviewStatus: 'draft', renderMode: 'sandbox-iframe',
+  fallback: { required: true, supported: ['title', 'text', 'html', 'imageUrl', 'alt', 'ariaLabel'] },
+  controls: [{ key: 'speed', type: 'range', defaultValue: 1, unknownNested: { retained: true } }],
+  dependencyMetadata: { defaultProps: { series: { values: [1, 2] } }, propsSchema: { type: 'object', properties: { series: { type: 'object' } } }, dataBindingPresets: [{ id: 'series', label: 'Series', scope: 'collections', targetPath: 'props.series', mode: 'list' }], unknown: { retained: true } },
+};
+const registryPatch: GeneratedBackyOpenApiAdminInteractiveComponentUpdateRequest = { dependencyMetadata: registryCreate.dependencyMetadata };
+const registryBundle: GeneratedBackyOpenApiAdminInteractiveComponentBundleRequest = { contentBase64: 'Zml4dHVyZQ==', filename: 'fixture.js' };
+const registryReview: GeneratedBackyOpenApiAdminInteractiveComponentReviewRequest = { action: 'submit' };
+const registryMigration: GeneratedBackyOpenApiAdminInteractiveComponentMigrationRequest = { targetVersion: '2.0.0', dryRun: true };
+const registryExport: GeneratedBackyOpenApiAdminInteractiveComponentExportPackage = { schemaVersion: 'backy.interactive-component-export.v1', component: { componentKey: 'fixture.widget', displayName: 'Widget', version: '1.0.0', status: 'disabled', reviewStatus: 'draft' } };
+const registryImport: GeneratedBackyOpenApiAdminInteractiveComponentCreateRequest = { exportPackage: registryExport, version: '3.0.0' };
+const registryRow: GeneratedBackyOpenApiAdminInteractiveComponentResource = { id: 'component', siteId: 'canonical-site', componentKey: 'fixture.widget', displayName: 'Widget', version: '1.0.0', type: 'codeComponent', status: 'archived', reviewStatus: 'rejected', renderMode: 'static-fallback', source: 'registry', dependencyMetadata: registryCreate.dependencyMetadata };
+const registryList: GeneratedBackyOpenApiAdminInteractiveComponentListEnvelope = { success: true, requestId: 'registry-types', data: { components: [registryRow], pagination: { total: 205, limit: 100, offset: 0, hasMore: true } } };
+const registryRollback: GeneratedBackyOpenApiAdminInteractiveComponentRollbackEnvelope = { success: true, requestId: 'registry-types', data: { rolledBack: true, restoredFromVersion: null, component: registryRow, disabledVersions: [] } };
+// @ts-expect-error A new registry entry requires key and display name, or an export package.
+const registryMissingIdentity: GeneratedBackyOpenApiAdminInteractiveComponentCreateRequest = { version: '1.0.0' };
+// @ts-expect-error PATCH cannot mutate an exact registered identity.
+const registryChangedVersion: GeneratedBackyOpenApiAdminInteractiveComponentUpdateRequest = { version: '2.0.0' };
+// @ts-expect-error Editable defaults belong in dependencyMetadata, not an ignored root alias.
+const registryRootDefaults: GeneratedBackyOpenApiAdminInteractiveComponentCreateRequest = { componentKey: 'key', displayName: 'Name', defaultProps: {} };
+// @ts-expect-error Review has only three supported actions.
+const registryInvalidReview: GeneratedBackyOpenApiAdminInteractiveComponentReviewRequest = { action: 'publish' };
+// @ts-expect-error Signed upload requires content bytes.
+const registryMissingBundle: GeneratedBackyOpenApiAdminInteractiveComponentBundleRequest = { filename: 'fixture.js' };
+void [registryCreate, registryPatch, registryBundle, registryReview, registryMigration, registryExport, registryImport, registryRow, registryList, registryRollback, registryMissingIdentity, registryChangedVersion, registryRootDefaults, registryInvalidReview, registryMissingBundle];
+
+import type {
+  GeneratedBackyOpenApiAdminMediaUploadMultipartRequest,
+  GeneratedBackyOpenApiAdminMediaReplaceMultipartRequest,
+  GeneratedBackyOpenApiAdminMediaUpdateRequest,
+  GeneratedBackyOpenApiAdminMediaBindingRequest,
+  GeneratedBackyOpenApiAdminMediaSignedUrlRequest,
+  GeneratedBackyOpenApiAdminMediaSignedUrlEnvelope,
+  GeneratedBackyOpenApiAdminMediaDeleteRequest,
+  GeneratedBackyOpenApiAdminMediaDeletionErrorEnvelope,
+  GeneratedBackyOpenApiAdminMediaFolderCreateRequest,
+  GeneratedBackyOpenApiAdminMediaVersionRestoreEnvelope,
+  GeneratedBackyOpenApiAdminMediaProviderAnalyticsRequest,
+} from '../src/generated-contract-types';
+const mediaMultipart: GeneratedBackyOpenApiAdminMediaUploadMultipartRequest = { file: new Blob(['exact bytes']), scope: 'page', scopeTargetId: 'page', visibility: 'private', tags: 'alpha,beta', metadata: JSON.stringify({ nested: { retained: true } }), fontFamily: 'Site Sans', fontWeight: '600' };
+const mediaReplacement: GeneratedBackyOpenApiAdminMediaReplaceMultipartRequest = { file: new File(['replacement'], 'fixture.txt'), reason: 'Reviewed replacement' };
+const mediaPatch: GeneratedBackyOpenApiAdminMediaUpdateRequest = { visibility: 'private', tags: ['revised'], metadata: { nested: { retained: true } } };
+const mediaBinding: GeneratedBackyOpenApiAdminMediaBindingRequest = { targetType: 'post', targetId: 'article', action: 'bind' };
+const mediaSigning: GeneratedBackyOpenApiAdminMediaSignedUrlRequest = { disposition: 'attachment', expiresInSeconds: 120 };
+const mediaSignedResult: GeneratedBackyOpenApiAdminMediaSignedUrlEnvelope = { success: true, requestId: 'media-types', data: { media: { id: 'media', siteId: 'canonical-site', filename: 'fixture.txt', mimeType: 'text/plain', visibility: 'private' }, signedUrl: '/signed', path: '/signed', expiresAt: 1800000000, disposition: 'attachment' } };
+const mediaDeleteOverride: GeneratedBackyOpenApiAdminMediaDeleteRequest = { allowReferencedDelete: true, reason: 'Reviewed content deletion', referenceFingerprint: 'current-reference-fingerprint' };
+const mediaDeleteConflict: GeneratedBackyOpenApiAdminMediaDeletionErrorEnvelope = { success: false, requestId: 'media-types', error: { code: 'MEDIA_IN_USE', message: 'Review current references', details: { mediaId: 'media', referenceCount: 1, references: [{ scope: 'collectionRecord', targetId: 'record', collectionId: 'collection' }], referenceFingerprint: 'fingerprint' } } };
+const mediaFolderCreate: GeneratedBackyOpenApiAdminMediaFolderCreateRequest = { name: 'Site assets', parentId: null, sortOrder: 1 };
+const mediaAnalytics: GeneratedBackyOpenApiAdminMediaProviderAnalyticsRequest = { entries: [{ mediaId: 'media', requests: 3, conversions: 1 }], mergeMode: 'increment' };
+const mediaRestore: GeneratedBackyOpenApiAdminMediaVersionRestoreEnvelope['data']['source'] = 'metadata';
+// @ts-expect-error Multipart uploads require binary Blob/File parts rather than a filename string.
+const mediaWrongBinary: GeneratedBackyOpenApiAdminMediaUploadMultipartRequest = { file: 'fixture.txt' };
+// @ts-expect-error Replacement requires its binary file part.
+const mediaMissingBinary: GeneratedBackyOpenApiAdminMediaReplaceMultipartRequest = { reason: 'Missing file' };
+// @ts-expect-error Multipart tags are a comma-separated string, not the SDK helper's string[] source input.
+const mediaWrongTags: GeneratedBackyOpenApiAdminMediaUploadMultipartRequest = { file: new Blob(), tags: ['alpha'] };
+// @ts-expect-error Binding targets are site-local pages or articles.
+const mediaWrongBinding: GeneratedBackyOpenApiAdminMediaBindingRequest = { targetType: 'collection', targetId: 'record' };
+// @ts-expect-error Signed expiry responses are Unix seconds, not date strings.
+const mediaWrongExpiry: GeneratedBackyOpenApiAdminMediaSignedUrlEnvelope['data']['expiresAt'] = '2026-10-04T00:00:00Z';
+// @ts-expect-error Folder creation requires a name.
+const mediaMissingFolder: GeneratedBackyOpenApiAdminMediaFolderCreateRequest = { parentId: null };
+void [mediaMultipart, mediaReplacement, mediaPatch, mediaBinding, mediaSigning, mediaSignedResult, mediaDeleteOverride, mediaDeleteConflict, mediaFolderCreate, mediaAnalytics, mediaRestore, mediaWrongBinary, mediaMissingBinary, mediaWrongTags, mediaWrongBinding, mediaWrongExpiry, mediaMissingFolder];
+
+// Website visitor contracts do not imply CMS identity or a required requestId.
+import type { BackyVisitorRegisterRequest, BackyVisitorLoginRequest, BackyVisitorIssuedSessionEnvelope, BackyVisitorRequestOptions } from '../src/index';
+const visitorRegisterByEmail: BackyVisitorRegisterRequest = { email: 'member@example.com', password: 'correct-password', returnUrl: 'https://website.example/account' };
+const visitorEnrollVerified: BackyVisitorRegisterRequest = { accessToken: 'verified-user-token', displayName: 'Member' };
+const visitorLoginBody: BackyVisitorLoginRequest = { email: 'member@example.com', password: 'correct-password' };
+const visitorResponse: BackyVisitorIssuedSessionEnvelope = { success: true, data: { expiresAt: '2026-10-04T12:00:00Z', member: { id: 'member', siteId: 'website', email: 'member@example.com', displayName: 'Member', status: 'active', createdAt: '2026-10-04T00:00:00Z', updatedAt: '2026-10-04T00:00:00Z' } } };
+const visitorOptions: BackyVisitorRequestOptions = { origin: 'https://website.example', credentials: 'same-origin' };
+// @ts-expect-error Enrollment requires either verified accessToken or email/password/returnUrl.
+const missingVisitorIdentity: BackyVisitorRegisterRequest = { displayName: 'Member' };
+// @ts-expect-error A CMS role is not a visitor registration field.
+const forgedVisitorRole: BackyVisitorRegisterRequest = { accessToken: 'verified-user-token', role: 'owner' };
+// @ts-expect-error Operator keys are not accepted by the visitor transport.
+const forgedVisitorOptions: BackyVisitorRequestOptions = { adminKey: 'operator' };
+declare const visitorClient: BackyClient;
+const typedVisitorSession = visitorClient.visitorSession(visitorOptions);
+const typedVisitorReset = visitorClient.visitorResetPassword({ accessToken: 'verified', recoveryToken: 'bkv_' + 'a'.repeat(43), password: 'correct-password' });
+const typedMediaOverride = visitorClient.deleteAdminMedia('asset', { input: { allowReferencedDelete: true, reason: 'Reviewed references', referenceFingerprint: 'a'.repeat(64) } });
+void [visitorRegisterByEmail, visitorEnrollVerified, visitorLoginBody, visitorResponse, missingVisitorIdentity, forgedVisitorRole, forgedVisitorOptions, typedVisitorSession, typedVisitorReset, typedMediaOverride];
+
+import type { GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope } from '../src/generated-contract-types';
+const migrationCasResult: Pick<GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope['data'], 'outcome' | 'failedTargets' | 'completionWarnings' | 'retry' | 'concurrencyBoundary'> = {
+  outcome: 'partial', failedTargets: [{ targetType: 'page', targetId: 'changed-page', code: 'CONTENT_REVISION_CONFLICT', message: 'Reload the preview.' }], completionWarnings: ['Cache invalidation unavailable.'], retry: { required: true, reloadPreview: true, message: 'Reload before retrying.' }, concurrencyBoundary: 'database-row-lock',
+};
+// @ts-expect-error Arbitrary failure codes are not part of the migration CAS result.
+const invalidMigrationFailure: GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope['data']['failedTargets'][number] = { targetType: 'post', targetId: 'post', code: 'arbitrary', message: 'Invalid' };
+void [migrationCasResult, invalidMigrationFailure];
+
+// Operator grants require explicit revision and a known site module permission.
+import type { BackyAdminOperatorSiteScope, BackyAdminOperatorSiteGrantPatch, BackyAdminOperatorSiteGrantEnvelope } from '../src/index';
+const operatorScope: BackyAdminOperatorSiteScope = { version: 1, revision: 1, mode: 'selected-sites', grants: [{ siteId: 'site-example', permissions: ['sites.view', 'pages.edit'] }], expiresAt: null };
+const operatorPatch: BackyAdminOperatorSiteGrantPatch = { expectedRevision: 0, scope: operatorScope, requestId: 'fixture' };
+const legacyOperatorPolicy: BackyAdminOperatorSiteGrantEnvelope = { success: true, requestId: 'fixture', data: { userId: 'operator', ownerManaged: true, revision: 0, status: 'legacy-workspace', scope: { version: 1, revision: 0, mode: 'workspace', grants: [], expiresAt: null, legacy: true } } };
+// @ts-expect-error Permission catalog excludes owner/global rights.
+const invalidOperatorPermission: BackyAdminOperatorSiteScope['grants'][number]['permissions'][number] = 'users.manage';
+// @ts-expect-error An expected revision is mandatory.
+const missingOperatorRevision: BackyAdminOperatorSiteGrantPatch = { scope: operatorScope };
+declare const operatorClient: BackyClient;
+const typedOperatorGet: Promise<BackyAdminOperatorSiteGrantEnvelope> = operatorClient.adminUserSiteGrants('operator', { adminSession: 'synthetic-owner' });
+const typedOperatorPatch: Promise<BackyAdminOperatorSiteGrantEnvelope> = operatorClient.updateAdminUserSiteGrants('operator', operatorPatch);
+void [operatorScope, operatorPatch, legacyOperatorPolicy, invalidOperatorPermission, missingOperatorRevision, typedOperatorGet, typedOperatorPatch];
+
+// The public SDK alias retains every standard migration outcome and reviewed-preview field.
+type MigrationResponsePreservesGeneratedContract = Assert<Equal<BackyAdminInteractiveComponentMigrationResponse, GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope>>;
+
+// Private visitor member management is a retained access boundary, not provider or operator identity editing.
+import type { BackyAdminVisitorUpdateRequest, BackyAdminVisitorRemoveAccessRequest, BackyAdminVisitorMember, BackyAdminVisitorMutationEnvelope } from '../src/index';
+const visitorMemberName: BackyAdminVisitorUpdateRequest = { displayName: 'Updated reader', status: 'suspended' };
+const visitorAccessRemoval: BackyAdminVisitorRemoveAccessRequest = { confirmRetention: true };
+// @ts-expect-error Provider email cannot change through operator member management.
+const forbiddenVisitorEmailChange: BackyAdminVisitorUpdateRequest = { email: 'owner@example.com' };
+// @ts-expect-error Removal cannot be represented as reactivation or an unreviewed deletion.
+const unreviewedVisitorAccessRemoval: BackyAdminVisitorRemoveAccessRequest = { confirmRetention: false };
+type VisitorMemberRemovalStatus = Assert<Equal<BackyAdminVisitorMember['status'], 'active' | 'suspended' | 'removed'>>;
+type VisitorMutationSdkKeepsRetention = Assert<Equal<AwaitedReturn<BackyClient['removeAdminVisitorMemberAccess']>, BackyAdminVisitorMutationEnvelope>>;
+
+// Design/template SDK bindings preserve the standard admin responses and action variants.
+import type { BackyAdminFrontendDesignActionInput } from '../src/index';
+type AdminDesignUsesStandardEnvelope = Assert<Equal<BackyAdminFrontendDesignResponse, GeneratedBackyOpenApiAdminFrontendDesignEnvelope>>;
+type AdminTemplatesUseStandardEnvelope = Assert<Equal<BackyAdminTemplateRegistryResponse, GeneratedBackyOpenApiAdminTemplateRegistryEnvelope>>;
+const typedDesignImport: BackyAdminFrontendDesignActionInput = { action: 'import', manifest: { data: { site: { frontendDesign: { templates: [{ id: 'custom', nestedExtension: { keep: true } }] } } } } };
+const typedDesignCapture: BackyAdminFrontendDesignActionInput = { action: 'capture-content-template', type: 'reusable-section', resourceId: 'section', templateId: 'captured' };
+// @ts-expect-error A supported action is mandatory.
+const unsupportedDesignAction: BackyAdminFrontendDesignActionInput = { action: 'publish' };
+// @ts-expect-error Import requires an actual design/contract/manifest payload.
+const missingDesignPayload: BackyAdminFrontendDesignActionInput = { action: 'import' };
+// @ts-expect-error Capture requires a resource identity.
+const missingCaptureResource: BackyAdminFrontendDesignActionInput = { action: 'capture-content-template', resourceType: 'page' };
+declare const typedDesignClient: BackyClient;
+const typedActionResponse: Promise<BackyAdminFrontendDesignResponse> = typedDesignClient.runAdminFrontendDesignAction(typedDesignCapture);
+void [typedDesignImport, typedDesignCapture, unsupportedDesignAction, missingDesignPayload, missingCaptureResource, typedActionResponse];
+
+// Navigation/SEO/redirect admin aliases and optional DOM evidence track their standard schemas.
+import type { BackyAdminSeoUpdateInput, BackyAdminRedirectsUpdateInput } from '../src/index';
+import type { GeneratedBackyOpenApiAdminNavigationEnvelope, GeneratedBackyOpenApiAdminSeoEnvelope, GeneratedBackyOpenApiAdminRedirectsEnvelope, GeneratedBackyOpenApiFrontendObservation } from '../src/generated-contract-types';
+type NavigationAliasRetainsStandard = Assert<Equal<BackyAdminNavigationResponse, GeneratedBackyOpenApiAdminNavigationEnvelope>>;
+type SeoAliasRetainsStandard = Assert<Equal<BackyAdminSeoResponse, GeneratedBackyOpenApiAdminSeoEnvelope>>;
+type RedirectAliasRetainsStandard = Assert<Equal<BackyAdminRedirectsResponse, GeneratedBackyOpenApiAdminRedirectsEnvelope>>;
+const typedSeoClear: BackyAdminSeoUpdateInput = { seo: { defaultDescription: null, sitemap: { defaultPriority: '2' }, routeOverrides: [{ match: '/articles/*', keywords: 'first, second' }] } };
+const typedRedirectAlias: BackyAdminRedirectsUpdateInput = { redirects: { rules: [{ from: '/gone', statusCode: '410' }] } };
+// @ts-expect-error A redirect request must contain a supported rules envelope.
+const missingRedirectRules: BackyAdminRedirectsUpdateInput = {};
+const typedDomObservation: GeneratedBackyOpenApiFrontendObservation = {
+ siteId: 'site-fixture', route: '/fixture', frontendId: 'fixture.frontend', frontendVersion: '1.0', breakpoint: 'mobile', revision: 'revision1', complete: false,
+ domCapture: { schemaVersion: 'backy.frontend-dom-evidence.v1', source: 'browser-dom', capturedAt: '2026-10-05T00:00:00Z', viewport: { width: 375, height: 812 }, expectedCount: 1, capturedCount: 1, limitations: ['revision.missing'] },
+ elements: [{ id: 'heading', dom: { rect: { x: 0, y: 0, width: 327, height: 44 }, visibility: 'rendered', positioning: 'relative', transformed: false } }],
+};
+// @ts-expect-error Arbitrary DOM limitations are not part of the bounded evidence catalog.
+const unknownDomLimitation: NonNullable<GeneratedBackyOpenApiFrontendObservation['domCapture']>['limitations'][number] = 'live-certified';
+void [typedSeoClear, typedRedirectAlias, missingRedirectRules, typedDomObservation, unknownDomLimitation];
+
+// Reusable section SDK responses preserve standard authored data and propagation envelopes.
+import type { GeneratedBackyOpenApiAdminReusableSectionResource, GeneratedBackyOpenApiAdminReusableSectionListEnvelope, GeneratedBackyOpenApiAdminReusableSectionEnvelope, GeneratedBackyOpenApiAdminReusableSectionDeleteEnvelope, GeneratedBackyOpenApiAdminReusableSectionVersionsEnvelope, GeneratedBackyOpenApiAdminReusableSectionRestoreEnvelope, GeneratedBackyOpenApiAdminReusableSectionExportEnvelope, GeneratedBackyOpenApiAdminReusableSectionImportEnvelope, GeneratedBackyOpenApiAdminReusableSectionInstancesEnvelope, GeneratedBackyOpenApiAdminReusableSectionRefreshEnvelope, GeneratedBackyOpenApiAdminReusableSectionMetadataEnvelope, GeneratedBackyOpenApiAdminReusableSectionMetadataUpdateEnvelope } from "../src/generated-contract-types";
+type ReusableSectionsResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionsResponse, GeneratedBackyOpenApiAdminReusableSectionListEnvelope>>;
+type ReusableSectionResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionResponse, GeneratedBackyOpenApiAdminReusableSectionEnvelope>>;
+type ReusableSectionDeleteResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionDeleteResponse, GeneratedBackyOpenApiAdminReusableSectionDeleteEnvelope>>;
+type ReusableSectionVersionsResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionVersionsResponse, GeneratedBackyOpenApiAdminReusableSectionVersionsEnvelope>>;
+type ReusableSectionRestoreResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionRestoreResponse, GeneratedBackyOpenApiAdminReusableSectionRestoreEnvelope>>;
+type ReusableSectionExportResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionExportResponse, GeneratedBackyOpenApiAdminReusableSectionExportEnvelope>>;
+type ReusableSectionImportResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionImportResponse, GeneratedBackyOpenApiAdminReusableSectionImportEnvelope>>;
+type ReusableSectionInstancesResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionInstancesResponse, GeneratedBackyOpenApiAdminReusableSectionInstancesEnvelope>>;
+type ReusableSectionInstancesRefreshResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionInstancesRefreshResponse, GeneratedBackyOpenApiAdminReusableSectionRefreshEnvelope>>;
+type ReusableSectionMetadataResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionMetadataResponse, GeneratedBackyOpenApiAdminReusableSectionMetadataEnvelope>>;
+type ReusableSectionMetadataUpdateResponseTracksSchema = Assert<Equal<BackyAdminReusableSectionMetadataUpdateResponse, GeneratedBackyOpenApiAdminReusableSectionMetadataUpdateEnvelope>>;
+import type { BackyAdminReusableSectionInstancesRefreshInput, BackyAdminReusableSectionCreateRequest, BackyAdminReusableSectionImportRequest } from '../src/index';
+const typedSectionTemplateOnly: BackyAdminReusableSectionCreateRequest = { frontendDesignTemplateId: 'section-template' };
+const typedSectionStringTags: BackyAdminReusableSectionCreateRequest = { name: 'Hero', tags: 'hero, shared', content: { elements: [{ id: 'root', nestedVersion: { componentKey: 'fixture.widget', version: '2' } }], extension: { keep: [0, false] } } };
+const typedSectionImportAlias: BackyAdminReusableSectionImportRequest = { data: { sections: [{ name: 'Imported', tags: 'hero, shared', content: { elements: [{ id: 'root', nestedVersion: { version: '2' } }], extension: { keep: [0, false] } } }] } };
+// @ts-expect-error Import requires a selected envelope with actual content entries.
+const missingSectionImportEnvelope: BackyAdminReusableSectionImportRequest = {};
+// @ts-expect-error Template-only seeding belongs to create, not import.
+const templateOnlySectionImport: BackyAdminReusableSectionImportRequest = { section: { frontendDesignTemplateId: 'template' } };
+void [missingSectionImportEnvelope, templateOnlySectionImport];
+const typedSectionProductTarget: BackyAdminReusableSectionInstancesRefreshInput = { targetType: 'product', dryRun: true };
+// @ts-expect-error Explicit content must include at least its top-level elements field.
+const typedSectionMissingElements: BackyAdminReusableSectionCreateRequest = { name: 'Invalid', content: {} };
+void [typedSectionTemplateOnly, typedSectionStringTags, typedSectionImportAlias, typedSectionProductTarget, typedSectionMissingElements];
+
+const typedNumericStringSectionWrite = typedDesignClient.updateAdminReusableSection('section', { expectedVersion: '2', content: { elements: [{ versionedExtension: { keep: true } }] } });
+const typedNumericStringMetadataWrite = typedDesignClient.updateAdminReusableSectionMetadata('section', { expectedVersion: '2', labels: 'First, Second', owner: null });
+void [typedNumericStringSectionWrite, typedNumericStringMetadataWrite];
+
+const typedVisitorProfile = visitorClient.visitorUpdateProfile({ displayName: 'Visitor name' });
+void typedVisitorProfile.then(response => { const name: string = response.data.member.displayName; void name; });
+// @ts-expect-error Visitor profile cannot modify email.
+visitorClient.visitorUpdateProfile({ displayName: 'Visitor name', email: 'other@example.com' });
+// @ts-expect-error Visitor profile cannot modify membership status.
+visitorClient.visitorUpdateProfile({ displayName: 'Visitor name', status: 'active' });
+// @ts-expect-error Visitor profile requires a string display name.
+visitorClient.visitorUpdateProfile({ displayName: null });

@@ -113,12 +113,21 @@ assert(
 );
 
 assert(
-  advancedToolbar.includes('savedSelectionRef.current = editor.selection ? { ...editor.selection } : null') &&
+  advancedToolbar.includes('captureToolbarSelection(editor)') && advancedToolbar.includes('restoreToolbarSelection(editor, savedSelectionRef.current)') &&
     fixedToolbar.includes('savedSelectionRef.current = editor.selection ? { ...editor.selection } : null') &&
     floatingToolbar.includes('const captureSelection = () =>') &&
     floatingToolbar.includes('savedSelectionRef.current = editor.selection && Range.isRange(editor.selection) ? { ...editor.selection } : null') &&
     portalToolbar.includes('savedSelectionRef.current = editor?.selection && Range.isRange(editor.selection) ? { ...editor.selection } : null'),
   'Shared editor URL controls must preserve the active Slate selection before focusing URL fields.',
+);
+
+assert(
+  !advancedToolbar.includes('<form') && !fontDropdown.includes('<form') &&
+    advancedToolbar.includes("whiteSpace: 'nowrap'") && advancedToolbar.includes('useToolbarPopoverPosition(open, triggerRef, menuRef, 240, 448)') &&
+    advancedToolbar.includes('minHeight: 44') && advancedToolbar.includes('flexShrink: 0') &&
+    advancedToolbar.includes('event.stopPropagation(); submitInsertForm();') &&
+    fontDropdown.includes('event.stopPropagation(); void handleAddCustom();'),
+  'Article toolbar popups must stay legible and local URL/font controls must never nest forms or submit the enclosing article.',
 );
 
 const colorPicker = read('../src/ui/ColorPicker.tsx');

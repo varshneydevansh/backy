@@ -330,7 +330,7 @@ export function resolveSiteRoute(
     }, localized);
   }
 
-  const canonical = page.meta.canonical || getCanonicalPathForPage(page);
+  const canonical = page.meta.canonical || path;
   return withLocalizedResolvedRoute({
     type: 'page',
     path,

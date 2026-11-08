@@ -46,6 +46,18 @@ declare module '@supabase/supabase-js' {
                         cacheControl?: string;
                     }
                 ) => Promise<{ error?: { message: string } | null }>;
+                info: (path: string) => Promise<{
+                    data: {
+                        size?: number;
+                        lastModified?: string;
+                        updatedAt?: string;
+                        createdAt?: string;
+                        contentType?: string;
+                        etag?: string;
+                        metadata?: Record<string, unknown>;
+                    } | null;
+                    error: { message: string; status?: number; statusCode?: string } | null;
+                }>;
                 download: (path: string) => Promise<{
                     data: Blob | null;
                     error: { message: string } | null;

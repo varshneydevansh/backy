@@ -8,10 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import {
-  createReusableSection,
+  applyReusableSectionBatch,
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
-  updateReusableSection,
 } from "@/lib/backyStore";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
@@ -23,7 +22,7 @@ import {
   buildReusableSectionUpdateMetadata,
 } from "@/lib/reusableSectionVersions";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
-import type { BackyJsonObject, Site } from "@backy-cms/core";
+import type { BackyReusableSectionBatchMutation, BackyJsonObject, Site } from "@backy-cms/core";
 
 export const runtime = "nodejs";
 
@@ -250,15 +249,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       typeof body.importedBy === "string" && body.importedBy.trim()
         ? body.importedBy.trim()
         : "admin";
-    const sections = sectionsFromBody(body)
-      .map(normalizeImportSection)
-      .filter(Boolean) as ImportSection[];
+    const rawSections = sectionsFromBody(body);
+    const parsedSections = rawSections.map(normalizeImportSection);
+    const sections = parsedSections as ImportSection[];
 
-    if (sections.length === 0) {
+    if (sections.length === 0 || parsedSections.some(section => !section)) {
       return errorResponse(
         400,
         "VALIDATION_ERROR",
-        "Reusable section import requires at least one valid section with content.elements",
+        "Every imported section requires a name, slug and nonempty content.elements",
         requestId,
       );
     }
@@ -291,7 +290,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const imported = [];
+      const operations: BackyReusableSectionBatchMutation[] = [];
       let created = 0;
       let updated = 0;
       const beforeSections = new Map<string, unknown>();
@@ -312,8 +311,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         if (existing) {
           beforeSections.set(existing.id, existing);
-          const result = (
-            await repositories.reusableSections.update(site.id, existing.id, {
+          operations.push({ type: 'update', sectionId: existing.id, input: {
+              expectedSection: existing,
               name: section.name,
               description: section.description ?? null,
               category: section.category || "general",
@@ -327,13 +326,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               ) as BackyJsonObject,
               sourceElementId: section.sourceElementId ?? null,
               updatedBy: actor,
-            })
-          ).item;
-          imported.push(result);
+            } });
           updated += 1;
         } else {
-          const result = (
-            await repositories.reusableSections.create({
+          operations.push({ type: 'create', input: {
               siteId: site.id,
               name: section.name,
               slug: section.slug,
@@ -349,13 +345,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
               sourceElementId: section.sourceElementId ?? null,
               createdBy: actor,
               updatedBy: actor,
-            })
-          ).item;
-          imported.push(result);
+            } });
           created += 1;
         }
       }
 
+      const imported = await repositories.reusableSections.applyBatch(site.id, operations);
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {
@@ -420,7 +415,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const imported = [];
+    const operations: BackyReusableSectionBatchMutation[] = [];
     let created = 0;
     let updated = 0;
     const beforeSections = new Map<string, unknown>();
@@ -438,7 +433,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
       if (existing) {
         beforeSections.set(existing.id, existing);
-        const result = updateReusableSection(site.id, existing.id, {
+        operations.push({ type: 'update', sectionId: existing.id, input: {
+          expectedSection: existing as unknown as import('@backy-cms/core').BackyReusableSection,
           name: section.name,
           description: section.description ?? null,
           category: section.category || "general",
@@ -449,17 +445,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             existing,
             section.metadata,
             { actor, requestId },
-          ),
+          ) as BackyJsonObject,
           sourceElementId: section.sourceElementId ?? null,
           updatedBy: actor,
-        });
-        if (result) {
-          imported.push(result);
-          updated += 1;
-        }
+        } });
+        updated += 1;
       } else {
-        imported.push(
-          createReusableSection(site.id, {
+        operations.push({ type: 'create', input: {
+            siteId: site.id,
             name: section.name,
             slug: section.slug,
             description: section.description ?? null,
@@ -470,15 +463,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             metadata: buildInitialReusableSectionMetadata(section.metadata, {
               actor,
               requestId,
-            }),
+            }) as BackyJsonObject,
             sourceElementId: section.sourceElementId ?? null,
             createdBy: actor,
             updatedBy: actor,
-          }),
-        );
+          } });
         created += 1;
       }
     }
+    const imported = applyReusableSectionBatch(site.id, operations);
     await recordAdminAudit({
       siteId: site.id,
       entity: "reusableSection",
@@ -524,6 +517,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    const cause = error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
+    const causeCode = cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined;
+    if (code === 'REUSABLE_SECTION_VERSION_CONFLICT') return errorResponse(409, code, 'Reusable section changed during import. Reload and retry. No import writes were committed.', requestId);
+    if (code === '23505' || causeCode === '23505') return errorResponse(409, 'SLUG_CONFLICT', 'A reusable section slug changed during import. Reload and retry. No import writes were committed.', requestId);
     console.error("Admin reusable section import API error:", error);
     return errorResponse(
       500,

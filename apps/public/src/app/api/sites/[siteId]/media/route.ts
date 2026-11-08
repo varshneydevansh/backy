@@ -1,3 +1,4 @@
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
 /**
  * ==========================================================================
  * REST API - Media Endpoint
@@ -10,7 +11,7 @@ import { NextRequest } from 'next/server';
 import type { MediaFolder, MediaItem } from '@backy-cms/core';
 import { getMediaList, getSiteByIdOrSlug, listMediaFolders } from '@/lib/backyStore';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
-import { booleanQueryFlag, mediaMatchesScopeFilters } from '@/lib/mediaScope';
+import { booleanQueryFlag, mediaMatchesScopeFilters, readMediaLinkedFilters } from '@/lib/mediaScope';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { toPublicMediaAsset } from '@/lib/publicMediaResource';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -179,6 +180,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     try {
         const { siteId } = await params;
         const { searchParams } = new URL(request.url);
+        const linkedFilters = readMediaLinkedFilters(searchParams);
+        if (linkedFilters.invalid) return errorResponse(400, 'INVALID_MEDIA_LINK_FILTER', 'Use one nonempty linkedPageId or linkedPostId, never both or duplicate values.', requestId);
         const mediaType = mediaTypeFromInput(searchParams.get('type')); // image, video, audio, document/file, font, other
         if (mediaType.invalid) {
             return errorResponse(
@@ -244,17 +247,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
             const [folders, result] = await Promise.all([
                 repositories.media.listFolders(site.id),
-                repositories.media.list({
+                readCompleteMediaInventory(site.id, pagination => repositories.media.list({
                     siteId: site.id,
                     type: type || 'all',
                     folderId,
                     visibility: 'public',
                     search: search || undefined,
-                    limit: 10000,
-                    offset: 0,
-                }),
+                    linkedPageId: linkedFilters.linkedPageId,
+                    linkedPostId: linkedFilters.linkedPostId,
+                    ...pagination,
+                })),
             ]);
-            const filtered = result.items
+            const filtered = result
                 .filter((item) => mediaMatchesRequestedType(item, mediaType))
                 .filter((item) => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
                 .filter((item) => mediaTagMatches(item.tags, tag))
@@ -284,7 +288,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
         }
 
-        const mediaPayload = getMediaList(site.id, {
+        const mediaItems = await readCompleteMediaInventory(site.id, async pagination => {
+          const result = getMediaList(site.id, {
             type: type || undefined,
             scope: scope || undefined,
             visibility: 'public',
@@ -294,11 +299,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             pageId: pageId || undefined,
             postId: postId || undefined,
             global: globalOnly,
-            limit: 10000,
-            offset: 0,
+            linkedPageId: linkedFilters.linkedPageId,
+            linkedPostId: linkedFilters.linkedPostId,
+            ...pagination,
+          });
+          return { items: result.media, pagination: result.pagination };
         });
         const folders = listMediaFolders(site.id);
-        const visibleMedia = mediaPayload.media
+        const visibleMedia = mediaItems
             .filter((item) => mediaMatchesRequestedType(item, mediaType))
             .filter((item) => !isMediaQuarantined(item));
         const mediaWithVariants = paginateMedia(site.id, visibleMedia, limit, offset, folders);
@@ -315,6 +323,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             siteId: site.id,
         });
     } catch (error) {
+        if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
         console.error('API Error:', error);
         return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
     }

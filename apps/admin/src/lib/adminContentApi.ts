@@ -1,3 +1,6 @@
+import { loadInteractiveRegistryPages } from './interactiveRegistryLoading';
+import { loadReusableSectionLibrary } from './reusableSectionLibraryLoading';
+import { adminAuthPolicyPatch } from './adminAuthPolicyPatch';
 import type { BlogPost, Page, Site, User } from '@/stores/mockStore';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { getLocalBackendOrigin, isLocalAdminDevHost, normalizeLocalBackendBase } from '@/lib/localBackendOrigin';
@@ -388,6 +391,7 @@ interface ApiCustomFrontendStarterResponse {
 }
 
 export interface CollectionBindingPreset {
+  [key: string]: unknown;
   id: string;
   name: string;
   collectionId: string;
@@ -407,11 +411,14 @@ export interface CollectionBindingPreset {
   updatedBy?: string | null;
 }
 
+export interface CollectionBindingPresetState {
+  site: { id: string; slug: string; name: string };
+  presets: CollectionBindingPreset[];
+}
+
 interface ApiCollectionBindingPresetsResponse {
   success: boolean;
-  data?: {
-    presets: CollectionBindingPreset[];
-  };
+  data?: CollectionBindingPresetState;
   error?: {
     message?: string;
   };
@@ -548,6 +555,7 @@ interface ApiPageResponse {
   success: boolean;
   data?: {
     page: ApiPage;
+    completionWarnings?: unknown;
   };
   error?: {
     code?: string;
@@ -787,6 +795,10 @@ interface ApiBulkUsersResponse {
     deleted: number;
     userIds: string[];
     users: ApiUser[];
+    outcome: 'complete' | 'partial';
+    completionWarnings: string[];
+    failedTargets: { userId: string; code: string }[];
+    reloadRequired: boolean;
   };
   error?: {
     message?: string;
@@ -846,6 +858,7 @@ export interface AdminPermissionGroup {
 }
 
 export interface AdminUserPermissionMatrix {
+  siteAccess?: { scope: AdminOperatorSiteScope | null; status: AdminOperatorSiteAccess['status'] };
   userId: string;
   role: User['role'];
   status: User['status'];
@@ -862,6 +875,7 @@ interface ApiUserPermissionsResponse {
   success: boolean;
   data?: {
     permissions: AdminUserPermissionMatrix;
+    siteAccess?: AdminUserPermissionMatrix['siteAccess'];
   };
   error?: {
     message?: string;
@@ -1142,6 +1156,7 @@ interface ApiBlogPostResponse {
   success: boolean;
   data?: {
     post: ApiBlogPost;
+    completionWarnings?: unknown;
   };
   error?: {
     code?: string;
@@ -1355,6 +1370,7 @@ interface ApiCommentDeliveryRetryResponse {
     delivery: CommentDeliveryRetryDelivery;
     retryOf: string;
     comment: Comment;
+    completionWarnings?: string[];
   };
   delivery?: CommentDeliveryRetryDelivery;
   retryOf?: string;
@@ -1555,6 +1571,7 @@ interface ApiCreateCommentResponse {
   success: boolean;
   data?: {
     comment: Comment;
+    completionWarnings?: string[];
     message?: string;
   };
   comment?: Comment;
@@ -1583,6 +1600,8 @@ interface ApiUpdateCommentsResponse {
     updated: Comment[];
     updatedCount: number;
     missingIds: string[];
+    completionWarnings?: string[];
+    concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process';
   };
   updated?: Comment[];
   updatedCount?: number;
@@ -1596,6 +1615,7 @@ interface ApiUpdateCommentResponse {
   success: boolean;
   data?: {
     comment: Comment;
+    completionWarnings?: string[];
   };
   comment?: Comment;
   error?: {
@@ -1609,6 +1629,8 @@ interface ApiDeleteCommentResponse {
   data?: {
     deleted: Comment[];
     deletedCount: number;
+    completionWarnings?: string[];
+    concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process';
   };
   deleted?: Comment[];
   deletedCount?: number;
@@ -1641,6 +1663,8 @@ interface ApiDeleteCommentBlocklistResponse {
     deleted: AdminCommentBlocklistEntry[];
     deletedCount: number;
     missingIds: string[];
+    completionWarnings?: string[];
+    concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process';
   };
   deleted?: AdminCommentBlocklistEntry[];
   deletedCount?: number;
@@ -1937,7 +1961,28 @@ export interface ApiKeyRevocationHistoryEntry {
   replacementKeyFingerprint?: string | null;
 }
 
+export interface AdminServiceKeyScope {
+  version: 1;
+  mode: 'workspace' | 'selected-sites';
+  siteIds: string[];
+  permissions: string[];
+  expiresAt: string | null;
+  revision: number;
+  legacy?: boolean;
+}
+
+export const ADMIN_SITE_SERVICE_PERMISSIONS = [
+  'sites.view', 'sites.configure', 'pages.view', 'pages.edit', 'pages.publish', 'pages.delete',
+  'collections.view', 'collections.edit', 'collections.export', 'collections.delete',
+  'forms.view', 'forms.create', 'forms.edit', 'forms.manage', 'forms.export', 'forms.delete',
+  'media.view', 'media.create', 'media.edit', 'media.configure', 'media.delete',
+  'commerce.view', 'commerce.edit', 'commerce.configure', 'commerce.delete',
+  'comments.view', 'comments.manage', 'comments.configure',
+];
+
 export interface ApiKeyServiceKeyEntry {
+  scope?: AdminServiceKeyScope | null;
+  scopeStatus?: 'invalid' | 'expired' | 'legacy-workspace' | 'workspace' | 'selected-sites';
   id: string;
   label: string;
   keyPrefix?: string | null;
@@ -1954,6 +1999,7 @@ export interface ApiKeyServiceKeyEntry {
 }
 
 export interface IssuedAdminApiKey {
+  scope?: AdminServiceKeyScope;
   id: string;
   label: string;
   adminApiKey: string;
@@ -2062,6 +2108,7 @@ interface ApiCollectionField {
 }
 
 interface ApiCollection {
+  version?: string;
   id: string;
   siteId: string;
   name: string;
@@ -2083,6 +2130,7 @@ interface ApiCollection {
 }
 
 interface ApiCollectionRecord {
+  version?: string;
   id: string;
   siteId: string;
   collectionId: string;
@@ -2581,12 +2629,18 @@ export interface AdminOrderTrackingStatus {
   providerPayload?: Record<string, unknown>;
 }
 
+export interface AdminOrderCompletionWarning {
+  code: 'CACHE_INVALIDATION_PENDING' | 'AUDIT_PENDING' | 'WEBHOOK_DELIVERY_PENDING';
+  message: string;
+}
+
 interface ApiOrderTrackingResponse {
   success: boolean;
   data?: {
     record: ApiCollectionRecord;
     order?: ApiCollectionRecord;
     tracking: AdminOrderTrackingStatus;
+    completionWarnings?: AdminOrderCompletionWarning[];
   };
   error?: {
     code?: string;
@@ -2692,6 +2746,15 @@ interface ApiBulkCollectionRecordsResponse {
     updated: number;
     skipped: number;
     records: ApiCollectionRecord[];
+    outcome?: 'complete' | 'partial';
+    appliedRecordIds?: string[];
+    skippedRecordIds?: string[];
+    failedTargets?: Array<{ recordId: string; code: string }>;
+    notAttemptedRecordIds?: string[];
+    completionWarnings?: string[];
+    reloadRequired?: boolean;
+    concurrencyBoundary?: 'database-per-record-transaction';
+
   };
   error?: {
     code?: string;
@@ -2770,16 +2833,6 @@ interface ApiReusableSection {
   updatedBy?: string | null;
   createdAt?: string;
   updatedAt?: string;
-}
-
-interface ApiListReusableSectionsResponse {
-  success: boolean;
-  data?: {
-    sections: ApiReusableSection[];
-  };
-  error?: {
-    message?: string;
-  };
 }
 
 interface ApiReusableSectionResponse {
@@ -2979,6 +3032,10 @@ export interface UserBulkResult {
   deleted: number;
   userIds: string[];
   users: User[];
+  outcome: 'complete' | 'partial';
+  completionWarnings: string[];
+  failedTargets: { userId: string; code: string }[];
+  reloadRequired: boolean;
 }
 
 export interface UserImportError {
@@ -3219,6 +3276,9 @@ export interface SiteSettingsInput {
     apiKeyConfigured?: boolean;
     smtpHostConfigured?: boolean;
     smtpAuthConfigured?: boolean;
+    hostingerApiTokenConfigured?: boolean;
+    authenticationVerified?: boolean;
+    outboundDeliveryVerified?: boolean;
     missing: string[];
     error?: string;
   };
@@ -3632,6 +3692,7 @@ export interface FormFieldDefinition {
 }
 
 export interface FormDefinition {
+  version?: string;
   id: string;
   siteId: string;
   pageId?: string | null;
@@ -3685,6 +3746,7 @@ export interface FormDefinition {
 }
 
 export type FormDefinitionInput = Omit<FormDefinition, 'id' | 'siteId' | 'createdAt' | 'updatedAt'> & {
+  frontendDesignTemplateId?: string;
   id?: string;
   siteId?: string;
 };
@@ -3727,7 +3789,45 @@ export interface FormSubmissionList {
   };
 }
 
-export interface FormDeliveryEvent {
+export type DeliveryReviewEvidence = 'provider-console-reviewed' | 'recipient-report-reviewed' | 'outcome-unavailable';
+export interface DeliveryReconciliation {
+  id: string;
+  version: number;
+  actorId: string;
+  requestId: string;
+  createdAt: string;
+  observedUpdatedAt: string;
+  observedState: 'pending' | 'uncertain';
+  evidence: DeliveryReviewEvidence;
+  disposition: 'retain-without-resend';
+}
+export interface DeliveryProviderEvidence {
+  provider: 'webhook' | 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp' | 'hostinger';
+  observedAt: string;
+  statusCode?: number;
+  providerMessageId?: string;
+  outboxOnly?: boolean;
+}
+export interface DeliveryReviewFields {
+  updatedAt?: string;
+  providerEvidence?: DeliveryProviderEvidence | null;
+  reconciliationVersion?: number;
+  reconciliations?: DeliveryReconciliation[];
+}
+export interface DeliveryReviewRequest {
+  expectedUpdatedAt: string;
+  expectedState: 'pending' | 'uncertain';
+  expectedReviewVersion: number;
+  evidence: DeliveryReviewEvidence;
+  disposition: 'retain-without-resend';
+}
+export interface DeliveryReviewOutcome<T> {
+  attempt: T;
+  reconciliation: DeliveryReconciliation;
+  completionWarnings: Array<{ code: 'DELIVERY_RECONCILIATION_AUDIT_PENDING'; message: string }>;
+}
+
+export interface FormDeliveryEvent extends DeliveryReviewFields {
   id: string;
   siteId: string;
   kind: string;
@@ -3745,7 +3845,7 @@ export interface FormDeliveryEvent {
   createdAt: string;
 }
 
-export interface CommentDeliveryEvent {
+export interface CommentDeliveryEvent extends DeliveryReviewFields {
   id: string;
   siteId: string;
   kind: 'comment-submitted' | 'comment-status' | 'comment-reported' | string;
@@ -3789,6 +3889,9 @@ export interface OrderDeliveryEventList {
 }
 
 export interface CommentDeliveryRetryDelivery {
+  attemptId?: string;
+  durableState?: 'pending' | 'succeeded' | 'failed' | 'uncertain';
+  completionWarnings?: string[];
   attempted: boolean;
   channel?: 'webhook' | 'email' | string;
   target?: string;
@@ -3806,6 +3909,9 @@ export interface FormDeliveryEventList {
 }
 
 export interface FormWebhookRetryDelivery {
+  attemptId?:string;
+  durableState?:'pending'|'succeeded'|'failed'|'uncertain';
+  completionWarnings?:string[];
   attempted: boolean;
   target?: string;
   status: 'queued' | 'succeeded' | 'failed' | string;
@@ -3994,6 +4100,8 @@ export interface NewsletterIssueDraftHandoff {
 }
 
 export interface ContactListFilters {
+  /** Complete management reads must not invent pagination for legacy responses. */
+  requirePagination?: boolean;
   status?: ContactStatus | 'all';
   requestId?: string;
   limit?: number;
@@ -4287,6 +4395,8 @@ export interface UpdateCommentThreadInput {
 }
 
 export interface UpdateCommentsResult {
+  completionWarnings?: string[];
+  concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process';
   updated: AdminComment[];
   updatedCount: number;
   missingIds: string[];
@@ -4397,6 +4507,7 @@ export interface CollectionPermissions {
 }
 
 export interface Collection {
+  version?: string;
   id: string;
   siteId: string;
   name: string;
@@ -4413,6 +4524,7 @@ export interface Collection {
 }
 
 export interface CollectionRecord {
+  version?: string;
   id: string;
   siteId: string;
   collectionId: string;
@@ -4426,6 +4538,8 @@ export interface CollectionRecord {
 }
 
 export interface CollectionInput {
+  expectedVersion?: string;
+  frontendDesignTemplateId?: string;
   name: string;
   slug: string;
   routePattern?: string | null;
@@ -4441,6 +4555,7 @@ export interface CollectionRecordInput {
   slug: string;
   status?: Page['status'];
   scheduledAt?: string | null;
+  frontendDesignTemplateId?: string;
   values: Record<string, unknown>;
 }
 
@@ -4473,6 +4588,14 @@ export interface BulkCollectionRecordResult {
   updated: number;
   skipped: number;
   records: CollectionRecord[];
+  outcome?: 'complete' | 'partial';
+  appliedRecordIds?: string[];
+  skippedRecordIds?: string[];
+  failedTargets?: Array<{ recordId: string; code: string }>;
+  notAttemptedRecordIds?: string[];
+  completionWarnings?: string[];
+  reloadRequired?: boolean;
+  concurrencyBoundary?: 'database-per-record-transaction';
 }
 
 export interface CollectionRecordImportError {
@@ -4574,6 +4697,7 @@ export interface ReusableSection {
 }
 
 export interface ReusableSectionInput {
+  frontendDesignTemplateId?: string;
   name: string;
   slug?: string;
   description?: string | null;
@@ -4636,18 +4760,6 @@ export interface InteractiveComponentRegistry {
     limit?: number;
     offset?: number;
     hasMore?: boolean;
-  };
-}
-
-interface ApiInteractiveComponentRegistryResponse {
-  success: boolean;
-  data?: InteractiveComponentRegistry;
-  registry?: InteractiveComponentRegistry;
-  components?: InteractiveComponentRegistryEntry[];
-  error?: {
-    message?: string;
-    details?: unknown;
-    code?: string;
   };
 }
 
@@ -4775,12 +4887,24 @@ export interface ReusableSectionInstancesFilters {
 export interface ReusableSectionInstancesRefreshInput extends ReusableSectionInstancesFilters {
   dryRun?: boolean;
   updatedBy?: string;
+  reviewedPreview?: ReusableSectionReviewedPreview;
+}
+
+export interface ReusableSectionReviewedPreview {
+  schemaVersion: 'backy.reusable-section-propagation-preview.v1'; siteId: string; sectionId: string;
+  sourceFingerprint: string; inventoryFingerprint: string;
+  scope: { targetType: 'page' | 'post' | 'product' | 'all'; targetId: string | null; includeProducts: boolean };
+  targets: Array<{ type: 'page' | 'post' | 'product'; id: string; collectionId?: string; updatedAt: string; contentFingerprint: string }>;
 }
 
 export interface ReusableSectionInstancesRefreshResult {
   dryRun: boolean;
   sectionId: string;
   sourceUpdatedAt?: string;
+  reviewedPreview: ReusableSectionReviewedPreview;
+  outcome: 'complete' | 'partial';
+  completionWarnings: string[];
+  concurrencyBoundary: 'database-serializable-transaction' | 'demo-single-process';
   refreshedTargets: Array<{
     type: 'page' | 'post' | 'product';
     id: string;
@@ -5281,6 +5405,7 @@ const toContentRevision = (revision: ApiRevision): ContentRevision => {
 };
 
 const toCollectionField = (field: ApiCollectionField, index: number): CollectionField => ({
+  ...field,
   id: field.id,
   key: field.key,
   label: field.label || field.key,
@@ -5296,6 +5421,8 @@ const toCollectionField = (field: ApiCollectionField, index: number): Collection
 });
 
 const toCollection = (collection: ApiCollection): Collection => ({
+  ...collection,
+  version: collection.version,
   id: collection.id,
   siteId: collection.siteId,
   name: collection.name,
@@ -5317,6 +5444,7 @@ const toCollection = (collection: ApiCollection): Collection => ({
 });
 
 const toCollectionRecord = (record: ApiCollectionRecord): CollectionRecord => ({
+  version: record.version,
   id: record.id,
   siteId: record.siteId,
   collectionId: record.collectionId,
@@ -5339,6 +5467,7 @@ const toReusableSection = (section: ApiReusableSection): ReusableSection => ({
   status: section.status || 'active',
   tags: section.tags || [],
   content: {
+    ...section.content,
     elements: Array.isArray(section.content?.elements) ? section.content.elements : [],
     canvasSize: section.content?.canvasSize,
     customCSS: section.content?.customCSS,
@@ -5425,7 +5554,12 @@ export async function createSite(input: SiteCreateInput): Promise<Site> {
   return toStoreSite(payload.data.site);
 }
 
-export async function duplicateSite(siteId: string, input: Partial<SiteCreateInput> = {}): Promise<Site> {
+export interface SiteDuplicateOutcome {
+  site: Site; pagesCopied: number;
+  copiedResourceScope: { copied: string[]; notCopied: string[]; retainedReferences: string };
+  concurrencyBoundary: string; completionWarnings: string[];
+}
+export async function duplicateSiteWithOutcome(siteId: string, input: Partial<SiteCreateInput> = {}): Promise<SiteDuplicateOutcome> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/duplicate`, {
     method: 'POST',
     headers: {
@@ -5433,7 +5567,7 @@ export async function duplicateSite(siteId: string, input: Partial<SiteCreateInp
     },
     body: JSON.stringify(input),
   });
-  const payload = await readJson<ApiSiteResponse>(response);
+  const payload = await readJson<ApiSiteResponse & {data?: {site: ApiSite; pagesCopied: number; copiedResourceScope: {copied: string[]; notCopied: string[]; retainedReferences: string}; concurrencyBoundary: string; completionWarnings: string[]}}>(response);
 
   if (!response.ok || !payload.success || !payload.data?.site) {
     throw new AdminContentApiError(
@@ -5443,7 +5577,14 @@ export async function duplicateSite(siteId: string, input: Partial<SiteCreateInp
     );
   }
 
-  return toStoreSite(payload.data.site);
+  const site = toStoreSite(payload.data.site);
+  site.pageCount = payload.data.pagesCopied;
+  return { site, pagesCopied: payload.data.pagesCopied, copiedResourceScope: payload.data.copiedResourceScope,
+    concurrencyBoundary: payload.data.concurrencyBoundary, completionWarnings: payload.data.completionWarnings };
+}
+
+export async function duplicateSite(siteId: string, input: Partial<SiteCreateInput> = {}): Promise<Site> {
+  return (await duplicateSiteWithOutcome(siteId, input)).site;
 }
 
 export async function getAdminSite(siteId: string): Promise<ApiSite> {
@@ -5488,16 +5629,13 @@ export async function updateAdminSiteSettingsScope(
   return payload.data.settings;
 }
 
-export async function deleteSite(siteId: string): Promise<void> {
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}`, {
-    method: 'DELETE',
-  });
-  const payload = await readJson<ApiDeleteResponse>(response);
-
-  if (!response.ok || !payload.success || !payload.data?.deleted) {
-    throw new Error(payload.error?.message || 'Unable to delete site');
-  }
+export async function deleteSiteWithOutcome(siteId: string): Promise<{ deleted: true; siteId: string; completionWarnings: string[] }> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' });
+  const payload = await readJson<{ success: boolean; data?: { deleted: true; siteId: string; completionWarnings: string[] }; error?: { message?: string } }>(response);
+  if (!response.ok || !payload.success || !payload.data?.deleted) throw new Error(payload.error?.message || 'Unable to delete site');
+  return payload.data;
 }
+export async function deleteSite(siteId: string): Promise<void> { await deleteSiteWithOutcome(siteId); }
 
 export async function updateSite(siteId: string, input: Partial<SiteCreateInput>): Promise<Site> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}`, {
@@ -5532,7 +5670,7 @@ export async function getSiteFrontendDesign(siteId: string): Promise<AdminFronte
 
 export async function updateSiteFrontendDesign(
   siteId: string,
-  frontendDesign: SiteSettings['frontendDesign'],
+  frontendDesign: Partial<NonNullable<SiteSettings['frontendDesign']>>,
 ): Promise<AdminFrontendDesignResponse> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/frontend-design`, {
     method: 'PATCH',
@@ -5604,21 +5742,21 @@ export async function getSiteCustomFrontendStarterExport(
   return payload.data;
 }
 
-export async function listCollectionBindingPresets(siteId: string): Promise<CollectionBindingPreset[]> {
+export async function listCollectionBindingPresetState(siteId: string): Promise<CollectionBindingPresetState> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/editor/collection-binding-presets`);
   const payload = await readJson<ApiCollectionBindingPresetsResponse>(response);
 
-  if (!response.ok || !payload.success || !payload.data) {
+  if (!response.ok || !payload.success || !payload.data?.site?.id) {
     throw new Error(payload.error?.message || 'Unable to load collection binding presets');
   }
 
-  return payload.data.presets;
+  return payload.data;
 }
 
-export async function saveCollectionBindingPresets(
+export async function saveCollectionBindingPresetState(
   siteId: string,
   presets: CollectionBindingPreset[],
-): Promise<CollectionBindingPreset[]> {
+): Promise<CollectionBindingPresetState> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/editor/collection-binding-presets`, {
     method: 'PATCH',
     headers: {
@@ -5628,11 +5766,19 @@ export async function saveCollectionBindingPresets(
   });
   const payload = await readJson<ApiCollectionBindingPresetsResponse>(response);
 
-  if (!response.ok || !payload.success || !payload.data) {
+  if (!response.ok || !payload.success || !payload.data?.site?.id) {
     throw new Error(payload.error?.message || 'Unable to save collection binding presets');
   }
 
-  return payload.data.presets;
+  return payload.data;
+}
+
+export async function listCollectionBindingPresets(siteId: string): Promise<CollectionBindingPreset[]> {
+  return (await listCollectionBindingPresetState(siteId)).presets;
+}
+
+export async function saveCollectionBindingPresets(siteId: string, presets: CollectionBindingPreset[]): Promise<CollectionBindingPreset[]> {
+  return (await saveCollectionBindingPresetState(siteId, presets)).presets;
 }
 
 export async function getSiteReadiness(siteId: string): Promise<SiteReadiness> {
@@ -5877,7 +6023,7 @@ export async function getUserPermissions(userId: string): Promise<AdminUserPermi
       throw adminContentApiError(payload, 'Unable to load user permissions');
     }
 
-    const matrix = payload.data.permissions;
+    const matrix = { ...payload.data.permissions, ...(payload.data.siteAccess ? { siteAccess: payload.data.siteAccess } : {}) };
     if (cacheRevision === userPermissionMatrixCacheRevision) {
       userPermissionMatrixCache.set(cacheKey, matrix);
       persistUserPermissions(userId, matrix);
@@ -5891,6 +6037,39 @@ export async function getUserPermissions(userId: string): Promise<AdminUserPermi
 
   userPermissionMatrixRequests.set(cacheKey, request);
   return request;
+}
+
+export interface AdminOperatorSiteScope {
+  version: 1;
+  revision: number;
+  mode: 'workspace' | 'selected-sites';
+  grants: Array<{ siteId: string; permissions: string[] }>;
+  expiresAt: string | null;
+  legacy?: boolean;
+}
+export interface AdminOperatorSiteAccess {
+  userId: string;
+  scope: AdminOperatorSiteScope | null;
+  status: 'owner-workspace' | 'legacy-workspace' | 'workspace' | 'selected-sites' | 'revoked' | 'invalid' | 'expired';
+  revision: number;
+  ownerManaged: boolean;
+  completionWarnings?: string[];
+}
+interface ApiOperatorSiteAccessResponse { success: boolean; data?: AdminOperatorSiteAccess; error?: { message?: string } }
+export async function getUserSiteGrants(userId: string): Promise<AdminOperatorSiteAccess> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/site-grants`);
+  const payload = await readJson<ApiOperatorSiteAccessResponse>(response);
+  if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error?.message || 'Unable to load operator site grants');
+  return payload.data;
+}
+export async function updateUserSiteGrants(userId: string, scope: AdminOperatorSiteScope, expectedRevision: number, confirmWorkspace: boolean): Promise<AdminOperatorSiteAccess> {
+  const response = await adminFetch(`${getAdminApiBase()}/users/${encodeURIComponent(userId)}/site-grants`, {
+    method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope, expectedRevision, confirmWorkspace }),
+  });
+  const payload = await readJson<ApiOperatorSiteAccessResponse>(response);
+  if (!response.ok || !payload.success || !payload.data) throw new Error(payload.error?.message || 'Unable to save operator site grants');
+  clearUserPermissionsCache(userId);
+  return payload.data;
 }
 
 export async function updateUserPermissions(
@@ -5910,7 +6089,7 @@ export async function updateUserPermissions(
     throw new Error(payload.error?.message || 'Unable to update user permissions');
   }
 
-  const matrix = payload.data.permissions;
+  const matrix = { ...payload.data.permissions, ...(payload.data.siteAccess ? { siteAccess: payload.data.siteAccess } : {}) };
   clearUserPermissionsCache(userId);
   userPermissionMatrixCache.set(getUserPermissionCacheKey(userId), matrix);
   persistUserPermissions(userId, matrix);
@@ -6217,7 +6396,7 @@ export async function updateSettings(input: Partial<SiteSettingsInput>): Promise
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, ...(input.auth !== undefined ? { auth: adminAuthPolicyPatch(input.auth) } : {}) }),
   });
   const payload = await readJson<ApiSettingsResponse>(response);
 
@@ -6245,7 +6424,7 @@ export async function regenerateSettingsApiKeys(scope: 'all' | 'public' | 'admin
   return toSiteSettingsInput(payload.data.settings);
 }
 
-export async function issueSettingsAdminApiKey(label: string): Promise<{
+export async function issueSettingsAdminApiKey(label: string, scope: AdminServiceKeyScope, confirmWorkspace = false): Promise<{
   settings: SiteSettingsInput;
   issuedKey: IssuedAdminApiKey;
 }> {
@@ -6254,7 +6433,7 @@ export async function issueSettingsAdminApiKey(label: string): Promise<{
     headers: {
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ action: 'issue-admin-api-key', label }),
+    body: JSON.stringify({ action: 'issue-admin-api-key', label, scope, confirmWorkspace }),
   });
   const payload = await readJson<ApiSettingsResponse>(response);
 
@@ -6489,7 +6668,22 @@ export async function getPage(siteId: string, pageId: string): Promise<Page> {
   return toStorePage(payload.data.page);
 }
 
-export async function updatePage(siteId: string, pageId: string, input: PageUpdateInput): Promise<Page> {
+export type ContentSaveCompletionWarning = 'CONTENT_CACHE_INVALIDATION_PENDING' | 'CONTENT_AUDIT_PENDING' | 'CONTENT_WEBHOOK_DELIVERY_PENDING';
+const contentSaveWarnings = (value: unknown): ContentSaveCompletionWarning[] => Array.isArray(value)
+  ? [...new Set(value.filter((code): code is ContentSaveCompletionWarning => code === 'CONTENT_CACHE_INVALIDATION_PENDING' || code === 'CONTENT_AUDIT_PENDING' || code === 'CONTENT_WEBHOOK_DELIVERY_PENDING'))]
+  : [];
+export function formatContentSaveWarnings(warnings: readonly ContentSaveCompletionWarning[]): string | null {
+  const labels = [
+    warnings.includes('CONTENT_CACHE_INVALIDATION_PENDING') ? 'cache refresh' : '',
+    warnings.includes('CONTENT_AUDIT_PENDING') ? 'audit history' : '',
+    warnings.includes('CONTENT_WEBHOOK_DELIVERY_PENDING') ? 'webhook delivery' : '',
+  ].filter(Boolean);
+  return labels.length ? `Saved. Follow-up work needs attention: ${labels.join(', ')}.` : null;
+}
+export interface PageSaveOutcome { page: Page; completionWarnings: ContentSaveCompletionWarning[] }
+export interface BlogPostSaveOutcome { post: BlogPost; completionWarnings: ContentSaveCompletionWarning[] }
+
+export async function updatePageWithOutcome(siteId: string, pageId: string, input: PageUpdateInput): Promise<PageSaveOutcome> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/pages/${pageId}`, {
     method: 'PATCH',
     headers: {
@@ -6507,7 +6701,12 @@ export async function updatePage(siteId: string, pageId: string, input: PageUpda
     );
   }
 
-  return toStorePage(payload.data.page);
+  return { page: toStorePage(payload.data.page), completionWarnings: contentSaveWarnings(payload.data.completionWarnings) };
+}
+
+/** Compatibility helper for callers that only need the saved page. */
+export async function updatePage(siteId: string, pageId: string, input: PageUpdateInput): Promise<Page> {
+  return (await updatePageWithOutcome(siteId, pageId, input)).page;
 }
 
 export async function listPageRevisions(siteId: string, pageId: string): Promise<ContentRevision[]> {
@@ -6833,11 +7032,11 @@ export async function getBlogPost(siteId: string, postId: string): Promise<BlogP
   return toStorePost(payload.data.post);
 }
 
-export async function updateBlogPost(
+export async function updateBlogPostWithOutcome(
   siteId: string,
   postId: string,
   input: BlogPostUpdateInput,
-): Promise<BlogPost> {
+): Promise<BlogPostSaveOutcome> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/blog/${postId}`, {
     method: 'PATCH',
     headers: {
@@ -6855,7 +7054,12 @@ export async function updateBlogPost(
     );
   }
 
-  return toStorePost(payload.data.post);
+  return { post: toStorePost(payload.data.post), completionWarnings: contentSaveWarnings(payload.data.completionWarnings) };
+}
+
+/** Compatibility helper for callers that only need the saved post. */
+export async function updateBlogPost(siteId: string, postId: string, input: BlogPostUpdateInput): Promise<BlogPost> {
+  return (await updateBlogPostWithOutcome(siteId, postId, input)).post;
 }
 
 export async function listBlogPostRevisions(siteId: string, postId: string): Promise<ContentRevision[]> {
@@ -7051,7 +7255,7 @@ export async function cloneForm(
 export async function updateForm(
   siteId: string,
   formId: string,
-  input: Partial<FormDefinitionInput>,
+  input: Partial<FormDefinitionInput> & { expectedVersion?: string },
 ): Promise<FormDefinition> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}`, {
     method: 'PATCH',
@@ -7067,24 +7271,36 @@ export async function updateForm(
     throw new Error(payload.error?.message || 'Unable to update form');
   }
 
+  if (form.id !== formId || form.siteId !== siteId || (form.version !== undefined && !/^form-v1:[a-f0-9]{64}$/.test(form.version))) {
+    throw new Error('Form update returned an incompatible workspace or version. Reload before continuing.');
+  }
+
   return form;
 }
 
-export async function deleteForm(siteId: string, formId: string): Promise<void> {
+export async function deleteForm(siteId: string, formId: string): Promise<{ deleted: true; cleanupPending: boolean }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}`, {
     method: 'DELETE',
   });
-  const payload = await readJson<ApiDeleteResponse>(response);
+  const payload = await readJson<ApiDeleteResponse & { data?: { deleted: boolean; siteId: string; cleanupPending?: boolean } }>(response);
 
   if (!response.ok || !payload.success || !payload.data?.deleted) {
     throw new Error(payload.error?.message || 'Unable to delete form');
   }
+  return { deleted: true, cleanupPending: payload.data.cleanupPending === true };
+}
+
+export async function listFormAttachmentCleanup(siteId: string): Promise<Array<{ formId: string; attachmentCount: number }>> {
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/forms/attachment-cleanup`);
+  const payload = await readJson<{ success: boolean; data?: { jobs: Array<{ formId: string; attachmentCount: number }> }; error?: { message?: string } }>(response);
+  if (!response.ok || !payload.success || !Array.isArray(payload.data?.jobs)) throw new Error(payload.error?.message || 'Unable to load private file cleanup status');
+  return payload.data.jobs;
 }
 
 export async function getFormWithSubmissions(
   siteId: string,
   formId: string,
-  filters: { status?: FormSubmissionStatus | 'all'; requestId?: string; limit?: number; offset?: number } = {},
+  filters: { status?: FormSubmissionStatus | 'all'; requestId?: string; limit?: number; offset?: number; requirePagination?: boolean } = {},
 ): Promise<{ form: FormDefinition; submissions: FormSubmissionList }> {
   const query = new URLSearchParams();
   if (filters.status && filters.status !== 'all') query.set('status', filters.status);
@@ -7099,6 +7315,9 @@ export async function getFormWithSubmissions(
 
   if (!response.ok || !payload.success || !form) {
     throw new Error(payload.error?.message || 'Unable to load form');
+  }
+  if (filters.requirePagination && (!Array.isArray(submissions?.data) || !submissions?.pagination)) {
+    throw new Error('The form submission response is incomplete. Refresh and retry; partial results cannot be searched or exported.');
   }
 
   return {
@@ -7198,12 +7417,10 @@ export async function listFormDeliveryEvents(
   filters: { limit?: number; offset?: number } = {},
 ): Promise<FormDeliveryEventList> {
   const query = new URLSearchParams();
-  query.set('kind', 'form-submission');
-  query.set('formId', formId);
   query.set('limit', String(filters.limit || 50));
   query.set('offset', String(filters.offset || 0));
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/events?${query.toString()}`);
+  const response = await adminFetch(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/forms/${encodeURIComponent(formId)}/delivery-attempts?${query.toString()}`);
   const payload = await readJson<ApiListFormDeliveryEventsResponse>(response);
   const events = payload.data?.events || payload.events;
   const count = payload.data?.count ?? payload.count ?? events?.length ?? 0;
@@ -7225,16 +7442,15 @@ export async function listCommentDeliveryEvents(
   filters: { limit?: number; offset?: number; commentId?: string } = {},
 ): Promise<CommentDeliveryEventList> {
   const query = new URLSearchParams();
-  query.set('kind', 'all');
   query.set('limit', String(filters.limit || 100));
   query.set('offset', String(filters.offset || 0));
   if (filters.commentId) query.set('commentId', filters.commentId);
 
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/events?${query.toString()}`);
+  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/delivery-attempts?${query.toString()}`);
   const payload = await readJson<ApiListCommentDeliveryEventsResponse>(response);
   const rawEvents = payload.data?.events || payload.events;
   const events = rawEvents?.filter((event) => event.kind.startsWith('comment-'));
-  const count = events?.length ?? payload.data?.count ?? payload.count ?? 0;
+  const count = payload.data?.count ?? payload.count ?? events?.length ?? 0;
   const pagination = payload.data?.pagination || payload.pagination;
 
   if (!response.ok || !payload.success || !events) {
@@ -7304,6 +7520,7 @@ export async function retryFormWebhookDelivery(
   siteId: string,
   formId: string,
   submissionId: string,
+  eventId?: string,
 ): Promise<{ requestId: string; delivery: FormWebhookRetryDelivery; submission: FormSubmission }> {
   const requestId = `forms-ui-retry-${Date.now().toString(36)}`;
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}/webhook-retry`, {
@@ -7312,7 +7529,7 @@ export async function retryFormWebhookDelivery(
       'content-type': 'application/json',
       'x-request-id': requestId,
     },
-    body: JSON.stringify({ requestId }),
+    body: JSON.stringify({ requestId, ...(eventId?{eventId}:{}) }),
   });
   const payload = await readJson<ApiFormSubmissionResponse>(response);
   const delivery = payload.data?.delivery || payload.delivery;
@@ -7333,6 +7550,7 @@ export async function retryFormEmailDelivery(
   siteId: string,
   formId: string,
   submissionId: string,
+  eventId?: string,
 ): Promise<{ requestId: string; delivery: FormWebhookRetryDelivery; submission: FormSubmission }> {
   const requestId = `forms-ui-email-retry-${Date.now().toString(36)}`;
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/forms/${formId}/submissions/${submissionId}/email-retry`, {
@@ -7341,7 +7559,7 @@ export async function retryFormEmailDelivery(
       'content-type': 'application/json',
       'x-request-id': requestId,
     },
-    body: JSON.stringify({ requestId }),
+    body: JSON.stringify({ requestId, ...(eventId?{eventId}:{}) }),
   });
   const payload = await readJson<ApiFormSubmissionResponse>(response);
   const delivery = payload.data?.delivery || payload.delivery;
@@ -7362,7 +7580,7 @@ export async function retryCommentDelivery(
   siteId: string,
   commentId: string,
   eventId: string,
-): Promise<{ requestId: string; delivery: CommentDeliveryRetryDelivery; retryOf: string; comment: AdminComment }> {
+): Promise<{ requestId: string; delivery: CommentDeliveryRetryDelivery; retryOf: string; comment: AdminComment; completionWarnings: string[] }> {
   const requestId = `comments-ui-delivery-retry-${Date.now().toString(36)}`;
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}/delivery-retry`, {
     method: 'POST',
@@ -7386,7 +7604,67 @@ export async function retryCommentDelivery(
     delivery,
     retryOf,
     comment,
+    completionWarnings: [...(payload.data?.completionWarnings || []), ...(delivery.completionWarnings || [])],
   };
+}
+
+async function recordDeliveryReview<T extends CommentDeliveryEvent | FormDeliveryEvent>(
+  url: string,
+  original: T,
+  body: DeliveryReviewRequest,
+): Promise<DeliveryReviewOutcome<T>> {
+  if (!original.updatedAt || body.expectedUpdatedAt !== original.updatedAt
+    || !['pending', 'uncertain'].includes(original.status)
+    || body.expectedState !== original.status
+    || !Number.isSafeInteger(body.expectedReviewVersion) || body.expectedReviewVersion < 0
+    || body.expectedReviewVersion !== (original.reconciliationVersion ?? 0)
+    || !['provider-console-reviewed', 'recipient-report-reviewed', 'outcome-unavailable'].includes(body.evidence)
+    || body.disposition !== 'retain-without-resend') {
+    throw new AdminContentApiError('Reload delivery history before recording this review.', undefined, 'DELIVERY_REVIEW_SNAPSHOT_INVALID');
+  }
+  const response = await adminFetch(url, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const payload = await readJson<{ success?: boolean; error?: { message?: string; code?: string; details?: unknown }; data?: DeliveryReviewOutcome<T> }>(response);
+  if (!response.ok || !payload.success || !payload.data) {
+    throw adminContentApiError(payload, 'Unable to record delivery review. Reload history before retrying.');
+  }
+  const { attempt, reconciliation, completionWarnings } = payload.data;
+  if (!attempt || attempt.id !== original.id || attempt.siteId !== original.siteId
+    || attempt.kind !== original.kind || attempt.target !== original.target || attempt.createdAt !== original.createdAt
+    || attempt.statusCode !== original.statusCode || attempt.error !== original.error
+    || JSON.stringify(attempt.providerEvidence ?? null) !== JSON.stringify(original.providerEvidence ?? null)
+    || attempt.commentId !== original.commentId || ('formId' in original && (!('formId' in attempt) || attempt.formId !== original.formId))
+    || ('submissionId' in original && (!('submissionId' in attempt) || attempt.submissionId !== original.submissionId))
+    || attempt.status !== original.status || attempt.updatedAt !== original.updatedAt
+    || attempt.reconciliationVersion !== body.expectedReviewVersion + 1
+    || !reconciliation || typeof reconciliation.id !== 'string' || !reconciliation.id
+    || reconciliation.version !== attempt.reconciliationVersion
+    || reconciliation.observedState !== body.expectedState || reconciliation.observedUpdatedAt !== body.expectedUpdatedAt
+    || reconciliation.evidence !== body.evidence || reconciliation.disposition !== 'retain-without-resend'
+    || typeof reconciliation.actorId !== 'string' || !reconciliation.actorId
+    || typeof reconciliation.createdAt !== 'string' || !Number.isFinite(Date.parse(reconciliation.createdAt))
+    || !Array.isArray(attempt.reconciliations) || !attempt.reconciliations.some(row => row.id === reconciliation.id && row.version === reconciliation.version)
+    || attempt.reconciliations.length !== (original.reconciliations?.length ?? 0) + 1
+    || (original.reconciliations ?? []).some((row, index) => JSON.stringify(row) !== JSON.stringify(attempt.reconciliations?.[index]))
+    || !Array.isArray(completionWarnings) || completionWarnings.some(value => !value || value.code !== 'DELIVERY_RECONCILIATION_AUDIT_PENDING' || typeof value.message !== 'string')) {
+    throw new AdminContentApiError('The review response could not be verified. The write may have completed; reload history and do not replay automatically.', undefined, 'DELIVERY_REVIEW_OUTCOME_UNVERIFIED');
+  }
+  return { attempt, reconciliation, completionWarnings };
+}
+
+export async function recordCommentDeliveryReview(
+  siteId: string, event: CommentDeliveryEvent, body: DeliveryReviewRequest,
+): Promise<DeliveryReviewOutcome<CommentDeliveryEvent>> {
+  if (event.siteId !== siteId || !event.commentId) throw new AdminContentApiError('Reload the selected site delivery history.');
+  return recordDeliveryReview(`${getPublicApiBase()}/sites/${encodeURIComponent(siteId)}/comments/${encodeURIComponent(event.commentId)}/delivery-attempts/${encodeURIComponent(event.id)}/reconciliation`, event, body);
+}
+
+export async function recordFormDeliveryReview(
+  siteId: string, formId: string, event: FormDeliveryEvent, body: DeliveryReviewRequest,
+): Promise<DeliveryReviewOutcome<FormDeliveryEvent>> {
+  if (event.siteId !== siteId || event.formId !== formId || !event.submissionId) throw new AdminContentApiError('Reload the selected form delivery history.');
+  return recordDeliveryReview(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(event.submissionId)}/delivery-attempts/${encodeURIComponent(event.id)}/reconciliation`, event, body);
 }
 
 export async function listFormContacts(
@@ -7404,6 +7682,11 @@ export async function listFormContacts(
   const payload = await readJson<ApiListContactsResponse>(response);
   const contacts = payload.data?.contacts || payload.contacts;
   const count = payload.data?.count ?? payload.count ?? contacts?.length ?? 0;
+  const wirePagination = payload.data?.pagination || payload.pagination;
+  const wireCount = payload.data?.count ?? payload.count;
+  if (response.ok && payload.success && filters.requirePagination && (!Array.isArray(contacts) || !wirePagination || !Number.isSafeInteger(wireCount) || wireCount !== wirePagination.total)) {
+    throw new Error('The contact response is incomplete. Refresh and retry; partial results cannot be searched or exported.');
+  }
   const pagination = payload.data?.pagination || payload.pagination || {
     total: count,
     limit: filters.limit || contacts?.length || 100,
@@ -7833,12 +8116,16 @@ export async function getCommentAnalytics(
   return analytics;
 }
 
-export async function createComment(
+export async function createCommentWithOutcome(
   siteId: string,
   input: CreateCommentInput,
-): Promise<AdminComment> {
+): Promise<{ comment: AdminComment; completionWarnings: string[] }> {
   const targetSegment = input.targetType === 'post' ? 'blog' : 'pages';
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/${targetSegment}/${input.targetId}/comments`, {
+  const moderatorReply = Boolean(input.parentId);
+  const endpoint = moderatorReply
+    ? `${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/comments/${encodeURIComponent(input.parentId!)}/replies`
+    : `${getPublicApiBase()}/sites/${encodeURIComponent(siteId)}/${targetSegment}/${encodeURIComponent(input.targetId)}/comments`;
+  const response = await adminFetch(endpoint, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -7848,13 +8135,11 @@ export async function createComment(
       authorName: input.authorName,
       authorEmail: input.authorEmail,
       authorWebsite: input.authorWebsite,
-      parentId: input.parentId,
+      ...(moderatorReply ? { targetType: input.targetType, targetId: input.targetId } : { parentId: input.parentId }),
       commentThreadId: input.commentThreadId,
       moderationMode: input.moderationMode,
       requestId: input.requestId,
-      honeypot: '',
-      rateLimitBypass: true,
-      startedAt: Date.now() - 3000,
+      ...(!moderatorReply ? { honeypot: '', startedAt: Date.now() - 3000 } : {}),
     }),
   });
   const payload = await readJson<ApiCreateCommentResponse>(response);
@@ -7864,7 +8149,12 @@ export async function createComment(
     throw new AdminContentApiError(payload.error?.message || 'Unable to create comment reply', payload.error?.details);
   }
 
-  return comment;
+  return { comment, completionWarnings: payload.data?.completionWarnings || [] };
+}
+
+/** Compatibility helper for callers that consume only the created comment. */
+export async function createComment(siteId: string, input: CreateCommentInput): Promise<AdminComment> {
+  return (await createCommentWithOutcome(siteId, input)).comment;
 }
 
 export async function updateComments(
@@ -7889,14 +8179,16 @@ export async function updateComments(
     updated,
     updatedCount: payload.data?.updatedCount ?? payload.updatedCount ?? updated.length,
     missingIds: payload.data?.missingIds || payload.missingIds || [],
+    completionWarnings: payload.data?.completionWarnings || [],
+    concurrencyBoundary: payload.data?.concurrencyBoundary,
   };
 }
 
-export async function updateCommentThread(
+export async function updateCommentThreadWithOutcome(
   siteId: string,
   commentId: string,
   input: UpdateCommentThreadInput,
-): Promise<AdminComment> {
+): Promise<{ comment: AdminComment; completionWarnings: string[] }> {
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}`, {
     method: 'PATCH',
     headers: {
@@ -7911,13 +8203,20 @@ export async function updateCommentThread(
     throw new AdminContentApiError(payload.error?.message || 'Unable to move comment reply', payload.error?.details);
   }
 
-  return comment;
+  return { comment, completionWarnings: payload.data?.completionWarnings || [] };
+}
+
+/** Compatibility helper for callers that consume only the saved comment. */
+export async function updateCommentThread(
+  siteId: string, commentId: string, input: UpdateCommentThreadInput,
+): Promise<AdminComment> {
+  return (await updateCommentThreadWithOutcome(siteId, commentId, input)).comment;
 }
 
 export async function deleteComment(
   siteId: string,
   commentId: string,
-): Promise<{ deleted: AdminComment[]; deletedCount: number }> {
+): Promise<{ deleted: AdminComment[]; deletedCount: number; completionWarnings: string[]; concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process' }> {
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/${commentId}`, {
     method: 'DELETE',
   });
@@ -7931,6 +8230,8 @@ export async function deleteComment(
   return {
     deleted,
     deletedCount: payload.data?.deletedCount ?? payload.deletedCount ?? deleted.length,
+    completionWarnings: payload.data?.completionWarnings || [],
+    concurrencyBoundary: payload.data?.concurrencyBoundary,
   };
 }
 
@@ -7969,7 +8270,7 @@ export async function listCommentBlocklist(
 export async function deleteCommentBlocklistEntries(
   siteId: string,
   ids: string[],
-): Promise<{ deleted: AdminCommentBlocklistEntry[]; deletedCount: number; missingIds: string[] }> {
+): Promise<{ deleted: AdminCommentBlocklistEntry[]; deletedCount: number; missingIds: string[]; completionWarnings: string[]; concurrencyBoundary?: 'database-site-row-lock' | 'demo-single-process' }> {
   const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/comments/blocklist`, {
     method: 'DELETE',
     headers: {
@@ -7988,6 +8289,8 @@ export async function deleteCommentBlocklistEntries(
     deleted,
     deletedCount: payload.data?.deletedCount ?? payload.deletedCount ?? deleted.length,
     missingIds: payload.data?.missingIds || payload.missingIds || [],
+    completionWarnings: payload.data?.completionWarnings || [],
+    concurrencyBoundary: payload.data?.concurrencyBoundary,
   };
 }
 
@@ -8006,7 +8309,7 @@ async function listCollectionsPage(siteId: string, offset: number): Promise<{
   const payload = await readJson<ApiListCollectionsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to load collections');
+    throw adminContentApiError(payload, 'Unable to load collections');
   }
 
   return {
@@ -8076,7 +8379,11 @@ export async function updateCollection(
     throw adminContentApiError(payload, 'Unable to save collection');
   }
 
-  return toCollection(payload.data.collection);
+  const collection = payload.data.collection;
+  if (collection.id !== collectionId || collection.siteId !== siteId || (collection.version !== undefined && !/^collection-v1:[a-f0-9]{64}$/.test(collection.version))) {
+    throw new Error('Collection update returned an incompatible workspace or version. Reload before continuing.');
+  }
+  return toCollection(collection);
 }
 
 export async function deleteCollection(siteId: string, collectionId: string): Promise<void> {
@@ -8109,7 +8416,7 @@ export async function listCollectionRecords(
   const payload = await readJson<ApiListCollectionRecordsResponse>(response);
 
   if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to load collection records');
+    throw adminContentApiError(payload, 'Unable to load collection records');
   }
 
   return {
@@ -8307,7 +8614,7 @@ export async function updateCollectionRecord(
   siteId: string,
   collectionId: string,
   recordId: string,
-  input: Partial<CollectionRecordInput>,
+  input: Partial<CollectionRecordInput> & { expectedUpdatedAt?: string; expectedVersion?: string },
 ): Promise<CollectionRecord> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/collections/${collectionId}/records/${recordId}`, {
     method: 'PATCH',
@@ -8484,7 +8791,7 @@ export async function refreshOrderTracking(
   siteId: string,
   orderId: string,
   input: { provider?: string; executionProvider?: string; carrier?: string; shippingCarrier?: string; trackingNumber?: string; trackingUrl?: string } = {},
-): Promise<{ record: CollectionRecord; tracking: AdminOrderTrackingStatus }> {
+): Promise<{ record: CollectionRecord; tracking: AdminOrderTrackingStatus; completionWarnings: AdminOrderCompletionWarning[] }> {
   const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/commerce/orders/${orderId}/tracking`, {
     method: 'POST',
     headers: {
@@ -8501,6 +8808,7 @@ export async function refreshOrderTracking(
   return {
     record: toCollectionRecord(payload.data.record || payload.data.order),
     tracking: payload.data.tracking,
+    completionWarnings: payload.data.completionWarnings || [],
   };
 }
 
@@ -8885,6 +9193,14 @@ export async function bulkUpdateCollectionRecords(
     updated: payload.data.updated,
     skipped: payload.data.skipped,
     records: payload.data.records.map(toCollectionRecord),
+    outcome: payload.data.outcome,
+    appliedRecordIds: payload.data.appliedRecordIds,
+    skippedRecordIds: payload.data.skippedRecordIds,
+    failedTargets: payload.data.failedTargets,
+    notAttemptedRecordIds: payload.data.notAttemptedRecordIds,
+    completionWarnings: payload.data.completionWarnings,
+    reloadRequired: payload.data.reloadRequired,
+    concurrencyBoundary: payload.data.concurrencyBoundary,
   };
 }
 
@@ -8913,35 +9229,16 @@ export async function listReusableSections(
   if (filters.tag) query.set('tag', filters.tag);
   if (filters.search) query.set('search', filters.search);
 
-  const response = await adminFetch(`${getAdminApiBase()}/sites/${siteId}/reusable-sections?${query.toString()}`);
-  const payload = await readJson<ApiListReusableSectionsResponse>(response);
-
-  if (!response.ok || !payload.success || !payload.data) {
-    throw new Error(payload.error?.message || 'Unable to load reusable sections');
-  }
-
-  return payload.data.sections.map(toReusableSection);
+  const sections = await loadReusableSectionLibrary<ApiReusableSection>(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/reusable-sections`, siteId, query, adminFetch);
+  return sections.map(toReusableSection);
 }
 
 export async function getInteractiveComponentRegistry(
   siteId: string,
+  signal: AbortSignal = new AbortController().signal,
 ): Promise<InteractiveComponentRegistry> {
-  const response = await adminFetch(`${getPublicApiBase()}/sites/${siteId}/interactive-components`);
-  const payload = await readJson<ApiInteractiveComponentRegistryResponse>(response);
-  const registry = payload.data || payload.registry;
-
-  if (!response.ok || !payload.success || !registry) {
-    throw adminContentApiError(payload, 'Unable to load interactive component registry');
-  }
-
-  return {
-    ...registry,
-    components: Array.isArray(registry.components)
-      ? registry.components
-      : Array.isArray(payload.components)
-        ? payload.components
-        : [],
-  };
+  return await loadInteractiveRegistryPages(`${getAdminApiBase()}/sites/${encodeURIComponent(siteId)}/interactive-components/discovery`,
+    siteId, signal, adminFetch, 'include') as unknown as InteractiveComponentRegistry;
 }
 
 export async function createReusableSection(

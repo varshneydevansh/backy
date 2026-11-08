@@ -132,12 +132,12 @@ const appendAnonymizedNote = (submission: FormSubmission, actor: string) => (
   ].filter(Boolean).join('\n')
 );
 
-const listAllDemoSubmissions = (formId: string): FormSubmission[] => {
+const listAllDemoSubmissions = (formId: string, siteId: string): FormSubmission[] => {
   const items: FormSubmission[] = [];
   let offset = 0;
 
   while (true) {
-    const page = listFormSubmissions(formId, { limit: PAGE_SIZE, offset });
+    const page = listFormSubmissions(formId, { siteId, limit: PAGE_SIZE, offset });
     items.push(...page.data);
     if (!page.pagination.hasMore) break;
     offset += PAGE_SIZE;
@@ -256,12 +256,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const consentFields = findConsentFields(form.fields || []);
     const consentFieldKeys = consentFields.map((field) => field.key);
     const deleteAfterDays = readDeleteAfterDays(form);
-    const submissions = listAllDemoSubmissions(form.id);
+    const submissions = listAllDemoSubmissions(form.id, site.id);
     const dueSubmissions = submissions.filter((submission) => shouldAnonymize(submission, consentFieldKeys, deleteAfterDays, now));
     const updated = dryRun
       ? []
       : dueSubmissions.flatMap((submission) => {
-        const anonymized = anonymizeFormSubmissionConsentEvidence(form.id, submission.id, consentFieldKeys, actor);
+        const anonymized = anonymizeFormSubmissionConsentEvidence(form.id, submission.id, consentFieldKeys, actor, site.id);
         return anonymized ? [anonymized] : [];
       });
     if (!dryRun) {

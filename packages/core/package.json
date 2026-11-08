@@ -48,8 +48,10 @@
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit",
     "test:content-contract": "npm run build && node scripts/content-contract-smoke.mjs && node scripts/content-migrations-smoke.mjs",
+    "test:data-figure-source": "tsx scripts/data-figure-source.test.ts",
     "test:repositories": "npm run build && node scripts/repository-contract-smoke.mjs",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test:animation-sequence": "npm run build && node scripts/animation-sequence-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

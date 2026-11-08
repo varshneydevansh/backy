@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls = [];
+const client = createBackyClient({ baseUrl: 'https://backy.example', siteId: 'site/default', fetch: async (url, init) => {
+  const body = JSON.parse(init.body); calls.push({url: new URL(url), init, body});
+  if (body.reviewVersion === 'stale') return Response.json({success:false, requestId:'fixture', error:{code:'COMPOSITION_REVIEW_STALE',message:'Review again'}}, {status:409});
+  if (body.action === 'apply') return Response.json({success:true, requestId:'fixture', data:{publication:'draft-only', drafts:[{id:'draft',editUrl:'/pages/draft/edit'}]}}, {status:201});
+  return Response.json({success:true, requestId:'fixture', data:{canApply:false, issues:[{severity:'unverified',code:'OPAQUE_WIDGET'}],reviewVersion:'composition-v1:'+ 'a'.repeat(64)}});
+} });
+const input = {composition:{schemaVersion:'backy.frontend-composition-import.v1',routes:[{id:'nested',type:'page',title:'Nested',path:'/nested',content:{elements:[{id:'child',responsive:{mobile:{width:375}},unknown:[false,0]}]}}]},selection:['route:nested'],acknowledgeUnverified:false};
+const review = await client.reviewAdminFrontendComposition(input,{adminSession:'fixture-session',requestId:'request-proof',credentials:'include'});
+assert.equal(review.data.canApply,false); assert.equal(review.data.issues[0].severity,'unverified');
+assert.deepEqual(calls[0].body,{...input,action:'review'});
+assert.equal(calls[0].url.pathname,'/api/admin/sites/site%2Fdefault/frontend-design/composition-import');
+assert.equal(calls[0].init.method,'POST'); assert.equal(calls[0].init.credentials,'include');
+assert.equal(calls[0].init.headers.get('x-request-id'),'request-proof');
+assert(calls[0].init.headers.get('authorization')?.includes('fixture-session') || calls[0].init.headers.get('x-backy-admin-session') === 'fixture-session');
+const applied = await client.applyAdminFrontendComposition({...input,reviewVersion:review.data.reviewVersion},{siteId:'override'});
+assert.equal(applied.data.publication,'draft-only');assert.equal(calls[1].url.pathname,'/api/admin/sites/override/frontend-design/composition-import');
+assert.deepEqual(calls[1].body,{...input,action:'apply',reviewVersion:review.data.reviewVersion});
+await assert.rejects(client.applyAdminFrontendComposition({...input,reviewVersion:'stale'}),e=>e instanceof BackyApiError && e.status===409 && e.code==='COMPOSITION_REVIEW_STALE');
+assert.equal(calls.length,3,'Stale applies must not be automatically replayed');
+console.log('Composition SDK transport PASS: scoped session, retained payload, review/apply separation, draft-only response and no stale replay.');

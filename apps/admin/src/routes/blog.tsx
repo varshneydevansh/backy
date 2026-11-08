@@ -350,7 +350,6 @@ function BlogListView() {
   const adminBaseUrl = useMemo(() => getAdminApiBase(), []);
   const createPostSearch = useMemo(() => ({
     siteId: activeSiteId,
-    templateSource: 'backy-canvas' as const,
     focus: 'canvas' as const,
   }), [activeSiteId]);
   const siteScopedPosts = useMemo(() => {

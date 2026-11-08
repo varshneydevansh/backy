@@ -1,6 +1,8 @@
+import { normalizeBackyAnimationSequence } from './animation-sequence';
 import {
   BACKY_CONTENT_SCHEMA_VERSION,
   createBackyContentDocument,
+  synchronizeBackyElementParentScopes,
   isBackyContentDocument,
   validateBackyContentDocument,
   type BackyBreakpoint,
@@ -117,6 +119,116 @@ const RESERVED_ELEMENT_FIELDS = new Set([
   'metadata',
   'animation',
 ]);
+
+const UNSAFE_JSON_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+const ownEnumerableDataFields = (value: unknown): Record<string, unknown> | null => {
+  if (!isRecord(value)) return null;
+  const result: Record<string, unknown> = {};
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    if (descriptor.enumerable && 'value' in descriptor && !UNSAFE_JSON_KEYS.has(key)) result[key] = descriptor.value;
+  }
+  return result;
+};
+
+const isPlainJsonObject = (value: object): boolean => {
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype === null || prototype === Object.prototype) return true;
+  // Native plain objects from another realm are still JSON objects. Custom
+  // class/prototype instances are not; inspect descriptors without getters.
+  const constructor = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  return Object.getPrototypeOf(prototype) === null && typeof constructor === 'function'
+    && Object.getOwnPropertyDescriptor(constructor, 'prototype')?.value === prototype
+    && Function.prototype.toString.call(constructor) === 'function Object() { [native code] }';
+};
+
+/** Copy JSON extensions without executing getters/toJSON or adopting prototypes.
+ * Unsupported array entries become null so later JSON entries keep their index.
+ * Iterative traversal preserves deep valid JSON without a silent depth cutoff.
+ */
+const normalizeJsonExtension = (input: unknown): BackyJsonValue | undefined => {
+  type Ancestor = { value: object; parent: Ancestor | null };
+  type Work = { value: unknown; parent: BackyJsonObject | BackyJsonValue[] | null; key: string | number; ancestors: Ancestor | null };
+  const pending: Work[] = [{ value: input, parent: null, key: '', ancestors: null }];
+  let result: BackyJsonValue | undefined;
+  while (pending.length) {
+    const work = pending.pop()!;
+    const { value, parent, key, ancestors } = work;
+    const assign = (next: BackyJsonValue) => {
+      if (parent === null) result = next;
+      else if (Array.isArray(parent)) parent[Number(key)] = next;
+      else parent[String(key)] = next;
+    };
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') { assign(value); continue; }
+    if (typeof value === 'number') { if (Number.isFinite(value)) assign(value); continue; }
+    if (!value || typeof value !== 'object') continue;
+    let cyclic = false;
+    for (let ancestor = ancestors; ancestor; ancestor = ancestor.parent) if (ancestor.value === value) { cyclic = true; break; }
+    if (cyclic) continue;
+    const array = Array.isArray(value);
+    if (!array && !isPlainJsonObject(value)) continue;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const nextAncestors: Ancestor = { value, parent: ancestors };
+    if (array) {
+      const output: BackyJsonValue[] = new Array(descriptors.length.value).fill(null);
+      assign(output);
+      for (let index = output.length - 1; index >= 0; index--) {
+        const descriptor = descriptors[String(index)];
+        if (descriptor && 'value' in descriptor) pending.push({ value: descriptor.value, parent: output, key: index, ancestors: nextAncestors });
+      }
+    } else {
+      const output: BackyJsonObject = {};
+      assign(output);
+      for (const [entryKey, descriptor] of Object.entries(descriptors).reverse()) {
+        if (descriptor.enumerable && 'value' in descriptor && !UNSAFE_JSON_KEYS.has(entryKey)) pending.push({ value: descriptor.value, parent: output, key: entryKey, ancestors: nextAncestors });
+      }
+    }
+  }
+  return result;
+};
+
+const rootJsonExtensions = (input: Record<string, unknown>, reserved: Set<string>): BackyJsonObject => {
+  const result: BackyJsonObject = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (reserved.has(key) || UNSAFE_JSON_KEYS.has(key)) continue;
+    const normalized = normalizeJsonExtension(value);
+    if (normalized !== undefined) result[key] = normalized;
+  }
+  return result;
+};
+
+const RESERVED_DOCUMENT_FIELDS = new Set([
+  'schemaVersion', 'id', 'kind', 'title', 'slug', 'locale', 'status', 'version', 'elements',
+  'themeTokenRefs', 'assets', 'interactions', 'seo', 'dataBindings', 'editableMap', 'metadata',
+]);
+const RESERVED_CANVAS_PAYLOAD_FIELDS = new Set([
+  ...RESERVED_DOCUMENT_FIELDS, 'contentDocument', 'canvasSize', 'customCSS', 'customJS', 'themeSchemaVersion', 'animations',
+]);
+
+/** Canonical input keeps declared semantics; only unknown root extensions are cloned. */
+const canonicalDocumentWithSafeExtensions = (value: unknown): BackyContentDocument | null => {
+  const fields = ownEnumerableDataFields(value);
+  if (!fields || fields.schemaVersion !== BACKY_CONTENT_SCHEMA_VERSION || !Array.isArray(fields.elements)) return null;
+  const sanitizeElement = (input: unknown, ancestors: Set<object>): BackyContentElement | null => {
+    if (!input || typeof input !== 'object' || ancestors.has(input)) return null;
+    const elementFields = ownEnumerableDataFields(input);
+    if (!elementFields) return null;
+    const nextAncestors = new Set([...ancestors, input]);
+    const children = Array.isArray(elementFields.children) ? elementFields.children
+      .map(child => sanitizeElement(child, nextAncestors)).filter((child): child is BackyContentElement => child !== null) : elementFields.children;
+    return {
+      ...rootJsonExtensions(elementFields, RESERVED_ELEMENT_FIELDS),
+      ...Object.fromEntries(Object.entries(elementFields).filter(([key]) => RESERVED_ELEMENT_FIELDS.has(key))),
+      children,
+    } as BackyContentElement;
+  };
+  const document = {
+    ...rootJsonExtensions(fields, RESERVED_DOCUMENT_FIELDS),
+    ...Object.fromEntries(Object.entries(fields).filter(([key]) => RESERVED_DOCUMENT_FIELDS.has(key))),
+    elements: fields.elements.map(element => sanitizeElement(element, new Set())).filter((element): element is BackyContentElement => element !== null),
+  } as unknown as BackyContentDocument;
+  return isBackyContentDocument(document) ? document : null;
+};
 
 const ASSET_ID_FIELDS = new Set([
   'assetId',
@@ -246,11 +358,12 @@ const normalizeJsonValue = (value: unknown): BackyJsonValue | undefined => {
 };
 
 export function normalizeBackyJsonObject(value: unknown): BackyJsonObject {
-  if (!isRecord(value)) {
+  const fields = ownEnumerableDataFields(value);
+  if (!fields) {
     return {};
   }
 
-  return Object.entries(value).reduce<BackyJsonObject>((normalized, [key, rawValue]) => {
+  return Object.entries(fields).reduce<BackyJsonObject>((normalized, [key, rawValue]) => {
     const nextValue = normalizeJsonValue(rawValue);
     if (nextValue !== undefined) {
       normalized[key] = nextValue;
@@ -306,6 +419,8 @@ const normalizeBackyElementAnimation = (value: unknown): BackyElementAnimation |
     return undefined;
   }
 
+  const sequence = value.sequence === undefined ? undefined : normalizeBackyAnimationSequence(value.sequence);
+  if (value.sequence !== undefined && !sequence) return undefined;
   const delay = toNumber(value.delay);
   const easing = toString(value.easing);
   const direction = toString(value.direction);
@@ -318,6 +433,7 @@ const normalizeBackyElementAnimation = (value: unknown): BackyElementAnimation |
     duration,
   };
 
+  if (sequence) animation.sequence = sequence;
   if (delay !== undefined && delay >= 0) animation.delay = delay;
   if (easing) animation.easing = easing;
   if (direction && ELEMENT_ANIMATION_DIRECTIONS.has(direction)) {
@@ -724,33 +840,26 @@ const normalizeRenderCapabilities = (value: unknown): BackyInteractiveRenderCapa
 };
 
 const collectAssetIdsFromValue = (value: unknown, key: string | null, assetIds: Set<string>) => {
-  if (key && ASSET_ID_FIELDS.has(key)) {
-    if (isNonEmptyString(value)) {
-      assetIds.add(value.trim());
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      value.forEach((item) => {
-        if (isNonEmptyString(item)) {
-          assetIds.add(item.trim());
+  const pending = [{ value, key }];
+  const seen = new Set<object>();
+  while (pending.length) {
+    const item = pending.pop()!;
+    if (item.key && ASSET_ID_FIELDS.has(item.key)) {
+      if (isNonEmptyString(item.value)) assetIds.add(item.value.trim());
+      else if (Array.isArray(item.value)) {
+        for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(item.value))) {
+          if (descriptor.enumerable && 'value' in descriptor && isNonEmptyString(descriptor.value)) assetIds.add(descriptor.value.trim());
         }
-      });
-      return;
+      }
+      continue;
     }
-
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectAssetIdsFromValue(item, null, assetIds));
-    return;
-  }
-
-  if (isRecord(value)) {
-    Object.entries(value).forEach(([entryKey, entryValue]) => {
-      collectAssetIdsFromValue(entryValue, entryKey, assetIds);
-    });
+    if (!item.value || typeof item.value !== 'object' || seen.has(item.value)) continue;
+    seen.add(item.value);
+    const array = Array.isArray(item.value);
+    const entries = Object.entries(Object.getOwnPropertyDescriptors(item.value)).reverse();
+    for (const [entryKey, descriptor] of entries) {
+      if (descriptor.enumerable && 'value' in descriptor && !UNSAFE_JSON_KEYS.has(entryKey)) pending.push({ value: descriptor.value, key: array ? null : entryKey });
+    }
   }
 };
 
@@ -793,20 +902,6 @@ const normalizeElementMetadata = (
     }
   }
 
-  const extra = Object.entries(rawElement).reduce<BackyJsonObject>((result, [key, value]) => {
-    if (!RESERVED_ELEMENT_FIELDS.has(key)) {
-      const normalized = normalizeJsonValue(value);
-      if (normalized !== undefined) {
-        result[key] = normalized;
-      }
-    }
-    return result;
-  }, {});
-
-  if (Object.keys(extra).length > 0) {
-    metadata.legacy = extra;
-  }
-
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 };
 
@@ -817,12 +912,15 @@ interface NormalizeElementContext {
 }
 
 export function normalizeBackyContentElement(
-  rawElement: unknown,
+  value: unknown,
   context: Partial<NormalizeElementContext> = {},
 ): BackyContentElement | null {
-  if (!isRecord(rawElement)) {
+  const fields = ownEnumerableDataFields(value);
+  if (!fields) {
     return null;
   }
+  const extensions = rootJsonExtensions(fields, RESERVED_ELEMENT_FIELDS);
+  const rawElement = { ...extensions, ...Object.fromEntries(Object.entries(fields).filter(([key]) => RESERVED_ELEMENT_FIELDS.has(key))) };
 
   const type = toString(rawElement.type);
   if (!type) {
@@ -841,6 +939,7 @@ export function normalizeBackyContentElement(
   const parentId = context.parentId || toString(rawElement.parentId) || toString(rawMetadata.parentId);
 
   const element: BackyContentElement = {
+    ...extensions,
     id,
     type,
     children: rawChildren
@@ -965,12 +1064,15 @@ const documentFromCanvasPayload = (
   rawContent: unknown,
   fallbackDocument?: BackyContentDocument | null,
 ): BackyContentDocument | null => {
-  if (isBackyContentDocument(rawContent)) {
-    return rawContent;
+  const fields = ownEnumerableDataFields(rawContent);
+  const document = canonicalDocumentWithSafeExtensions(fields);
+  if (document) {
+    return document;
   }
 
-  if (isRecord(rawContent) && isBackyContentDocument(rawContent.contentDocument)) {
-    return rawContent.contentDocument;
+  const embedded = canonicalDocumentWithSafeExtensions(fields?.contentDocument);
+  if (embedded) {
+    return embedded;
   }
 
   return fallbackDocument || null;
@@ -1215,14 +1317,13 @@ export function buildBackyEditorCompositionSummary(
 export function canvasContentPayloadToBackyContentDocument(
   input: BackyCanvasContentPayloadDocumentInput,
 ): BackyContentDocument {
-  if (isBackyContentDocument(input.rawContent)) {
-    return input.rawContent;
+  const canonical = canonicalDocumentWithSafeExtensions(input.rawContent);
+  if (canonical) {
+    return { ...canonical, elements: synchronizeBackyElementParentScopes(canonical.elements, { completeTree: true }) };
   }
 
-  const rawRecord = isRecord(input.rawContent) ? input.rawContent : {};
-  const payloadDocument = isRecord(input.rawContent) && isBackyContentDocument(input.rawContent.contentDocument)
-    ? input.rawContent.contentDocument
-    : null;
+  const rawRecord = ownEnumerableDataFields(input.rawContent) || {};
+  const payloadDocument = canonicalDocumentWithSafeExtensions(rawRecord.contentDocument);
   const fallbackDocument = input.fallbackDocument || null;
   const existingDocument = documentFromCanvasPayload(input.rawContent, fallbackDocument);
   const rawElements = Array.isArray(input.rawContent)
@@ -1249,7 +1350,7 @@ export function canvasContentPayloadToBackyContentDocument(
         ? fallbackDocument.metadata.themeSchemaVersion as BackyThemeSchemaVersion
       : undefined;
 
-  return canvasElementsToBackyContentDocument({
+  const document = canvasElementsToBackyContentDocument({
     id: input.id,
     kind: input.kind,
     title: input.title,
@@ -1318,6 +1419,12 @@ export function canvasContentPayloadToBackyContentDocument(
     metadata,
     themeSchemaVersion,
   });
+  return {
+    ...rootJsonExtensions(ownEnumerableDataFields(fallbackDocument) || {}, RESERVED_DOCUMENT_FIELDS),
+    ...rootJsonExtensions(ownEnumerableDataFields(existingDocument) || {}, RESERVED_DOCUMENT_FIELDS),
+    ...rootJsonExtensions(rawRecord, RESERVED_CANVAS_PAYLOAD_FIELDS),
+    ...document,
+  };
 }
 
 export function canvasElementsToBackyContentDocument(
@@ -1341,7 +1448,7 @@ export function canvasElementsToBackyContentDocument(
   if (input.themeSchemaVersion) {
     metadata.themeSchemaVersion = input.themeSchemaVersion;
   }
-  const normalizedElements = normalizeBackyContentElements(input.elements);
+  const normalizedElements = synchronizeBackyElementParentScopes(normalizeBackyContentElements(input.elements), { completeTree: true });
   metadata.editorComposition = buildBackyEditorCompositionSummary(normalizedElements);
 
   const document = createBackyContentDocument({

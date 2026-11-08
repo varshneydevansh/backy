@@ -319,7 +319,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const site = getSiteByIdOrSlug(siteId);
     if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     const forms = findNewsletterForms(listFormsBySite(site.id), formId);
-    const contacts = forms.flatMap((form) => listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
+    const contacts = forms.flatMap((form) => listFormContacts(form.id, { siteId: site.id, limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
     return newsletterResponse(requestId, site, forms, contacts, {
       limit: limitFilter.value,
       offset: offsetFilter.value,

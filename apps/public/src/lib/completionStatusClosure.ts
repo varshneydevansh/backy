@@ -143,7 +143,7 @@ export const buildBackyPartialClosureReadiness = () => ({
     partialCount: closureRows.length,
     status: 'partial',
     audit: DEFAULT_AUDIT_COUNTS,
-    description: 'The public completion-status audit stays at 41 Ready / 4 Partial until saved redacted Settings and Commerce artifacts are supplied to the release doctor.',
+    description: 'The legacy 45-surface release checklist has 41 Ready / 4 Partial before provider artifacts. These counts do not certify current builder readiness.',
   },
   artifactAcceptedMode: {
     ready: true,
@@ -151,7 +151,7 @@ export const buildBackyPartialClosureReadiness = () => ({
     partialCount: 0,
     status: 'ready',
     audit: ARTIFACT_ACCEPTED_AUDIT_COUNTS,
-    description: 'When fresh no-secret Settings and Commerce artifacts pass the artifact-required release doctor, the provider closure block is 4 Ready / 0 Partial and the artifact-backed audit view is 45 Ready / 0 Partial.',
+    description: 'Projected legacy checklist counts are 45 Ready / 0 Partial if fresh redacted provider artifacts pass the release doctor. This projection is not artifact acceptance evidence and cannot certify the separate builder readiness audit.',
   },
   rows: closureRows.map((row) => ({
     ...row,

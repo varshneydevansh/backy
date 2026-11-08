@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { BackyAuditLogEntry, Comment } from '@backy-cms/core';
-import { getCommentById, getSiteByIdOrSlug, listAuditEvents } from '@/lib/backyStore';
+import { commentDeliveryErrorDetails, type Comment } from '@backy-cms/core';
+import { getCommentDeliveryEvent } from '@/lib/commentDeliveryHistory';
+import { getCommentById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
@@ -109,7 +110,7 @@ const parseBody = (raw: unknown): { eventId: string; requestId?: string } | null
   const eventId = readString(body.eventId);
   const requestId = readString(body.requestId);
 
-  if (!eventId) {
+  if (!eventId || eventId.length > 200 || requestId.length > 200) {
     return null;
   }
 
@@ -119,59 +120,14 @@ const parseBody = (raw: unknown): { eventId: string; requestId?: string } | null
   };
 };
 
-const metadataText = (event: BackyAuditLogEntry, key: string): string | null => {
-  const value = event.metadata?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : null;
-};
-
-const auditLogToDeliveryEvent = (event: BackyAuditLogEntry): RetryableCommentDeliveryEvent => ({
-  id: event.id,
-  kind: event.action,
-  commentId: event.entity === 'comment' ? event.entityId : metadataText(event, 'commentId'),
-  target: metadataText(event, 'target') || `${event.entity}:${event.entityId}`,
-  status: metadataText(event, 'status') || 'succeeded',
-  requestId: event.requestId,
-  reason: metadataText(event, 'reason'),
-  actor: event.actorId || metadataText(event, 'actor'),
-  metadata: event.metadata || {},
-});
-
-async function listRepositoryCommentDeliveryEvents(
-  repositories: CommentRepositories,
-  siteId: string,
-  commentId: string,
-): Promise<RetryableCommentDeliveryEvent[]> {
-  const result = await repositories.auditLogs.list({
-    siteId,
-    entity: 'comment',
-    entityId: commentId,
-    limit: 200,
-    offset: 0,
-  });
-
-  return result.items
-    .map(auditLogToDeliveryEvent)
-    .filter((event) => event.commentId === commentId);
-}
-
-const listDemoCommentDeliveryEvents = (siteId: string, commentId: string): RetryableCommentDeliveryEvent[] => (
-  listAuditEvents(siteId, {
-    kind: 'all',
-    commentId,
-    limit: 200,
-    offset: 0,
-  }).events
-);
-
 async function retryDeliveryForComment(params: {
   repositories?: CommentRepositories | null;
   siteId: string;
   comment: Comment;
-  events: RetryableCommentDeliveryEvent[];
   eventId: string;
   requestId: string;
 }) {
-  const event = params.events.find((item) => item.id === params.eventId);
+  const event = await getCommentDeliveryEvent(params.siteId,params.comment.id,params.eventId,params.repositories);
   if (!event) {
     return { error: { status: 404, code: 'DELIVERY_EVENT_NOT_FOUND', message: 'Failed delivery event not found.' } };
   }
@@ -252,7 +208,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         repositories,
         siteId: site.id,
         comment,
-        events: await listRepositoryCommentDeliveryEvents(repositories, site.id, comment.id),
         eventId: payload.eventId,
         requestId,
       });
@@ -261,7 +216,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         const retryError = result.error;
         return errorResponse(retryError.status, retryError.code, retryError.message, requestId);
       }
-      await recordAdminAudit({
+      const completionWarnings: string[] = [];
+      try { await recordAdminAudit({
         repositories,
         siteId: site.id,
         actorId: access.session?.user.id,
@@ -278,6 +234,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       });
 
+      } catch { completionWarnings.push('COMMENT_AUDIT_PENDING'); }
       return privateResponse({
         success: true,
         requestId,
@@ -285,10 +242,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           delivery: result.delivery,
           retryOf: result.retryOf,
           comment,
+          completionWarnings,
         },
         delivery: result.delivery,
         retryOf: result.retryOf,
         comment,
+        completionWarnings,
       }, requestId);
     }
 
@@ -305,7 +264,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const result = await retryDeliveryForComment({
       siteId: site.id,
       comment,
-      events: listDemoCommentDeliveryEvents(site.id, comment.id),
       eventId: payload.eventId,
       requestId,
     });
@@ -314,7 +272,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const retryError = result.error;
       return errorResponse(retryError.status, retryError.code, retryError.message, requestId);
     }
-    await recordAdminAudit({
+    const completionWarnings: string[] = [];
+    try { await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
       entity: 'comment',
@@ -330,6 +289,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     });
 
+    } catch { completionWarnings.push('COMMENT_AUDIT_PENDING'); }
     return privateResponse({
       success: true,
       requestId,
@@ -337,13 +297,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         delivery: result.delivery,
         retryOf: result.retryOf,
         comment,
+        completionWarnings,
       },
       delivery: result.delivery,
       retryOf: result.retryOf,
       comment,
     }, requestId);
   } catch (error) {
-    console.error('Comment delivery retry API error:', error);
+    const known=commentDeliveryErrorDetails(error);
+    if(known) return errorResponse(known.status,known.code,known.message,baseRequestId);
+    console.error('Comment delivery retry API failed.');
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }
 }

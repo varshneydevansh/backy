@@ -13,6 +13,7 @@ import { listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionSto
 import { requireAdminAccess, type AdminAccessContext } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { buildUserPermissionMatrix } from '@/lib/adminPermissions';
+import { legacyWorkspaceServiceKeyScope, parseAdminServiceKeyScope } from '@/lib/adminServiceKeyScope';
 import {
   getAdminSettings,
   getMediaList,
@@ -23,7 +24,8 @@ import {
   updateMediaItem,
 } from '@/lib/backyStore';
 import { resolveCommerceWebhookSecret } from '@/lib/commerceWebhookSecrets';
-import { getEmailDeliveryConfig } from '@/lib/formEmailDelivery';
+import { getEmailDeliveryConfig, getEmailDeliveryCapabilitySummary, getEmailSenderPolicySummary } from '@/lib/formEmailDelivery';
+import { getHostingerMailConfigurationSummary, probeHostingerMailConnection } from '@/lib/hostingerMail';
 import { getMediaStorageAdapter, getMediaStorageConfigSummary, resolveMediaStorageConfig } from '@/lib/mediaStorage';
 import { resolveMediaScannerConfig } from '@/lib/mediaSafety';
 import { buildBackyPartialClosureReadiness } from '@/lib/completionStatusClosure';
@@ -1021,7 +1023,7 @@ const buildSettingsCompletionStatus = () => {
       Boolean(envValue(['BACKY_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'])),
     storage: Boolean(envValue(['BACKY_MEDIA_STORAGE_PROVIDER', 'BACKY_STORAGE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'SUPABASE_SERVICE_ROLE_KEY'])),
     vercel: Boolean(envValue(['BACKY_VERCEL_TOKEN', 'VERCEL_TOKEN'])),
-    notifications: Boolean(envValue(['BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL', 'BACKY_RESEND_API_KEY', 'RESEND_API_KEY', 'SMTP_HOST'])),
+    notifications: getEmailDeliveryCapabilitySummary().configured,
     publicApiCors: Boolean(envValue(['BACKY_CORS_ALLOWED_ORIGINS'])),
     commerce: Boolean(envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'])),
   };
@@ -1337,7 +1339,7 @@ const buildSettingsCompletionStatus = () => {
     schemaVersion: 'backy.completion-status.v1',
     generatedAt: new Date().toISOString(),
     status: blockedGate ? 'external-gates-required' : 'certification-ready',
-    summary: 'Backy core backend/editor/API parity is implemented for the audited local scope; Forms and SDK database gates are certified, and the remaining Partial rows require live provider certification evidence.',
+    summary: 'Legacy release-audit counts cover a bounded 45-surface provider checklist. They do not certify current builder completion, deployed behavior or the connected website. Follow docs/audits/backy-builder-readiness-2026-10-04.md for open authoring, frontend, identity and verification requirements; provider artifact acceptance cannot close those requirements.',
     audit: {
       source: 'specs/page-completion-audit/backy-page-surface-audit.md',
       ready: 41,
@@ -2028,6 +2030,7 @@ const getMediaScannerRuntimeSummary = () => {
 };
 
 const getNotificationRuntimeSummary = () => {
+  const senderPolicy = getEmailSenderPolicySummary();
   try {
     const config = getEmailDeliveryConfig();
     const provider = config.provider;
@@ -2036,10 +2039,12 @@ const getNotificationRuntimeSummary = () => {
       provider === 'resend' && !config.apiKey ? 'BACKY_RESEND_API_KEY or RESEND_API_KEY' : '',
       provider === 'smtp' && !config.smtp?.host ? 'BACKY_SMTP_HOST or SMTP_HOST' : '',
       provider === 'smtp' && config.smtp?.user && !config.smtp?.password ? 'BACKY_SMTP_PASSWORD or SMTP_PASSWORD' : '',
+      ...(provider === 'hostinger' ? getHostingerMailConfigurationSummary(config.hostinger).missing : []),
     ].filter(Boolean);
 
     return {
       emailProvider: provider,
+      senderPolicy,
       configured: missing.length === 0,
       productionReady: provider !== 'local-outbox' && missing.length === 0,
       from: config.from,
@@ -2047,11 +2052,15 @@ const getNotificationRuntimeSummary = () => {
       apiKeyConfigured: Boolean(config.apiKey),
       smtpHostConfigured: Boolean(config.smtp?.host),
       smtpAuthConfigured: Boolean(config.smtp?.user && config.smtp?.password),
+      hostingerApiTokenConfigured: provider === 'hostinger' && getHostingerMailConfigurationSummary(config.hostinger).apiTokenConfigured,
+      authenticationVerified: false,
+      outboundDeliveryVerified: false,
       missing,
     };
   } catch (error) {
     return {
       emailProvider: 'unknown',
+      senderPolicy,
       configured: false,
       productionReady: false,
       from: envValue(['BACKY_EMAIL_FROM', 'BACKY_NOTIFICATION_EMAIL_FROM', 'BACKY_SMTP_FROM', 'BACKY_RESEND_FROM']),
@@ -2315,6 +2324,7 @@ const normalizeServiceKeyGrants = (value: unknown): BackyJsonObject[] => (
           keyFingerprint: stringValue(entry.keyFingerprint) || null,
           keyHash: stringValue(entry.keyHash) || null,
           permissionScope: stringValue(entry.permissionScope) || 'non-owner-admin',
+          ...(entry.scope !== undefined ? { scope: entry.scope } : {}),
           createdAt: stringValue(entry.createdAt) || new Date().toISOString(),
           createdBy: stringValue(entry.createdBy) || null,
           requestId: stringValue(entry.requestId) || null,
@@ -2334,7 +2344,10 @@ const sanitizeServiceKeyGrant = (entry: BackyJsonObject): BackyJsonObject => {
     keyHash: _keyHash,
     ...safeEntry
   } = entry;
-  return safeEntry;
+  const scope = entry.scope === undefined ? legacyWorkspaceServiceKeyScope() : parseAdminServiceKeyScope(entry.scope);
+  const scopeStatus = !scope ? 'invalid' : scope.expiresAt && Date.parse(scope.expiresAt) <= Date.now()
+    ? 'expired' : scope.legacy ? 'legacy-workspace' : scope.mode;
+  return { ...safeEntry, scope: scope as unknown as BackyJsonObject | null, scopeStatus };
 };
 
 const sanitizeAuthForResponse = (value: unknown): BackyJsonObject | undefined => {
@@ -2912,22 +2925,26 @@ const validateBrandSeoSettings = (integrations: unknown): string | null => {
   return null;
 };
 
+// These records are maintained by dedicated authorization/credential handlers.
+// Generic auth policy editing must preserve them, never replace or mint them.
+const MANAGED_ADMIN_AUTH_FIELDS = [
+  'passwordResetTokens', 'inviteTokens', 'apiKeyServiceKeys', 'adminSessions',
+  'userPermissionOverrides', 'permissionOverrides', 'userMfaEnrollments', 'userSiteGrants',
+  'authRateLimits', 'apiKeyRotationHistory', 'apiKeyRevocationHistory',
+];
+
 const normalizeAdminAuthSettings = (value: unknown): BackyJsonObject | undefined => {
   const input = parseJsonObject(value);
   if (!input) {
     return undefined;
   }
-  const {
-    passwordResetTokens: _passwordResetTokens,
-    inviteTokens: _inviteTokens,
-    apiKeyServiceKeys: _apiKeyServiceKeys,
-    adminSessions: _adminSessions,
-    ...safeInput
-  } = input;
+  const safeInput = Object.fromEntries(Object.entries(input).filter(([field]) => (
+    !MANAGED_ADMIN_AUTH_FIELDS.includes(field)
+  )));
 
   return {
     ...safeInput,
-    requireTwoFactor: boolValue(safeInput.requireTwoFactor),
+    ...(safeInput.requireTwoFactor !== undefined ? { requireTwoFactor: boolValue(safeInput.requireTwoFactor) } : {}),
   };
 };
 
@@ -5069,6 +5086,13 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  const authInput = parseJsonObject(body.auth);
+  if (authInput && MANAGED_ADMIN_AUTH_FIELDS.some((field) => (
+    Object.prototype.hasOwnProperty.call(authInput, field)
+  ))) {
+    return errorResponse(400, 'AUTH_ACCESS_POLICY_FIELD_FORBIDDEN', 'Managed auth records require their dedicated permission, credential, or session endpoints.', requestId);
+  }
+
   try {
     const deliveryMode = body.deliveryMode === undefined
       ? undefined
@@ -5266,6 +5290,11 @@ export async function POST(request: NextRequest) {
     });
     if (access instanceof NextResponse) {
       return access;
+    }
+
+    if (body.action === 'hostinger-mail-probe') {
+      const result = await probeHostingerMailConnection();
+      return NextResponse.json({ success: true, requestId, data: result }, { headers: { 'Cache-Control': 'private, no-store' } });
     }
 
     if (mediaStorageProvisioningProbe) {
@@ -5469,6 +5498,21 @@ export async function POST(request: NextRequest) {
         return errorResponse(400, 'VALIDATION_ERROR', 'Service key label is required and must be 80 characters or less.', requestId);
       }
 
+      const scope = parseAdminServiceKeyScope(body.scope);
+      if (!scope || scope.revision !== 1 || (scope.expiresAt && Date.parse(scope.expiresAt) <= Date.now())) {
+        return errorResponse(400, 'INVALID_SERVICE_KEY_SCOPE', 'Provide an explicit workspace or selected-sites scope, canonical site IDs, known site permissions, and an optional future expiry.', requestId);
+      }
+      if (scope.mode === 'workspace' && body.confirmWorkspace !== true) {
+        return errorResponse(400, 'WORKSPACE_SERVICE_KEY_CONFIRMATION_REQUIRED', 'Confirm deliberate workspace-wide access before issuing this key.', requestId);
+      }
+      if (scope.mode === 'selected-sites') {
+        const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
+        for (const siteId of scope.siteIds) {
+          const site = repositories ? await repositories.sites.getById(siteId) : getSiteByIdOrSlug(siteId);
+          if (!site || site.id !== siteId) return errorResponse(400, 'INVALID_SERVICE_KEY_SITE', 'Every granted site must exist and use its canonical site ID.', requestId);
+        }
+      }
+
       const issuedKey = createAdminServiceApiKey();
       const now = new Date().toISOString();
       const grant: BackyJsonObject = {
@@ -5478,6 +5522,7 @@ export async function POST(request: NextRequest) {
         keyFingerprint: keyFingerprint(issuedKey),
         keyHash: keyHash(issuedKey),
         permissionScope: 'non-owner-admin',
+        scope: scope as unknown as BackyJsonObject,
         createdAt: now,
         createdBy: access.session?.user.id || null,
         requestId,
@@ -5511,6 +5556,7 @@ export async function POST(request: NextRequest) {
             keyId: grant.id,
             label,
             keyFingerprint: grant.keyFingerprint,
+            scope: grant.scope,
           },
           requestId,
         });
@@ -5526,6 +5572,7 @@ export async function POST(request: NextRequest) {
               adminApiKey: issuedKey,
               keyFingerprint: grant.keyFingerprint,
               keyPrefix: grant.keyPrefix,
+              scope: grant.scope,
             },
           },
         });
@@ -5551,6 +5598,7 @@ export async function POST(request: NextRequest) {
           keyId: grant.id,
           label,
           keyFingerprint: grant.keyFingerprint,
+          scope: grant.scope,
         },
         requestId,
       });
@@ -5566,6 +5614,7 @@ export async function POST(request: NextRequest) {
             adminApiKey: issuedKey,
             keyFingerprint: grant.keyFingerprint,
             keyPrefix: grant.keyPrefix,
+            scope: grant.scope,
           },
         },
       });

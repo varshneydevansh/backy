@@ -1,5 +1,7 @@
+import { BackyCollectionRecordValidationError, normalizeBackyCollectionUniqueValue } from '@backy-cms/core';
 import type { BackyCollection, BackyCollectionRecord, BackyJsonValue, BackyListResult, MediaItem } from '@backy-cms/core';
-import { validateCollectionRecordValues, type StoreCollection } from '@/lib/backyStore';
+import { normalizeCollectionRecordValues, validateCollectionRecordValues, type StoreCollection } from '@/lib/backyStore';
+import { collectCompleteCollectionInventory } from '@/lib/collectionInventory';
 
 export interface CollectionRecordValidationDetail {
   field: string;
@@ -24,16 +26,7 @@ type CollectionMediaRepository = {
 
 type CollectionField = BackyCollection['fields'][number];
 
-const normalizeUniqueValue = (value: unknown): string => {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'string') return value.trim().toLowerCase();
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim().toLowerCase();
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value).trim().toLowerCase();
-  }
-};
+const normalizeUniqueValue = normalizeBackyCollectionUniqueValue;
 
 const isEmptyValue = (value: unknown): boolean => (
   value === null ||
@@ -58,31 +51,16 @@ const hasRepositoryDuplicateValue = async (
     excludeRecordId?: string;
   },
 ): Promise<boolean> => {
-  let offset = 0;
-  const limit = 100;
-
-  for (;;) {
-    const page = await repository.listRecords({
+  const records = await collectCompleteCollectionInventory(pagination => repository.listRecords({
       siteId: input.siteId,
       collectionId: input.collectionId,
       includeUnpublished: true,
-      limit,
-      offset,
-    });
-
-    if (page.items.some((record) => (
+      ...pagination,
+    }), record => record.siteId === input.siteId && record.collectionId === input.collectionId);
+  return records.some((record) => (
       record.id !== input.excludeRecordId &&
       normalizeUniqueValue(record.values[input.fieldKey]) === input.targetValue
-    ))) {
-      return true;
-    }
-
-    if (!page.pagination.hasMore || page.items.length === 0) {
-      return false;
-    }
-
-    offset += page.pagination.limit || limit;
-  }
+  ));
 };
 
 const fieldValidationRecord = (field: CollectionField): Record<string, unknown> => (
@@ -135,7 +113,10 @@ export const normalizeCollectionRecordMediaValues = (
     if (!isMultiFileField(field) || values[field.key] === undefined) {
       return;
     }
-    normalized[field.key] = normalizeListValue(values[field.key]);
+    const value = values[field.key];
+    if (typeof value === 'string' || (Array.isArray(value) && value.every(item => typeof item === 'string'))) {
+      normalized[field.key] = normalizeListValue(value);
+    }
   });
 
   return normalized;
@@ -239,6 +220,7 @@ export const validateRepositoryCollectionRecordValues = async (
     values: Record<string, unknown>;
     existingValues?: Record<string, unknown>;
     excludeRecordId?: string;
+    skipLocalUnique?: boolean;
   },
 ): Promise<CollectionRecordValidationDetail[]> => {
   const values = normalizeCollectionRecordMediaValues(input.collection, input.values);
@@ -248,12 +230,14 @@ export const validateRepositoryCollectionRecordValues = async (
     {
       existingValues: input.existingValues,
       excludeRecordId: input.excludeRecordId,
+      skipUnique: input.skipLocalUnique,
     },
   ) as CollectionRecordValidationDetail[];
+  const normalizedValues = normalizeCollectionRecordValues(input.collection as unknown as StoreCollection, values, input.existingValues);
   const uniqueFields = input.collection.fields.filter((field) => field.unique);
 
   for (const field of uniqueFields) {
-    const value = values[field.key];
+    const value = normalizedValues[field.key];
     if (isEmptyValue(value)) {
       continue;
     }
@@ -292,3 +276,11 @@ export const validateRepositoryCollectionRecordValues = async (
 
   return issues;
 };
+
+/** Typed storage validation is safe to return; unknown provider/storage failures remain masked. */
+export function collectionRecordValidationIssuesFromError(error: unknown): CollectionRecordValidationDetail[] | null {
+  if (!(error instanceof BackyCollectionRecordValidationError) && !(error && typeof error === 'object' && 'code' in error && error.code === 'COLLECTION_RECORD_VALIDATION')) return null;
+  if (!error || typeof error !== 'object' || !('details' in error) || !Array.isArray(error.details)) return null;
+  if (!error.details.every(issue => issue && typeof issue === 'object' && typeof issue.field === 'string' && typeof issue.code === 'string' && typeof issue.message === 'string')) return null;
+  return error.details.map(issue => ({ field: issue.field, code: issue.code, message: issue.message, ...(typeof issue.label === 'string' ? { label: issue.label } : {}) }));
+}

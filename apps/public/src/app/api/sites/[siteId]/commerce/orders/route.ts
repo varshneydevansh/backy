@@ -3552,7 +3552,8 @@ const checkoutLineItemDeliveryMetadata = (item: Record<string, unknown>) => {
     booleanValue(item.hasDigitalDelivery) ||
     booleanValue(item.downloadable) ||
     downloadMediaPresent ||
-    downloadUrlPresent;
+    downloadUrlPresent ||
+    Boolean(textValue(item.digitalFileId));
 
   return {
     productType,
@@ -3582,24 +3583,26 @@ const buildCheckoutDigitalDeliveryHandoff = (
     0,
     digitalItems.length - configuredItemCount,
   );
-  const isPaid = paymentStatus === "paid" || paymentStatus === "refunded";
+  const isPaid = paymentStatus === "paid";
   const status =
     digitalItems.length === 0
       ? "not-applicable"
       : pendingItemCount > 0
         ? "attention"
-        : fulfillmentStatus === "fulfilled"
-          ? "fulfilled"
-          : isPaid
-            ? "ready"
-            : "pending-payment";
+        : !isPaid
+          ? "pending-payment"
+          : fulfillmentStatus === "fulfilled"
+            ? "fulfilled"
+            : "ready";
   const customerAction =
     digitalItems.length === 0
       ? "No digital delivery items were detected for this order."
       : pendingItemCount > 0
         ? `${pendingItemCount} digital item${pendingItemCount === 1 ? "" : "s"} still need delivery metadata before customer portal handoff.`
         : status === "pending-payment"
-          ? "Digital delivery is configured and will become customer-visible after payment is confirmed."
+          ? paymentStatus === "refunded"
+            ? "Payment is refunded; private paid-file access is held."
+            : "Digital delivery is configured; private file access requires current authoritative paid state and checkout proof."
           : status === "fulfilled"
             ? "Digital delivery items are configured and fulfillment is complete."
             : "Digital delivery items are configured for the customer-safe order status view.";
@@ -4843,7 +4846,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           }
         }
 
-        lineItems.push(lineItemFromProduct(product, quantity, item));
+        const digitalFile = product.productType === 'digital' ? await repositories.commerceEntitlements?.currentFile(site.id, record.id) : null;
+        lineItems.push({ ...lineItemFromProduct(product, quantity, item), ...(digitalFile ? { digitalFileId: digitalFile.id } : {}) });
       }
 
       const currency = lineItems[0]?.currency || "USD";

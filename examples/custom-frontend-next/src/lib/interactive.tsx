@@ -71,8 +71,12 @@ export function BackyInteractiveComponent({ element, siteId, publicApiBaseUrl }:
       if (message.type === "backy.interactive-component.ready") {
         window.clearTimeout(timeout);
         setReady(true);
-        setError("");
         sendInit();
+      } else if (message.type === "backy.interactive-component.rendered") {
+        // The sandbox sends completion only after its awaited mount/update succeeds.
+        window.clearTimeout(timeout);
+        setReady(true);
+        setError("");
       } else if (message.type === "backy.interactive-component.resize") {
         const size = Number(message.height);
         if (Number.isFinite(size)) {

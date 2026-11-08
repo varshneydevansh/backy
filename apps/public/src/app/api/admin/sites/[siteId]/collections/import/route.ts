@@ -1,9 +1,12 @@
+import { collectionRecordValidationIssuesFromError } from "@/lib/collectionRecordValidation";
 /**
  * Admin CMS collection backup import endpoint.
  *
  * POST /api/admin/sites/[siteId]/collections/import?upsert=true
  */
 
+import { BackyCollectionImportConflictError } from "@backy-cms/core";
+import { prepareCollectionImport, CollectionImportValidationError } from "@/lib/collectionImportPreparation";
 import { NextRequest, NextResponse } from "next/server";
 import type {
   BackyCollectionField,
@@ -16,32 +19,27 @@ import type {
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import {
-  createAdminCollection,
-  createAdminCollectionRecord,
+  applyAdminCollectionImport,
+  listCollectionRecords,
+  getMediaById,
   getCollectionByIdOrSlug,
-  getCollectionRecordByIdOrSlug,
   getPageSummary,
   getSiteByIdOrSlug,
-  updateAdminCollection,
-  updateAdminCollectionRecord,
-  validateCollectionRecordValues,
-  type StoreCollection,
 } from "@/lib/backyStore";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import { parseAdminCollectionFields } from "@/lib/adminCollectionFields";
-import { validateRepositoryCollectionRecordValues } from "@/lib/collectionRecordValidation";
 import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
-import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
 import {
   isValidCollectionListRoutePattern,
   isValidCollectionRoutePattern,
   normalizeCollectionListRoutePattern,
   normalizeCollectionRoutePattern,
 } from "@/lib/collectionRoutes";
-import { findCollectionRouteConflict } from "@/lib/routeConflicts";
+import { collectCollectionRoutePages, CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 import { requireCommerceCollectionSlugAccess } from "@/lib/adminCommerceCollectionAccess";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
@@ -237,11 +235,16 @@ const normalizeImportCollection = (
       details: { index, slug },
     };
   }
-  const records = Array.isArray(value.records)
-    ? (value.records
-        .map(normalizeImportRecord)
-        .filter(Boolean) as ImportRecord[])
-    : [];
+  if (value.records !== undefined && !Array.isArray(value.records)) return { ok: false, message: `Imported collection ${index + 1} records must be an array.`, details: { index, slug } };
+  const records: ImportRecord[] = [];
+  for (const [recordIndex, rawRecord] of (Array.isArray(value.records) ? value.records : []).entries()) {
+    const record = normalizeImportRecord(rawRecord);
+    if (!record || !isRecord(rawRecord) || (rawRecord.values !== undefined && !isRecord(rawRecord.values))
+      || (rawRecord.status !== undefined && !['draft', 'published', 'scheduled', 'archived'].includes(String(rawRecord.status)))) {
+      return { ok: false, message: `Imported collection ${index + 1} record ${recordIndex + 1} requires a slug, object values and a valid status.`, details: { index, slug, recordIndex } };
+    }
+    records.push(record);
+  }
 
   return {
     ok: true,
@@ -482,170 +485,26 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const pages = await repositories.pages.list({
+      const pages = await collectCollectionRoutePages(site.id, pagination => repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
         status: "all",
-        limit: 1000,
-        offset: 0,
+        ...pagination,
+      }));
+      const operations = await prepareCollectionImport({ siteId: site.id, collections, upsert, pages,
+        getCollection: slug => repositories.collections.getBySlug(site.id, slug),
+        readRecords: (collectionId, pagination) => repositories.collections.listRecords({ siteId: site.id, collectionId, includeUnpublished: true, status: 'all', ...pagination }),
+        mediaRepository: repositories.media,
       });
-      const importedCollections = [];
-      const importedRecords = [];
-      let createdCollections = 0;
-      let updatedCollections = 0;
-      let createdRecords = 0;
-      let updatedRecords = 0;
-
-      for (const collectionInput of collections) {
-        const existingCollection = await repositories.collections.getBySlug(
-          site.id,
-          collectionInput.slug,
-        );
-        if (existingCollection && !upsert) {
-          return errorResponse(
-            409,
-            "SLUG_CONFLICT",
-            "A collection with this slug already exists.",
-            requestId,
-            { slug: collectionInput.slug },
-          );
-        }
-
-        const routeConflict = findCollectionRouteConflict(
-          {
-            id: existingCollection?.id,
-            slug: collectionInput.slug,
-            name: collectionInput.name,
-            routePattern: collectionInput.routePattern,
-            listRoutePattern: collectionInput.listRoutePattern,
-          },
-          pages.items,
-        );
-        if (routeConflict) {
-          return errorResponse(
-            409,
-            "ROUTE_CONFLICT",
-            routeConflict.message,
-            requestId,
-            { slug: collectionInput.slug },
-          );
-        }
-
-        const collection = existingCollection
-          ? (
-              await repositories.collections.update(
-                site.id,
-                existingCollection.id,
-                {
-                  name: collectionInput.name,
-                  slug: collectionInput.slug,
-                  description: collectionInput.description ?? null,
-                  status: collectionInput.status,
-                  fields: collectionInput.fields,
-                  permissions: collectionInput.permissions,
-                  metadata: collectionInput.metadata,
-                  routePattern: collectionInput.routePattern,
-                  listRoutePattern: collectionInput.listRoutePattern,
-                },
-              )
-            ).item
-          : (
-              await repositories.collections.create({
-                siteId: site.id,
-                name: collectionInput.name,
-                slug: collectionInput.slug,
-                description: collectionInput.description ?? null,
-                status: collectionInput.status,
-                fields: collectionInput.fields,
-                permissions: collectionInput.permissions,
-                metadata: collectionInput.metadata,
-                routePattern: collectionInput.routePattern,
-                listRoutePattern: collectionInput.listRoutePattern,
-              })
-            ).item;
-        importedCollections.push(collection);
-        if (existingCollection) updatedCollections += 1;
-        else createdCollections += 1;
-
-        for (const recordInput of collectionInput.records) {
-          const existingRecord = await repositories.collections.getRecordBySlug(
-            site.id,
-            collection.id,
-            recordInput.slug,
-          );
-          if (existingRecord && !upsert) {
-            return errorResponse(
-              409,
-              "RECORD_SLUG_CONFLICT",
-              "A collection record with this slug already exists.",
-              requestId,
-              {
-                collectionSlug: collection.slug,
-                recordSlug: recordInput.slug,
-              },
-            );
-          }
-          const validationErrors =
-            await validateRepositoryCollectionRecordValues({
-              repository: repositories.collections,
-              siteId: site.id,
-              collection,
-              values: recordInput.values,
-              existingValues: existingRecord?.values,
-              excludeRecordId: existingRecord?.id,
-            });
-          if (validationErrors.length > 0) {
-            return errorResponse(
-              400,
-              "VALIDATION_ERROR",
-              "Collection record values are invalid.",
-              requestId,
-              {
-                collectionSlug: collection.slug,
-                recordSlug: recordInput.slug,
-                issues: validationErrors,
-              },
-            );
-          }
-
-          const record = existingRecord
-            ? (
-                await repositories.collections.updateRecord(
-                  site.id,
-                  collection.id,
-                  existingRecord.id,
-                  {
-                    slug: recordInput.slug,
-                    status: recordInput.status,
-                    scheduledAt: recordInput.scheduledAt,
-                    values: recordInput.values,
-                  },
-                )
-              ).item
-            : (
-                await repositories.collections.createRecord({
-                  siteId: site.id,
-                  collectionId: collection.id,
-                  slug: recordInput.slug,
-                  status: recordInput.status,
-                  scheduledAt: recordInput.scheduledAt,
-                  values: recordInput.values,
-                })
-              ).item;
-          await syncRepositoryCollectionRecordMediaReferences({
-            mediaRepository: repositories.media,
-            siteId: site.id,
-            collectionId: collection.id,
-            recordId: record.id,
-            values: record.values,
-          });
-          importedRecords.push(record);
-          if (existingRecord) updatedRecords += 1;
-          else createdRecords += 1;
-        }
-      }
-
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      const { collections: importedCollections, records: importedRecords, createdCollections, updatedCollections, createdRecords, updatedRecords } = await repositories.collections.applyImport(site.id, operations);
+      // The import and essential reference index have committed together. These
+      // independent tasks must not invite a replay of that completed import.
+      const completionWarnings: string[] = [];
+      const followUp = async <T>(code: string, operation: () => Promise<T>): Promise<T | undefined> => {
+        try { return await operation(); }
+        catch { completionWarnings.push(code); return undefined; }
+      };
+      const cacheInvalidation = await followUp("COLLECTION_IMPORT_CACHE_INVALIDATION_PENDING", () => recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -654,8 +513,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           reason: "collections-imported",
           requestId,
         },
-      );
-      await recordAdminAudit({
+      ));
+      await followUp("COLLECTION_IMPORT_AUDIT_PENDING", () => recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "collection",
@@ -678,8 +537,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           ),
         },
         requestId,
-      });
-      await deliverCollectionImportWebhook({
+      }));
+      await followUp("COLLECTION_IMPORT_WEBHOOK_DELIVERY_PENDING", async () => {
+        const outcomes = await deliverCollectionImportWebhook({
         repositories,
         site,
         collections: importedCollections,
@@ -693,6 +553,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         },
         requestId,
         actor: access.session?.user.id,
+        });
+        if (Array.isArray(outcomes) && outcomes.some(outcome => outcome.status === "failed")) throw new Error("Collection import notification needs attention.");
       });
 
       return NextResponse.json({
@@ -710,6 +572,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           collections: importedCollections,
           records: importedRecords,
           cacheInvalidation,
+          ...(completionWarnings.length ? { completionWarnings } : {}),
         },
       });
     }
@@ -719,142 +582,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const importedCollections = [];
-    const importedRecords = [];
-    let createdCollections = 0;
-    let updatedCollections = 0;
-    let createdRecords = 0;
-    let updatedRecords = 0;
-
-    for (const collectionInput of collections) {
-      const existingCollection = getCollectionByIdOrSlug(
-        site.id,
-        collectionInput.slug,
-        { includeUnpublished: true },
-      );
-      if (existingCollection && !upsert) {
-        return errorResponse(
-          409,
-          "SLUG_CONFLICT",
-          "A collection with this slug already exists.",
-          requestId,
-          { slug: collectionInput.slug },
-        );
-      }
-
-      const routeConflict = findCollectionRouteConflict(
-        {
-          id: existingCollection?.id,
-          slug: collectionInput.slug,
-          name: collectionInput.name,
-          routePattern: collectionInput.routePattern,
-          listRoutePattern: collectionInput.listRoutePattern,
-        },
-        getPageSummary(site.id, { includeUnpublished: true }),
-      );
-      if (routeConflict) {
-        return errorResponse(
-          409,
-          "ROUTE_CONFLICT",
-          routeConflict.message,
-          requestId,
-          { slug: collectionInput.slug },
-        );
-      }
-
-      const collection = existingCollection
-        ? updateAdminCollection(
-            site.id,
-            existingCollection.id,
-            collectionInput as unknown as Record<string, unknown>,
-          )
-        : createAdminCollection(
-            site.id,
-            collectionInput as unknown as Record<string, unknown>,
-          );
-      if (!collection) {
-        return errorResponse(
-          500,
-          "IMPORT_FAILED",
-          "Unable to save imported collection.",
-          requestId,
-          { slug: collectionInput.slug },
-        );
-      }
-      importedCollections.push(collection);
-      if (existingCollection) updatedCollections += 1;
-      else createdCollections += 1;
-
-      for (const recordInput of collectionInput.records) {
-        const existingRecord = getCollectionRecordByIdOrSlug(
-          site.id,
-          collection.id,
-          recordInput.slug,
-          { includeUnpublished: true },
-        );
-        if (existingRecord && !upsert) {
-          return errorResponse(
-            409,
-            "RECORD_SLUG_CONFLICT",
-            "A collection record with this slug already exists.",
-            requestId,
-            {
-              collectionSlug: collection.slug,
-              recordSlug: recordInput.slug,
-            },
-          );
-        }
-        const validationErrors = validateCollectionRecordValues(
-          collection,
-          recordInput.values,
-          {
-            existingValues: existingRecord?.values,
-            excludeRecordId: existingRecord?.id,
-          },
-        );
-        if (validationErrors.length > 0) {
-          return errorResponse(
-            400,
-            "VALIDATION_ERROR",
-            "Collection record values are invalid.",
-            requestId,
-            {
-              collectionSlug: collection.slug,
-              recordSlug: recordInput.slug,
-              issues: validationErrors,
-            },
-          );
-        }
-
-        const record = existingRecord
-          ? updateAdminCollectionRecord(
-              site.id,
-              collection.id,
-              existingRecord.id,
-              recordInput as unknown as Record<string, unknown>,
-            )
-          : createAdminCollectionRecord(
-              site.id,
-              collection.id,
-              recordInput as unknown as Record<string, unknown>,
-            );
-        if (!record) {
-          return errorResponse(
-            500,
-            "IMPORT_FAILED",
-            "Unable to save imported collection record.",
-            requestId,
-            {
-              collectionSlug: collection.slug,
-              recordSlug: recordInput.slug,
-            },
-          );
-        }
-        importedRecords.push(record);
-        if (existingRecord) updatedRecords += 1;
-        else createdRecords += 1;
-      }
-    }
+    const operations = await prepareCollectionImport({ siteId: site.id, collections, upsert,
+      pages: getPageSummary(site.id, { includeUnpublished: true }),
+      getCollection: async slug => getCollectionByIdOrSlug(site.id, slug, { includeUnpublished: true }) as never || null,
+      readRecords: async (collectionId, pagination) => {
+        const result = listCollectionRecords(site.id, collectionId, { includeUnpublished: true, ...pagination });
+        return { items: result.records as never, pagination: result.pagination };
+      },
+      mediaRepository: { getById: async (siteId, mediaId) => getMediaById(siteId, mediaId) || null },
+    });
+    const { collections: importedCollections, records: importedRecords, createdCollections, updatedCollections, createdRecords, updatedRecords } = applyAdminCollectionImport(site.id, operations);
 
     await recordAdminAudit({
       siteId: site.id,
@@ -911,6 +648,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const mediaAdmissionError = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaAdmissionError) return mediaAdmissionError;
+    const recordIssues = collectionRecordValidationIssuesFromError(error);
+    if (recordIssues) return errorResponse(400, "VALIDATION_ERROR", "Collection record values are invalid.", requestId, { issues: recordIssues });
+    if (error instanceof CollectionImportValidationError) return errorResponse(error.status, error.code, error.message, requestId, error.details);
+    if (error instanceof BackyCollectionImportConflictError || (isRecord(error) && error.code === 'COLLECTION_IMPORT_CONFLICT')) return errorResponse(409, 'COLLECTION_IMPORT_CONFLICT', 'Collection content changed while the import was prepared. Reload the collections and retry; no import changes were committed.', requestId);
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collections backup import API error:", error);
     return errorResponse(
       500,

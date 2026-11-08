@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { NextRequest, NextResponse } from 'next/server';
+const require=createRequire(import.meta.url);
+export function loadVisitorErasureTestSource(relative:string,mocks:Record<string,any>={}){const filename=fileURLToPath(new URL(relative,import.meta.url)),module={exports:{} as any};vm.runInNewContext(ts.transpileModule(readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require:(id:string)=>id in mocks?mocks[id]:require(id),process,Buffer,TextDecoder,URL,Date,console},{filename});return module.exports;}
+export async function runVisitorErasureRouteProof(repositories:any,site:any,member:any,actorId:string){
+ let role='owner',permission=true;const auth={requireAdminAccess:async(_request:any,_id:any,options:any)=>{assert.equal(options.permission,'users.delete');assert.equal(options.recordUsage,false);return permission?{type:'session',session:{user:{id:actorId,role}}}:NextResponse.json({success:false,error:{code:'FORBIDDEN_PERMISSION'}},{status:403});},isOwnerAdminSession:(access:any)=>access.type==='session'&&access.session.user.role==='owner',adminAccessError:(status:number,code:string,message:string,requestId:string)=>NextResponse.json({success:false,requestId,error:{code,message}},{status})};
+ const helper=loadVisitorErasureTestSource('../src/lib/adminVisitorErasure.ts',{'./adminAccess':auth,'./repositoryRuntime':{getRequiredDatabaseRepositories:async()=>repositories}}),routes=Object.fromEntries(['preview','confirm'].map(operation=>[operation,loadVisitorErasureTestSource(`../src/app/api/admin/sites/[siteId]/visitors/members/[memberId]/privacy-erasure/${operation}/route.ts`,{'@/lib/adminVisitorErasure':helper})]));
+ const choices={comments:'retain',submissions:'retain',exclusiveContacts:'retain'},origin='https://admin.example';
+ const send=async(operation:string,body:any,headers:any={},selectedMember=member.id,siteKey=site.id)=>routes[operation].POST(new NextRequest(`${origin}/api/admin/sites/${siteKey}/visitors/members/${selectedMember}/privacy-erasure/${operation}`,{method:'POST',headers:{origin,'content-type':'application/json',cookie:'backy_admin_session=fixture',...headers},body:JSON.stringify(body)}),{params:Promise.resolve({siteId:siteKey,memberId:selectedMember})});
+ assert.equal((await send('preview',{choices},{authorization:'Bearer explicit'})).status,403);assert.equal((await send('preview',{choices},{cookie:''})).status,401);role='admin';assert.equal((await send('preview',{choices})).status,403);role='owner';permission=false;assert.equal((await send('preview',{choices})).status,403);permission=true;
+ assert.equal((await send('preview',{choices:{...choices,foreign:'delete'}})).status,400);assert.equal((await send('confirm',{previewId:randomUUID(),confirmLocalErasure:false})).status,400);assert.equal((await send('preview',{choices}, {},randomUUID())).status,404);
+ const response=await send('preview',{choices});assert.equal(response.status,200);assert.match(response.headers.get('cache-control')!,/no-store/);const preview=(await response.json()).data;assert.equal(preview.siteId,site.id);assert.equal(preview.memberId,member.id);assert.doesNotMatch(JSON.stringify(preview),/email\":|subject\":|values\":|displayName/);
+ const projected=helper.projectVisitorErasure({...preview,privateField:'must-not-project'},site.id,member.id,'preview');assert.equal(projected.privateField,undefined);
+ assert.equal((await send('confirm',{previewId:preview.previewId,confirmLocalErasure:true}, {},randomUUID())).status,404);
+ const completed=await send('confirm',{previewId:preview.previewId,confirmLocalErasure:true});assert.equal(completed.status,200);const receipt=(await completed.json()).data;assert.equal(receipt.localErasurePerformed,true);assert.equal(receipt.counts.comments,0);assert.equal(receipt.counts.submissions,0);assert.equal(receipt.counts.exclusiveContacts,0);assert.equal((await send('confirm',{previewId:preview.previewId,confirmLocalErasure:true})).status,200);assert.equal((await send('preview',{choices})).status,409);
+ const capability=repositories.visitorAccounts.privacyErasure;delete repositories.visitorAccounts.privacyErasure;try{assert.equal((await send('preview',{choices})).status,503);}finally{repositories.visitorAccounts.privacyErasure=capability;}
+ console.log('Visitor local erasure actual preview/confirm wrappers passed: Owner-cookie/permission boundary fixtures, exact scope, malformed/unsupported inputs, choices, primitive projections, no-store, unavailable capability, durable receipt retry and final-policy conflict.');
+}

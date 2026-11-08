@@ -1,3 +1,4 @@
+import { collectionBulkOutcome } from '../lib/collectionBulkOutcome';
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   AdminContentApiError,
+  clearUserPermissionsCache,
   bulkUpdateCollectionRecords,
   createCollection,
   createCollectionRecord,
@@ -51,11 +53,13 @@ import {
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
+import { CollectionDesignHistoryPanel } from '@/components/collections/CollectionDesignHistoryPanel';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
-import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { adminPermissionReason, adminPermissionRule, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { createWorkspaceLoadAuthority } from '@/lib/workspaceLoadAuthority';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { useStore, type Page } from '@/stores/mockStore';
 import { useAuthStore, type User } from '@/stores/authStore';
@@ -779,6 +783,7 @@ const collectionMetadataWithSlugPolicy = (
   return {
     ...baseMetadata,
     slugPolicy: {
+      ...(isPlainRecord(baseMetadata.slugPolicy) ? baseMetadata.slugPolicy : {}),
       schemaVersion: 'backy.collection-slug-policy.v1',
       routeParameter: ':recordSlug',
       transform: 'lowercase-dashes',
@@ -1254,6 +1259,7 @@ const collectionMetadataWithVisitorWritePolicy = (
   return {
     ...baseMetadata,
     visitorWritePolicy: {
+      ...(isPlainRecord(baseMetadata.visitorWritePolicy) ? baseMetadata.visitorWritePolicy : {}),
       createFieldMode: visitorWritePolicy.createFieldMode,
       ...(visitorWritePolicy.createFieldMode === 'selected' ? { allowedCreateFields } : {}),
       ...(publicWriteToken ? { publicWriteToken } : {}),
@@ -1283,6 +1289,7 @@ const normalizeAuthoredDynamicTemplate = (value: unknown): CollectionAuthoredDyn
     || cloneJsonRecord(contentDocument?.metadata);
 
   return {
+    ...JSON.parse(JSON.stringify(value)),
     pageId,
     pageTitle,
     pageSlug,
@@ -1504,6 +1511,7 @@ const authoredDynamicTemplateFromPage = (page: Page): CollectionAuthoredDynamicT
   if (elements.length === 0) return null;
 
   return {
+    ...JSON.parse(JSON.stringify(content)),
     pageId: page.id,
     pageTitle: page.title,
     pageSlug: page.slug,
@@ -1568,7 +1576,9 @@ const normalizeDynamicTemplates = (
   const item = isPlainRecord(dynamicTemplates.item) ? dynamicTemplates.item : {};
 
   return {
+    ...JSON.parse(JSON.stringify(dynamicTemplates)),
     list: {
+      ...JSON.parse(JSON.stringify(list)),
       variant: dynamicListVariantFromValue(list.variant),
       titleField: optionalStringFromRecord(list, 'titleField') || defaults.list.titleField,
       descriptionField: optionalStringFromRecord(list, 'descriptionField') || defaults.list.descriptionField,
@@ -1581,6 +1591,7 @@ const normalizeDynamicTemplates = (
       authoredHistory: normalizeAuthoredDynamicTemplateHistory(list.authoredHistory),
     },
     item: {
+      ...JSON.parse(JSON.stringify(item)),
       variant: dynamicItemVariantFromValue(item.variant),
       titleField: optionalStringFromRecord(item, 'titleField') || defaults.item.titleField,
       descriptionField: optionalStringFromRecord(item, 'descriptionField') || defaults.item.descriptionField,
@@ -1765,31 +1776,29 @@ const formatValidationDetails = (details: unknown): string[] => {
 const collectionPermissionRule = (
   permissionMatrix: AdminUserPermissionMatrix | null,
   key: CollectionPermissionKey,
-) => permissionMatrix?.groups
-  .flatMap((group) => group.permissions)
-  .find((permission) => permission.key === key) || null;
+  siteId?: string,
+) => adminPermissionRule(permissionMatrix, key, siteId);
+
+const isCollectionAccessDeniedError = (error: unknown): boolean => isAdminPermissionDeniedError(error)
+  || (error instanceof AdminContentApiError && /^(?:FORBIDDEN|UNAUTHORIZED|OPERATOR_SITE_SCOPE_INVALID)/.test(error.code || ''));
 
 const isCollectionPermissionAllowed = (
   permissionMatrix: AdminUserPermissionMatrix | null,
   currentAdmin: User | null,
   key: CollectionPermissionKey,
+  siteId?: string,
 ): boolean => {
-  const matrixRule = collectionPermissionRule(permissionMatrix, key);
-  if (matrixRule) {
-    return matrixRule.allowed;
-  }
-  if (!permissionMatrix && currentAdmin) {
-    return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);
-  }
-  return false;
+  return Boolean(permissionMatrix && currentAdmin && permissionMatrix.userId === currentAdmin.id
+    && permissionMatrix.role === currentAdmin.role && permissionMatrix.canSignIn && collectionPermissionRule(permissionMatrix, key, siteId)?.allowed);
 };
 
 const collectionPermissionReason = (
   permissionMatrix: AdminUserPermissionMatrix | null,
   currentAdmin: User | null,
   key: CollectionPermissionKey,
+  siteId?: string,
 ): string => {
-  const matrixRule = collectionPermissionRule(permissionMatrix, key);
+  const matrixRule = collectionPermissionRule(permissionMatrix, key, siteId);
   if (matrixRule) {
     return matrixRule.reason;
   }
@@ -1804,12 +1813,32 @@ const collectionPermissionReason = (
     : `Blocked by backend permissions and ${currentAdmin.role} role defaults.`;
 };
 
+const collectionEditorDraft = (collection: Collection) => ({
+  name: collection.name,
+  slug: collection.slug,
+  listRoutePattern: normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug),
+  routePattern: normalizeCollectionRoutePattern(collection.routePattern, collection.slug),
+  description: collection.description || '',
+  status: collection.status,
+  permissions: collection.permissions,
+  frontendDesignTemplateId: getCollectionFrontendTemplateId(collection) || '',
+  dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
+  slugPolicy: normalizeSlugPolicy(collection.metadata, collection.fields),
+  visitorWritePolicy: normalizeVisitorWritePolicy(collection.metadata, collection.fields),
+  fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
+});
+
+const collectionRecordEditorDraft = (collection: Collection | null, record: CollectionRecord | null) => record && collection ? {
+  slug: record.slug, status: record.status, scheduledAt: formatDateTimeLocalValue(record.scheduledAt),
+  values: Object.fromEntries(collection.fields.map(field => [field.key, formatRecordFormValue(field, record.values[field.key])])),
+} : { slug: '', status: 'published' as CollectionRecord['status'], scheduledAt: '', values: {} };
+
 function CollectionsPage() {
   const { sites } = useStore();
   const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites, ''));
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(routeSearch.collectionId || null);
   const [records, setRecords] = useState<CollectionRecord[]>([]);
@@ -1859,6 +1888,8 @@ function CollectionsPage() {
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [isPagesLoading, setIsPagesLoading] = useState(false);
   const [isSavingCollection, setIsSavingCollection] = useState(false);
+  const [isRestoringCollectionDesign, setIsRestoringCollectionDesign] = useState(false);
+  const [isCapturingCollectionDesign, setIsCapturingCollectionDesign] = useState(false);
   const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isExportingRecords, setIsExportingRecords] = useState(false);
   const [isImportingRecords, setIsImportingRecords] = useState(false);
@@ -1889,7 +1920,7 @@ function CollectionsPage() {
   const backupImportInputRef = useRef<HTMLInputElement>(null);
   const collectionInteractionVersionRef = useRef(0);
   const recordInteractionVersionRef = useRef(0);
-  const isCollectionMutationPending = isSavingCollection || isImportingBackup || isExportingBackup || Boolean(isCreatingFrontendTemplateId);
+  const isCollectionMutationPending = isSavingCollection || isRestoringCollectionDesign || isCapturingCollectionDesign || isImportingBackup || isExportingBackup || Boolean(isCreatingFrontendTemplateId);
   const isRecordMutationPending = isSavingRecord || isImportingRecords || isExportingRecords || isSelectingMatchingRecords;
   const isCollectionsBusy = isLoading || isRecordsLoading || isCollectionMutationPending || isRecordMutationPending;
 
@@ -1899,7 +1930,7 @@ function CollectionsPage() {
   };
 
   const activeSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
+    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || (!selectedSiteId ? sites[0] : undefined),
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
@@ -1992,14 +2023,47 @@ function CollectionsPage() {
   const activeCollectionIsPublic = activeCollection?.status === 'published' && activeCollection.permissions?.publicRead === true;
   const recordsCopyUrl = activeCollectionIsPublic ? publicRecordsUrl : adminRecordsUrl;
   const recordsCopyLabel = activeCollectionIsPublic ? 'Public records URL' : 'Admin records URL';
-  const canUseCollectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCollectionRoleDefaults;
-  const canViewCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');
-  const canEditCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');
-  const canExportCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');
-  const canDeleteCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');
-  const canViewMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
-  const canCreateMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
+  const isPermissionMatrixPending = isPermissionsLoading || Boolean(currentAdmin && permissionMatrix
+    && (permissionMatrix.userId !== currentAdmin.id || permissionMatrix.role !== currentAdmin.role));
+  const canViewCollections = Boolean(activeSite) && !isPermissionMatrixPending && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view', activeSiteId);
+  const canEditCollections = canViewCollections && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit', activeSiteId);
+  const canExportCollections = canViewCollections && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export', activeSiteId);
+  const canDeleteCollections = canViewCollections && isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete', activeSiteId);
+  const canViewMedia = canViewCollections && Boolean(adminPermissionRule(permissionMatrix, 'media.view', activeSiteId)?.allowed);
+  const canCreateMedia = canViewCollections && Boolean(adminPermissionRule(permissionMatrix, 'media.create', activeSiteId)?.allowed);
+  const collectionDesignNeedsCommerce = ['products', 'orders'].includes(activeCollection?.slug || '');
+  const canViewCollectionDesign = !isPermissionsLoading && Boolean(permissionMatrix) && canViewCollections
+    && (!collectionDesignNeedsCommerce || Boolean(adminPermissionRule(permissionMatrix, 'commerce.view', activeSiteId)?.allowed));
+  const canEditCollectionDesign = canViewCollectionDesign && canEditCollections
+    && (!collectionDesignNeedsCommerce || Boolean(adminPermissionRule(permissionMatrix, 'commerce.configure', activeSiteId)?.allowed));
+  const collectionLoadAuthority = useRef(createWorkspaceLoadAuthority());
+  const recordLoadAuthority = useRef(createWorkspaceLoadAuthority());
+  const collectionAuditLoadAuthority = useRef(createWorkspaceLoadAuthority());
+  const collectionReadScope = useRef({ context: '', epoch: 0 });
+  const collectionReadContext = JSON.stringify([activeSiteId, currentAdmin?.id, currentAdmin?.role, routeSearch.siteId,
+    canViewCollections, canExportCollections, isPermissionMatrixPending, permissionMatrix?.siteAccess]);
+  if (collectionReadScope.current.context !== collectionReadContext) {
+    collectionReadScope.current = { context: collectionReadContext, epoch: collectionReadScope.current.epoch + 1 };
+  }
+  collectionLoadAuthority.current.setContext(collectionReadContext);
+  collectionAuditLoadAuthority.current.setContext(collectionReadContext);
+  recordLoadAuthority.current.setContext(JSON.stringify([collectionReadContext, selectedCollectionId, routeSearch.recordId, recordFilters, recordPagination.limit, recordPagination.offset]));
+  const recordDraftDirty = stableTemplateValue(recordForm) !== stableTemplateValue(collectionRecordEditorDraft(activeCollection, selectedRecord));
+  const collectionDraftDirty = Boolean(activeCollection && stableTemplateValue(collectionForm) !== stableTemplateValue(collectionEditorDraft(activeCollection)));
+  const collectionSaveContext = JSON.stringify([activeSiteId, currentAdmin?.id, currentAdmin?.role, routeSearch.siteId, routeSearch.collectionId, routeSearch.draft, selectedCollectionId, activeCollection?.version, isPermissionsLoading, canViewCollectionDesign, canEditCollectionDesign]);
+  const collectionDraftAuthority = useRef('');
+  collectionDraftAuthority.current = stableTemplateValue(collectionForm);
+  const collectionSaveAuthority = useRef({ context: collectionSaveContext, epoch: 0 });
+  if (collectionSaveAuthority.current.context !== collectionSaveContext) {
+    collectionSaveAuthority.current = { context: collectionSaveContext, epoch: collectionSaveAuthority.current.epoch + 1 };
+  }
+  useEffect(() => {
+    const mountedAuthority = collectionSaveAuthority.current;
+    setIsSavingCollection(false); setIsRestoringCollectionDesign(false); setIsCapturingCollectionDesign(false);
+    return () => {
+      if (collectionSaveAuthority.current === mountedAuthority) collectionSaveAuthority.current = { ...mountedAuthority, epoch: mountedAuthority.epoch + 1 };
+    };
+  }, [collectionSaveContext]);
   const schemaMutationDisabled = isLoading || isCollectionMutationPending || !canEditCollections;
   const recordMutationDisabled = isCollectionsBusy || !canEditCollections;
   const recordExportDisabled = isCollectionsBusy || !canExportCollections;
@@ -2020,10 +2084,12 @@ function CollectionsPage() {
       return errors;
     }, {});
   }, [activeCollection, recordForm.values, recordFormSubmitted]);
-  const viewPermissionTitle = canViewCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.view');
-  const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit');
-  const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export');
-  const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete');
+  const viewPermissionTitle = canViewCollections ? undefined : !activeSite && selectedSiteId
+    ? 'The requested site is not available to this account. Choose an authorized site.'
+    : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.view', activeSiteId);
+  const editPermissionTitle = canEditCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.edit', activeSiteId);
+  const exportPermissionTitle = canExportCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.export', activeSiteId);
+  const deletePermissionTitle = canDeleteCollections ? undefined : collectionPermissionReason(permissionMatrix, currentAdmin, 'collections.delete', activeSiteId);
   const mediaViewPermissionTitle = canViewMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const mediaCreatePermissionTitle = canCreateMedia ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);
   const recordActionBusyReason = isCollectionsBusy
@@ -2933,7 +2999,7 @@ function CollectionsPage() {
   const showPermissionDenied = (key: CollectionPermissionKey, action: string) => {
     setNotice(null);
     setValidationDetails([]);
-    setError(`Your account needs ${key} to ${action}. ${collectionPermissionReason(permissionMatrix, currentAdmin, key)}`);
+    setError(`Your account needs ${key} to ${action}. ${collectionPermissionReason(permissionMatrix, currentAdmin, key, activeSiteId)}`);
   };
 
   const copyCollectionApiText = async (
@@ -2942,7 +3008,7 @@ function CollectionsPage() {
     permission?: { key: CollectionPermissionKey; action: string },
   ) => {
     if (isCollectionsBusy) return;
-    if (permission && !isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key)) {
+    if (permission && !isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key, activeSiteId)) {
       showPermissionDenied(permission.key, permission.action);
       return;
     }
@@ -3087,13 +3153,14 @@ function CollectionsPage() {
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
+    if (sites.length > 0 && !selectedSiteId && !routeSearch.siteId) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
-  }, [selectedSiteId, sites]);
+  }, [selectedSiteId, sites, routeSearch.siteId]);
 
   useEffect(() => {
     let cancelled = false;
+    const scope = collectionReadScope.current;
 
     const loadFrontendDesign = async () => {
       if (isPermissionMatrixPending) return;
@@ -3108,16 +3175,16 @@ function CollectionsPage() {
       setFrontendDesignError(null);
       try {
         const response = await getSiteFrontendDesign(activeSiteId);
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setFrontendDesign(response.frontendDesign);
         }
       } catch (loadError) {
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setFrontendDesign(null);
           setFrontendDesignError(loadError instanceof Error ? loadError.message : 'Unable to load frontend design contract');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setFrontendDesignLoading(false);
         }
       }
@@ -3128,10 +3195,11 @@ function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
+  }, [collectionReadContext, activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
     let cancelled = false;
+    const scope = collectionReadScope.current;
 
     const loadPageTemplates = async () => {
       if (isPermissionMatrixPending) return;
@@ -3146,16 +3214,16 @@ function CollectionsPage() {
       setPagesError(null);
       try {
         const backendPages = await listPages(activeSiteId);
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setPages(backendPages.filter((page) => page.status !== 'archived'));
         }
       } catch (loadError) {
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setPages([]);
           setPagesError(loadError instanceof Error ? loadError.message : 'Unable to load pages for dynamic templates');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && scope === collectionReadScope.current) {
           setIsPagesLoading(false);
         }
       }
@@ -3166,7 +3234,7 @@ function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
+  }, [collectionReadContext, activeSiteId, canViewCollections, isPermissionMatrixPending, viewPermissionTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3205,7 +3273,7 @@ function CollectionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentAdmin?.id]);
+  }, [currentAdmin?.id, currentAdmin?.role]);
 
   const resetCollectionForm = (options: { draftMode?: boolean; frontendTemplateId?: string } = {}) => {
     collectionInteractionVersionRef.current += 1;
@@ -3545,6 +3613,7 @@ function CollectionsPage() {
       );
       const fields = cloneTemplateFields(blueprint.fields);
       const saved = await createCollection(activeSiteId, {
+        frontendDesignTemplateId: template.id,
         name: blueprint.name,
         slug: blueprint.slug,
         listRoutePattern: blueprint.listRoutePattern,
@@ -3586,20 +3655,7 @@ function CollectionsPage() {
       ...prev,
       offset: preserveRouteState ? prev.offset : 0,
     }));
-    setCollectionForm({
-      name: collection.name,
-      slug: collection.slug,
-      listRoutePattern: normalizeCollectionListRoutePattern(collection.listRoutePattern, collection.slug),
-      routePattern: normalizeCollectionRoutePattern(collection.routePattern, collection.slug),
-      description: collection.description || '',
-      status: collection.status,
-      permissions: collection.permissions,
-      frontendDesignTemplateId: getCollectionFrontendTemplateId(collection) || '',
-      dynamicTemplates: normalizeDynamicTemplates(collection.metadata),
-      slugPolicy: normalizeSlugPolicy(collection.metadata, collection.fields),
-      visitorWritePolicy: normalizeVisitorWritePolicy(collection.metadata, collection.fields),
-      fields: collection.fields.length > 0 ? collection.fields : [createEmptyField(10)],
-    });
+    setCollectionForm(collectionEditorDraft(collection));
     setRecordForm({ slug: '', status: 'published', scheduledAt: '', values: {} });
     setRecordFormSubmitted(false);
     updateCollectionsRouteSearch({
@@ -3611,8 +3667,20 @@ function CollectionsPage() {
     });
   };
 
+  const clearDeniedCollectionWorkspace = (loadError: unknown) => {
+    setCollections([]);
+    setRecords([]);
+    resetCollectionForm({ draftMode: false });
+    setPages([]); setFrontendDesign(null); setCollectionAuditLogs([]); setReferenceRecordsByCollection({});
+    recordLoadAuthority.current.invalidate(); collectionAuditLoadAuthority.current.invalidate();
+    collectionReadScope.current = { ...collectionReadScope.current, epoch: collectionReadScope.current.epoch + 1 };
+    setIsRecordsLoading(false); setIsAuditLoading(false);
+    clearUserPermissionsCache(currentAdmin?.id);
+    setPermissionMatrix(null); setPermissionError(loadError instanceof Error ? loadError.message : 'Collection site access was denied.');
+  };
+
   const loadCollections = async () => {
-    if (isCollectionsBusy) return;
+    if (isCollectionMutationPending || isRecordMutationPending) return;
     if (isPermissionMatrixPending) return;
     if (!canViewCollections) {
       setCollections([]);
@@ -3633,8 +3701,9 @@ function CollectionsPage() {
     setError(null);
     setValidationDetails([]);
     setNotice(null);
-    try {
+    await collectionLoadAuthority.current.run(async (isCurrent) => {
       const backendCollections = await listCollections(activeSiteId);
+      if (!isCurrent()) return;
       setCollections(backendCollections);
       if (loadInteractionVersion !== collectionInteractionVersionRef.current) {
         return;
@@ -3654,19 +3723,12 @@ function CollectionsPage() {
       } else {
         resetCollectionForm({ draftMode: false });
       }
-    } catch (loadError) {
-      if (isAdminPermissionDeniedError(loadError)) {
-        setCollections([]);
-        setRecords([]);
-        setSelectedCollectionId(null);
-        setSelectedRecordId(null);
-        setDeepLinkedRecord(null);
-        setSelectedRecordIds([]);
-      }
+    }, { error: (loadError) => {
+      if (isCollectionAccessDeniedError(loadError)) clearDeniedCollectionWorkspace(loadError);
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collections');
-    } finally {
+    }, finish: () => {
       setIsLoading(false);
-    }
+    } });
   };
 
   const loadRecords = async (collectionId: string) => {
@@ -3682,7 +3744,7 @@ function CollectionsPage() {
     setIsRecordsLoading(true);
     setError(null);
     setValidationDetails([]);
-    try {
+    await recordLoadAuthority.current.run(async (isCurrent) => {
       const result = await listCollectionRecords(activeSiteId, collectionId, {
         search: recordFilters.search.trim() || undefined,
         status: recordFilters.status || undefined,
@@ -3693,6 +3755,7 @@ function CollectionsPage() {
         limit: recordPagination.limit,
         offset: recordPagination.offset,
       });
+      if (!isCurrent()) return;
       setRecords(result.records);
       if (routeSearch.recordId) {
         const shortcutRecord = result.records.find((record) => (
@@ -3705,11 +3768,19 @@ function CollectionsPage() {
         } else {
           try {
             const record = await getCollectionRecord(activeSiteId, collectionId, routeSearch.recordId);
+            if (!isCurrent()) return;
             if (!result.records.some((item) => item.id === record.id)) {
               setDeepLinkedRecord(record);
             }
             setSelectedRecordId(record.id);
-          } catch {
+          } catch (detailError) {
+            if (!isCurrent()) return;
+            if (isCollectionAccessDeniedError(detailError)) {
+              clearDeniedCollectionWorkspace(detailError);
+              setError(detailError instanceof Error ? detailError.message : 'Collection record access was denied.');
+              setRecordPagination(previous => ({ ...previous, total: 0, hasMore: false }));
+              return;
+            }
             setDeepLinkedRecord(null);
             setSelectedRecordId(null);
           }
@@ -3718,7 +3789,8 @@ function CollectionsPage() {
         setDeepLinkedRecord(null);
       }
       setRecordPagination(result.pagination);
-    } catch (loadError) {
+    }, { error: (loadError) => {
+      if (isCollectionAccessDeniedError(loadError)) clearDeniedCollectionWorkspace(loadError);
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection records');
       setRecords([]);
       setRecordPagination((prev) => ({
@@ -3726,9 +3798,9 @@ function CollectionsPage() {
         total: 0,
         hasMore: false,
       }));
-    } finally {
+    }, finish: () => {
       setIsRecordsLoading(false);
-    }
+    } });
   };
 
   const loadCollectionAuditLogs = async () => {
@@ -3742,7 +3814,7 @@ function CollectionsPage() {
 
     setIsAuditLoading(true);
     setAuditError(null);
-    try {
+    await collectionAuditLoadAuthority.current.run(async (isCurrent) => {
       const [schemaResult, recordResult] = await Promise.all([
         listAdminAuditLogs({
           siteId: activeSiteId,
@@ -3757,18 +3829,35 @@ function CollectionsPage() {
           offset: 0,
         }),
       ]);
+      if (!isCurrent()) return;
       setCollectionAuditLogs(
         [...schemaResult.logs, ...recordResult.logs]
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, 12),
       );
-    } catch (loadError) {
+    }, { error: (loadError) => {
       setCollectionAuditLogs([]);
       setAuditError(loadError instanceof Error ? loadError.message : 'Unable to load collection activity');
-    } finally {
+    }, finish: () => {
       setIsAuditLoading(false);
-    }
+    } });
   };
+
+  useEffect(() => {
+    setCollections([]); setRecords([]); setPages([]); setFrontendDesign(null);
+    setCollectionAuditLogs([]); setReferenceRecordsByCollection({});
+    resetCollectionForm({ draftMode: routeSearch.draft === 'new', frontendTemplateId: routeSearch.frontendTemplate });
+    setRecordPagination(previous => ({ ...previous, total: 0, hasMore: false }));
+    setIsLoading(false); setIsRecordsLoading(false); setIsAuditLoading(false);
+    setError(null); setNotice(null);
+    // The scope changes in render, before a prior response or finalizer can run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionReadContext]);
+
+  useEffect(() => () => {
+    collectionLoadAuthority.current.invalidate(); recordLoadAuthority.current.invalidate(); collectionAuditLoadAuthority.current.invalidate();
+    collectionReadScope.current = { ...collectionReadScope.current, epoch: collectionReadScope.current.epoch + 1 };
+  }, []);
 
   useEffect(() => {
     if (!isPermissionMatrixPending) {
@@ -3776,16 +3865,18 @@ function CollectionsPage() {
       void loadCollectionAuditLogs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId, canViewCollections, canExportCollections, isPermissionMatrixPending]);
+  }, [collectionReadContext, activeSiteId, canViewCollections, canExportCollections, isPermissionMatrixPending]);
 
   useEffect(() => {
     if (!isPermissionMatrixPending && canViewCollections && selectedCollectionId) {
       void loadRecords(selectedCollectionId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCollectionId, activeSiteId, canViewCollections, isPermissionMatrixPending, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
+  }, [collectionReadContext, selectedCollectionId, activeSiteId, canViewCollections, isPermissionMatrixPending, recordFilters.search, recordFilters.status, recordFilters.fieldKey, recordFilters.fieldValue, recordFilters.sortBy, recordFilters.sortDirection, recordPagination.limit, recordPagination.offset]);
 
   useEffect(() => {
+    let cancelled = false;
+    const scope = collectionReadScope.current;
     if (isPermissionMatrixPending || !canViewCollections || activeReferenceCollectionIds.length === 0) {
       return;
     }
@@ -3807,6 +3898,7 @@ function CollectionsPage() {
         sortDirection: 'desc',
       })
         .then((result) => {
+          if (cancelled || scope !== collectionReadScope.current) return;
           setReferenceRecordsByCollection((prev) => ({
             ...prev,
             [referenceCollectionId]: {
@@ -3819,6 +3911,7 @@ function CollectionsPage() {
           }));
         })
         .catch((loadError) => {
+          if (cancelled || scope !== collectionReadScope.current) return;
           setReferenceRecordsByCollection((prev) => ({
             ...prev,
             [referenceCollectionId]: {
@@ -3829,7 +3922,8 @@ function CollectionsPage() {
           }));
         });
     });
-  }, [activeReferenceCollectionIdsKey, activeSiteId, canViewCollections, isPermissionMatrixPending]);
+    return () => { cancelled = true; };
+  }, [collectionReadContext, activeReferenceCollectionIdsKey, activeSiteId, canViewCollections, isPermissionMatrixPending]);
 
   useEffect(() => {
     if (!selectedRecord || !activeCollection) {
@@ -4029,11 +4123,15 @@ function CollectionsPage() {
       return;
     }
 
-    setError(null);
-    setNotice(null);
-
+    const authority = collectionSaveAuthority.current;
+    const interaction = collectionInteractionVersionRef.current;
+    const draftFingerprint = collectionDraftAuthority.current;
+    setIsCapturingCollectionDesign(true);
+    setError(null); setNotice(null);
     try {
       const page = await getPage(activeSiteId, pageId);
+      if (authority !== collectionSaveAuthority.current || interaction !== collectionInteractionVersionRef.current || draftFingerprint !== collectionDraftAuthority.current) return;
+      if (page.id !== pageId || page.siteId !== activeSiteId) throw new Error('Captured page returned another workspace. Reload before capturing.');
       const authoredCanvas = authoredDynamicTemplateFromPage(page);
       if (!authoredCanvas) {
         setError(`The selected ${kind} template page has no canvas elements to capture.`);
@@ -4060,7 +4158,9 @@ function CollectionsPage() {
 
       setNotice(`${kind === 'list' ? 'List' : 'Item'} template canvas captured. Save schema to publish it to dynamic routes.`);
     } catch (captureError) {
-      setError(captureError instanceof Error ? captureError.message : `Unable to capture ${kind} template page`);
+      if (authority === collectionSaveAuthority.current && interaction === collectionInteractionVersionRef.current && draftFingerprint === collectionDraftAuthority.current) setError(captureError instanceof Error ? captureError.message : `Unable to capture ${kind} template page`);
+    } finally {
+      if (authority === collectionSaveAuthority.current) setIsCapturingCollectionDesign(false);
     }
   };
 
@@ -4101,25 +4201,8 @@ function CollectionsPage() {
       return;
     }
 
-    const restoredCanvas: CollectionAuthoredDynamicTemplate = {
-      pageId: version.pageId,
-      pageTitle: version.pageTitle,
-      pageSlug: version.pageSlug,
-      capturedAt: version.capturedAt,
-      ...(version.canvasSize ? { canvasSize: version.canvasSize } : {}),
-      ...(version.customCSS ? { customCSS: version.customCSS } : {}),
-      ...(version.customJS ? { customJS: version.customJS } : {}),
-      ...(version.themeTokenRefs ? { themeTokenRefs: version.themeTokenRefs } : {}),
-      ...(version.assets ? { assets: version.assets } : {}),
-      ...(version.animations ? { animations: version.animations } : {}),
-      ...(version.interactions ? { interactions: version.interactions } : {}),
-      ...(version.dataBindings ? { dataBindings: version.dataBindings } : {}),
-      ...(version.editableMap ? { editableMap: version.editableMap } : {}),
-      ...(version.seo ? { seo: version.seo } : {}),
-      ...(version.metadata ? { metadata: version.metadata } : {}),
-      ...(version.contentDocument ? { contentDocument: version.contentDocument } : {}),
-      elements: version.elements,
-    };
+    const { id: _historyId, version: _historyVersion, elementCount: _elementCount, ...snapshot } = version;
+    const restoredCanvas: CollectionAuthoredDynamicTemplate = JSON.parse(JSON.stringify(snapshot));
 
     if (kind === 'list') {
       updateDynamicListTemplate({
@@ -4143,6 +4226,7 @@ function CollectionsPage() {
   const handleCollectionSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isLoading || isCollectionMutationPending) return;
+    if (recordDraftDirty) { setError('Save or discard current entry edits before saving the collection schema.'); return; }
     if (!canEditCollections) {
       showPermissionDenied('collections.edit', 'save collection schemas');
       return;
@@ -4153,6 +4237,8 @@ function CollectionsPage() {
     setValidationDetails([]);
     setNotice(null);
 
+    const saveAuthority = collectionSaveAuthority.current;
+    const saveDraftFingerprint = collectionDraftAuthority.current;
     const fields = collectionForm.fields
       .filter((field) => field.key.trim() && field.label.trim())
       .map((field, index) => ({
@@ -4171,23 +4257,23 @@ function CollectionsPage() {
         ? frontendCollectionTemplates.find((template) => template.id === collectionForm.frontendDesignTemplateId) || null
         : null;
       const baseMetadata = collectionMetadataWithVisitorWritePolicy(
-        stripFrontendCollectionTemplateMetadata(
           collectionMetadataWithSlugPolicy(
             collectionMetadataWithDynamicTemplates(currentMetadata, collectionForm.dynamicTemplates),
             collectionForm.slugPolicy,
             fields,
           ),
-        ),
         collectionForm.visitorWritePolicy,
         fields,
       );
-      const metadata = selectedFrontendTemplate
+      const metadata = selectedFrontendTemplate && selectedFrontendTemplate.id !== (activeCollection ? getCollectionFrontendTemplateId(activeCollection) : null)
         ? {
-            ...baseMetadata,
+            ...stripFrontendCollectionTemplateMetadata(baseMetadata),
             ...buildFrontendCollectionTemplateMetadata(selectedFrontendTemplate, frontendDesign),
           }
-        : baseMetadata;
+        : collectionForm.frontendDesignTemplateId === (activeCollection ? getCollectionFrontendTemplateId(activeCollection) || '' : '')
+          ? baseMetadata : stripFrontendCollectionTemplateMetadata(baseMetadata);
       const payload = {
+        ...(activeCollection?.version ? { expectedVersion: activeCollection.version } : {}),
         name: collectionForm.name.trim(),
         slug: collectionSlug,
         listRoutePattern: collectionForm.listRoutePattern.trim() || defaultCollectionListRoutePattern(collectionSlug),
@@ -4202,6 +4288,8 @@ function CollectionsPage() {
       const saved = selectedCollectionId
         ? await updateCollection(activeSiteId, selectedCollectionId, payload)
         : await createCollection(activeSiteId, payload);
+      if (saveAuthority !== collectionSaveAuthority.current || saveInteractionVersion !== collectionInteractionVersionRef.current || saveDraftFingerprint !== collectionDraftAuthority.current) return;
+      if (saved.siteId !== activeSiteId || (selectedCollectionId && saved.id !== selectedCollectionId)) throw new Error('Collection save returned another workspace. Reload before continuing.');
       setCollections((prev) => {
         const exists = prev.some((collection) => collection.id === saved.id);
         return exists
@@ -4214,9 +4302,9 @@ function CollectionsPage() {
         setNotice(`${saved.name} collection ${isCreatingCollection ? 'created' : 'updated'}.`);
       }
     } catch (saveError) {
-      showApiError(saveError, 'Unable to save collection');
+      if (saveAuthority === collectionSaveAuthority.current) showApiError(saveError, 'Unable to save collection');
     } finally {
-      setIsSavingCollection(false);
+      if (saveAuthority === collectionSaveAuthority.current) setIsSavingCollection(false);
     }
   };
 
@@ -4301,7 +4389,7 @@ function CollectionsPage() {
         values,
       };
       const saved = selectedRecordId
-        ? await updateCollectionRecord(activeSiteId, activeCollection.id, selectedRecordId, payload)
+        ? await updateCollectionRecord(activeSiteId, activeCollection.id, selectedRecordId, { ...payload, expectedUpdatedAt: selectedRecord?.updatedAt, expectedVersion: selectedRecord?.version })
         : await createCollectionRecord(activeSiteId, activeCollection.id, payload);
       setRecords((prev) => {
         const exists = prev.some((record) => record.id === saved.id);
@@ -4379,8 +4467,9 @@ function CollectionsPage() {
       setRecords((prev) => prev.map((record) => (
         result.records.find((updatedRecord) => updatedRecord.id === record.id) || record
       )));
-      setSelectedRecordIds([]);
-      setNotice(`${result.updated} records moved to ${status}${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+      const outcome = collectionBulkOutcome(result, selectedRecordIds);
+      setSelectedRecordIds(outcome.remainingIds);
+      setNotice(outcome.notice);
       void loadRecords(activeCollection.id);
       void loadCollectionAuditLogs();
     } catch (bulkError) {
@@ -4408,14 +4497,15 @@ function CollectionsPage() {
         action: 'delete',
         recordIds: deletedIds,
       });
-      setRecords((prev) => prev.filter((record) => !deletedIds.includes(record.id)));
-      if (selectedRecordId && deletedIds.includes(selectedRecordId)) {
+      const outcome = collectionBulkOutcome(result, deletedIds);
+      setRecords((prev) => prev.filter((record) => !outcome.appliedIds.includes(record.id)));
+      if (selectedRecordId && outcome.appliedIds.includes(selectedRecordId)) {
         setSelectedRecordId(null);
         updateCollectionsRouteSearch({ recordId: undefined });
       }
-      setSelectedRecordIds([]);
+      setSelectedRecordIds(outcome.remainingIds);
       setPendingBulkDelete(false);
-      setNotice(`${result.deleted} records deleted${result.skipped ? `, ${result.skipped} skipped` : ''}.`);
+      setNotice(outcome.notice);
       void loadRecords(activeCollection.id);
       void loadCollectionAuditLogs();
     } catch (bulkError) {
@@ -5124,11 +5214,9 @@ function CollectionsPage() {
                 Effective role {permissionMatrix?.role || currentAdmin?.role || 'unknown'}
               </span>
             </div>
-            {(canUseCollectionRoleDefaults || isPermissionMatrixPending) && (
+            {isPermissionMatrixPending && (
               <p className="mt-2 text-xs text-muted-foreground" data-testid="collections-permission-sync-state">
-                {canUseCollectionRoleDefaults
-                  ? 'Using role defaults while detailed collection permissions sync.'
-                  : 'Loading detailed collection permissions before enabling role-specific controls.'}
+                Loading current account and site permissions before enabling controls.
               </p>
             )}
             {permissionError && (
@@ -5159,7 +5247,7 @@ function CollectionsPage() {
             )}
             <div className="mt-3 grid gap-2">
               {COLLECTION_PERMISSION_CONTRACT.map((permission) => {
-                const allowed = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key);
+                const allowed = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, permission.key, activeSiteId);
                 const pending = isPermissionMatrixPending;
 
                 return (
@@ -5183,7 +5271,7 @@ function CollectionsPage() {
                     </div>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">{permission.detail}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {pending ? 'Loading current admin permission matrix.' : collectionPermissionReason(permissionMatrix, currentAdmin, permission.key)}
+                      {pending ? 'Loading current admin permission matrix.' : collectionPermissionReason(permissionMatrix, currentAdmin, permission.key, activeSiteId)}
                     </p>
                   </div>
                 );
@@ -5994,6 +6082,17 @@ function CollectionsPage() {
             )}
           </section>
 
+          {activeCollection && <CollectionDesignHistoryPanel key={`${collectionSaveContext}:${collectionSaveAuthority.current.epoch}`}
+            siteId={activeSiteId} collectionId={activeCollection.id} currentVersion={activeCollection.version}
+            canView={canViewCollectionDesign} canEdit={canEditCollectionDesign && !isSavingCollection && !isCapturingCollectionDesign && !isImportingBackup && !isExportingBackup && !isRecordMutationPending}
+            hasUnsavedChanges={collectionDraftDirty || recordDraftDirty} onRestoreBusyChange={setIsRestoringCollectionDesign}
+            onRestored={(saved, warnings) => {
+              if (saved.siteId !== activeSiteId || saved.id !== activeCollection.id) return;
+              setCollections(previous => previous.map(collection => collection.id === saved.id ? saved : collection));
+              setCollectionForm(collectionEditorDraft(saved)); void loadCollectionAuditLogs();
+              setNotice(warnings.length ? `Design restored; follow-up pending: ${warnings.join(', ')}.` : 'Collection design restored. Current schema, rules and entries were retained.');
+            }} />}
+
           <form id="collections-schema" onSubmit={handleCollectionSubmit} className="rounded-lg border border-border bg-card scroll-mt-24">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
@@ -6029,8 +6128,8 @@ function CollectionsPage() {
                 )}
                 <button
                   type="submit"
-                  disabled={schemaMutationDisabled}
-                  title={schemaActionDisabledTitle}
+                  disabled={schemaMutationDisabled || recordDraftDirty}
+                  title={recordDraftDirty ? 'Save or discard current entry edits before saving the collection schema.' : schemaActionDisabledTitle}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Save className="h-4 w-4" />

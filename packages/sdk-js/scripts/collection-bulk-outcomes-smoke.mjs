@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls = [];
+const data = { action: 'updateStatus', deleted: 0, updated: 1, skipped: 0, records: [{ id: 'one', version: 'record-v1:' + 'a'.repeat(64), values: { extension: { keep: [false, 0] } } }], outcome: 'partial', appliedRecordIds: ['one'], failedTargets: [{ recordId: 'two', code: 'COLLECTION_RECORD_WRITE_FAILED' }], notAttemptedRecordIds: ['three'], completionWarnings: ['COLLECTION_BULK_APPLY_INCOMPLETE'], reloadRequired: true, concurrencyBoundary: 'database-per-record-transaction' };
+let status = 200, payload = { success: true, requestId: 'fixture-request', data };
+const client = createBackyClient({ baseUrl: 'https://fixture.invalid', siteId: 'site/a', fetch: async (input, init) => { calls.push({ input: String(input), init }); return Response.json(payload, { status }); } });
+const input = { action: 'updateStatus', status: 'published', recordIds: ['one', 'two', 'three'] }, options = { adminSession: 'synthetic-fixture', requestId: 'fixture-request' };
+const result = await client.bulkAdminCollectionRecords('collection/a', input, options);
+assert.deepEqual(result.data, data); assert.deepEqual(JSON.parse(calls[0].init.body), input); assert.match(calls[0].input, /sites\/site%2Fa\/collections\/collection%2Fa\/records\/bulk$/); assert.equal(calls[0].init.cache, 'no-store'); assert.equal(new Headers(calls[0].init.headers).get('x-backy-admin-session'), 'synthetic-fixture');
+payload = { success: true, requestId: 'fixture-request', data: { ...data, failedTargets: [], notAttemptedRecordIds: [], completionWarnings: ['COLLECTION_BULK_WEBHOOK_DELIVERY_PENDING'] } };
+assert.deepEqual((await client.bulkAdminCollectionRecords('collection/a', input, options)).data.completionWarnings, ['COLLECTION_BULK_WEBHOOK_DELIVERY_PENDING']);
+payload = { success: true, requestId: 'fixture-request', data: { action: 'delete', deleted: 3, updated: 0, skipped: 0, records: [] } };
+assert.equal((await client.bulkAdminCollectionRecords('collection/a', { action: 'delete', recordIds: input.recordIds }, options)).data.deleted, 3);
+status = 503; payload = { success: false, requestId: 'fixture-request', error: { code: 'MEDIA_STORAGE_MUTATION_BUSY', message: 'Try later.' } };
+await assert.rejects(client.bulkAdminCollectionRecords('collection/a', input, options), error => error instanceof BackyApiError && error.code === 'MEDIA_STORAGE_MUTATION_BUSY');
+assert.equal(calls.length, 4, 'One request for each explicit action; no automatic partial replay');
+console.log('SDK collection bulk transport PASS exact partial outcomes/version/JSON, committed follow-up warning, legacy response, encoded/auth/no-store request and503/no retry. Fetch synthetic.');

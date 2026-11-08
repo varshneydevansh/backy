@@ -117,3 +117,17 @@ export const mediaMatchesScopeFilters = (
 
   return true;
 };
+
+/** One exact stored association selector, independent of editor availability. */
+export function readMediaLinkedFilters(query: URLSearchParams): { linkedPageId?: string; linkedPostId?: string; invalid?: boolean } {
+  const keys = ['linkedPageId', 'linkedPostId'] as const;
+  if (keys.every(key => query.has(key))) return { invalid: true };
+  const result: { linkedPageId?: string; linkedPostId?: string } = {};
+  for (const key of keys) {
+    if (!query.has(key)) continue;
+    const value = query.get(key)?.trim();
+    if (query.getAll(key).length !== 1 || !value || value.length > 256 || /[\p{Cc}\p{Cs}]/u.test(value)) return { invalid: true };
+    result[key] = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value) ? value.toLowerCase() : value;
+  }
+  return result;
+}

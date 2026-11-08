@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/content-payload-runtime.schema.json",
+  "title": "Backy opt-in public runtime render payload",
+  "description": "Negotiated only through backy.content-payload.runtime.v1. The complete top-level editing map is retained. Known duplicate maps reference #/data/editableMap; different maps remain inline. Never a saved document or private preview.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "site": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/site"
+        },
+        "route": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/route"
+        },
+        "navigation": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/navigation"
+        },
+        "frontendDesign": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/frontendDesign"
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schemaVersion": {
+              "const": "backy.content.runtime.v1"
+            },
+            "id": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/id"
+            },
+            "kind": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/kind"
+            },
+            "title": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/title"
+            },
+            "locale": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/locale"
+            },
+            "version": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/version"
+            },
+            "elements": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/elements"
+            },
+            "canvasSize": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/canvasSize"
+            },
+            "customCSS": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/customCSS"
+            },
+            "customJS": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/customJS"
+            },
+            "contentDocument": {
+              "$ref": "content-runtime-document.schema.json"
+            },
+            "themeTokenRefs": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/themeTokenRefs"
+            },
+            "assets": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/assets"
+            },
+            "animations": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/animations"
+            },
+            "interactions": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/interactions"
+            },
+            "seo": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/seo"
+            },
+            "dataBindings": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/dataBindings"
+            },
+            "editableMap": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/editableMap"
+            },
+            "metadata": {
+              "$ref": "content-payload.schema.json#/properties/data/properties/content/properties/metadata"
+            },
+            "editableMapRef": {
+              "const": "#/data/editableMap"
+            }
+          },
+          "required": [
+            "schemaVersion",
+            "id",
+            "kind",
+            "elements"
+          ],
+          "not": {
+            "required": [
+              "editableMap",
+              "editableMapRef"
+            ]
+          }
+        },
+        "assets": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/assets"
+        },
+        "interactions": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/interactions"
+        },
+        "seo": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/seo"
+        },
+        "dataBindings": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/dataBindings"
+        },
+        "editableMap": {
+          "$ref": "content-payload.schema.json#/properties/data/properties/editableMap"
+        }
+      },
+      "required": [
+        "site",
+        "navigation",
+        "route",
+        "content",
+        "assets",
+        "interactions",
+        "seo",
+        "dataBindings",
+        "editableMap"
+      ]
+    }
+  },
+  "required": [
+    "success",
+    "requestId",
+    "data"
+  ]
+}

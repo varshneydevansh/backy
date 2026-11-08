@@ -1,60 +1,11 @@
 import { NextRequest } from 'next/server';
-import { getSiteByIdOrSlug } from '@/lib/backyStore';
-import { buildRobotsTxtFromDiscovery, buildSeoDiscovery, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
-import { createPublicCacheRevision, publicContractResponse } from '@/lib/publicContractResponse';
-
-interface RouteParams {
-  params: Promise<{
-    subdomain: string;
-  }>;
-}
-
-export async function GET(request: NextRequest, { params }: RouteParams) {
+import { GET as readPublicDiscovery } from '@/app/api/sites/[siteId]/seo/route';
+export async function GET(request: NextRequest, { params }: { params: Promise<{ subdomain: string }> }) {
   const { subdomain } = await params;
-  const site = getSiteByIdOrSlug(subdomain);
-  const requestId = request.headers.get('x-request-id') || `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-  if (!site || !site.isPublished) {
-    return publicContractResponse('Not found', {
-      request,
-      requestId,
-      status: 404,
-      cache: 'error',
-      siteId: site?.id,
-    }, {
-      headers: {
-        'content-type': 'text/plain; charset=utf-8',
-      },
-    });
-  }
-
-  const origin = new URL(request.url).origin;
-  const discovery = buildSeoDiscovery(site);
-  const hostedDiscovery = {
-    ...discovery,
-    sitemap: {
-      ...discovery.sitemap,
-      url: `${getSiteCanonicalBaseUrl(origin, site)}/sitemap.xml`,
-    },
-  };
-  const text = buildRobotsTxtFromDiscovery(hostedDiscovery);
-  const cacheRevision = createPublicCacheRevision({ site, discovery: hostedDiscovery, feed: 'hosted-robots' });
-
-  return publicContractResponse(text, {
-    request,
-    requestId,
-    cache: 'discovery',
-    siteId: site.id,
-    cacheRevision,
-    etagSeed: {
-      format: 'hosted-robots',
-      site,
-      discovery: hostedDiscovery,
-      revision: cacheRevision,
-    },
-  }, {
-    headers: {
-      'content-type': 'text/plain; charset=utf-8',
-    },
-  });
+  const url = new URL(request.url);
+  url.pathname = `/api/sites/${encodeURIComponent(subdomain)}/seo`;
+  url.searchParams.set('format', 'robots');
+  const headers = new Headers(request.headers);
+  headers.set('x-backy-seo-format', 'robots');
+  return readPublicDiscovery(new NextRequest(url, { headers }), { params: Promise.resolve({ siteId: subdomain }) });
 }

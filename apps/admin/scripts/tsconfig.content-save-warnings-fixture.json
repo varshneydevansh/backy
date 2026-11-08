@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src", "content-save-warnings-runtime-fixture.tsx"]
+}

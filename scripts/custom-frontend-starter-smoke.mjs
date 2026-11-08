@@ -47,6 +47,9 @@ const files = {
   page: read('src/app/[[...path]]/page.tsx'),
   newsletter: read('src/app/api/newsletter/route.ts'),
   form: read('src/app/api/backy-form/route.ts'),
+  formBff: read('src/lib/form-bff.ts'),
+  contentBff: read('src/lib/content-bff.ts'),
+  commentsBff: read('src/lib/comments-bff.ts'),
   checkout: read('src/app/api/backy-checkout/route.ts'),
   checkoutUi: read('src/lib/checkout.tsx'),
   connection: read('src/app/api/backy-connection/route.ts'),
@@ -57,6 +60,10 @@ const files = {
   ensureSite: readRepo('scripts/ensure-custom-frontend-site.mjs'),
   generatedTemplate: readRepo('apps/public/src/lib/customFrontendStarterProjectTemplate.ts'),
 };
+
+const inventory = source => [...(source.match(/const starterFiles = \[([\s\S]*?)\n\];/)?.[1] || '').matchAll(/path: '([^']+)'/g)].map(match => match[1]);
+if (JSON.stringify(inventory(files.generator)) === JSON.stringify(inventory(files.scaffold))) pass('CLI scaffold includes every generated starter runtime file');
+else fail('CLI scaffold inventory diverges from the generated starter');
 
 const rootPackageJson = JSON.parse(files.rootPackageJson || '{}');
 if (rootPackageJson.scripts?.['custom-frontend:ensure-site'] === 'node scripts/ensure-custom-frontend-site.mjs') {
@@ -180,8 +187,10 @@ assertIncludes(files.client, 'createCommerceOrder', 'Starter local client expose
 assertIncludes(files.client, 'commerceOrderStatus', 'Starter local client exposes tokenized customer order status');
 assertIncludes(files.client, 'blogPosts', 'Starter local client exposes published blog archive reads');
 assertIncludes(files.client, 'blogPost', 'Starter local client exposes published blog post reads');
-assertIncludes(files.form, 'buildBackyFormSubmissionInput', 'Starter normalizes Backy form submissions');
-assertIncludes(files.form, 'submitForm', 'Starter submits public Backy form submissions');
+assertIncludes(files.form, 'websiteFormSubmission(request)', 'Starter form route dispatches the checked submission bridge');
+assertIncludes(files.formBff, 'buildBackyFormSubmissionInput', 'Starter normalizes Backy form submissions');
+assertIncludes(files.formBff, '`/forms/${encodeURIComponent(formId)}/submissions`', 'Starter submits to the canonical public form endpoint');
+assertIncludes(files.formBff, 'fetchWebsiteContent(context,', 'Starter submits through the scoped website content transport');
 assertIncludes(files.checkout, 'containsRawPaymentData', 'Starter checkout rejects raw card data');
 assertIncludes(files.checkout, 'backy.createCommerceOrder', 'Starter checkout sends customer and cart data to Backy order intake');
 assertIncludes(files.checkout, 'cache-control', 'Starter checkout bridge preserves private no-store responses');
@@ -358,6 +367,28 @@ if (
   fail(`Starter scaffold failed:\n${scaffoldRun.stdout}\n${scaffoldRun.stderr}`);
 }
 
+const bundledFiles = JSON.parse(files.generatedTemplate.split('export const CUSTOM_FRONTEND_STARTER_TEMPLATE_FILES = ')[1].split(' satisfies CustomFrontendStarterProjectTemplateFile[];')[0]);
+const exportedManifest = JSON.parse(fs.readFileSync(scaffoldManifestPath, 'utf8'));
+const adminExportRoute = readRepo('apps/public/src/app/api/admin/sites/[siteId]/custom-frontend/starter/route.ts');
+const preservedPaths = source => [...(source.match(/const STARTER_FILES_TO_PRESERVE = \[([\s\S]*?)\n\]/)?.[1] || '').matchAll(/["']([^"']+)["']/g)].map(match => match[1]);
+if (JSON.stringify(preservedPaths(adminExportRoute)) === JSON.stringify(exportedManifest.data.preserveFiles)) pass('Admin download and CLI export preserve the same integration boundaries');
+else fail('Admin download preservation guidance differs from CLI export');
+
+for (const relativePath of ['src/lib/visitor-bff.ts', 'src/lib/content-bff.ts', 'src/lib/form-bff.ts', 'src/lib/comments-bff.ts', 'src/app/api/backy-account/[operation]/route.ts', 'src/app/api/backy-comments/route.ts', 'src/lib/animation.tsx', 'src/lib/portable-animation.js', 'src/lib/portable-animation.d.ts', 'src/lib/frontend-observation.js', 'src/lib/frontend-observation.d.ts', 'src/lib/frontend-identity.ts', 'src/lib/inspection.tsx', 'src/app/layout.tsx']) {
+  if (exportedManifest.data.preserveFiles.includes(relativePath)) pass(`AI handoff preserves scoped bridge ${relativePath}`);
+  else fail(`AI handoff omits scoped bridge preservation: ${relativePath}`);
+}
+for (const relativePath of inventory(files.generator)) {
+  const expected = read(relativePath);
+  const bundled = bundledFiles.find(file => file.path === relativePath);
+  const materializedPath = path.join(scaffoldOutputPath, relativePath);
+  if (bundled?.content === expected && fs.existsSync(materializedPath) && fs.readFileSync(materializedPath, 'utf8') === expected) {
+    pass(`Starter bundle and materialized project preserve ${relativePath}`);
+  } else {
+    fail(`Starter bundle or materialized project is missing/stale: ${relativePath}`);
+  }
+}
+
 const scaffoldEnv = fs.readFileSync(path.join(scaffoldOutputPath, '.env.example'), 'utf8');
 const scaffoldRunbook = fs.readFileSync(path.join(scaffoldOutputPath, 'BACKY_FRONTEND_STARTER.md'), 'utf8');
 if (scaffoldEnv.endsWith('\n') && scaffoldRunbook.endsWith('\n')) {
@@ -382,6 +413,14 @@ if (process.env.BACKY_CUSTOM_FRONTEND_STARTER_TYPECHECK === '1') {
   } else {
     fail(`Starter TypeScript typecheck failed:\n${typecheck.stdout}\n${typecheck.stderr}`);
   }
+  // Use the installed dependencies, but compile the exported files themselves.
+  // This detects missing imported bridge modules in either export inventory.
+  fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(scaffoldOutputPath, 'node_modules'), 'dir');
+  const exportedTypecheck = spawnSync('npm', ['run', 'typecheck', '--silent'], {
+    cwd: scaffoldOutputPath, encoding: 'utf8', timeout: 30000,
+  });
+  if (exportedTypecheck.status === 0) pass('Materialized starter TypeScript and Next route generation passed');
+  else fail(`Materialized starter typecheck failed:\n${exportedTypecheck.stdout}\n${exportedTypecheck.stderr}`);
 }
 
 if (failures.length > 0) {

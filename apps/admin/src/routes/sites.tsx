@@ -27,8 +27,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  deleteSite as deleteSiteFromApi,
-  duplicateSite as duplicateSiteFromApi,
+  deleteSiteWithOutcome as deleteSiteFromApi,
+  duplicateSiteWithOutcome as duplicateSiteFromApi,
   getSettings,
   getUserPermissions,
   listAdminAuditLogs,
@@ -1200,12 +1200,13 @@ function SitesListView() {
     setNotice(null);
 
     try {
-      const duplicated = await duplicateSiteFromApi(site.publicSiteId || site.id);
+      const outcome = await duplicateSiteFromApi(site.publicSiteId || site.id);
+      const duplicated = outcome.site;
       setSites([duplicated, ...sites]);
       setStatusFilter('all');
       setDomainFilter('all');
       setPageCoverageFilter('all');
-      setNotice(`${site.name} duplicated as ${duplicated.name}. Review domains and publish settings before going live.`);
+      setNotice(`${site.name} duplicated as ${duplicated.name} with ${outcome.pagesCopied} pages. Settings, theme, hierarchy and navigation copied; other resource records and uploaded files were not copied. Review retained references, domains and publish settings before going live.${outcome.completionWarnings.length ? " Saved successfully; audit recording needs attention." : ""}`);
       void loadSiteAuditLogs();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to duplicate site');
@@ -1236,7 +1237,8 @@ function SitesListView() {
     setNotice(null);
 
     try {
-      await deleteSiteFromApi(pendingDelete.publicSiteId || pendingDelete.id);
+      const outcome = await deleteSiteFromApi(pendingDelete.publicSiteId || pendingDelete.id);
+      setNotice(`Site deleted.${outcome.completionWarnings.length ? " Audit or webhook follow-up needs attention; deletion is complete. Do not repeat the deletion." : ""}`);
       deleteSite(pendingDelete.id);
       setPendingDelete(null);
       setDeleteConfirmationText('');

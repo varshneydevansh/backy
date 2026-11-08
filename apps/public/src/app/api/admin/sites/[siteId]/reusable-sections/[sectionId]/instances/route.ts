@@ -8,33 +8,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
+import { readReusableSectionInventory, ReusableSectionInventoryError } from "@/lib/reusableSectionInventory";
 import {
+  applyReusableSectionPropagation,
   getCollectionByIdOrSlug,
   listCollectionRecords,
-  updateAdminCollectionRecord,
   getAdminPageById,
   getBlogPosts,
   getReusableSectionByIdOrSlug,
   getSiteByIdOrSlug,
   getPageSummary,
-  updateAdminBlogPost,
-  updateAdminPage,
 } from "@/lib/backyStore";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import {
   listReusableSectionInstancesInContent,
   refreshReusableSectionInstancesInContent,
   type ReusableSectionInstance,
+  ReusableSectionSourceRootError,
 } from "@/lib/reusableSectionInstances";
 import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
-import { syncRepositoryCollectionRecordMediaReferences } from "@/lib/repositoryMediaReferenceSync";
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+import { buildReusableSectionReviewedPreview, isReusableSectionReviewedPreview, sameReusableSectionReviewedPreview } from '@/lib/reusableSectionPropagation';
 import { productCanvasDesign } from "@backy-cms/core";
 import type {
   BackyContentDocument,
+  BackyReusableSectionPropagationInput,
+  BackyReusableSectionPropagationTarget,
+  BackyReusableSection,
+  BackyPage,
+  BackyPost,
   BackyJsonValue,
   Site,
 } from "@backy-cms/core";
@@ -213,23 +219,13 @@ const productTargets = async (
     ? await repositories.collections.getBySlug(siteId, "products")
     : getCollectionByIdOrSlug(siteId, "products", { includeUnpublished: true });
   if (!collection) return [];
-  const targets: ContentTarget[] = [];
-  let offset = 0;
-  while (true) {
-    const input = { includeUnpublished: true, limit: 100, offset };
-    const result = repositories
-      ? await repositories.collections.listRecords({
-          ...input,
-          siteId,
-          collectionId: collection.id,
-        })
-      : listCollectionRecords(siteId, collection.id, input);
-    const records = "items" in result ? result.items : result.records;
-    targets.push(...records.map(productTarget));
-    if (!result.pagination.hasMore || records.length === 0) break;
-    offset += records.length;
-  }
-  return targets;
+  const records = await readReusableSectionInventory<Parameters<typeof productTarget>[0] & { siteId: string }>(siteId, async pagination => {
+    const input = { includeUnpublished: true, ...pagination };
+    if (repositories) return repositories.collections.listRecords({ ...input, siteId, collectionId: collection.id });
+    const result = listCollectionRecords(siteId, collection.id, input);
+    return { items: result.records, pagination: result.pagination };
+  }, record => record.collectionId === collection.id);
+  return records.map(productTarget);
 };
 
 const targetMatches = (
@@ -385,22 +381,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const [pages, posts] = await Promise.all([
         targetType !== "all" && targetType !== "page"
           ? Promise.resolve({ items: [] })
-          : repositories.pages.list({
+          : readReusableSectionInventory(site.id, pagination => repositories.pages.list({
               siteId: site.id,
               includeUnpublished: true,
               status: "all",
-              limit: 1000,
-              offset: 0,
-            }),
+              ...pagination,
+            })).then(items => ({ items })),
         targetType !== "all" && targetType !== "post"
           ? Promise.resolve({ items: [] })
-          : repositories.posts.list({
+          : readReusableSectionInventory(site.id, pagination => repositories.posts.list({
               siteId: site.id,
               includeUnpublished: true,
               status: "all",
-              limit: 1000,
-              offset: 0,
-            }),
+              ...pagination,
+            })).then(items => ({ items })),
       ]);
       const targets: ContentTarget[] = [
         ...(includeProducts ? await productTargets(site.id, repositories) : []),
@@ -481,11 +475,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const postTargets: ContentTarget[] =
       targetType !== "all" && targetType !== "post"
         ? []
-        : getBlogPosts(site.id, {
-            includeUnpublished: true,
-            limit: 1000,
-            offset: 0,
-          }).posts.map((post) => ({
+        : (await readReusableSectionInventory(site.id, async pagination => {
+            const result = getBlogPosts(site.id, { includeUnpublished: true, ...pagination });
+            if (!result.pagination) throw new ReusableSectionInventoryError();
+            return { items: result.posts, pagination: result.pagination };
+          })).map((post) => ({
             type: "post" as const,
             id: post.id,
             title: post.title,
@@ -526,6 +520,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof ReusableSectionInventoryError) return errorResponse(503, error.code, error.message, requestId);
+    if (error instanceof ReusableSectionSourceRootError) return errorResponse(409, error.code, error.message, requestId);
     console.error("Admin reusable section instances API error:", error);
     return errorResponse(
       500,
@@ -537,355 +533,83 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get("x-request-id") || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, {
-    permission: "pages.edit",
-  });
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, { permission: 'pages.edit' });
   if (access instanceof NextResponse) return access;
-
   try {
     const { siteId, sectionId } = await params;
     const body = await parseJsonBody(request);
-    const targetType = targetTypeFilter(
-      typeof body.targetType === "string" ? body.targetType : undefined,
-    );
-    const targetId =
-      typeof body.targetId === "string" && body.targetId.trim()
-        ? body.targetId.trim()
-        : undefined;
+    const targetType = targetTypeFilter(typeof body.targetType === 'string' ? body.targetType : undefined);
+    const targetId = typeof body.targetId === 'string' && body.targetId.trim() ? body.targetId.trim() : undefined;
     const dryRun = body.dryRun === true;
-    const includeProducts = await productAccess(
-      request,
-      requestId,
-      targetType,
-      "edit",
-    );
+    const includeProducts = await productAccess(request, requestId, targetType, 'edit');
     if (includeProducts instanceof NextResponse) return includeProducts;
-    const updatedBy =
-      typeof body.updatedBy === "string" && body.updatedBy.trim()
-        ? body.updatedBy.trim()
-        : "admin";
-
-    if (!shouldUseDemoStoreFallback()) {
-      const repositories = await getRequiredDatabaseRepositories();
-      const site =
-        (await repositories.sites.getById(siteId)) ||
-        (await repositories.sites.getBySlug(siteId));
-      if (!site) {
-        return errorResponse(
-          404,
-          "SITE_NOT_FOUND",
-          "Site not found",
-          requestId,
-        );
-      }
-      const section =
-        (await repositories.reusableSections.getById(site.id, sectionId)) ||
-        (await repositories.reusableSections.getBySlug(site.id, sectionId));
-      if (!section) {
-        return errorResponse(
-          404,
-          "REUSABLE_SECTION_NOT_FOUND",
-          "Reusable section not found",
-          requestId,
-        );
-      }
-
-      const [pages, posts] = await Promise.all([
-        targetType !== "all" && targetType !== "page"
-          ? Promise.resolve({ items: [] })
-          : repositories.pages.list({
-              siteId: site.id,
-              includeUnpublished: true,
-              status: "all",
-              limit: 1000,
-              offset: 0,
-            }),
-        targetType !== "all" && targetType !== "post"
-          ? Promise.resolve({ items: [] })
-          : repositories.posts.list({
-              siteId: site.id,
-              includeUnpublished: true,
-              status: "all",
-              limit: 1000,
-              offset: 0,
-            }),
-      ]);
-      const targets: ContentTarget[] = [
-        ...(includeProducts ? await productTargets(site.id, repositories) : []),
-        ...pages.items.map((page) => ({
-          type: "page" as const,
-          id: page.id,
-          title: page.title,
-          slug: page.slug,
-          status: page.status,
-          updatedAt: page.updatedAt,
-          content: page.content,
-        })),
-        ...posts.items.map((post) => ({
-          type: "post" as const,
-          id: post.id,
-          title: post.title,
-          slug: post.slug,
-          status: post.status,
-          updatedAt: post.updatedAt,
-          content: post.content,
-        })),
-      ].filter((target) => targetMatches(target, { targetType, targetId }));
-      const refreshedTargets = [];
-      for (const target of targets) {
-        const result = refreshReusableSectionInstancesInContent(
-          target.content,
-          section,
-        );
-        if (result.refreshed === 0) continue;
-        refreshedTargets.push({
-          type: target.type,
-          id: target.id,
-          title: target.title,
-          slug: target.slug,
-          refreshed: result.refreshed,
-        });
-        if (dryRun) continue;
-        if (target.type === "product" && target.collectionId) {
-          const values = refreshedProductValues(
-            target,
-            result.content,
-          ) as Record<string, BackyJsonValue>;
-          await repositories.collections.updateRecord(
-            site.id,
-            target.collectionId,
-            target.id,
-            { values },
-          );
-          await syncRepositoryCollectionRecordMediaReferences({
-            mediaRepository: repositories.media,
-            siteId: site.id,
-            collectionId: target.collectionId,
-            recordId: target.id,
-            values,
-          });
-        } else if (target.type === "page") {
-          await repositories.pages.update(site.id, target.id, {
-            content: result.content as BackyContentDocument,
-            revisionNote: `Refresh reusable section ${section.name}`,
-          });
-        } else {
-          await repositories.posts.update(site.id, target.id, {
-            content: result.content as BackyContentDocument,
-            revisionNote: `Refresh reusable section ${section.name}`,
-          });
-        }
-      }
-      const cacheInvalidation = dryRun
-        ? null
-        : await recordSiteCacheInvalidation(repositories, {
-            siteId: site.id,
-            scope: "content",
-            entity: "reusableSection",
-            entityId: section.id,
-            reason: "reusable-section-instances-refreshed",
-            requestId,
-          });
-      if (!dryRun) {
-        await recordAdminAudit({
-          repositories,
-          siteId: site.id,
-          entity: "reusableSection",
-          entityId: section.id,
-          action: "reusableSection.instances.refresh",
-          after: {
-            refreshedTargets,
-          },
-          metadata: {
-            targetType,
-            targetId: targetId || null,
-            updatedBy,
-            targets: refreshedTargets.length,
-            instances: refreshedTargets.reduce(
-              (total, target) => total + target.refreshed,
-              0,
-            ),
-          },
-          requestId,
-        });
-        if (refreshedTargets.length > 0) {
-          await deliverReusableSectionInstancesWebhook({
-            repositories,
-            site,
-            section,
-            refreshedTargets,
-            targetType,
-            targetId,
-            updatedBy,
-            requestId,
-            actor: access.session?.user.id,
-          });
-        }
-      }
-
-      return NextResponse.json({
-        success: true,
-        requestId,
-        data: {
-          dryRun,
-          sectionId: section.id,
-          sourceUpdatedAt: section.updatedAt,
-          refreshedTargets,
-          totals: {
-            targets: refreshedTargets.length,
-            instances: refreshedTargets.reduce(
-              (total, target) => total + target.refreshed,
-              0,
-            ),
-          },
-          cacheInvalidation,
-        },
-      });
-    }
-
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
-    }
-    const section = getReusableSectionByIdOrSlug(site.id, sectionId);
-    if (!section) {
-      return errorResponse(
-        404,
-        "REUSABLE_SECTION_NOT_FOUND",
-        "Reusable section not found",
-        requestId,
-      );
-    }
-
-    const pageTargets: ContentTarget[] =
-      targetType !== "all" && targetType !== "page"
-        ? []
-        : getPageSummary(site.id, { includeUnpublished: true })
-            .map((page) => getAdminPageById(site.id, page.id))
-            .filter(isAdminPage)
-            .map((page) => ({
-              type: "page" as const,
-              id: page.id,
-              title: page.title,
-              slug: page.slug,
-              status: page.status,
-              updatedAt: page.updatedAt,
-              content: page.content,
-            }));
-    const postTargets: ContentTarget[] =
-      targetType !== "all" && targetType !== "post"
-        ? []
-        : getBlogPosts(site.id, {
-            includeUnpublished: true,
-            limit: 1000,
-            offset: 0,
-          }).posts.map((post) => ({
-            type: "post" as const,
-            id: post.id,
-            title: post.title,
-            slug: post.slug,
-            status: post.status,
-            updatedAt: post.updatedAt,
-            content: post.content,
-          }));
-    const targets = [
-      ...pageTargets,
-      ...postTargets,
-      ...(includeProducts ? await productTargets(site.id) : []),
-    ].filter((target) => targetMatches(target, { targetType, targetId }));
-    const refreshedTargets = [];
-    for (const target of targets) {
-      const result = refreshReusableSectionInstancesInContent(
-        target.content,
-        section,
-      );
-      if (result.refreshed === 0) continue;
-      refreshedTargets.push({
-        type: target.type,
-        id: target.id,
-        title: target.title,
-        slug: target.slug,
-        refreshed: result.refreshed,
-      });
-      if (dryRun) continue;
-      if (target.type === "product" && target.collectionId) {
-        updateAdminCollectionRecord(site.id, target.collectionId, target.id, {
-          values: refreshedProductValues(target, result.content),
-        });
-      } else if (target.type === "page") {
-        updateAdminPage(site.id, target.id, {
-          content: result.content,
-          updatedBy,
-          revisionNote: `Refresh reusable section ${section.name}`,
-        });
+    const repositories = shouldUseDemoStoreFallback() ? undefined : await getRequiredDatabaseRepositories();
+    const site = repositories ? (await repositories.sites.getById(siteId)) || (await repositories.sites.getBySlug(siteId)) : getSiteByIdOrSlug(siteId);
+    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    const section = repositories ? (await repositories.reusableSections.getById(site.id, sectionId)) || (await repositories.reusableSections.getBySlug(site.id, sectionId)) : getReusableSectionByIdOrSlug(site.id, sectionId);
+    if (!section) return errorResponse(404, 'REUSABLE_SECTION_NOT_FOUND', 'Reusable section not found', requestId);
+    const targets: ContentTarget[] = [];
+    for (const type of ['page','post'] as const) {
+      if (targetType !== 'all' && targetType !== type) continue;
+      if (repositories) {
+        const items = await readReusableSectionInventory<BackyPage | BackyPost>(site.id, pagination => (type === 'page' ? repositories.pages : repositories.posts).list({ siteId: site.id, includeUnpublished: true, status: 'all', ...pagination }));
+        targets.push(...items.map(item => ({ type, id: item.id, title: item.title, slug: item.slug, status: item.status, updatedAt: item.updatedAt, content: item.content })));
+      } else if (type === 'page') {
+        targets.push(...getPageSummary(site.id, { includeUnpublished: true }).map(page => getAdminPageById(site.id, page.id)).filter(isAdminPage).map(item => ({ type, id: item.id, title: item.title, slug: item.slug, status: item.status, updatedAt: item.updatedAt, content: item.content })));
       } else {
-        updateAdminBlogPost(site.id, target.id, {
-          content: result.content,
-          updatedBy,
-          revisionNote: `Refresh reusable section ${section.name}`,
+        const items = await readReusableSectionInventory(site.id, async pagination => {
+          const result = getBlogPosts(site.id, { includeUnpublished: true, ...pagination });
+          if (!result.pagination) throw new ReusableSectionInventoryError();
+          return { items: result.posts, pagination: result.pagination };
         });
+        targets.push(...items.map(item => ({ type, id: item.id, title: item.title, slug: item.slug, status: item.status, updatedAt: item.updatedAt, content: item.content })));
       }
     }
+    if (includeProducts) targets.push(...await productTargets(site.id, repositories));
+    const selected = targets.filter(target => targetMatches(target, { targetType, targetId }));
+    if (selected.length > 100000) throw new ReusableSectionInventoryError();
+    const inventory: BackyReusableSectionPropagationTarget[] = selected.map(target => ({ type: target.type, id: target.id, collectionId: target.collectionId, updatedAt: target.updatedAt || '', ...(target.type === 'product' ? { values: target.values } : { content: target.content }) }));
+    const scope = { targetType, targetId: targetId || null, includeProducts };
+    const reviewedPreview = buildReusableSectionReviewedPreview(site.id, section, scope, inventory);
+    const plans = selected.map(target => ({ target, result: refreshReusableSectionInstancesInContent(target.content, section) })).filter(plan => plan.result.refreshed > 0);
+    const refreshedTargets = plans.map(({ target, result }) => ({ type: target.type, id: target.id, title: target.title, slug: target.slug, refreshed: result.refreshed }));
+    if (!dryRun && !isReusableSectionReviewedPreview(body.reviewedPreview)) return errorResponse(400, 'VALIDATION_ERROR', 'A reviewed dry-run preview is required before refreshing instances.', requestId);
+    if (!dryRun && !sameReusableSectionReviewedPreview(body.reviewedPreview as Parameters<typeof sameReusableSectionReviewedPreview>[0], reviewedPreview)) return errorResponse(409, 'REUSABLE_SECTION_PREVIEW_CONFLICT', 'The source, scope, or target inventory changed. Reload and review the dry-run preview.', requestId);
+    const productCollection = includeProducts ? repositories ? await repositories.collections.getBySlug(site.id, 'products') : getCollectionByIdOrSlug(site.id, 'products', { includeUnpublished: true }) : undefined;
+    const input: BackyReusableSectionPropagationInput = { source: section as unknown as BackyReusableSection, scope: { targetType, targetId, includeProducts, productCollectionId: productCollection?.id }, inventory,
+      mutations: plans.map(({ target, result }) => ({ expected: inventory.find(item => item.type === target.type && item.id === target.id)!, ...(target.type === 'product' ? { values: refreshedProductValues(target, result.content) as Record<string, BackyJsonValue> } : { content: result.content as BackyContentDocument }) })),
+    };
+    const completionWarnings: string[] = [];
+    let cacheInvalidation: unknown = null;
+    const updatedBy = access.session?.user.id || 'api-key';
     if (!dryRun) {
-      await recordAdminAudit({
-        siteId: site.id,
-        entity: "reusableSection",
-        entityId: section.id,
-        action: "reusableSection.instances.refresh",
-        after: {
-          refreshedTargets,
-        },
-        metadata: {
-          targetType,
-          targetId: targetId || null,
-          updatedBy,
-          targets: refreshedTargets.length,
-          instances: refreshedTargets.reduce(
-            (total, target) => total + target.refreshed,
-            0,
-          ),
-        },
-        requestId,
-      });
+      if (repositories) {
+        if (typeof repositories.reusableSections.applyPropagation !== 'function') return errorResponse(503, 'REUSABLE_SECTION_PROPAGATION_UNAVAILABLE', 'Atomic section propagation is unavailable on this repository adapter.', requestId);
+        await repositories.reusableSections.applyPropagation(site.id, input);
+        try { cacheInvalidation = await recordSiteCacheInvalidation(repositories, { siteId: site.id, scope: 'content', entity: 'reusableSection', entityId: section.id, reason: 'reusable-section-instances-refreshed', requestId }); }
+        catch { completionWarnings.push('Content committed; cache invalidation needs retry.'); }
+      } else completionWarnings.push(...applyReusableSectionPropagation(site.id, input, updatedBy));
+      try { await recordAdminAudit({ repositories, siteId: site.id, entity: 'reusableSection', entityId: section.id, action: 'reusableSection.instances.refresh', after: { refreshedTargets }, metadata: { targetType, targetId: targetId || null, updatedBy, targets: refreshedTargets.length, instances: refreshedTargets.reduce((sum, target) => sum + target.refreshed, 0) }, requestId }); }
+      catch { completionWarnings.push('Content committed; audit recording needs retry.'); }
       if (refreshedTargets.length > 0) {
-        await deliverReusableSectionInstancesWebhook({
-          site: site as unknown as Site,
-          section,
-          refreshedTargets,
-          targetType,
-          targetId,
-          updatedBy,
-          requestId,
-          actor: access.session?.user.id,
-        });
+        try { await deliverReusableSectionInstancesWebhook({ repositories, site: site as unknown as Site, section, refreshedTargets, targetType, targetId, updatedBy, requestId, actor: access.session?.user.id }); }
+        catch { completionWarnings.push('Content committed; webhook delivery needs retry.'); }
       }
     }
-
-    return NextResponse.json({
-      success: true,
-      requestId,
-      data: {
-        dryRun,
-        sectionId: section.id,
-        sourceUpdatedAt: section.updatedAt,
-        refreshedTargets,
-        totals: {
-          targets: refreshedTargets.length,
-          instances: refreshedTargets.reduce(
-            (total, target) => total + target.refreshed,
-            0,
-          ),
-        },
-      },
-    });
+    return NextResponse.json({ success: true, requestId, data: { dryRun, sectionId: section.id, sourceUpdatedAt: section.updatedAt, reviewedPreview, refreshedTargets,
+      totals: { targets: refreshedTargets.length, instances: refreshedTargets.reduce((sum, target) => sum + target.refreshed, 0) }, cacheInvalidation,
+      outcome: completionWarnings.length ? 'partial' : 'complete', completionWarnings: [...new Set(completionWarnings)],
+      concurrencyBoundary: repositories ? 'database-serializable-transaction' : 'demo-single-process',
+    } });
   } catch (error) {
-    console.error("Admin reusable section instances refresh API error:", error);
-    return errorResponse(
-      500,
-      "INTERNAL_SERVER_ERROR",
-      "Internal server error",
-      requestId,
-    );
+    if (error instanceof ReusableSectionInventoryError) return errorResponse(503, error.code, error.message, requestId);
+    if (error instanceof ReusableSectionSourceRootError) return errorResponse(409, error.code, error.message, requestId);
+    if (error && typeof error === 'object' && (error as { code?: string }).code === 'REUSABLE_SECTION_PROPAGATION_CONFLICT') return errorResponse(409, 'REUSABLE_SECTION_PROPAGATION_CONFLICT', 'The source or targets changed during apply. Reload and review the preview; no refresh writes committed.', requestId);
+    if (error && typeof error === 'object' && (error as { code?: string }).code === 'REUSABLE_SECTION_PROPAGATION_UNAVAILABLE') return errorResponse(503, 'REUSABLE_SECTION_PROPAGATION_UNAVAILABLE', 'Serializable section propagation requires the PostgreSQL adapter.', requestId);
+    const mediaAdmissionError = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaAdmissionError) return mediaAdmissionError;
+    console.error('Admin reusable section propagation error:', error);
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Section propagation failed; its content transaction did not commit.', requestId);
   }
 }

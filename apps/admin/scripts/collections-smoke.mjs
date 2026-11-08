@@ -34,21 +34,13 @@ const assertCollectionsRouteSourceContract = () => {
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Collections permission error state must link to user access management');
   assert(source.includes('data-testid="collections-rbac-permission-state"') && source.includes('aria-label="Retry loading collection permissions"'), 'Collections permission contract must expose a retryable permission error state');
   assert(
-    source.includes('const canUseCollectionRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
-      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCollectionRoleDefaults;') &&
-      source.includes('return COLLECTION_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role);') &&
-      source.includes("const canViewCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.view');") &&
-      source.includes("const canEditCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.edit');") &&
-      source.includes("const canExportCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.export');") &&
-      source.includes("const canDeleteCollections = isCollectionPermissionAllowed(permissionMatrix, currentAdmin, 'collections.delete');") &&
-      source.includes("const canViewMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.view', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);") &&
-      source.includes("const canCreateMedia = isAdminPermissionAllowed(permissionMatrix, currentAdmin, 'media.create', COLLECTION_MEDIA_PERMISSION_ROLE_DEFAULTS);") &&
+    source.includes('permissionMatrix.userId === currentAdmin.id') &&
+      source.includes('permissionMatrix.canSignIn') &&
+      source.includes('adminPermissionRule(permissionMatrix, key, siteId)') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading') &&
       source.includes('data-testid="collections-permission-sync-state"') &&
-      source.includes('const pending = isPermissionMatrixPending;') &&
-      !source.includes('const canViewCollections = !isPermissionMatrixPending') &&
-      !source.includes('const canViewMedia = !isPermissionMatrixPending') &&
-      !source.includes('const pending = isPermissionsLoading && !permissionMatrix;'),
-    'Collections route must keep role-default collection and media workflows usable while permission details hydrate',
+      !source.includes('const canUseCollectionRoleDefaults'),
+    'Collections controls must wait for current-user permission metadata and the requested site policy',
   );
   assert(
     source.includes('data-testid="collections-control-map-details"') &&

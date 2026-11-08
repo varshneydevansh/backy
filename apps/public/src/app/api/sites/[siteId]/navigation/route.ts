@@ -10,6 +10,8 @@ import { getSiteByIdOrSlug, getSiteNavigation } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { collectPublishedNavigationPages } from '@/lib/repositoryNavigationPages';
+import { CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 
 interface RouteParams {
   params: Promise<{
@@ -66,13 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const pages = await repositories.pages.list({
-        siteId: site.id,
-        includeUnpublished: false,
-        status: 'published',
-        limit: 100,
-        offset: 0,
-      });
+      const pages = await collectPublishedNavigationPages(repositories.pages, site.id);
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
       }) || undefined;
@@ -86,7 +82,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             slug: site.slug,
             name: site.name,
           },
-          navigation: buildSiteNavigation(site.settings, pages.items.filter(isPubliclyReadable).map((page) => ({
+          navigation: buildSiteNavigation(site.settings, pages.filter(isPubliclyReadable).map((page) => ({
             ...page,
             meta: {
               ...page.meta,
@@ -127,6 +123,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'NAVIGATION_INVENTORY_INCOMPLETE', 'Unable to read a complete navigation inventory. Retry after content changes finish.', requestId);
     console.error('Navigation API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

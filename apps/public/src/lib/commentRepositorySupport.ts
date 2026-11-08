@@ -1,11 +1,14 @@
 import type {
   BackyRepositoryEntity,
+  BackyCommentModerationInput,
+  BackyCommentModerationResult,
   Comment,
   CommentReportReason,
   CommentStatus,
 } from "@backy-cms/core";
 import type { getRequiredDatabaseRepositories } from "@/lib/repositoryRuntime";
 import { getCommentReportReasons } from "@/lib/backyStore";
+import { BackyCommentLifecycleError } from "@backy-cms/core";
 
 export type PublicCommentRepositories = Awaited<
   ReturnType<typeof getRequiredDatabaseRepositories>
@@ -106,127 +109,45 @@ export async function recordRepositoryInteractionEvent(
   });
 }
 
-export async function updateRepositoryCommentStatus(
-  repositories: PublicCommentRepositories,
-  siteId: string,
-  comment: Comment,
-  input: {
-    status: CommentStatus;
-    reviewedBy?: string | null;
-    actor?: string | null;
-    rejectionReason?: string | null;
-    blockReason?: string | null;
-    requestId?: string | null;
-    defaultReviewer?: string | null;
-    clearReports?: boolean;
-  },
-): Promise<Comment> {
-  const reviewedBy =
-    input.actor || input.reviewedBy || input.defaultReviewer || null;
-  const reviewedAt = new Date().toISOString();
-  const resolvedRequestId = input.requestId || comment.requestId || undefined;
-  const update = {
-    status: input.status,
-    reviewedBy,
-    reviewedAt,
-    rejectionReason: input.rejectionReason ?? null,
-    blockReason: comment.blockReason ?? null,
-    blockedBy: comment.blockedBy ?? null,
-    blockedAt: comment.blockedAt ?? null,
-    requestId: resolvedRequestId || null,
-    ...(input.clearReports ? { reportCount: 0, reportReasons: [] } : {}),
-  };
-
-  if (input.status === "blocked") {
-    const normalizedBlockReason = normalizeRepositoryReportReason(
-      input.blockReason || null,
-    );
-    update.blockReason =
-      normalizedBlockReason || input.blockReason || "manual-block";
-    update.blockedBy = reviewedBy;
-    update.blockedAt = reviewedAt;
-
-    await repositories.comments.blockIdentity({
-      siteId,
-      reason: update.blockReason,
-      actor: reviewedBy || null,
-      requestId: resolvedRequestId,
-      email: comment.authorEmail,
-      ipHash: comment.ipHash,
-    });
-  } else if (input.status !== "rejected" && input.status !== "spam") {
-    update.blockReason = null;
-    update.blockedBy = null;
-    update.blockedAt = null;
-    update.rejectionReason = null;
+export async function moderateRepositoryComments(
+  repositories: PublicCommentRepositories, siteId: string,
+  input: BackyCommentModerationInput & { completionWarnings?: string[] },
+): Promise<BackyCommentModerationResult> {
+  if (typeof repositories.comments.moderateBatch !== "function") throw new BackyCommentLifecycleError("COMMENT_MODERATION_UNAVAILABLE", "Atomic comment moderation is unavailable.");
+  const { completionWarnings, ...mutation } = input;
+  const result = await repositories.comments.moderateBatch(siteId, mutation);
+  for (const comment of result.updated) {
+    try {
+      await recordRepositoryInteractionEvent(repositories, {
+        kind: "comment-status", siteId, commentId: comment.id, target: `comment:${comment.id}`, status: "succeeded",
+        requestId: input.requestId || comment.requestId || undefined,
+        reason: input.status || "reports-cleared", actor: input.actor || input.reviewedBy || input.defaultReviewer || null,
+        metadata: { targetType: comment.targetType, targetId: comment.targetId, status: comment.status, blockReason: comment.blockReason, reportsCleared: input.clearReports === true },
+      });
+    } catch (error) {
+      if (!completionWarnings) throw error;
+      if (!completionWarnings.includes("COMMENT_ACTIVITY_PENDING")) completionWarnings.push("COMMENT_ACTIVITY_PENDING");
+    }
   }
+  return result;
+}
 
-  const nextComment = (
-    await repositories.comments.update(siteId, comment.id, update)
-  ).item;
-  await recordRepositoryInteractionEvent(repositories, {
-    kind: "comment-status",
-    siteId,
-    commentId: nextComment.id,
-    target: `comment:${nextComment.id}`,
-    status: "succeeded",
-    requestId: resolvedRequestId,
-    reason: input.status,
-    actor: reviewedBy,
-    metadata: {
-      targetType: nextComment.targetType,
-      targetId: nextComment.targetId,
-      status: input.status,
-      blockReason: nextComment.blockReason,
-      reportsCleared: input.clearReports === true,
-    },
-  });
-  return nextComment;
+export async function updateRepositoryCommentStatus(
+  repositories: PublicCommentRepositories, siteId: string, comment: Comment,
+  input: Omit<BackyCommentModerationInput, "commentIds"> & { status: CommentStatus; completionWarnings?: string[] },
+): Promise<Comment> {
+  const result = await moderateRepositoryComments(repositories, siteId, { ...input, commentIds: [comment.id] });
+  if (!result.updated.length) throw new BackyCommentLifecycleError("COMMENT_MODERATION_CONFLICT", "The comment no longer exists. Reload the thread.");
+  return result.updated[0];
 }
 
 export async function clearRepositoryCommentReports(
-  repositories: PublicCommentRepositories,
-  siteId: string,
-  comment: Comment,
-  input: {
-    reviewedBy?: string | null;
-    actor?: string | null;
-    requestId?: string | null;
-    defaultReviewer?: string | null;
-  },
+  repositories: PublicCommentRepositories, siteId: string, comment: Comment,
+  input: Omit<BackyCommentModerationInput, "commentIds" | "status" | "clearReports"> & { completionWarnings?: string[] },
 ): Promise<Comment> {
-  const reviewedBy =
-    input.actor || input.reviewedBy || input.defaultReviewer || null;
-  const reviewedAt = new Date().toISOString();
-  const resolvedRequestId = input.requestId || comment.requestId || undefined;
-  const nextComment = (
-    await repositories.comments.update(siteId, comment.id, {
-      reviewedBy,
-      reviewedAt,
-      reportCount: 0,
-      reportReasons: [],
-      requestId: resolvedRequestId || null,
-    })
-  ).item;
-
-  await recordRepositoryInteractionEvent(repositories, {
-    kind: "comment-status",
-    siteId,
-    commentId: nextComment.id,
-    target: `comment:${nextComment.id}`,
-    status: "succeeded",
-    requestId: resolvedRequestId,
-    reason: "reports-cleared",
-    actor: reviewedBy,
-    metadata: {
-      targetType: nextComment.targetType,
-      targetId: nextComment.targetId,
-      reportCount: 0,
-      reportReasons: [],
-    },
-  });
-
-  return nextComment;
+  const result = await moderateRepositoryComments(repositories, siteId, { ...input, commentIds: [comment.id], clearReports: true });
+  if (!result.updated.length) throw new BackyCommentLifecycleError("COMMENT_MODERATION_CONFLICT", "The comment no longer exists. Reload the thread.");
+  return result.updated[0];
 }
 
 export async function updateRepositoryCommentThread(
@@ -239,6 +160,7 @@ export async function updateRepositoryCommentThread(
     actor?: string | null;
     requestId?: string | null;
     defaultReviewer?: string | null;
+    completionWarnings?: string[];
   },
 ): Promise<Comment> {
   const reviewedBy = input.actor || input.defaultReviewer || null;
@@ -254,6 +176,7 @@ export async function updateRepositoryCommentThread(
     })
   ).item;
 
+  try {
   await recordRepositoryInteractionEvent(repositories, {
     kind: "comment-status",
     siteId,
@@ -272,7 +195,10 @@ export async function updateRepositoryCommentThread(
       commentThreadId: nextComment.commentThreadId || null,
     },
   });
-
+  } catch (error) {
+    if (!input.completionWarnings) throw error;
+    if (!input.completionWarnings.includes("COMMENT_ACTIVITY_PENDING")) input.completionWarnings.push("COMMENT_ACTIVITY_PENDING");
+  }
   return nextComment;
 }
 
@@ -285,34 +211,20 @@ export async function reportRepositoryComment(
     actor?: string;
     details?: string;
     requestId?: string;
+    completionWarnings?: string[];
   },
 ): Promise<Comment> {
   const normalizedReason = normalizeRepositoryReportReason(
     input.reason || null,
   );
-  const reportReasons = new Set<CommentReportReason>(
-    comment.reportReasons || [],
-  );
-  if (normalizedReason) {
-    reportReasons.add(normalizedReason);
+  if (typeof repositories.comments.report !== "function") {
+    throw new BackyCommentLifecycleError("COMMENT_REPORT_UNAVAILABLE", "Atomic comment reporting is unavailable.");
   }
-
-  const reportCount = (comment.reportCount || 0) + 1;
-  const reviewedAt = new Date().toISOString();
-  const nextStatus =
-    reportCount >= 3 && comment.status === "approved" ? "spam" : comment.status;
-
-  const nextComment = (
-    await repositories.comments.update(siteId, comment.id, {
-      status: nextStatus,
-      reviewedBy: input.actor || null,
-      reviewedAt,
-      reportCount,
-      reportReasons: Array.from(reportReasons),
-      requestId: input.requestId || comment.requestId || null,
-    })
-  ).item;
-  await recordRepositoryInteractionEvent(repositories, {
+  const nextComment = (await repositories.comments.report(siteId, comment.id, {
+    reason: normalizedReason || "other",
+    ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+  })).item;
+  try { await recordRepositoryInteractionEvent(repositories, {
     kind: "comment-reported",
     siteId,
     commentId: nextComment.id,
@@ -329,6 +241,9 @@ export async function reportRepositoryComment(
       reportReasons: nextComment.reportReasons,
       ...(input.details ? { details: input.details } : {}),
     },
-  });
+  }); } catch (error) {
+    if (!input.completionWarnings) throw error;
+    if (!input.completionWarnings.includes("COMMENT_ACTIVITY_PENDING")) input.completionWarnings.push("COMMENT_ACTIVITY_PENDING");
+  }
   return nextComment;
 }

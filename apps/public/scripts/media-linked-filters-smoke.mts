@@ -1,0 +1,77 @@
+import assert from 'node:assert/strict';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { NextRequest } from 'next/server';
+import { installActualMediaRecovery, memoryMediaJobs } from './media-storage-recovery-fixture.mts';
+import { assertMediaBody, assertMediaSchema, operation } from './admin-media-contract.mjs';
+const require = createRequire(import.meta.url);
+const {readCompleteMediaInventory,MediaInventoryIncompleteError}=require('../src/lib/mediaInventory.ts');
+const {mediaMatchesLinkedFilters}=require('@backy-cms/core');
+const {createMediaRepository}=require('../../../packages/db/src/repositories/media.ts');
+const {PgDialect}=createRequire(new URL('../../../packages/db/package.json',import.meta.url))('drizzle-orm/pg-core');
+let checks = 0;
+function equal(a:any,b:any,label='') { assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)),label); checks++; }
+function load(relative:string,mocks:Record<string,any>,replace?:(s:string)=>string) {
+ const filename=fileURLToPath(new URL(relative,import.meta.url));
+ const compiled=ts.transpileModule(replace?replace(readFileSync(filename,'utf8')):readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+ const module={exports:{} as any}; vm.runInNewContext(compiled,{module,exports:module.exports,Request,Response,Headers,URL,URLSearchParams,Buffer,File,FormData,process,console:{error(){}},require:(id:string)=>id in mocks?mocks[id]:id.startsWith('@/')?(()=>{throw Error('Missing actual fixture dependency '+id)})():require(id)},{filename});return module.exports;
+}
+const site={id:'11111111-1111-4111-8111-111111111111',slug:'linked-media-site',isPublished:true,settings:{}}, foreign='22222222-2222-4222-8222-222222222222',page='33333333-3333-4333-8333-333333333333',post='post-demo';
+function asset(id:string,patch:any={}) { return {id,siteId:site.id,filename:id+'.png',originalName:id+'.png',mimeType:'image/png',sizeBytes:10,type:'image',url:'/fixture/'+id,scope:'global',scopeTargetId:null,visibility:'public',folderId:null,tags:['owned'],pageIds:[],postIds:[],metadata:{},createdAt:'2026-10-04T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z',...patch}; }
+const rows=[asset('unlinked-global'),asset('array-page',{pageIds:[page]}),asset('scoped-page',{scope:'page',scopeTargetId:page}),asset('binding-page',{metadata:{bindings:[{scope:'page',targetId:page,mediaId:'binding-page'}]}}),asset('foreign-binding',{metadata:{bindings:[{scope:'page',targetId:page,mediaId:'different-asset'}]}}),asset('other-page',{pageIds:['other-page'],scope:'page',scopeTargetId:'other-page'}),asset('array-post',{postIds:[post]}),asset('scoped-post',{scope:'post',scopeTargetId:post}),asset('binding-post',{metadata:{bindings:[{scope:'post',targetId:post}]}}),asset('private-page',{pageIds:[page],visibility:'private'}),asset('quarantined-page',{pageIds:[page],metadata:{quarantined:true}}),asset('foreign-site',{siteId:foreign,pageIds:[page]})];
+const scope=load('../src/lib/mediaScope.ts',{}),responsive=load('../src/lib/mediaResponsive.ts',{}),organization=load('../src/lib/publicMediaResource.ts',{'@/lib/mediaScope':scope,'@/lib/mediaResponsive':responsive});
+for(const [selector,expected] of [[{linkedPageId:page},['array-page','scoped-page','binding-page','private-page','quarantined-page','foreign-site']],[{linkedPostId:post},['array-post','scoped-post','binding-post']]] as const) equal(rows.filter(r=>mediaMatchesLinkedFilters(r,selector)).map(r=>r.id),expected);
+equal(scope.readMediaLinkedFilters(new URLSearchParams('linkedPageId='+page.toUpperCase())),{linkedPageId:page});
+for(const query of ['linkedPageId=&linkedPostId=','linkedPageId='+page+'&linkedPostId='+post,'linkedPageId='+page+'&linkedPageId='+page,'linkedPostId=','linkedPageId=%00','linkedPageId='+('x'.repeat(257))]) { assert.ok(scope.readMediaLinkedFilters(new URLSearchParams(query)).invalid); checks++; }
+// Run the saved demo list function and its saved scalar helpers; persistence and the
+// in-memory catalog are supplied by this read-only fixture, without opening demo files.
+const storeSource=readFileSync(new URL('../src/lib/backyStore.ts',import.meta.url),'utf8'),ast=ts.createSourceFile('store.ts',storeSource,ts.ScriptTarget.Latest,true);
+const declarations=['getMediaList','getPagination','normalizeIdentifier','sanitizeString'].map(name=>{const n=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text===name);assert.ok(n,name);return n.getText(ast).replace(/^export /,'');}).join('\n');
+function demoList(catalog:any[],negative=false) { const source=negative?declarations.replace('media = media.filter(item => mediaMatchesLinkedFilters(item, params));',''):declarations; const compiled=ts.transpileModule(source+';globalThis.actualGetMediaList=getMediaList;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText; const context:any={MEDIA_LIBRARY:catalog,ensurePersistedMediaLoaded(){},clone:(x:any)=>structuredClone(x),mediaMatchesScopeFilters:scope.mediaMatchesScopeFilters,mediaMatchesLinkedFilters};vm.runInNewContext(compiled,context);return context.actualGetMediaList; }
+let catalog=rows;
+const demo=()=>demoList(catalog);
+const dialect=new PgDialect(); let selects=0;
+const db:any={select(){ selects++;let selected:any[]=[];const chain:any={from(){return chain},where(condition:any){ const q=dialect.sqlToQuery(condition);equal(q.params,[site.id],'actual SQL preserves site equality');selected=catalog.filter(r=>r.siteId===q.params[0]).map(r=>({...r,metadata:{...r.metadata,pageIds:r.pageIds,postIds:r.postIds,scope:r.scope,scopeTargetId:r.scopeTargetId,visibility:r.visibility}}));return chain},orderBy(){return chain},then(resolve:any,reject:any){return Promise.resolve(selected).then(resolve,reject)}};return chain; }};
+const repo=createMediaRepository(db);
+for(const [filter,expected] of [[{linkedPageId:page},['scoped-page','binding-page','private-page','quarantined-page']],[{linkedPostId:post},['scoped-post','binding-post']]] as const) {
+ const result=await repo.list({siteId:site.id,...filter,limit:10,offset:1});equal(result.items.map(r=>r.id),expected);equal(result.pagination,{total:expected.length+1,limit:10,offset:1,hasMore:false});
+ const local=demo()(site.id,{...filter,limit:10,offset:1});equal(local.media.map((r:any)=>r.id),expected);equal(local.pagination,result.pagination);
+}
+equal(demo()(site.id,{pageId:page,limit:100}).media.some((r:any)=>r.id==='unlinked-global'),true,'editor context keeps global availability');
+equal(demo()(site.id,{linkedPageId:'missing',limit:100}).media,[]);
+assert.throws(()=>equal(demoList(rows,true)(site.id,{linkedPageId:page,limit:100}).media.map((r:any)=>r.id),['array-page','scoped-page','binding-page','private-page','quarantined-page'])); checks++;
+const scratch=mkdtempSync('/tmp/backy-linked-media-fixture-');
+try {
+for(const useDemo of [true,false]) {
+ let reads=0,fault='';const offsets:number[]=[];
+ const inventory=async(p:any)=>{ reads++;offsets.push(p.offset); const result=useDemo?(()=>{const r=demo()(site.id,p);return{items:r.media,pagination:r.pagination}})():await repo.list(p);if(fault==='total') result.pagination.total++;if(fault==='premature')result.pagination.hasMore=false;if(fault==='foreign'&&result.items.length)result.items[0]={...result.items[0],siteId:foreign};return result; };
+ const repositories:any={sites:{getById:async(id:string)=>id===site.id?site:null,getBySlug:async(id:string)=>id===site.slug?site:null},settings:{get:async()=>({})},media:{...repo,storageJobs:memoryMediaJobs(),listVersions:async(p:any)=>({items:[],pagination:{total:0,...p,hasMore:false}}),list:inventory,listFolders:async()=>[]},cacheInvalidations:{latestRevision:async()=>null}};
+ const mocks:any={'@/lib/mediaInventory':{readCompleteMediaInventory,MediaInventoryIncompleteError},'@/lib/mediaScope':scope,'@/lib/mediaResponsive':responsive,'@/lib/publicMediaResource':organization,'@/lib/publicContractResponse':load('../src/lib/publicContractResponse.ts',{}),'@/lib/mediaSafety':{isMediaQuarantined:(r:any)=>r.metadata?.quarantined===true},'@/lib/repositoryRuntime':{shouldUseDemoStoreFallback:()=>useDemo,getRequiredDatabaseRepositories:async()=>repositories},'@/lib/backyStore':{getSiteByIdOrSlug:(id:string)=>id===site.id||id===site.slug?site:null,getMediaList:(id:string,p:any)=>{assert.equal(id,site.id);reads++;offsets.push(p.offset);const r=demo()(id,p);if(fault==='total')r.pagination.total++;if(fault==='premature')r.pagination.hasMore=false;if(fault==='foreign'&&r.media.length)r.media[0]={...r.media[0],siteId:foreign};return r;},listMediaFolders:()=>[],getAdminSettings:()=>({})},'@/lib/adminAccess':{requireAdminAccess:async()=>({session:{user:{id:'fixture'}}})},'@/lib/adminAudit':{},'@/lib/cacheInvalidation':{},'@/lib/siteWebhookDelivery':{},'@/lib/mediaStorage':{},'@/lib/mediaTransformGeneration':{generatedTransformBytes:()=>0},'@/lib/mediaStorageMutation':{},'@/lib/mediaUploadPolicy':load('../src/lib/mediaUploadPolicy.ts',{},s=>s)};
+ installActualMediaRecovery(mocks,repositories,scratch);
+ const pub=load('../src/app/api/sites/[siteId]/media/route.ts',mocks),admin=load('../src/app/api/admin/sites/[siteId]/media/route.ts',mocks);
+ async function call(route:any,query:string,status=200){ const response=await route.GET(new NextRequest('http://fixture.invalid/api/sites/'+site.slug+'/media'+query),{params:Promise.resolve({siteId:site.slug})});const body=await response.json();equal(response.status,status,JSON.stringify({useDemo,query,admin:route===admin,body}));if(route===admin)assertMediaBody('','GET',status,body);else assertMediaSchema(status===200?'MediaList':'ErrorEnvelope',body);return body; }
+ catalog=rows;
+ for(const route of [pub,admin]){
+ const expected=route===pub?['array-page','scoped-page','binding-page']:['array-page','scoped-page','binding-page','private-page','quarantined-page'];const result=await call(route,'?linkedPageId='+page+'&limit=2&offset=1');equal(result.data.media.map((r:any)=>r.id),expected.slice(1,3));equal(result.data.pagination,{total:expected.length,limit:2,offset:1,hasMore:3<expected.length});
+ equal((await call(route,'?linkedPostId='+post)).data.media.map((r:any)=>r.id),['array-post','scoped-post','binding-post']);
+ for(const query of ['?linkedPageId='+page+'&linkedPostId='+post,'?linkedPageId='+page+'&linkedPageId='+page,'?linkedPostId=']){const before=reads;const refusal=await call(route,query,400);equal(refusal.error.code,'INVALID_MEDIA_LINK_FILTER');equal(reads,before,'invalid selectors never read media');}
+ }
+ const beforeMissing=reads;for(const route of [pub,admin]){const response=await route.GET(new NextRequest('http://fixture.invalid/api/sites/'+foreign+'/media?linkedPageId='+page),{params:Promise.resolve({siteId:foreign})});equal(response.status,404);const body=await response.json();assertMediaSchema('ErrorEnvelope',body);}equal(reads,beforeMissing,'unknown site cannot read selected site media');
+ catalog=[asset('owned-pdf',{type:'document',pageIds:[page],tags:['paper'],folderId:'folder'}),asset('owned-zip',{type:'other',pageIds:[page],tags:['paper'],folderId:'folder'}),asset('owned-font',{type:'font',pageIds:[page]}),asset('unlinked-pdf',{type:'document',tags:['paper'],folderId:'folder'}),asset('foreign-pdf',{siteId:foreign,type:'document',pageIds:[page],tags:['paper'],folderId:'folder'})];
+ for(const route of [pub,admin]){const filtered=await call(route,'?linkedPageId='+page+'&type=file&tag=paper&folderId=folder&limit=1&offset=1');equal(filtered.data.media.map((r:any)=>r.id),['owned-zip']);equal(filtered.data.pagination,{total:2,limit:1,offset:1,hasMore:false});equal((await call(route,'?linkedPageId='+page+'&type=font')).data.media.map((r:any)=>r.id),['owned-font']);}
+ catalog=Array.from({length:10005},(_,i)=>asset('asset-'+i,{pageIds:i>=10000?[page]:[]}));
+ let complete=await call(pub,'?limit=5&offset=10000');equal(complete.data.pagination,{total:10005,limit:5,offset:10000,hasMore:false});equal(complete.data.media.map((r:any)=>r.id),['asset-10000','asset-10001','asset-10002','asset-10003','asset-10004']);assert.ok(offsets.includes(10000));checks++;
+ complete=await call(pub,'?linkedPageId='+page+'&limit=2&offset=2');equal(complete.data.pagination,{total:5,limit:2,offset:2,hasMore:true});equal(complete.data.media.map((r:any)=>r.id),['asset-10002','asset-10003']);
+ const truncated=load('../src/app/api/sites/[siteId]/media/route.ts',{...mocks,'@/lib/mediaInventory':{MediaInventoryIncompleteError,readCompleteMediaInventory:async(_site:any,read:any)=>(await read({limit:10000,offset:0})).items}});const counter=await call(truncated,'?limit=5&offset=10000');assert.throws(()=>equal(counter.data.pagination.total,10005));checks++;
+ for(const broken of ['total','premature','foreign']){fault=broken;const refusal=await call(pub,'',503);equal(refusal.error.code,'MEDIA_INVENTORY_INCOMPLETE');}fault='';
+}
+}finally{rmSync(scratch,{recursive:true,force:true})}
+// Actual OpenAPI operation and manifest producer expressions, not presence-only certification.
+for(const name of ['linkedPageId','linkedPostId']){const parameter=operation('','GET').parameters.find((p:any)=>p.name===name);equal(parameter.schema,{type:'string',minLength:1,maxLength:256});}
+const openapiSource=ts.createSourceFile('openapi.ts',readFileSync(new URL('../src/app/api/sites/[siteId]/openapi/route.ts',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true);let publicOperation:any;function visitPublic(n:ts.Node){if(ts.isPropertyAssignment(n)&&ts.isComputedPropertyName(n.name)&&n.name.expression.getText(openapiSource)==='`/api/sites/${site.id}/media`')publicOperation=vm.runInNewContext('('+n.initializer.getText(openapiSource)+')',{mediaFileCategoryDiscoveryContract:{}}).get;ts.forEachChild(n,visitPublic);}visitPublic(openapiSource);assert.ok(publicOperation);for(const name of ['linkedPageId','linkedPostId'])equal(publicOperation.parameters.find((p:any)=>p.name===name).schema,{type:'string',minLength:1,maxLength:256});equal(publicOperation.responses['503'].content['application/json'].schema.$ref,'#/components/schemas/ErrorEnvelope');
+const manifest=ts.createSourceFile('manifest.ts',readFileSync(new URL('../src/app/api/sites/[siteId]/manifest/route.ts',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true);const n=manifest.statements.find(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>d.name.getText(manifest)==='buildManifestMediaDiscovery'));assert.ok(n);const text=n.getText(manifest);const produced=vm.runInNewContext(ts.transpileModule(text+';buildManifestMediaDiscovery', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,{site:{id:site.id},mediaFileCategories:[]});
+const discovery=produced(site.id,[],0,0);for(const filters of [discovery.filters,discovery.managementPolicy.filters]){assert.ok(filters.queryParams.includes('linkedPageId'));assert.ok(filters.queryParams.includes('linkedPostId'));assert.match(filters.exactAssociationRule,/global availability alone is excluded/);checks+=3;}
+console.log(`Media linked association source PASS ${checks} assertions: actual repository SQL site admission + pre-pagination JS, saved demo function, actual admin/public GET in both modes, private/quarantine isolation, 10005 inventory, fail-closed faults, two negative controls, OpenAPI/manifest. Synthetic query adapter and admin admission; no live/SQL engine proof.`);

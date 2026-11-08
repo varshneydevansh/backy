@@ -1,5 +1,6 @@
+import { operatorLifecycleErrorResponse, readCompleteOperatorInventory } from '@/lib/adminUserLifecycle';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminAuthPolicySettings,
@@ -130,16 +131,25 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, 'VALIDATION_ERROR', 'Status must be active, inactive, invited, or suspended.', requestId);
   }
 
+  const committedUserIds: string[] = [];
+  const committedUsers: unknown[] = [];
+  let phase: 'writes' | 'audit' = 'writes';
+  let currentTargetId: string | null = null;
   try {
     const selectedIds = new Set(userIds);
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const allUsers = (await repositories.users.list({ limit: 1000, offset: 0 })).items;
+      const allUsers = await readCompleteOperatorInventory(repositories.users);
       const existingUsers = allUsers.filter((user) => selectedIds.has(user.id));
 
       if (existingUsers.length !== userIds.length) {
         return errorResponse(404, 'USER_NOT_FOUND', 'One or more selected users were not found.', requestId);
+      }
+
+      for (const user of existingUsers) {
+        const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: user.role });
+        if (ownerError) return ownerError;
       }
 
       if (wouldRemoveLastAdminAuthority(allUsers, selectedIds, nextStatus)) {
@@ -149,12 +159,15 @@ export async function POST(request: NextRequest) {
       if (action === 'delete') {
         const deletedUserIds: string[] = [];
         for (const user of existingUsers) {
+          currentTargetId = user.id;
           if (await repositories.users.delete(user.id)) {
             deletedUserIds.push(user.id);
+            committedUserIds.push(user.id);
           }
         }
 
-        await recordAdminAudit({
+        phase = 'audit';
+      await recordAdminAudit({
           repositories,
           actorId: access.session?.user.id || null,
           entity: 'user',
@@ -173,6 +186,7 @@ export async function POST(request: NextRequest) {
           requestId,
           data: {
             action,
+            outcome: 'complete', completionWarnings: [], failedTargets: [], reloadRequired: false,
             updated: 0,
             deleted: deletedUserIds.length,
             userIds: deletedUserIds,
@@ -193,9 +207,14 @@ export async function POST(request: NextRequest) {
 
       const updatedUsers = [];
       for (const user of existingUsers) {
-        updatedUsers.push((await repositories.users.update(user.id, { status })).item);
+        currentTargetId = user.id;
+        const saved = (await repositories.users.update(user.id, { status })).item;
+        updatedUsers.push(saved);
+        committedUserIds.push(user.id);
+        committedUsers.push(saved);
       }
 
+      phase = 'audit';
       await recordAdminAudit({
         repositories,
         actorId: access.session?.user.id || null,
@@ -217,6 +236,7 @@ export async function POST(request: NextRequest) {
         requestId,
         data: {
           action,
+          outcome: 'complete', completionWarnings: [], failedTargets: [], reloadRequired: false,
           updated: updatedUsers.length,
           deleted: 0,
           userIds,
@@ -234,15 +254,23 @@ export async function POST(request: NextRequest) {
       return errorResponse(404, 'USER_NOT_FOUND', 'One or more selected users were not found.', requestId);
     }
 
+    for (const user of existingUsers) {
+      const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: user.role });
+      if (ownerError) return ownerError;
+    }
+
     if (wouldRemoveLastAdminAuthority(allUsers, selectedIds, nextStatus)) {
       return errorResponse(409, 'LAST_ADMIN_AUTHORITY', 'At least one active owner or admin must remain.', requestId);
     }
 
     if (action === 'delete') {
-      const deletedUserIds = existingUsers
-        .filter((user) => deleteAdminUser(user.id))
-        .map((user) => user.id);
+      const deletedUserIds: string[] = [];
+      for (const user of existingUsers) {
+        currentTargetId = user.id;
+        if (deleteAdminUser(user.id)) { deletedUserIds.push(user.id); committedUserIds.push(user.id); }
+      }
 
+      phase = 'audit';
       await recordAdminAudit({
         actorId: access.session?.user.id || null,
         entity: 'user',
@@ -261,6 +289,7 @@ export async function POST(request: NextRequest) {
         requestId,
         data: {
           action,
+          outcome: 'complete', completionWarnings: [], failedTargets: [], reloadRequired: false,
           updated: 0,
           deleted: deletedUserIds.length,
           userIds: deletedUserIds,
@@ -279,11 +308,15 @@ export async function POST(request: NextRequest) {
       return errorResponse(400, 'INVITE_ONLY_REQUIRED', inviteOnlyPolicy.message, requestId);
     }
 
-    const updatedUsers = existingUsers
-      .map((user) => updateAdminUser(user.id, { status }))
-      .filter((user): user is NonNullable<ReturnType<typeof updateAdminUser>> => Boolean(user));
+    const updatedUsers: NonNullable<ReturnType<typeof updateAdminUser>>[] = [];
+    for (const user of existingUsers) {
+      currentTargetId = user.id;
+      const saved = updateAdminUser(user.id, { status });
+      if (saved) { updatedUsers.push(saved); committedUserIds.push(user.id); committedUsers.push(saved); }
+    }
 
-    await recordAdminAudit({
+    phase = 'audit';
+      await recordAdminAudit({
       actorId: access.session?.user.id || null,
       entity: 'user',
       entityId: 'bulk',
@@ -303,6 +336,7 @@ export async function POST(request: NextRequest) {
       requestId,
       data: {
         action,
+        outcome: 'complete', completionWarnings: [], failedTargets: [], reloadRequired: false,
         updated: updatedUsers.length,
         deleted: 0,
         userIds,
@@ -310,6 +344,20 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (committedUserIds.length) {
+      const rawCode = error && typeof error === 'object' && 'code' in error ? error.code : '';
+      const code = rawCode === 'LAST_ADMIN_AUTHORITY' || rawCode === 'OPERATOR_AUTHORITY_BUSY' || rawCode === 'OPERATOR_AUTHORITY_UNAVAILABLE' ? rawCode : 'OPERATOR_WRITE_FAILED';
+      return NextResponse.json({ success: true, requestId, data: {
+        action, outcome: 'partial', updated: action === 'updateStatus' ? committedUsers.length : 0,
+        deleted: action === 'delete' ? committedUserIds.length : 0,
+        userIds: committedUserIds, users: committedUsers,
+        failedTargets: phase === 'writes' ? userIds.filter(id => !committedUserIds.includes(id)).map(userId => ({ userId, code: userId === currentTargetId ? code : 'OPERATOR_NOT_ATTEMPTED' })) : [],
+        completionWarnings: [phase === 'audit' ? 'OPERATOR_BULK_AUDIT_PENDING' : 'OPERATOR_BULK_APPLY_INCOMPLETE'],
+        reloadRequired: true,
+      } }, { headers: { 'cache-control': 'private, no-store', vary: 'Cookie, Authorization' } });
+    }
+    const lifecycleError = operatorLifecycleErrorResponse(error, requestId);
+    if (lifecycleError) return lifecycleError;
     console.error('Admin users bulk API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

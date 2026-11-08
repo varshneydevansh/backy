@@ -9,6 +9,7 @@ import { getSiteByIdOrSlug, listCollections } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionFrontendDesign } from '@/lib/publicCollectionResources';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { collectCompleteCollectionInventory, CollectionInventoryIncompleteError } from '@/lib/collectionInventory';
 
 interface RouteParams {
   params: Promise<{
@@ -46,15 +47,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const payload = await repositories.collections.list({
+      const inventory = await collectCompleteCollectionInventory(pagination => repositories.collections.list({
         siteId: site.id,
         includeUnpublished: false,
         status: 'published',
-        limit: 100,
-        offset: 0,
-      });
-      const collections = payload.items
-        .filter((collection) => collection.permissions.publicRead)
+        ...pagination,
+      }), collection => collection.siteId === site.id);
+      const collections = inventory
+        .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
         .map(withCollectionFrontendDesign);
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
@@ -67,14 +67,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         data: {
           collections,
           pagination: {
-            ...payload.pagination,
+            limit: collections.length,
+            offset: 0,
             total: collections.length,
             hasMore: false,
           },
         },
         collections,
         pagination: {
-          ...payload.pagination,
+          limit: collections.length,
+          offset: 0,
           total: collections.length,
           hasMore: false,
         },
@@ -89,11 +91,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
 
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const collections = listCollections(site.id).map(withCollectionFrontendDesign);
+    const collections = listCollections(site.id).filter(collection => collection.status === 'published' && collection.permissions.publicRead).map(withCollectionFrontendDesign);
     const pagination = {
       total: collections.length,
       limit: collections.length,
@@ -117,6 +119,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, 'COLLECTION_INVENTORY_INCOMPLETE', 'The complete published collection inventory could not be verified. Retry after content changes finish.', requestId);
     console.error('Public collections list API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

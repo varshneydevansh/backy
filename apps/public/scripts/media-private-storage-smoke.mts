@@ -38,7 +38,7 @@ try {
   store.updateMediaItem('site-demo', media.id, { visibility: 'private' });
   assert.equal((await route.GET(request(), params)).status, 404, 'private transforms stay hidden');
   store.updateMediaItem('site-demo', media.id, { visibility: 'public', metadata: { generatedTransforms: { variants: [{ ...variant, storagePath: 'sites/other-site/generated/secret.webp' }] } } });
-  assert.equal((await route.GET(request(), params)).status, 307, 'cross-site variant paths cannot be read');
+  assert.equal((await route.GET(request(), params)).status, 404, 'cross-site variant paths and unresolved originals cannot be read');
   console.log(JSON.stringify({ ok: true, contract: 'backy.private-storage-delivery.v1' }));
 } finally {
   process.chdir(cwd);

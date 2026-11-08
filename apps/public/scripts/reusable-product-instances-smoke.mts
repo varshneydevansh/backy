@@ -187,7 +187,7 @@ try {
       403,
       `${denied} must protect product refresh`,
     );
-    const allResponse = await route.POST(sessionRequest("POST", {}), params);
+    const allResponse = await route.POST(sessionRequest("POST", { dryRun: true }), params);
     assert.equal(allResponse.status, 200);
     assert.equal(
       (await allResponse.json()).data.totals.instances,
@@ -215,7 +215,7 @@ try {
     params,
   );
   assert.equal(dry.status, 200);
-  assert.equal((await dry.json()).data.totals.instances, 1);
+  const dryData=(await dry.json()).data; assert.equal(dryData.totals.instances, 1);
   assert.deepEqual(
     store.getCollectionRecordByIdOrSlug(
       "site-demo",
@@ -227,7 +227,7 @@ try {
     "Dry run cannot write",
   );
   const refresh = await route.POST(
-    request("POST", { targetType: "product", targetId: product.id }),
+    request("POST", { targetType: "product", targetId: product.id, reviewedPreview: dryData.reviewedPreview }),
     params,
   );
   assert.equal(refresh.status, 200);
@@ -336,9 +336,10 @@ try {
         getById: async (siteId: string, id: string) =>
           siteId === site.id && id === section.id ? section : null,
         getBySlug: async () => null,
+        applyPropagation: async (_site: string,input: any) => { assert.equal(input.mutations.length,1); dbRecord.values=input.mutations[0].values; writes++; },
       },
-      pages: { list: async () => ({ items: [] }) },
-      posts: { list: async () => ({ items: [] }) },
+      pages: { list: async () => ({ items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }) },
+      posts: { list: async () => ({ items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }) },
       collections: {
         getBySlug: async (siteId: string, slug: string) => {
           assert.equal(siteId, site.id);
@@ -354,8 +355,8 @@ try {
           assert.equal(input.collectionId, collection.id);
           offsets.push(input.offset);
           return {
-            items: input.offset === 0 ? [detached] : [dbRecord],
-            pagination: { hasMore: input.offset === 0 },
+            items: input.offset === 0 ? Array.from({length:100},(_,i)=>({...detached,id:`detached-${i}`})) : [dbRecord],
+            pagination: { total:101, limit:100, offset:input.offset, hasMore: input.offset === 0 },
           };
         },
         updateRecord: async (
@@ -399,7 +400,7 @@ try {
     assert.equal((await listing.json()).data.totals.instances, 1);
     assert.deepEqual(
       offsets,
-      [0, 1],
+      [0, 100],
       "Discovery must include later product pages and ignore detached instances",
     );
     const preview = await route.POST(
@@ -413,7 +414,7 @@ try {
     assert.equal(preview.status, 200);
     assert.equal(writes, 0);
     const result = await route.POST(
-      request("POST", { targetType: "product", targetId: product.id }),
+      request("POST", { targetType: "product", targetId: product.id, reviewedPreview: (await preview.json()).data.reviewedPreview }),
       params,
     );
     assert.equal(result.status, 200);

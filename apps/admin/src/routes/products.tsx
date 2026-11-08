@@ -1,5 +1,7 @@
+import { ProductPrivateFilePanel, SitePrivateFileRecoveryPanel } from '@/components/commerce/BuyerDownloads';
 import { ChangeEvent, FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { ProductDesignHistoryPanel } from '@/components/products/ProductDesignHistoryPanel';
 import {
   AlertTriangle,
   Archive,
@@ -72,6 +74,7 @@ import { CanvasEditor } from '@/components/editor/CanvasEditor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
 import type { CanvasElement, CanvasSize } from '@/types/editor';
 import { readProductCanvas, writeProductCanvas } from '@/lib/productCanvasDesign';
+import { createWorkspaceLoadAuthority } from '@/lib/workspaceLoadAuthority';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
@@ -1762,12 +1765,14 @@ function ProductsRoute() {
   const [searchQuery, setSearchQuery] = useState(routeSearch.q || '');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRestoringProductDesign, setIsRestoringProductDesign] = useState(false);
   const [isBulkUpdatingProducts, setIsBulkUpdatingProducts] = useState(false);
   const [isSavingCustomerProfile, setIsSavingCustomerProfile] = useState(false);
   const [isImportingProducts, setIsImportingProducts] = useState(false);
   const [isCreatingTemplateId, setIsCreatingTemplateId] = useState<string | null>(null);
   const [isSyncingProviderProduct, setIsSyncingProviderProduct] = useState(false);
-  const isProductsBusy = isLoading || isSaving || isBulkUpdatingProducts || isSavingCustomerProfile || isImportingProducts || isSyncingProviderProduct || Boolean(isCreatingTemplateId);
+  const isProductMutationBusy = isSaving || isBulkUpdatingProducts || isSavingCustomerProfile || isImportingProducts || isSyncingProviderProduct || Boolean(isCreatingTemplateId);
+  const isProductsBusy = isLoading || isProductMutationBusy || isRestoringProductDesign;
   const productImportInputRef = useRef<HTMLInputElement>(null);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaPickerTarget, setMediaPickerTarget] = useState<'image' | 'gallery' | 'download'>('image');
@@ -1828,6 +1833,8 @@ function ProductsRoute() {
   const canConfigureProducts = canConfigureCommerce && canEditCollections;
   const canExportProducts = canViewCommerce && canExportCollections;
   const canDeleteProducts = canDeleteCommerce && canDeleteCollections;
+  const productLoadAuthority = useRef(createWorkspaceLoadAuthority());
+  const deferredProductLoad = useRef(false);
   const providerCertificationHasSelectedFamily = hasProductProviderCertificationFamily(providerCertificationCommandOptions);
   const updateProviderCertificationCommandOptions = (next: Partial<ProductProviderCertificationCommandOptions>) => {
     setProviderCertificationCommandOptions((current) => ({
@@ -1878,6 +1885,13 @@ function ProductsRoute() {
     [selectedSiteId, sites],
   );
   const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const productWorkspaceContext = JSON.stringify([activeSiteId, routeSearch.siteId, currentAdmin?.id, canViewProducts, canViewCommerce, isPermissionMatrixPending]);
+  productLoadAuthority.current.setContext(productWorkspaceContext);
+  const productWorkspaceContextRef = useRef(productWorkspaceContext);
+  productWorkspaceContextRef.current = productWorkspaceContext;
+  const productSelectionRef = useRef(selectedProductId);
+  productSelectionRef.current = selectedProductId;
+  const productWorkspaceMountedRef = useRef(true);
   const providerCertificationTargetOptions = useMemo<ProductProviderCertificationCommandOptions>(
     () => ({ ...providerCertificationCommandOptions, siteId: activeSiteId }),
     [activeSiteId, providerCertificationCommandOptions],
@@ -3790,6 +3804,9 @@ function ProductsRoute() {
   };
 
   const loadProductNotificationEvents = async () => {
+    const loadContext = productWorkspaceContext;
+    const isCurrent = () => productWorkspaceMountedRef.current && productWorkspaceContextRef.current === loadContext;
+    if (!isCurrent()) return;
     if (!canViewCommerce) {
       setProductNotificationEvents([]);
       setProductNotificationError(null);
@@ -3798,15 +3815,20 @@ function ProductsRoute() {
 
     try {
       const result = await listProductNotificationEvents(activeSiteId, { limit: 50 });
+      if (!isCurrent()) return;
       setProductNotificationEvents(result.events);
       setProductNotificationError(null);
     } catch (loadError) {
+      if (!isCurrent()) return;
       setProductNotificationEvents([]);
       setProductNotificationError(loadError instanceof Error ? loadError.message : 'Unable to load product notification events');
     }
   };
 
   const loadCommerceOrderAnalytics = async () => {
+    const loadContext = productWorkspaceContext;
+    const isCurrent = () => productWorkspaceMountedRef.current && productWorkspaceContextRef.current === loadContext;
+    if (!isCurrent()) return null;
     if (!canViewCommerce) {
       setOrderAnalytics(null);
       setOrderAnalyticsError(null);
@@ -3816,15 +3838,17 @@ function ProductsRoute() {
     setIsOrderAnalyticsLoading(true);
     try {
       const analytics = await getOrderAnalytics(activeSiteId);
+      if (!isCurrent()) return null;
       setOrderAnalytics(analytics);
       setOrderAnalyticsError(null);
       return analytics;
     } catch (loadError) {
+      if (!isCurrent()) return null;
       setOrderAnalytics(null);
       setOrderAnalyticsError(loadError instanceof Error ? loadError.message : 'Unable to load backend order analytics');
       return null;
     } finally {
-      setIsOrderAnalyticsLoading(false);
+      if (isCurrent()) setIsOrderAnalyticsLoading(false);
     }
   };
 
@@ -3881,6 +3905,9 @@ function ProductsRoute() {
   };
 
   const loadCommerceReconciliationReadiness = async () => {
+    const loadContext = productWorkspaceContext;
+    const isCurrent = () => productWorkspaceMountedRef.current && productWorkspaceContextRef.current === loadContext;
+    if (!isCurrent()) return null;
     if (!canConfigureCommerce) {
       setReconciliationReadiness(null);
       setReconciliationResult(null);
@@ -3891,15 +3918,17 @@ function ProductsRoute() {
     setIsReconciliationLoading(true);
     try {
       const readiness = await getCommerceReconciliationReadiness();
+      if (!isCurrent()) return null;
       setReconciliationReadiness(readiness);
       setReconciliationError(null);
       return readiness;
     } catch (loadError) {
+      if (!isCurrent()) return null;
       setReconciliationReadiness(null);
       setReconciliationError(loadError instanceof Error ? loadError.message : 'Unable to load provider reconciliation readiness');
       return null;
     } finally {
-      setIsReconciliationLoading(false);
+      if (isCurrent()) setIsReconciliationLoading(false);
     }
   };
 
@@ -3925,7 +3954,6 @@ function ProductsRoute() {
   };
 
   const loadProducts = async () => {
-    if (isProductsBusy) return;
     if (isPermissionMatrixPending) return;
     if (!canViewProducts) {
       setProductCollection(null);
@@ -3956,15 +3984,21 @@ function ProductsRoute() {
       setError(viewPermissionTitle || 'Your account cannot view commerce products.');
       return;
     }
+    if (isProductMutationBusy) {
+      deferredProductLoad.current = true;
+      return;
+    }
+    deferredProductLoad.current = false;
 
     setIsLoading(true);
     setError(null);
 
-    try {
+    await productLoadAuthority.current.run(async (isCurrent) => {
       const [collections, settings] = await Promise.all([
         listCollections(activeSiteId),
         canViewCommerce ? getSettings().catch(() => null) : Promise.resolve(null),
       ]);
+      if (!isCurrent()) return;
       setCommerceSettings(settings?.integrations?.commerce || null);
       setRuntimeCommerce(settings?.runtimeCommerce || null);
       const collection = collections.find((item) => item.slug === PRODUCT_COLLECTION_SLUG) || null;
@@ -4004,6 +4038,7 @@ function ProductsRoute() {
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
+      if (!isCurrent()) return;
       setProducts(result.records.map(normalizeProductRecord));
       setProductPagination(result.pagination);
 
@@ -4025,6 +4060,7 @@ function ProductsRoute() {
             }).catch(() => null)
           : Promise.resolve(null),
       ]);
+      if (!isCurrent()) return;
       setRecentOrders(ordersResult?.records || []);
       const customerRecords = customersResult?.records || [];
       setCustomerProfiles(customerRecords);
@@ -4044,20 +4080,19 @@ function ProductsRoute() {
           ? current
           : customerRecords[0]?.id || null
       ));
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load products');
-    } finally {
-      setIsLoading(false);
-    }
+    }, {
+      error: (loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load products'),
+      finish: () => setIsLoading(false),
+    });
   };
 
   const loadMoreProducts = async () => {
-    if (!productCollection || !productPagination?.hasMore || isProductsBusy || !canViewProducts) return;
+    if (!productCollection || !productPagination?.hasMore || isProductsBusy || isPermissionMatrixPending || !canViewProducts) return;
 
     setIsLoading(true);
     setError(null);
 
-    try {
+    await productLoadAuthority.current.run(async (isCurrent) => {
       const nextOffset = productPagination.offset + productPagination.limit;
       const result = await listCollectionRecords(activeSiteId, productCollection.id, {
         limit: PRODUCT_RECORD_PAGE_SIZE,
@@ -4065,7 +4100,9 @@ function ProductsRoute() {
         sortBy: 'updatedAt',
         sortDirection: 'desc',
       });
+      if (!isCurrent()) return;
       setProducts((current) => {
+        if (!isCurrent()) return current;
         const existingIds = new Set(current.map((product) => product.id));
         const nextProducts = result.records
           .map(normalizeProductRecord)
@@ -4073,11 +4110,10 @@ function ProductsRoute() {
         return [...current, ...nextProducts];
       });
       setProductPagination(result.pagination);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load more products');
-    } finally {
-      setIsLoading(false);
-    }
+    }, {
+      error: (loadError) => setError(loadError instanceof Error ? loadError.message : 'Unable to load more products'),
+      finish: () => setIsLoading(false),
+    });
   };
 
   useEffect(() => {
@@ -4172,9 +4208,59 @@ function ProductsRoute() {
   }, [isProductsAccessBusy, pendingBulkDeleteProducts, pendingDeleteProduct]);
 
   useEffect(() => {
+    productWorkspaceMountedRef.current = true;
+    return () => {
+      productWorkspaceMountedRef.current = false;
+      productLoadAuthority.current.invalidate();
+    };
+  }, []);
+  useEffect(() => {
+    setProducts([]);
+    setProductCollection(null);
+    setOrdersCollection(null);
+    setCustomersCollection(null);
+    setProductPagination(null);
+    setRecentOrders([]);
+    setCustomerProfiles([]);
+    setSelectedCustomerProfileId(null);
+    setCustomerProfileDraft(customerProfileToDraft(null));
+    clearProductEditorState();
+    setSelectedProductId(routeSearch.productId || null);
+    setSelectedProductIds([]);
+    setPendingDeleteProduct(null);
+    setPendingBulkDeleteProducts(false);
+    setProductCanvasDraft(null);
+    setProductCanvasDirty(false);
+    setCommerceSettings(null);
+    setRuntimeCommerce(null);
+    setError(null);
+    setNotice(null);
+    setNoticeCanvasAction(null);
+    setOrderAnalytics(null);
+    setOrderAnalyticsError(null);
+    setIsOrderAnalyticsLoading(false);
+    setReconciliationReadiness(null);
+    setReconciliationResult(null);
+    setReconciliationError(null);
+    setIsReconciliationLoading(false);
+    setProductNotificationEvents([]);
+    setProductNotificationError(null);
+    setSelectedProductLifecycle(null);
+    setProductLifecycleError(null);
+    setProductLifecycleActionMessage(null);
+    setIsLoading(false);
+  }, [productWorkspaceContext]);
+  useEffect(() => {
     void loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSiteId, canViewProducts, isPermissionMatrixPending]);
+  }, [productWorkspaceContext]);
+  useEffect(() => {
+    if (!isProductMutationBusy && !isPermissionMatrixPending && deferredProductLoad.current) {
+      void loadProducts();
+    }
+    // Replay only a site/context load deferred by a mutation, preserving drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProductMutationBusy, isPermissionMatrixPending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -4601,6 +4687,7 @@ function ProductsRoute() {
       const saved = normalizeProductRecord(await createCollectionRecord(activeSiteId, productCollection.id, {
         slug: `${blueprint.slug}-${instanceSuffix}`,
         status: 'draft',
+        frontendDesignTemplateId: template.id,
         values,
       }));
 
@@ -4659,7 +4746,15 @@ function ProductsRoute() {
     setNotice(null);
 
     const slug = slugify(formState.slug || formState.title || formState.sku);
+    const savingContext = productWorkspaceContext;
+    const savingProductId = selectedProductId;
+    const isCurrentSave = () => productWorkspaceMountedRef.current
+      && productWorkspaceContextRef.current === savingContext
+      && productSelectionRef.current === savingProductId;
     const input = {
+      ...(selectedProduct ? selectedProduct.version
+        ? { expectedVersion: selectedProduct.version }
+        : { expectedUpdatedAt: selectedProduct.updatedAt } : {}),
       slug,
       status: formState.status,
       scheduledAt,
@@ -4714,7 +4809,7 @@ function ProductsRoute() {
       const saved = normalizeProductRecord(selectedProduct
         ? await updateCollectionRecord(activeSiteId, productCollection.id, selectedProduct.id, input)
         : await createCollectionRecord(activeSiteId, productCollection.id, input));
-
+      if (!isCurrentSave()) return;
       setProducts((current) => [saved, ...current.filter((product) => product.id !== saved.id)]);
       if (!selectedProduct) {
         setProductPagination((current) => current
@@ -4728,7 +4823,7 @@ function ProductsRoute() {
       setNotice(message);
       setNoticeCanvasAction(!selectedProduct ? buildProductCanvasNoticeAction(message, saved.id) : null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
+      if (isCurrentSave()) setError(saveError instanceof Error ? saveError.message : 'Unable to save product');
       if (!event) throw saveError;
     } finally {
       setIsSaving(false);
@@ -5310,6 +5405,7 @@ function ProductsRoute() {
           </div>
         </div>
       )}
+      {canViewCommerce && !isProductsAccessBusy && <SitePrivateFileRecoveryPanel key={`${activeSiteId}:${currentAdmin?.id}`} siteId={activeSiteId} canEdit={canEditCommerce} />}
       {permissionError && (
         <div
           role="alert"
@@ -8311,6 +8407,7 @@ function ProductsRoute() {
                         File
                       </Button>
                     </div>
+                    {selectedProduct && formState.productType === 'digital' && <ProductPrivateFilePanel key={`${activeSiteId}:${selectedProduct.id}`} siteId={activeSiteId} productId={selectedProduct.id} canEdit={canEditProducts && canEditCommerce} />}
                     {formState.downloadMediaId ? (
                       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2" data-testid="products-download-media-binding">
                         <div className="min-w-0 text-xs">
@@ -9251,6 +9348,23 @@ function ProductsRoute() {
                 validateSettings={() => productIdentityMissing ? 'Fix product identity fields before saving.' : scheduledProductDateError || null}
               />
             </div>
+            <ProductDesignHistoryPanel
+              siteId={activeSiteId}
+              productId={selectedProduct.id}
+              collectionId={selectedProduct.collectionId}
+              currentVersion={selectedProduct.version}
+              canView={canViewProducts && !isPermissionMatrixPending}
+              canEdit={canEditProducts && !isLoading && !isProductMutationBusy && !isPermissionMatrixPending}
+              onRestoreBusyChange={setIsRestoringProductDesign}
+              hasUnsavedChanges={productCanvasDirty || JSON.stringify(formState) !== JSON.stringify(productToForm(selectedProduct))}
+              onRestored={(record, warnings) => {
+                const saved = normalizeProductRecord(record);
+                setProducts(current => current.map(product => product.id === saved.id ? saved : product));
+                setNotice(warnings.length
+                  ? `Product design restored. Current catalog data was retained. Follow-up pending: ${warnings.join(', ')}.`
+                  : 'Product design restored. Current catalog data was retained.');
+              }}
+            />
           </PanelContent>
         </Panel>
       )}

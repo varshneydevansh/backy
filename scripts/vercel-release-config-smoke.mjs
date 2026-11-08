@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import ignore from 'ignore';
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
 const readJson = (path) => JSON.parse(read(path));
@@ -23,6 +24,31 @@ const adminVercel = readJson('../apps/admin/vercel.json');
 const rootPackage = readJson('../package.json');
 const publicHome = read('../apps/public/src/app/page.tsx');
 const publicNextConfig = read('../apps/public/next.config.js');
+// Use the same gitignore-rule parser interface as the Vercel CLI upload tree.
+// Reading .gitignore instead would hide missing deployment exclusions.
+const sourceUploadRules = ignore().add(read('../.vercelignore'));
+for (const path of [
+  'data/backy/admin-content.json',
+  'uploads/owned.png',
+  'apps/public/data/backy/admin-content.json',
+  'apps/public/data/backy/media-library.json',
+  'apps/public/data/backy/interactions.json',
+  'apps/public/.backy-private/form-attachments/owned.pdf',
+  'apps/public/data/backy/private-site-restore/jobs/owned.json',
+  'apps/public/public/uploads/sites/site-demo/images/owned.png',
+  '.env', '.env.production', 'apps/public/.env',
+  'apps/public/.env.production.local',
+  'apps/public/.next-sdk-smoke-trace-acceptance/server/middleware.js',
+  'apps/public/.next-sdk-smoke-webpack-trace-proof/server/middleware.js',
+]) assert(sourceUploadRules.ignores(path), `Deployment source must exclude mutable/private input: ${path}`);
+for (const path of [
+  'package.json', 'package-lock.json', 'packages/core/src/index.ts',
+  'apps/public/src/app/page.tsx', 'apps/public/public/backy-logo.svg',
+  'apps/public/next.config.js', 'apps/admin/src/main.tsx',
+  'scripts/vercel-public-production-env-guard.mjs', '.env.example',
+  'scripts/vercel-admin-origin-policy.mjs',
+  'examples/custom-frontend-next/.env.example',
+]) assert(!sourceUploadRules.ignores(path), `Deployment source must retain required build input: ${path}`);
 const readme = read('../README.md');
 const vercelRunbookStart = readme.indexOf('## Vercel release runbook');
 const vercelRunbookEnd = readme.indexOf('---', vercelRunbookStart);
@@ -75,6 +101,10 @@ for (const snippet of [
   'Root Directory: `apps/admin`',
   'NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
   'VITE_BACKY_ADMIN_API_BASE_URL',
+  'BACKY_ADMIN_TRUSTED_ORIGINS',
+  'NEXT_PUBLIC_BACKY_ADMIN_TRUSTED_ORIGINS',
+  'VITE_BACKY_ADMIN_TRUSTED_ORIGINS',
+  'Environment-name metadata alone does not validate values',
   'CRON_SECRET',
   'same server-only value as `BACKY_ADMIN_API_KEY` or `BACKY_ADMIN_SECRET_KEY`',
   '### Protected topology',

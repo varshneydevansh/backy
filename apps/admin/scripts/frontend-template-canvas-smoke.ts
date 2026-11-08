@@ -40,11 +40,11 @@ for (const content of envelopes) {
   assert.equal(JSON.stringify(template), original, 'Size resolution and serialization must not mutate the reusable template');
 }
 
-assert.deepEqual(getFrontendTemplateCanvasSize({}), DEFAULT_CANVAS_SIZE, 'Templates without dimensions retain the existing editor default');
+assert.deepEqual(getFrontendTemplateCanvasSize({}), { ...DEFAULT_CANVAS_SIZE, layout: 'fixed' }, 'Templates without dimensions retain the existing editor default');
 assert.equal(getFrontendTemplateCanvasSize({ canvasSize: size }).height, 1800, 'Legacy top-level dimensions remain supported');
 assert.deepEqual(
   getFrontendTemplateCanvasSize({ content: { canvasSize: { height: 1800 } } }),
-  { ...DEFAULT_CANVAS_SIZE, height: 1800 },
+  { ...DEFAULT_CANVAS_SIZE, height: 1800, layout: 'fixed' },
   'Partial content dimensions preserve the provided axis',
 );
 assert.equal(getFrontendTemplateCanvasSize({ content: { canvasSize: { height: '1800' } } }).height, 1800);

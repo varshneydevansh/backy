@@ -81,7 +81,8 @@ export default async function CustomBackyPage({
       schemaVersion: "backy.content-payload.v1",
     });
 
-    return <BackyPage payload={rendered.data} publicApiBaseUrl={backyConfig.apiBaseUrl} />;
+    const search = await searchParams;
+    return <BackyPage payload={rendered.data} publicApiBaseUrl={backyConfig.apiBaseUrl} inspect={search.backyInspect === "1"} />;
   } catch (error) {
     const backyError = error as BackyApiError;
     if (backyError.status === 404 && path === "/blog") {

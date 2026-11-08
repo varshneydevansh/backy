@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import { buildFrontendCompatibilityReport, normalizeFrontendObservation, normalizeFrontendRuntimeDeclaration } from '../src/frontend-compatibility';
+import { normalizeFrontendDesignContract } from '../../../apps/public/src/lib/frontendDesignContract';
+const runtime = normalizeFrontendRuntimeDeclaration({ schemaVersion: 'backy.frontend-runtime.v1', frontendId: 'sample', version: '1', capabilities: { 'element.text': 'supported', 'layout.free': 'supported', 'layout.breakpoints': 'supported', 'richText.p': 'supported', 'richText.mark.bold': 'supported', 'richText.data_figure': 'unsupported', 'motion.custom': 'supported', 'motion.trigger.load': 'supported' }, componentVersions: { widget: ['1'] } })!;
+const content = { elements: [{ id: 'body', type: 'text', x: 0, y: 0, width: 700, height: 500, animation: { type: 'custom', to: { x: 150, opacity: 0.4 } }, responsive: { mobile: { width: 300, props: { title: 'mobile' } } }, props: { title: 'desktop', content: [{ type: 'p', children: [{ text: 'Hello', bold: true }] }, { type: 'data_figure', children: [{ text: '' }] }] }, children: [{ id: 'child', type: 'text', props: { title: 'nested' } }] }] };
+const report = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r1', content, runtime });
+assert.equal(report.summary.elementCount, 2);
+assert.equal(report.certification, 'not-live-certified');
+assert.ok(report.issues.some(issue => issue.capability === 'richText.data_figure' && issue.contentPath === '/elements/0/props/content/1' && issue.elementId === 'body'));
+assert.ok(report.issues.some(issue => issue.code === 'runtime.observations.unverified'));
+const identity = { siteId: 'site-a', route: '/article', frontendId: 'sample', frontendVersion: '1' };
+const observation = normalizeFrontendObservation({ ...identity, revision: 'r1', breakpoint: 'mobile', complete: true, elements: [{ id: 'body', type: 'text', parentId: null, fields: { width: 300, 'props.title': 'mobile', 'animation.to.x': 0, 'animation.to.opacity': 1 } }] })!;
+const observed = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r1', content, runtime, observation });
+assert.ok(observed.issues.some(issue => issue.contentPath === '/elements/0/animation/to/x' && issue.expected === 150 && issue.observed === 0 && issue.breakpoint === 'mobile'));
+assert.ok(observed.issues.some(issue => issue.code === 'renderer.element.missing' && issue.elementId === 'child'));
+assert.ok(!observed.issues.some(issue => issue.contentPath.endsWith('/width') || issue.contentPath.endsWith('/props/title')));
+assert.ok(!observed.issues.some(issue => issue.code === 'runtime.observations.unverified'));
+const stale = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r2', content, runtime, observation });
+assert.ok(stale.issues.some(issue => issue.code === 'observations.revision.unverified'));
+assert.ok(!stale.issues.some(issue => issue.code === 'renderer.property.mismatch'));
+const partial = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', content, revision: 'r1', runtime: { ...runtime, capabilities: {} }, observation: { ...identity, revision: 'r1', breakpoint: 'desktop', complete: false, elements: [] } });
+assert.ok(partial.issues.some(issue => issue.code === 'renderer.element.unverified'));
+assert.equal(partial.summary.blocking, 0);
+const normalized = normalizeFrontendDesignContract({ runtime }, { fallback: normalizeFrontendDesignContract({ status: 'synced', templates: [{ id: 't', name: 'Saved', type: 'page' }] }), mergeFallback: true });
+assert.deepEqual(normalized.runtime, runtime); assert.equal(normalized.templates.length, 1);
+assert.deepEqual(normalizeFrontendDesignContract({ notes: 'Changed' }, { fallback: normalized, mergeFallback: true }).runtime, runtime);
+assert.equal(normalizeFrontendDesignContract({ runtime: null }, { fallback: normalized, mergeFallback: true }).runtime, undefined);
+assert.throws(() => normalizeFrontendRuntimeDeclaration({ ...runtime, capabilities: { something: 'yes' } }));
+assert.throws(() => normalizeFrontendObservation({ ...identity, breakpoint: 'desktop', elements: [{ id: 'same' }, { id: 'same' }] }));
+assert.throws(() => buildFrontendCompatibilityReport({ siteId: 'a', route: '/', content: { elements: Array.from({ length: 10001 }, (_, i) => ({ id: String(i), type: 'text' })) } }));
+const secret = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r1', runtime, content: { elements: [{ id: 'x', type: 'text', props: { object: { password: 'private', label: 'public' } } }] }, observation: { ...identity, revision: 'r1', breakpoint: 'desktop', complete: true, elements: [{ id: 'x', fields: { 'props.object': { password: 'other', label: 'different' } } }] } });
+assert.ok(!JSON.stringify(secret).includes('private')); assert.ok(!JSON.stringify(secret).includes('other'));
+assert.equal(secret.issues.find(issue => issue.code === 'renderer.property.mismatch')?.evidence, 'supplied-observation');
+console.log('Frontend compatibility behavior passed: exact nested/rich locations, revision/breakpoint handling, declarations preserved, complete/partial inventories, limits and private field redaction.');
+
+assert.throws(() => normalizeFrontendRuntimeDeclaration({ ...runtime, capabilities: { invalid: ['supported'] } }));
+assert.throws(() => normalizeFrontendObservation({ ...identity, breakpoint: 'mobil', elements: [] }));
+const canonical = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r1', runtime, content: { contentDocument: { elements: [{ id: 'widget', type: 'text', componentKey: 'widget', version: '2', props: {}, tokenRefs: { fontFamily: 'body' }, responsive: { mobile: { tokenRefs: { color: 'muted' } } } }], metadata: { customCSS: 'body {}', animations: [{ id: 'timeline' }] } } }, observation: { ...identity, revision: 'r1', breakpoint: 'mobile', complete: true, elements: [{ id: 'widget', type: 'text', parentId: null, fields: { 'tokenRefs.fontFamily': 'body' } }] }, design: { chrome: { header: {}, navigation: {}, footer: {} } } });
+assert.ok(canonical.issues.some(issue => issue.code === 'component.version.unsupported' && issue.contentPath === '/contentDocument/elements/0'));
+assert.ok(canonical.issues.some(issue => issue.capability === 'design.customCSS' && issue.contentPath === '/contentDocument/metadata/customCSS'));
+assert.ok(canonical.issues.some(issue => issue.capability === 'motion.timelines'));
+assert.ok(!canonical.issues.some(issue => issue.code === 'renderer.property.mismatch'));
+assert.ok(!canonical.issues.some(issue => issue.capability === 'design.chrome'));
+const fields = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', revision: 'r1', runtime, content: { elements: [{ id: 'x', type: 'text', rotation: 0, visible: true }] }, observation: { ...identity, revision: 'r1', breakpoint: 'desktop', complete: true, elements: [{ id: 'x', type: 'text', parentId: null, fields: { rotation: 90, visible: false, 'unknown.flag': false } }] } });
+assert.equal(fields.issues.filter(issue => issue.code === 'renderer.property.mismatch').length, 2);
+assert.ok(fields.issues.some(issue => issue.code === 'observations.field.unverified'));
+const wrongSite = buildFrontendCompatibilityReport({ siteId: 'different-site', route: '/article', revision: 'r1', content, runtime, observation });
+assert.ok(wrongSite.issues.some(issue => issue.code === 'observations.identity.unverified'));
+assert.ok(!wrongSite.issues.some(issue => issue.code === 'renderer.property.mismatch'));
+const noRevision = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', content, runtime, observation });
+assert.ok(noRevision.issues.some(issue => issue.code === 'observations.revision.unverified'));
+const legacy = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/article', content: [{ type: 'p', children: [{ text: 'Legacy', bold: true }] }] });
+assert.ok(legacy.issues.some(issue => issue.capability === 'richText.mark.bold'));
+assert.ok(buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/', content: {} }).issues.some(issue => issue.code === 'registration.elements.missing'));
+console.log('Independent-review regressions passed: canonical wrapper/component metadata, responsive tokens, safe field coverage, exact identity, unknown breakpoint and empty content.');
+
+const flowTree = { elements: [{ id: 'row', type: 'section', x: 0, y: 0, props: { display: 'flex' }, children: [
+  { id: 'in-flow', type: 'heading', x: 999, y: 999, props: {} },
+  { id: 'escape', type: 'heading', x: 10, y: 10, styles: { position: 'absolute' } },
+  { id: 'responsive-grid', type: 'section', x: 200, y: 200, props: { layout: 'flow' }, responsive: { mobile: { styles: { display: 'grid' } } }, children: [{ id: 'grid-child', type: 'text', x: 800, y: 800 }] },
+] }] };
+const flowReport = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/flow', content: flowTree });
+assert.ok(flowReport.issues.some(issue => issue.elementId === 'row' && issue.capability === 'layout.flex' && issue.contentPath === '/elements/0/props/display'));
+assert.ok(!flowReport.issues.some(issue => ['in-flow', 'responsive-grid', 'grid-child'].includes(issue.elementId || '') && issue.capability === 'layout.free'));
+assert.ok(flowReport.issues.some(issue => issue.elementId === 'escape' && issue.capability === 'layout.free'));
+assert.ok(flowReport.issues.some(issue => issue.elementId === 'responsive-grid' && issue.capability === 'layout.grid' && issue.breakpoint === 'mobile' && issue.contentPath === '/elements/0/children/2/responsive/mobile/styles/display'));
+const precedenceReport = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/flow', content: { elements: [{ id: 'css', type: 'section', props: { layout: 'flex', display: 'flex' }, styles: { display: 'inline-grid' } }, { id: 'free', type: 'section', x: 0, props: { layout: 'free' }, styles: { display: 'flex' } }] } });
+assert.ok(precedenceReport.issues.some(issue => issue.elementId === 'css' && issue.capability === 'layout.grid'));
+assert.ok(!precedenceReport.issues.some(issue => issue.elementId === 'css' && issue.capability === 'layout.flex'));
+assert.ok(!precedenceReport.issues.some(issue => issue.elementId === 'free' && issue.capability === 'layout.flex'));
+const switchedParentReport = buildFrontendCompatibilityReport({ siteId: 'site-a', route: '/flow', content: { elements: [{ id: 'parent', type: 'section', props: { layout: 'flex' }, responsive: { mobile: { props: { layout: 'free' } } }, children: [{ id: 'positioned-on-mobile', type: 'text', x: 10, y: 20 }] }] } });
+assert.ok(switchedParentReport.issues.some(issue => issue.elementId === 'positioned-on-mobile' && issue.capability === 'layout.free' && issue.breakpoint === 'mobile'));
+console.log('Layout compatibility passed: shared CSS precedence, nested flow fallback coordinates, explicit positioning escapes and responsive parent/child layouts.');

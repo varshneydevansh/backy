@@ -1,4 +1,5 @@
-import type { BackyMediaRepository, MediaItem } from '@backy-cms/core';
+import type { BackyCollectionField, BackyMediaRepository, MediaItem } from '@backy-cms/core';
+import { readCompleteMediaInventory } from './mediaInventory';
 
 const MEDIA_REFERENCE_ID_KEYS = new Set([
   'assetId',
@@ -86,56 +87,59 @@ const uniqueStringList = (values: unknown[]): string[] => (
   Array.from(new Set(values.map(sanitizeString).filter(Boolean)))
 );
 
-export const collectRepositoryMediaReferenceIds = (value: unknown): Set<string> => {
-  const references = new Set<string>();
-
-  const addReference = (entry: unknown) => {
-    const id = sanitizeString(entry);
-    if (id) {
-      references.add(id);
-    }
-  };
-
-  const visit = (entry: unknown, key?: string, parentKey?: string) => {
-    if (!entry) {
-      return;
-    }
-
+/** Same authored identity grammar for reference indexing and pre-write admission. */
+export const collectRepositoryMediaReferences = (value: unknown): Array<{ mediaId: string; path: string }> => {
+  const references: Array<{ mediaId: string; path: string }> = [];
+  const pointer = (key: string) => key.replace(/~/g, '~0').replace(/\//g, '~1');
+  const add = (entry: unknown, path: string) => { const mediaId = sanitizeString(entry); if (mediaId) references.push({ mediaId, path }); };
+  const visit = (entry: unknown, path: string, key?: string, parentKey?: string) => {
+    if (!entry) return;
     if (key && MEDIA_REFERENCE_ID_KEYS.has(key)) {
-      if (Array.isArray(entry)) {
-        entry.forEach(addReference);
-      } else {
-        addReference(entry);
-      }
+      if (Array.isArray(entry)) entry.forEach((item, index) => add(item, `${path}/${index}`));
+      else add(entry, path);
       return;
     }
-
     if (Array.isArray(entry)) {
-      if (key === 'assetIds') {
-        entry.forEach(addReference);
-        return;
-      }
-
-      entry.forEach((item) => visit(item, undefined, key));
+      if (key === 'assetIds') entry.forEach((item, index) => add(item, `${path}/${index}`));
+      else entry.forEach((item, index) => visit(item, `${path}/${index}`, undefined, key));
       return;
     }
-
-    if (!isRecord(entry)) {
-      return;
-    }
-
-    if (parentKey && MEDIA_REFERENCE_ASSET_COLLECTION_KEYS.has(parentKey)) {
-      addReference(entry.id);
-    }
-
-    Object.entries(entry).forEach(([entryKey, entryValue]) => {
-      visit(entryValue, entryKey, key);
-    });
+    if (!isRecord(entry)) return;
+    if (parentKey && MEDIA_REFERENCE_ASSET_COLLECTION_KEYS.has(parentKey)) add(entry.id, `${path}/id`);
+    Object.entries(entry).forEach(([entryKey, entryValue]) => visit(entryValue, `${path}/${pointer(entryKey)}`, entryKey, key));
   };
-
-  visit(value);
+  visit(value, '');
   return references;
 };
+export const collectRepositoryMediaReferenceIds = (value: unknown): Set<string> => (
+  new Set(collectRepositoryMediaReferences(value).map(reference => reference.mediaId))
+);
+
+/** Collection schemas also identify managed IDs under arbitrary author-defined keys. */
+export const collectRepositoryCollectionRecordMediaReferences = (
+  values: unknown,
+  fields: BackyCollectionField[] = [],
+): Array<{ mediaId: string; path: string }> => {
+  const references = collectRepositoryMediaReferences(values);
+  if (!isRecord(values)) return references;
+  for (const field of fields) {
+    if (!['image', 'video', 'file'].includes(field.type)) continue;
+    const value = values[field.key];
+    const validation = isRecord(field.validation) ? field.validation : {};
+    const multiple = field.type === 'file' && (validation.multiple === true || Number.isFinite(Number(validation.maxItems)));
+    const entries = Array.isArray(value) ? value : multiple && typeof value === 'string' ? value.split(/[\n,]/) : [value];
+    entries.forEach((entry, index) => {
+      if (typeof entry !== 'string' && typeof entry !== 'number') return;
+      const mediaId = String(entry).trim();
+      if (!mediaId || /^(https?:)?\/\//i.test(mediaId) || mediaId.startsWith('/') || mediaId.startsWith('data:')) return;
+      const path = '/' + field.key.replace(/~/g, '~0').replace(/\//g, '~1');
+      references.push({ mediaId, path: Array.isArray(value) || multiple ? `${path}/${index}` : path });
+    });
+  }
+  return references;
+};
+
+const completeMedia = (repository: BackyMediaRepository, siteId: string) => readCompleteMediaInventory(siteId, pagination => repository.list({ siteId, type: 'all', visibility: 'all', ...pagination }));
 
 const bindingRecordsFromMetadata = (media: MediaItem): RepositoryMediaBindingRecord[] => {
   const bindings = media.metadata?.bindings;
@@ -197,15 +201,9 @@ const syncCollectionRecordBindings = async (
     referenceIds: Set<string>;
   },
 ): Promise<void> => {
-  const mediaPage = await input.mediaRepository.list({
-    siteId: input.siteId,
-    type: 'all',
-    visibility: 'all',
-    limit: 10000,
-    offset: 0,
-  });
+  const mediaItems = await completeMedia(input.mediaRepository, input.siteId);
 
-  await Promise.all(mediaPage.items.map(async (media) => {
+  await Promise.all(mediaItems.map(async (media) => {
     const currentBindings = bindingRecordsFromMetadata(media);
     const existingBinding = currentBindings.find((binding) =>
       isTargetCollectionRecordBinding(binding, input.collectionId, input.recordId),
@@ -239,10 +237,7 @@ const syncCollectionRecordBindings = async (
     }
 
     await input.mediaRepository.update(input.siteId, media.id, {
-      metadata: {
-        ...(media.metadata || {}),
-        bindings: nextBindings,
-      },
+      metadata: { bindings: nextBindings },
     });
   }));
 };
@@ -277,15 +272,9 @@ const syncTargetMediaReferences = async (
     .filter(Boolean)
     .forEach((id) => referenceIds.add(id));
 
-  const mediaPage = await input.mediaRepository.list({
-    siteId: input.siteId,
-    type: 'all',
-    visibility: 'all',
-    limit: 10000,
-    offset: 0,
-  });
+  const mediaItems = await completeMedia(input.mediaRepository, input.siteId);
 
-  await Promise.all(mediaPage.items.map(async (media) => {
+  await Promise.all(mediaItems.map(async (media) => {
     const currentRefs = currentTargetRefs(media, key);
     const shouldReference = referenceIds.has(media.id);
     const hasReference = currentRefs.includes(input.targetId);
@@ -299,10 +288,7 @@ const syncTargetMediaReferences = async (
       : currentRefs.filter((id) => id !== input.targetId);
 
     await input.mediaRepository.update(input.siteId, media.id, {
-      metadata: {
-        ...(media.metadata || {}),
-        [key]: nextRefs,
-      },
+      metadata: { [key]: nextRefs },
     });
   }));
 };
@@ -316,25 +302,16 @@ const removeTargetMediaReferences = async (
   },
 ): Promise<void> => {
   const key = input.targetType === 'page' ? 'pageIds' : 'postIds';
-  const mediaPage = await input.mediaRepository.list({
-    siteId: input.siteId,
-    type: 'all',
-    visibility: 'all',
-    limit: 10000,
-    offset: 0,
-  });
+  const mediaItems = await completeMedia(input.mediaRepository, input.siteId);
 
-  await Promise.all(mediaPage.items.map(async (media) => {
+  await Promise.all(mediaItems.map(async (media) => {
     const currentRefs = currentTargetRefs(media, key);
     if (!currentRefs.includes(input.targetId)) {
       return;
     }
 
     await input.mediaRepository.update(input.siteId, media.id, {
-      metadata: {
-        ...(media.metadata || {}),
-        [key]: currentRefs.filter((id) => id !== input.targetId),
-      },
+      metadata: { [key]: currentRefs.filter((id) => id !== input.targetId) },
     });
   }));
 };
@@ -346,11 +323,12 @@ export const syncRepositoryCollectionRecordMediaReferences = async (
     collectionId: string;
     recordId: string;
     values: unknown;
+    fields?: BackyCollectionField[];
   },
 ): Promise<void> => {
   await syncCollectionRecordBindings({
     ...input,
-    referenceIds: collectRepositoryMediaReferenceIds(input.values),
+    referenceIds: new Set(collectRepositoryCollectionRecordMediaReferences(input.values, input.fields).map(reference => reference.mediaId)),
   });
 };
 

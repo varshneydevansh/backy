@@ -312,3 +312,11 @@ This is how Backy can let an AI generate any frontend design while still control
 - `examples/form-page.json`: form-enabled page payload.
 
 These schemas are the current external target. Implementation can remain incremental, but custom frontends should not depend on fields outside this folder unless a newer contract version explicitly adds them.
+
+## Opt-in public runtime render response
+
+`GET /api/sites/:siteId/render?path=/about&schemaVersion=backy.content-payload.runtime.v1` negotiates the response-only [runtime payload schema](content-payload-runtime.schema.json). `x-backy-schema-version` must match the requested version. The default and explicit `backy.content-payload.v1`, all saved `backy.content.v1` documents, and private previews remain canonical. Runtime plus any `previewToken` is rejected with 406 before reads. Unknown versions return 406.
+
+The runtime content and nested document use `backy.content.runtime.v1`, never a save/import contract. The full top-level `data.editableMap` remains intact. Only `data.content.editableMap` and `data.content.contentDocument.editableMap` may be replaced by `editableMapRef: "#/data/editableMap"`, and only when structurally identical to that map. Different nested maps, unknown authored metadata, all elements/geometry/props/assets/bindings/animation and control entries remain unchanged. Resolve only this literal known pointer when a nested map is needed; do not treat it as a general URL or JSON Pointer evaluator. Runtime documents must never be written back as canonical content.
+
+Projection occurs before ETag serialization and changes neither publication/withdrawal admission nor freshness: public reads still revalidate at the origin and private/error responses remain no-store. This reduces duplicate payload transfer; it does not skip collection/media reads or promise database latency improvements. SDK constants and `BackyRuntimeRenderPayload` describe the opt-in contract; existing SDK defaults are unchanged.

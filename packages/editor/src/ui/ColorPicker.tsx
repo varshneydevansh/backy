@@ -22,6 +22,7 @@ export interface ColorPickerProps {
   testId?: string;
   triggerRef?: React.RefObject<HTMLElement | null> | null;
   onBeforeOpen?: () => void;
+  comfortable?: boolean;
 }
 
 const POPOVER_WIDTH = 260;
@@ -38,6 +39,7 @@ export const ColorPicker = ({
   testId,
   triggerRef,
   onBeforeOpen,
+  comfortable = false,
 }: ColorPickerProps) => {
   const [open, setOpen] = useState(false);
   const [customColor, setCustomColor] = useState(value || '#000000');
@@ -47,6 +49,10 @@ export const ColorPicker = ({
   const [popoverWidth, setPopoverWidth] = useState(POPOVER_WIDTH);
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const keyboardOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && keyboardOpenRef.current) popoverRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [open]);
 
   useEffect(() => {
     setCustomColor(value || '#000000');
@@ -122,6 +128,7 @@ export const ColorPicker = ({
   const handleColorSelect = (color: string) => {
     onChange(color);
     setOpen(false);
+    if (keyboardOpenRef.current) containerRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
   };
 
   const handleCustomColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,11 +150,10 @@ export const ColorPicker = ({
       ref={popoverRef}
       role="dialog"
       aria-label={`${triggerLabel} options`}
-      className="ignore-click-outside/toolbar fixed z-[10000] bg-popover rounded-lg shadow-lg border border-border p-2 animate-in fade-in zoom-in-95 duration-100"
+      className="ignore-click-outside/toolbar fixed z-[10000] overflow-y-auto bg-popover rounded-lg shadow-lg border border-border p-2"
       data-testid={testId ? `${testId}-popover` : undefined}
-      onMouseDown={(e) => {
-        e.stopPropagation();
-      }}
+      onMouseDown={(e) => { e.stopPropagation(); }}
+      onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setOpen(false); containerRef.current?.querySelector<HTMLButtonElement>('button')?.focus(); } }}
       style={{
         left: `${popoverLeft}px`,
         top: `${popoverTop}px`,
@@ -157,20 +163,19 @@ export const ColorPicker = ({
     >
       <div className="space-y-0.5">
         {COLOR_PALETTE.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex gap-0.5">
+          <div key={rowIndex} className={comfortable ? "grid grid-cols-5 gap-0.5" : "flex gap-0.5"}>
             {row.map((color) => (
               <button
                 key={color}
                 type="button"
                 className={cn(
-                  "w-5 h-5 rounded-sm border border-border/30 hover:scale-110 transition-transform",
+                  comfortable ? "min-h-11 min-w-11 rounded border border-border/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" : "w-5 h-5 rounded-sm border border-border/30 hover:scale-110 transition-transform",
                   value === color && "ring-2 ring-primary ring-offset-1"
                 )}
                 style={{ backgroundColor: color }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleColorSelect(color);
                 }}
                 onClick={(e) => {
                   e.preventDefault();
@@ -193,7 +198,7 @@ export const ColorPicker = ({
           type="color"
           value={customColor}
           onChange={handleCustomColorChange}
-          className="w-7 h-7 p-0 border-0 rounded cursor-pointer"
+          className={cn("p-0 border-0 rounded cursor-pointer", comfortable ? "h-11 w-11" : "w-7 h-7")}
           aria-label={`Custom ${triggerLabel}`}
           data-testid={testId ? `${testId}-custom-picker` : undefined}
         />
@@ -206,7 +211,7 @@ export const ColorPicker = ({
               onChange(e.target.value);
             }
           }}
-          className="flex-1 h-7 px-2 text-xs border rounded-md bg-background"
+          className={cn("flex-1 min-w-0 px-2 text-xs border rounded-md bg-background", comfortable ? "min-h-11" : "h-7")}
           placeholder="#000000"
           aria-label={`${triggerLabel} hex value`}
           data-testid={testId ? `${testId}-custom-text` : undefined}
@@ -215,15 +220,14 @@ export const ColorPicker = ({
 
       <button
         type="button"
-        className="w-full mt-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md"
+        className={cn("w-full mt-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md", comfortable && "min-h-11")}
         data-testid={testId ? `${testId}-clear` : undefined}
         aria-label={`Clear ${triggerLabel}`}
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onChange('');
-          setOpen(false);
         }}
+        onClick={() => { onChange(''); setOpen(false); }}
       >
         Clear Color
       </button>
@@ -237,19 +241,15 @@ export const ColorPicker = ({
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          toggleOpen(!open);
+          onBeforeOpen?.();
         }}
+        onClick={(event) => { keyboardOpenRef.current = event.detail === 0; toggleOpen(!open); }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleOpen(!open);
-          }
           if (e.key === 'Escape') {
             setOpen(false);
           }
         }}
-        className="p-1.5 rounded-md hover:bg-muted/80 transition-all flex items-center justify-center h-7 w-7 relative"
+        className={cn("p-1.5 rounded-md hover:bg-muted/80 transition-colors flex items-center justify-center relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", comfortable ? "h-11 w-11" : "h-7 w-7")}
         data-testid={testId}
         title={tooltip}
         aria-label={triggerLabel}

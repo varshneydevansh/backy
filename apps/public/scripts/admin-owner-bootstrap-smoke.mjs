@@ -23,6 +23,10 @@ const authProfileTriggerSource = readFileSync(
   path.join(repoRoot, 'supabase/migrations/014_invite_only_auth_profile_defaults.sql'),
   'utf8',
 );
+const explicitOperatorProvisioningSource = readFileSync(
+  path.join(repoRoot, 'supabase/migrations/016_explicit_operator_profile_provisioning.sql'),
+  'utf8',
+);
 
 const assert = (condition, message) => {
   if (!condition) {
@@ -97,7 +101,15 @@ assert(
     authProfileTriggerSource.includes('FALSE') &&
     !authProfileTriggerSource.includes('status = EXCLUDED.status') &&
     !authProfileTriggerSource.includes('is_active = EXCLUDED.is_active'),
-  'Supabase Auth profile trigger must create provider-only identities as invited/inactive until Backy activates them.',
+  'Retained pre-016 auth profile migration must not implicitly activate operator identities.',
+);
+
+assert(
+  explicitOperatorProvisioningSource.includes('DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;') &&
+    explicitOperatorProvisioningSource.includes('CREATE OR REPLACE FUNCTION public.handle_new_user()') &&
+    explicitOperatorProvisioningSource.includes('RETURN NEW;') &&
+    !/INSERT\s+INTO\s+(?:public\.)?profiles/i.test(explicitOperatorProvisioningSource),
+  'Current migration must separate provider signup from explicit operator profile provisioning; legacy hooks must remain harmless.',
 );
 
 console.log('Backy owner bootstrap source smoke passed.');

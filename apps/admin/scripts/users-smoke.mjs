@@ -232,9 +232,11 @@ const assertUsersEmptyStatesUseSharedComponent = () => {
       source.includes("template: 'member-account'") &&
       source.includes('Seed an email-based access page') &&
       source.includes('Seed an editable account page') &&
-      source.includes('Registration capture and member page shells are available through Backy content systems') &&
-      source.includes('Use Supabase Auth settings to enforce credentialed sessions on the seeded member pages.'),
-    'Users membership handoff must route authors to member login/account page templates and provider-gated auth settings.',
+      source.includes('Lead capture and member page templates are available through Backy content systems') &&
+      source.includes('checked Next /account server-only BFF') &&
+      source.includes('visitorAccounts,') &&
+      source.includes("status: 'implemented'"),
+    'Users membership handoff must preserve member templates and expose implemented account APIs separately from provider connection.',
   );
   assert(
     source.includes("const MEMBER_ACCESS_HANDOFF_SCHEMA_VERSION = 'backy.member-access-handoff.v1'") &&

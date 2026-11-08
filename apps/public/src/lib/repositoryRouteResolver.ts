@@ -9,7 +9,7 @@ import type {
 import { matchCollectionItemRoute, matchCollectionListRoute } from './collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
 import { frontendDesignProvenanceFromMetadata } from './frontendDesignContract';
-import { getRepositoryPageByPublicPath } from './repositoryPages';
+import { getRepositoryPageSummaryByPublicPath } from './repositoryPages';
 import { type ResolvedSiteRoute, withLocalizedResolvedRoute } from './routeResolver';
 import { resolveRedirectRoute } from './redirectRules';
 import { resolveLocalizedRoutePath } from './siteLocalization';
@@ -18,7 +18,7 @@ type RepositoryRouteResolverRepositories = Pick<
   BackyRepositories,
   'posts' | 'collections' | 'contentWorkflows'
 > & {
-  pages: Pick<BackyRepositories['pages'], 'getById' | 'getBySlug' | 'list'>;
+  pages: Pick<BackyRepositories['pages'], 'getById' | 'getBySlug' | 'list' | 'getSummaryById' | 'getSummaryBySlug' | 'listSummaries'>;
 };
 
 export const isRepositoryContentPubliclyReadable = (item: { status: string; scheduledAt?: string | null }) => (
@@ -33,14 +33,14 @@ export const isRepositoryContentPubliclyReadable = (item: { status: string; sche
 
 export const repositorySiteStatus = (site: Site) => (site.isPublished ? 'published' : 'draft');
 
-export const canonicalPathForRepositoryPage = (page: Pick<BackyPage, 'isHomepage' | 'slug' | 'meta'>) => {
+export const canonicalPathForRepositoryPage = (page: Pick<BackyPage, 'isHomepage' | 'slug' | 'meta'>, resolvedPath?: string) => {
   if (page.isHomepage || page.slug === 'index') {
     return '/';
   }
 
   return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
     ? page.meta.canonical
-    : `/${page.slug}`;
+    : resolvedPath || `/${page.slug}`;
 };
 
 export const repositoryCollectionRecordTitle = (record: { slug: string; values: Record<string, unknown> }): string => {
@@ -132,13 +132,13 @@ export async function resolveRepositorySiteRoute(
   }
 
   const pagePath = path === '/' ? 'index' : path.slice(1);
-  const page = await getRepositoryPageByPublicPath(repositories, site.id, pagePath);
+  const page = await getRepositoryPageSummaryByPublicPath(repositories, site.id, pagePath);
   const canPreviewPage = page && options.previewToken
     ? await repositories.contentWorkflows.validatePreviewToken(site.id, 'page', page.id, options.previewToken)
     : false;
 
   if (page && (isRepositoryContentPubliclyReadable(page) || canPreviewPage)) {
-    const canonical = canonicalPathForRepositoryPage(page);
+    const canonical = canonicalPathForRepositoryPage(page, path);
     return withLocalizedResolvedRoute({
       type: 'page',
       path,

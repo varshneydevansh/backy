@@ -5,7 +5,7 @@
  * verification, inside an opaque iframe with the public message contract.
  */
 
-import { getSiteByIdOrSlug, listInteractiveComponents } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, getInteractiveComponent } from '@/lib/backyStore';
 import { buildPublicInteractiveComponentRegistry, type BackyInteractiveComponentRegistryEntry } from '@/lib/interactiveComponentRegistry';
 import { publicContractResponse } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -171,12 +171,14 @@ const resolvePublishedSiteId = async (siteId: string): Promise<string | null> =>
 };
 
 const buildSandboxHtml = ({
+  siteId,
   componentKey,
   displayName,
   version,
   protocol,
   bundleBase64,
 }: {
+  siteId: string;
   componentKey: string;
   displayName: string;
   version: string;
@@ -210,6 +212,7 @@ const buildSandboxHtml = ({
   <script>
     (function () {
       var protocol = ${scriptJson(protocol)};
+      var siteId = ${scriptJson(siteId)};
       var componentKey = ${scriptJson(componentKey)};
       var version = ${scriptJson(version)};
       var title = document.getElementById('title');
@@ -220,6 +223,8 @@ const buildSandboxHtml = ({
       var fallbackNode = document.getElementById('fallback');
       var mounted = false;
       var cleanup;
+      var disposed = false;
+      var lifecycleGeneration = 0;
       var updates = Promise.resolve();
       var modulePromise = bundleBase64 ? (async function () {
         var bytes = Uint8Array.from(atob(bundleBase64), function (character) { return character.charCodeAt(0); });
@@ -252,10 +257,35 @@ const buildSandboxHtml = ({
         }, '*');
       }
 
+      function runCleanup(fn) {
+        if (typeof fn !== 'function') return Promise.resolve();
+        try { return Promise.resolve(fn()).catch(reportError); }
+        catch (error) { reportError(error); return Promise.resolve(); }
+      }
+
+      function dispose() {
+        if (disposed) return;
+        disposed = true;
+        lifecycleGeneration += 1;
+        mounted = false;
+        var previousCleanup = cleanup;
+        cleanup = undefined;
+        runCleanup(previousCleanup);
+      }
+
+      window.addEventListener('pagehide', dispose);
+      window.addEventListener('unload', dispose);
+      window.addEventListener('pageshow', function (event) {
+        if (!event.persisted || !disposed) return;
+        disposed = false;
+        parent.postMessage({ type: 'backy.interactive-component.ready', protocol: protocol,
+          componentKey: componentKey, version: version }, '*');
+      });
+
       window.addEventListener('message', function (event) {
         try {
           var data = event.data || {};
-          if (event.source !== parent || data.type !== 'backy.interactive-component.init' || data.protocol !== protocol
+          if (disposed || event.source !== parent || data.type !== 'backy.interactive-component.init' || data.protocol !== protocol
             || data.componentKey !== componentKey || data.version !== version) {
             return;
           }
@@ -271,21 +301,35 @@ const buildSandboxHtml = ({
           }, null, 2);
           payloadNode.hidden = Boolean(bundleBase64);
           if (bundleBase64) {
+            var generation = lifecycleGeneration;
             updates = updates.then(async function () {
               var module = await modulePromise;
-              var context = { root: root, props: data.props || {}, controls: data.controls || [], dataBindings: data.dataBindings || {}, componentKey: componentKey, version: version, resize: resize };
+              if (disposed || generation !== lifecycleGeneration) return;
+              var context = { root: root, props: data.props || {}, controls: data.controls || [], propsSchema: data.propsSchema || {}, dataBindings: data.dataBindings || {}, readOnly: true, siteId: siteId, componentKey: componentKey, version: version, resize: resize };
               root.hidden = false;
               if (mounted && typeof module.update === 'function') {
                 await module.update(context);
               } else {
-                if (typeof cleanup === 'function') await cleanup();
+                var previousCleanup = cleanup;
+                cleanup = undefined;
+                if (typeof previousCleanup === 'function') await previousCleanup();
+                if (disposed || generation !== lifecycleGeneration) return;
                 root.replaceChildren();
-                cleanup = await module.mount(context);
+                var nextCleanup = await module.mount(context);
+                if (disposed || generation !== lifecycleGeneration) {
+                  await runCleanup(nextCleanup);
+                  return;
+                }
+                cleanup = nextCleanup;
                 mounted = true;
               }
+              if (disposed || generation !== lifecycleGeneration) return;
               fallbackNode.hidden = true;
+              parent.postMessage({ type: 'backy.interactive-component.rendered', protocol: protocol,
+                componentKey: componentKey, version: version }, '*');
               resize();
             }).catch(function (error) {
+              if (disposed || generation !== lifecycleGeneration) return;
               root.hidden = true;
               fallbackNode.hidden = false;
               reportError(error);
@@ -334,15 +378,18 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   }
 
-  const storedEntries = shouldUseDemoStoreFallback()
-    ? listInteractiveComponents(resolvedSiteId, { publicOnly: true })
-    : (await (await getRequiredDatabaseRepositories()).interactiveComponents.list({
-        siteId: resolvedSiteId,
-        publicOnly: true,
-        limit: 100,
-        offset: 0,
-      })).items;
-  const registryEntries = storedEntries.map(toPublicRegistryEntry);
+  const key = decodeURIComponent(componentKey);
+  const requestedVersion = decodeURIComponent(version);
+  const storedComponent = shouldUseDemoStoreFallback()
+    ? getInteractiveComponent(resolvedSiteId, key, requestedVersion)
+    : await (await getRequiredDatabaseRepositories()).interactiveComponents.getByKeyVersion(resolvedSiteId, key, requestedVersion);
+  // A stored unapproved override must never silently restore a built-in identity.
+  if (storedComponent && (storedComponent.siteId !== resolvedSiteId || storedComponent.componentKey !== key
+    || storedComponent.version !== requestedVersion || storedComponent.status !== 'active'
+    || storedComponent.reviewStatus !== 'approved')) {
+    return sandboxError({ status: 404, title: 'Component not found', detail: 'The requested sandbox component is not registered for this site.', request, requestId, siteId: resolvedSiteId });
+  }
+  const registryEntries = storedComponent ? [toPublicRegistryEntry(storedComponent)] : [];
   const registry = buildPublicInteractiveComponentRegistry(resolvedSiteId, registryEntries);
   const component = registry.components.find((entry) => (
     entry.componentKey === decodeURIComponent(componentKey)
@@ -371,7 +418,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     });
   }
 
-  const storedComponent = storedEntries.find((entry) => entry.componentKey === component.componentKey && entry.version === component.version);
   let bundleBase64: string | undefined;
   if (storedComponent) {
     if (!registry.contract.sandbox.enabled) {
@@ -406,6 +452,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   ].join('; ');
 
   const html = buildSandboxHtml({
+    siteId: resolvedSiteId,
     componentKey: component.componentKey,
     displayName: component.displayName,
     version: component.version,

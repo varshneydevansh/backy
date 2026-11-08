@@ -1,4 +1,6 @@
 import {
+    assertBackyContentUpdateExpectation,
+    BackyContentConflictError,
     DEFAULT_SITE_SETTINGS,
     DEFAULT_THEME,
     canvasContentPayloadToBackyContentDocument,
@@ -6,17 +8,28 @@ import {
     type BackyContentDocument,
     type BackyListResult,
     type BackyPage,
+    type BackyPageSummary,
+    type BackyPageCanvasSource,
+    type BackyPageRouteMetadata,
+    type BackySiteRouteMetadata,
+    type BackyPageSearchMetadata,
+    type BackyPageLinkMetadata,
+    type BackyPostSearchMetadata,
+    type BackySearchMetadataListInput,
+    type BackySearchSeoMeta,
     type BackyPageCreateInput,
     type BackyPageListInput,
     type BackyPageRepository,
     type BackyPageUpdateInput,
     type BackyPost,
+    type BackyPostArchiveMetadata,
     type BackyPostCreateInput,
     type BackyPostListInput,
     type BackyPostRepository,
     type BackyPostUpdateInput,
     type BackyRepositoryMutationResult,
     type BackySiteCreateInput,
+    type BackySiteSearchMetadata,
     type BackySiteListInput,
     type BackySiteRepository,
     type BackySiteUpdateInput,
@@ -27,7 +40,9 @@ import {
     type SiteSettings,
     type ThemeConfig,
 } from '@backy-cms/core';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { SiteCreationAdmissionError } from '@backy-cms/core';
+import { withSiteCreationAdmission } from './site-creation-admission';
+import { and, desc, eq, ne, sql, type SQLWrapper } from 'drizzle-orm';
 import {
     blogPosts,
     comments,
@@ -35,8 +50,10 @@ import {
     sites,
 } from '../schema';
 import type { DatabaseInstance } from '../adapters';
+import { createContentWorkflowRepository } from './content-workflows';
 
 type QueryDatabase = {
+    transaction: <T>(run: (transaction: QueryDatabase) => Promise<T>) => Promise<T>;
     select: (...args: unknown[]) => {
         from: (table: unknown) => QueryBuilder;
     };
@@ -49,11 +66,12 @@ type QueryDatabase = {
         };
     };
     delete: (table: unknown) => {
-        where: (condition: unknown) => Promise<unknown>;
+        where: (condition: unknown) => Promise<unknown> & ReturningQuery;
     };
 };
 
 type QueryBuilder = {
+    for: (mode: 'update') => QueryBuilder;
     where: (condition: unknown) => QueryBuilder;
     orderBy: (...columns: unknown[]) => QueryBuilder;
     limit: (limit: number) => QueryBuilder;
@@ -291,6 +309,14 @@ const normalizeSettings = (value: unknown): SiteSettings => {
     };
 };
 
+// Arrays replace; nested settings sections merge so partial writes retain current metadata.
+const mergeSettingsRecords = (current: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(
+    Array.from(new Set([...Object.keys(current), ...Object.keys(patch)])).map((key) => {
+        const value = patch[key];
+        return [key, value === undefined ? current[key] : isRecord(value) && isRecord(current[key]) ? mergeSettingsRecords(current[key], value) : value];
+    }),
+);
+
 const normalizeMeta = (value: unknown): PageMeta => (
     isRecord(value) ? value as PageMeta : {}
 );
@@ -368,6 +394,91 @@ const toSite = (row: SiteRow): Site => ({
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
 });
+
+// Do not select or normalize editable canvas JSON for identity/navigation reads.
+const pageSummaryColumns = {
+    id: pages.id,
+    siteId: pages.siteId,
+    title: pages.title,
+    slug: pages.slug,
+    description: pages.description,
+    meta: pages.meta,
+    status: pages.status,
+    publishedAt: pages.publishedAt,
+    scheduledAt: pages.scheduledAt,
+    isHomepage: pages.isHomepage,
+    parentId: pages.parentId,
+    sortOrder: pages.sortOrder,
+    createdBy: pages.createdBy,
+    updatedBy: pages.updatedBy,
+    createdAt: pages.createdAt,
+    updatedAt: pages.updatedAt,
+};
+type PageSummaryRow = Omit<PageRow, 'content'>;
+
+const toPageSummary = (row: PageSummaryRow): BackyPageSummary => ({
+    id: row.id,
+    siteId: row.siteId,
+    title: row.title,
+    slug: row.slug,
+    description: row.description,
+    meta: normalizeMeta(row.meta),
+    status: row.status,
+    publishedAt: toNullableIso(row.publishedAt),
+    scheduledAt: toNullableIso(row.scheduledAt),
+    isHomepage: row.isHomepage,
+    parentId: row.parentId,
+    sortOrder: row.sortOrder,
+    createdBy: row.createdBy,
+    updatedBy: row.updatedBy,
+    createdAt: toIso(row.createdAt),
+    updatedAt: toIso(row.updatedAt),
+});
+
+const searchMetaKeys = ['canonical', 'title', 'description', 'noIndex', 'noFollow', 'keywords'] as const;
+const searchMetaValue = (column: SQLWrapper, key: typeof searchMetaKeys[number], adapter: string) => {
+    // Constants only; JSON is returned as text on every driver and decoded once.
+    const expression = adapter === 'sqlite' ? sql`cast(${column} -> ${`$.${key}`} as text)`
+        : adapter === 'mysql' ? sql`cast(json_extract(${column}, ${`$.${key}`}) as char)`
+            : sql`(${column} -> ${key})::text`;
+    return expression.mapWith((value: unknown) => value === null ? undefined : JSON.parse(String(value))).as(`search_${key}`);
+};
+const searchColumns = (table: typeof pages | typeof blogPosts, adapter: string) => ({
+    id: table.id, siteId: table.siteId, title: table.title, slug: table.slug,
+    status: table.status, scheduledAt: table.scheduledAt, updatedAt: table.updatedAt,
+    seoCanonical: searchMetaValue(table.meta, 'canonical', adapter),
+    seoTitle: searchMetaValue(table.meta, 'title', adapter),
+    seoDescription: searchMetaValue(table.meta, 'description', adapter),
+    seoNoIndex: searchMetaValue(table.meta, 'noIndex', adapter),
+    seoNoFollow: searchMetaValue(table.meta, 'noFollow', adapter),
+    seoKeywords: searchMetaValue(table.meta, 'keywords', adapter),
+});
+type SearchRow = {
+    id: string; siteId: string; title: string; slug: string; status: PublishStatus;
+    scheduledAt: Date | string | null; updatedAt: Date | string;
+    seoCanonical?: unknown; seoTitle?: unknown; seoDescription?: unknown;
+    seoNoIndex?: unknown; seoNoFollow?: unknown; seoKeywords?: unknown;
+};
+const searchIdentity = (row: SearchRow) => ({
+    id: row.id, siteId: row.siteId, title: row.title, slug: row.slug, status: row.status,
+    scheduledAt: toNullableIso(row.scheduledAt), updatedAt: toIso(row.updatedAt),
+    meta: Object.fromEntries(searchMetaKeys.flatMap(key => {
+        const value = row[`seo${key[0].toUpperCase()}${key.slice(1)}` as keyof SearchRow];
+        return value === undefined || value === null ? [] : [[key, value]];
+    })) as BackySearchSeoMeta,
+});
+async function listMetadataRows<T>(database: QueryDatabase, table: typeof pages | typeof blogPosts,
+    columns: Record<string, unknown>, input: BackySearchMetadataListInput): Promise<BackyListResult<T>> {
+    if (!['published', 'scheduled'].includes(input.status)) throw new Error('Search requires an explicit public candidate status.');
+    const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+    const where = and(eq(table.siteId, input.siteId), eq(table.status, input.status));
+    const [count] = await database.select({ total: sql<number>`count(*)` }).from(table).where(where) as { total: number | string }[];
+    const total = Number(count?.total);
+    if (!Number.isSafeInteger(total) || total < 0) throw new Error('Invalid search metadata count.');
+    const items = await database.select(columns).from(table).where(where)
+        .orderBy(desc(table.updatedAt), desc(table.id)).limit(limit).offset(offset) as T[];
+    return { items, pagination: { total, limit, offset, hasMore: offset + items.length < total } };
+}
 
 const toPage = (row: PageRow): BackyPage => ({
     id: row.id,
@@ -451,10 +562,117 @@ const contentPayload = (content: BackyContentDocument): Record<string, unknown> 
     elements: content.elements,
 });
 
-export function createSiteRepository(db: DatabaseInstance): BackySiteRepository {
+// Project recognized routing leaves in SQL. Nested owner extensions never cross the connection.
+const routeLeaf = (value: SQLWrapper, type: 'string' | 'boolean' | 'number') => sql`case when jsonb_typeof(${value}) = ${type} then ${value} else 'null'::jsonb end`;
+const routingArray = (value: SQLWrapper) => sql`case when jsonb_typeof(${value}) = 'array' then ${value} else '[]'::jsonb end`;
+const routeSettingsProjection = () => {
+    const redirects = routingArray(sql`${sites.settings}->'redirectRules'`);
+    const locales = routingArray(sql`${sites.settings}->'localization'->'locales'`);
+    const redirectFields = ['id', 'from', 'to'].flatMap(key => [sql`${key}::text`, routeLeaf(sql`entry.value->${key}::text`, 'string')]);
+    redirectFields.push(sql`'statusCode'`, routeLeaf(sql`entry.value->'statusCode'`, 'number'), sql`'enabled'`, routeLeaf(sql`entry.value->'enabled'`, 'boolean'));
+    const localeFields = ['code', 'label', 'direction', 'pathPrefix', 'domain'].flatMap(key => [sql`${key}::text`, routeLeaf(sql`entry.value->${key}::text`, 'string')]);
+    localeFields.push(sql`'default'`, routeLeaf(sql`entry.value->'default'`, 'boolean'));
+    return sql<string | null>`(select case when octet_length(projected::text) <= 262144 then projected::text else null end from (
+        select case when jsonb_array_length(${redirects}) > 10000 or jsonb_array_length(${locales}) > 1000
+            or exists (select 1 from jsonb_array_elements(${locales}) locale_entry where jsonb_typeof(locale_entry->'default') not in ('boolean', 'null')) then null else jsonb_build_object(
+            'redirectRules', coalesce((select jsonb_agg(jsonb_build_object(${sql.join(redirectFields, sql`, `)}) order by entry.ordinal)
+                from jsonb_array_elements(${redirects}) with ordinality entry(value, ordinal) where jsonb_typeof(entry.value) = 'object'), '[]'::jsonb),
+            'localization', jsonb_build_object(
+                'defaultLocale', ${routeLeaf(sql`${sites.settings}->'localization'->'defaultLocale'`, 'string')},
+                'localeStrategy', ${routeLeaf(sql`${sites.settings}->'localization'->'localeStrategy'`, 'string')},
+                'locales', coalesce((select jsonb_agg(case when jsonb_typeof(entry.value) = 'object' then jsonb_build_object(${sql.join(localeFields, sql`, `)}) else null end order by entry.ordinal)
+                    from jsonb_array_elements(${locales}) with ordinality entry(value, ordinal)), '[]'::jsonb)
+            )
+        ) end as projected
+    ) routing_projection)`;
+};
+const pageRouteColumns = {
+    id: pages.id, siteId: pages.siteId,
+    slug: sql<string>`case when length(${pages.slug}) <= 1024 then ${pages.slug} else null end`,
+    parentId: pages.parentId, isHomepage: pages.isHomepage, status: pages.status, scheduledAt: pages.scheduledAt,
+};
+type PageRouteRow = Omit<BackyPageRouteMetadata, 'scheduledAt'> & { scheduledAt: Date | string | null };
+const toPageRouteMetadata = (row: PageRouteRow): BackyPageRouteMetadata => {
+    if (typeof row.slug !== 'string') throw Error('Page routing identity exceeds its read budget');
+    return { ...row, scheduledAt: toNullableIso(row.scheduledAt) };
+};
+
+export function createSiteRepository(db: DatabaseInstance, adapterType: string = 'postgres'): BackySiteRepository {
     const database = asDb(db);
 
     return {
+        async getRouteMetadataByIdOrSlug(identifier: string): Promise<BackySiteRouteMetadata | null> {
+            if (adapterType !== 'postgres') throw Error('Narrow routing projection requires PostgreSQL');
+            const columns = { id: sites.id, slug: sites.slug, isPublished: sites.isPublished, routingSettings: routeSettingsProjection() };
+            type Row = Pick<Site, 'id' | 'slug' | 'isPublished'> & { routingSettings: string | null };
+            const read = (where: ReturnType<typeof eq>) => firstOrNull<Row>(database.select(columns).from(sites).where(where).limit(1));
+            let row = isUuidIdentifier(identifier) ? await read(eq(sites.id, identifier)) : null;
+            if (!row) row = await read(eq(sites.slug, identifier));
+            if (!row) return null;
+            if (row.routingSettings === null) throw Error('Routing settings exceed their read budget');
+            const settings = JSON.parse(row.routingSettings);
+            // Match the full repository's redirect normalization, including stripped legacy keys.
+            return { id: row.id, slug: row.slug, isPublished: row.isPublished, settings: {
+                localization: settings.localization, redirectRules: normalizeSiteRedirectRules(settings.redirectRules),
+            } };
+        },
+        async getAccessScopeByIdOrSlug(identifier: string): Promise<Pick<Site, 'id' | 'slug' | 'teamId'> | null> {
+            const columns = { id: sites.id, slug: sites.slug, teamId: sites.teamId };
+            if (isUuidIdentifier(identifier)) {
+                const byId = await firstOrNull<Pick<Site, 'id' | 'slug' | 'teamId'>>(database.select(columns).from(sites).where(eq(sites.id, identifier)).limit(1));
+                if (byId) return byId;
+            }
+            return firstOrNull<Pick<Site, 'id' | 'slug' | 'teamId'>>(database.select(columns).from(sites).where(eq(sites.slug, identifier)).limit(1));
+        },
+        async getSearchMetadataByIdOrSlug(identifier: string): Promise<BackySiteSearchMetadata | null> {
+            // Correlated ordered projection keeps first-match override semantics;
+            // unused templates, JSON-LD, OG images and owner labels stay in SQL.
+            // Other adapters must provide equivalent ordered JSON projection.
+            if (adapterType !== 'postgres') throw Error('Ordered site search metadata projection is unavailable for this adapter.');
+            const settings = sql<string>`case when ${sites.isPublished} = false then '{"seo":{}}'::text else jsonb_build_object(
+                'seo', jsonb_build_object(
+                    'titleTemplate', coalesce(${sites.settings}->'seo'->'titleTemplate', ${JSON.stringify(DEFAULT_SITE_SETTINGS.seo.titleTemplate)}::jsonb),
+                    'defaultDescription', coalesce(${sites.settings}->'seo'->'defaultDescription', ${JSON.stringify(DEFAULT_SITE_SETTINGS.seo.defaultDescription)}::jsonb),
+                    'robots', jsonb_build_object(
+                        'index', coalesce(${sites.settings}->'seo'->'robots'->'index', 'true'::jsonb),
+                        'follow', coalesce(${sites.settings}->'seo'->'robots'->'follow', 'true'::jsonb)
+                    ),
+                    'routeOverrides', coalesce((select jsonb_agg(jsonb_build_object(
+                        'id', search_override.value->'id', 'match', search_override.value->'match',
+                        'enabled', search_override.value->'enabled', 'title', search_override.value->'title',
+                        'description', search_override.value->'description', 'canonical', search_override.value->'canonical',
+                        'keywords', search_override.value->'keywords',
+                        'robots', jsonb_build_object('index', search_override.value->'robots'->'index', 'follow', search_override.value->'robots'->'follow')
+                    ) order by search_override.ordinal)
+                    from jsonb_array_elements(case
+                        when ${sites.settings}->'seo'->'routeOverrides' is null
+                          or ${sites.settings}->'seo'->'routeOverrides' in ('null'::jsonb, 'false'::jsonb, '0'::jsonb, '""'::jsonb) then '[]'::jsonb
+                        else ${sites.settings}->'seo'->'routeOverrides' end
+                    ) with ordinality as search_override(value, ordinal)), '[]'::jsonb)
+                )
+            )::text end`.as('search_settings');
+            const columns = { id: sites.id, slug: sites.slug, name: sites.name, isPublished: sites.isPublished, updatedAt: sites.updatedAt, searchSettings: settings };
+            type Row = Omit<BackySiteSearchMetadata, 'updatedAt' | 'settings'> & { updatedAt: Date | string; searchSettings: string };
+            const read = async (where: ReturnType<typeof eq>) => firstOrNull<Row>(database.select(columns).from(sites).where(where).limit(1));
+            let row = isUuidIdentifier(identifier) ? await read(eq(sites.id, identifier)) : null;
+            if (!row) row = await read(eq(sites.slug, identifier));
+            return row ? { id: row.id, slug: row.slug, name: row.name, isPublished: row.isPublished, updatedAt: toIso(row.updatedAt), settings: JSON.parse(row.searchSettings) } : null;
+        },
+
+        async getPublicationByIdOrSlug(identifier: string): Promise<Pick<Site, 'id' | 'slug' | 'isPublished'> | null> {
+            const columns = { id: sites.id, slug: sites.slug, isPublished: sites.isPublished };
+            // Retain ID precedence even when another site's slug is UUID-shaped.
+            if (isUuidIdentifier(identifier)) {
+                const byId = await firstOrNull<Pick<Site, 'id' | 'slug' | 'isPublished'>>(
+                    database.select(columns).from(sites).where(eq(sites.id, identifier)).limit(1),
+                );
+                if (byId) return byId;
+            }
+            return firstOrNull<Pick<Site, 'id' | 'slug' | 'isPublished'>>(
+                database.select(columns).from(sites).where(eq(sites.slug, identifier)).limit(1),
+            );
+        },
+
         async list(input: BackySiteListInput): Promise<BackyListResult<Site>> {
             const rows = await database.select().from(sites).orderBy(desc(sites.createdAt)) as SiteRow[];
             const filtered = rows
@@ -497,7 +715,10 @@ export function createSiteRepository(db: DatabaseInstance): BackySiteRepository 
 
         async create(input: BackySiteCreateInput): Promise<BackyRepositoryMutationResult<Site>> {
             const status = input.status || 'draft';
-            const [row] = await database.insert(sites).values({
+            return withSiteCreationAdmission(db, adapterType, async transaction => {
+            const [conflict] = await transaction.select({id:sites.id}).from(sites).where(eq(sites.slug,input.slug));
+            if (conflict) throw new SiteCreationAdmissionError('SITE_SLUG_CONFLICT',409,'This site slug is already in use. Choose another slug.');
+            const [row] = await transaction.insert(sites).values({
                 teamId: input.teamId,
                 name: input.name,
                 slug: input.slug,
@@ -510,6 +731,7 @@ export function createSiteRepository(db: DatabaseInstance): BackySiteRepository 
                 updatedAt: new Date(),
             }).returning() as SiteRow[];
             return { item: toSite(row) };
+            });
         },
 
         async update(siteId: string, input: BackySiteUpdateInput): Promise<BackyRepositoryMutationResult<Site>> {
@@ -521,26 +743,112 @@ export function createSiteRepository(db: DatabaseInstance): BackySiteRepository 
             if (input.description !== undefined) updates.description = input.description;
             if (input.customDomain !== undefined) updates.customDomain = input.customDomain;
             if (input.theme !== undefined) updates.theme = normalizeTheme(input.theme);
-            if (input.settings !== undefined) updates.settings = normalizeSettings(input.settings);
             if (input.isPublished !== undefined) updates.isPublished = input.isPublished;
             if (input.status !== undefined) updates.isPublished = input.status === 'published';
             if (input.publishedAt !== undefined) updates.publishedAt = input.publishedAt ? new Date(input.publishedAt) : null;
 
-            const [row] = await database.update(sites).set(updates).where(eq(sites.id, siteId)).returning() as SiteRow[];
-            return { item: toSite(row) };
+            const save = async (transaction: QueryDatabase) => {
+                const [row] = await transaction.update(sites).set(updates).where(eq(sites.id, siteId)).returning() as SiteRow[];
+                if (!row) throw Object.assign(new Error('Site not found'), { code: 'SITE_NOT_FOUND' });
+                return { item: toSite(row) };
+            };
+            if (input.settings === undefined) return save(database);
+            if (Object.prototype.hasOwnProperty.call(input.settings, 'frontendDesign')) throw Object.assign(new Error('Change frontendDesign through the atomic template history writer.'), { code: 'FRONTEND_DESIGN_HISTORY_REQUIRED', status: 400 });
+            return database.transaction(async (transaction) => {
+                const current = await firstOrNull<SiteRow>(transaction.select().from(sites).where(eq(sites.id, siteId)).for('update'));
+                if (!current) throw Object.assign(new Error('Site not found'), { code: 'SITE_NOT_FOUND' });
+                updates.settings = normalizeSettings(mergeSettingsRecords(normalizeSettings(current.settings) as unknown as Record<string, unknown>, input.settings as Record<string, unknown>));
+                return save(transaction);
+            });
         },
 
         async delete(siteId: string): Promise<boolean> {
-            await database.delete(sites).where(eq(sites.id, siteId));
-            return true;
+            const deleted = await database.delete(sites).where(eq(sites.id, siteId)).returning();
+            return deleted.length > 0;
         },
     };
 }
 
-export function createPageRepository(db: DatabaseInstance): BackyPageRepository {
+export function createPageRepository(db: DatabaseInstance, adapterType = 'postgres'): BackyPageRepository {
     const database = asDb(db);
 
     return {
+        async listCanvasSourceMetadata(input) {
+            if (adapterType !== 'postgres') throw Error('Narrow canvas discovery requires PostgreSQL');
+            const { limit = 50, offset = 0, search = '' } = input;
+            if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000 || typeof search !== 'string' || search.length > 200) throw Error('Invalid canvas discovery query');
+            const where = and(eq(pages.siteId, input.siteId), ne(pages.status, 'archived'), search ? sql`position(lower(${search}) in lower(${pages.title} || ' ' || ${pages.slug})) > 0` : undefined);
+            const count = await firstOrNull<{ total: number }>(database.select({ total: sql<number>`count(*)::int` }).from(pages).where(where));
+            const total = Number(count?.total);
+            if (!Number.isSafeInteger(total) || total < 0) throw Error('Invalid canvas discovery count');
+            const items = await database.select({
+                id: pages.id, siteId: pages.siteId,
+                title: sql<string>`case when length(${pages.title}) <= 2000 then ${pages.title} else null end`,
+                slug: sql<string>`case when length(${pages.slug}) <= 1024 then ${pages.slug} else null end`,
+                status: pages.status,
+            }).from(pages).where(where).orderBy(desc(pages.updatedAt), desc(pages.id)).limit(limit).offset(offset) as BackyPageCanvasSource[];
+            return { items, pagination: { total, limit, offset, hasMore: offset + limit < total } };
+        },
+        async getRouteMetadataById(siteId, pageId) {
+            if (!isUuidIdentifier(siteId) || !isUuidIdentifier(pageId)) return null;
+            const row = await firstOrNull<PageRouteRow>(database.select(pageRouteColumns).from(pages).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).limit(1));
+            return row ? toPageRouteMetadata(row) : null;
+        },
+        async getRouteMetadataBySlug(siteId, slug) {
+            const row = await firstOrNull<PageRouteRow>(database.select(pageRouteColumns).from(pages).where(and(eq(pages.siteId, siteId), eq(pages.slug, slug))).limit(1));
+            return row ? toPageRouteMetadata(row) : null;
+        },
+        async listRouteMetadata(input) {
+            // Home selection requires every status; silently filtering drafts changes Home precedence.
+            if (input.status !== 'all' || !input.includeUnpublished || input.search || input.parentId !== undefined) throw Error('Unsupported routing inventory query');
+            const { limit = 50, offset = 0 } = input;
+            if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000 || !Number.isSafeInteger(offset) || offset < 0) throw Error('Invalid routing pagination');
+            const count = await firstOrNull<{ total: number }>(database.select({ total: sql<number>`count(*)::int` }).from(pages).where(eq(pages.siteId, input.siteId)));
+            const total = Number(count?.total || 0);
+            if (total > 10000) throw Error('Page hierarchy inventory exceeds its read budget');
+            const rows = await database.select(pageRouteColumns).from(pages).where(eq(pages.siteId, input.siteId)).orderBy(desc(pages.updatedAt), desc(pages.id)).limit(limit).offset(offset) as PageRouteRow[];
+            return { items: rows.map(toPageRouteMetadata), pagination: { total, limit, offset, hasMore: offset + limit < total } };
+        },
+        async listLinkMetadata(input): Promise<BackyListResult<BackyPageLinkMetadata>> {
+            const result = await listMetadataRows<BackyPageLinkMetadata>(database, pages, {
+                id: pages.id, siteId: pages.siteId,
+                title: sql<string>`substr(${pages.title}, 1, 256)`,
+                slug: sql<string>`case when length(${pages.slug}) <= 1024 then ${pages.slug} else '' end`,
+                status: pages.status, isHomepage: pages.isHomepage, parentId: pages.parentId, updatedAt: pages.updatedAt,
+            }, { ...input, status: 'published' });
+            return { ...result, items: result.items.map(row => ({ ...row, updatedAt: toIso(row.updatedAt) })) };
+        },
+        async listSearchMetadata(input: BackySearchMetadataListInput): Promise<BackyListResult<BackyPageSearchMetadata>> {
+            const result = await listMetadataRows<SearchRow & Pick<PageRow, 'description' | 'isHomepage' | 'parentId'>>(database, pages,
+                { ...searchColumns(pages, adapterType), description: pages.description, isHomepage: pages.isHomepage, parentId: pages.parentId }, input);
+            return { ...result, items: result.items.map(row => ({ ...searchIdentity(row), description: row.description, isHomepage: row.isHomepage, parentId: row.parentId })) };
+        },
+        async listSummaries(input: BackyPageListInput): Promise<BackyListResult<BackyPageSummary>> {
+            const rows = await database.select(pageSummaryColumns).from(pages).where(eq(pages.siteId, input.siteId)).orderBy(desc(pages.updatedAt)) as PageSummaryRow[];
+            const filtered = rows
+                .map(toPageSummary)
+                .filter((page) => input.includeUnpublished || input.status === 'all' || page.status === 'published')
+                .filter((page) => input.status && input.status !== 'all' ? page.status === input.status : true)
+                .filter((page) => input.parentId === undefined ? true : page.parentId === input.parentId)
+                .filter((page) => input.search ? searchText(`${page.title} ${page.slug} ${page.description || ''}`, input.search) : true);
+            return paginate(filtered, input.limit, input.offset);
+        },
+
+        async getSummaryById(siteId: string, pageId: string): Promise<BackyPageSummary | null> {
+            if (!isUuidIdentifier(siteId) || !isUuidIdentifier(pageId)) return null;
+            const row = await firstOrNull<PageSummaryRow>(
+                database.select(pageSummaryColumns).from(pages).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).limit(1),
+            );
+            return row ? toPageSummary(row) : null;
+        },
+
+        async getSummaryBySlug(siteId: string, slug: string): Promise<BackyPageSummary | null> {
+            const row = await firstOrNull<PageSummaryRow>(
+                database.select(pageSummaryColumns).from(pages).where(and(eq(pages.siteId, siteId), eq(pages.slug, slug))).limit(1),
+            );
+            return row ? toPageSummary(row) : null;
+        },
+
         async list(input: BackyPageListInput): Promise<BackyListResult<BackyPage>> {
             const rows = await database.select().from(pages).where(eq(pages.siteId, input.siteId)).orderBy(desc(pages.updatedAt)) as PageRow[];
             const filtered = rows
@@ -602,25 +910,47 @@ export function createPageRepository(db: DatabaseInstance): BackyPageRepository 
         },
 
         async update(siteId: string, pageId: string, input: BackyPageUpdateInput): Promise<BackyRepositoryMutationResult<BackyPage>> {
-            const updates: Record<string, unknown> = {
-                updatedAt: new Date(),
-            };
-            if (input.title !== undefined) updates.title = input.title;
-            if (input.slug !== undefined) updates.slug = input.slug;
-            if (input.description !== undefined) updates.description = input.description;
-            if (input.content !== undefined) updates.content = contentPayload(input.content);
-            if (input.meta !== undefined) updates.meta = input.meta;
-            if (input.status !== undefined) {
-                updates.status = input.status;
-                updates.publishedAt = publishedAtForStatus(input.status);
-            }
-            if (input.scheduledAt !== undefined) updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
-            if (input.isHomepage !== undefined) updates.isHomepage = input.isHomepage;
-            if (input.parentId !== undefined) updates.parentId = input.parentId;
-            if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
+            const guarded = input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined;
+            if (input.beforeUpdateRevision && (input.expectedContent === undefined || !input.expectedUpdatedAt)) throw new BackyContentConflictError();
+            const run = async (writer: QueryDatabase): Promise<BackyRepositoryMutationResult<BackyPage>> => {
+                let lockedCurrent: BackyPage | null = null;
+                if (guarded) {
+                    const current = await firstOrNull<PageRow>(
+                        writer.select().from(pages).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).limit(1).for('update'),
+                    );
+                    lockedCurrent = current ? toPage(current) : null;
+                    assertBackyContentUpdateExpectation(input, lockedCurrent);
+                }
+                if (input.beforeUpdateRevision) {
+                    await createContentWorkflowRepository(writer as unknown as DatabaseInstance).createRevision({
+                        ...input.beforeUpdateRevision,
+                        siteId,
+                        targetType: 'page',
+                        targetId: pageId,
+                    });
+                }
+                const updates: Record<string, unknown> = {
+                    // Guarded revisions advance even for metadata-only writes in the same millisecond.
+                    updatedAt: new Date(Math.max(Date.now(), lockedCurrent ? Date.parse(lockedCurrent.updatedAt) + 1 : 0)),
+                };
+                if (input.title !== undefined) updates.title = input.title;
+                if (input.slug !== undefined) updates.slug = input.slug;
+                if (input.description !== undefined) updates.description = input.description;
+                if (input.content !== undefined) updates.content = contentPayload(input.content);
+                if (input.meta !== undefined) updates.meta = input.meta;
+                if (input.status !== undefined) {
+                    updates.status = input.status;
+                    updates.publishedAt = publishedAtForStatus(input.status);
+                }
+                if (input.scheduledAt !== undefined) updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+                if (input.isHomepage !== undefined) updates.isHomepage = input.isHomepage;
+                if (input.parentId !== undefined) updates.parentId = input.parentId;
+                if (input.sortOrder !== undefined) updates.sortOrder = input.sortOrder;
 
-            const [row] = await database.update(pages).set(updates).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).returning() as PageRow[];
-            return { item: toPage(row) };
+                const [row] = await writer.update(pages).set(updates).where(and(eq(pages.siteId, siteId), eq(pages.id, pageId))).returning() as PageRow[];
+                return { item: toPage(row) };
+            };
+            return guarded ? database.transaction(run) : run(database);
         },
 
         async publish(siteId: string, pageId: string): Promise<BackyRepositoryMutationResult<BackyPage>> {
@@ -643,10 +973,52 @@ export function createPageRepository(db: DatabaseInstance): BackyPageRepository 
     };
 }
 
-export function createPostRepository(db: DatabaseInstance): BackyPostRepository {
+export function createPostRepository(db: DatabaseInstance, adapterType = 'postgres'): BackyPostRepository {
     const database = asDb(db);
 
     return {
+        async listPublicArchiveMetadata(input): Promise<BackyListResult<BackyPostArchiveMetadata>> {
+            if (adapterType !== 'postgres') throw new Error('Public archive SQL projection unavailable for this adapter.');
+            if (!Number.isFinite(Date.parse(input.asOf))) throw new Error('A valid archive admission time is required.');
+            const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+            // JSON arrays are projected/examined inside SQL, never by fetching
+            // the enclosing owner metadata. Malformed/oversized arrays fail the
+            // public DTO check rather than becoming a different set of tags.
+            const array = (key: 'categoryIds' | 'tagIds') => sql<string[]>`case
+                when jsonb_typeof(${blogPosts.meta}->${key}) = 'array' then
+                    case when jsonb_array_length(${blogPosts.meta}->${key}) <= 1000 then ${blogPosts.meta}->${key} else null end
+                when ${blogPosts.meta}->${key} is null or ${blogPosts.meta}->${key} = 'null'::jsonb then '[]'::jsonb else null end`;
+            const categoryIds = array('categoryIds'), tagIds = array('tagIds');
+            const where = and(eq(blogPosts.siteId, input.siteId), sql`(${blogPosts.status} = 'published'
+                or (${blogPosts.status} = 'scheduled' and ${blogPosts.scheduledAt} <= ${input.asOf}::timestamptz))`,
+                input.categoryId ? sql`${categoryIds} @> ${JSON.stringify([input.categoryId])}::jsonb` : undefined,
+                input.tagId ? sql`${tagIds} @> ${JSON.stringify([input.tagId])}::jsonb` : undefined,
+                input.search ? sql`position(lower(${input.search}) in lower(${blogPosts.title} || ' ' || ${blogPosts.slug} || ' ' || coalesce(${blogPosts.excerpt}, ''))) > 0` : undefined);
+            const [count] = await database.select({ total: sql<number>`count(*)` }).from(blogPosts).where(where) as { total: number | string }[];
+            const total = Number(count?.total);
+            if (!Number.isSafeInteger(total) || total < 0) throw new Error('Invalid archive count.');
+            type Row = Omit<BackyPostArchiveMetadata, 'publishedAt' | 'scheduledAt' | 'meta'> & {
+                publishedAt: Date | null; scheduledAt: Date | null; originalPublishedAt: string | null;
+            };
+            const rows = await database.select({
+                id: blogPosts.id, siteId: blogPosts.siteId, status: blogPosts.status,
+                title: sql<string>`case when length(${blogPosts.title}) <= 2000 then ${blogPosts.title} else null end`,
+                slug: sql<string>`case when length(${blogPosts.slug}) <= 200 then ${blogPosts.slug} else null end`,
+                excerpt: sql<string | null>`case when length(${blogPosts.excerpt}) <= 20000 then ${blogPosts.excerpt} else null end`,
+                publishedAt: blogPosts.publishedAt, scheduledAt: blogPosts.scheduledAt, categoryIds, tagIds,
+                originalPublishedAt: sql<string | null>`case when jsonb_typeof(${blogPosts.meta}->'originalPublishedAt') = 'string'
+                    and length(${blogPosts.meta}->>'originalPublishedAt') <= 64 then ${blogPosts.meta}->>'originalPublishedAt' else null end`,
+            }).from(blogPosts).where(where).orderBy(desc(blogPosts.updatedAt), desc(blogPosts.id)).limit(limit).offset(offset) as Row[];
+            return { items: rows.map(({ originalPublishedAt, ...row }) => ({ ...row,
+                publishedAt: toNullableIso(row.publishedAt), scheduledAt: toNullableIso(row.scheduledAt),
+                meta: originalPublishedAt === null ? {} : { originalPublishedAt },
+            })), pagination: { total, limit, offset, hasMore: offset + limit < total } };
+        },
+        async listSearchMetadata(input: BackySearchMetadataListInput): Promise<BackyListResult<BackyPostSearchMetadata>> {
+            const result = await listMetadataRows<SearchRow & Pick<BlogPostRow, 'excerpt'>>(database, blogPosts,
+                { ...searchColumns(blogPosts, adapterType), excerpt: blogPosts.excerpt }, input);
+            return { ...result, items: result.items.map(row => ({ ...searchIdentity(row), excerpt: row.excerpt })) };
+        },
         async list(input: BackyPostListInput): Promise<BackyListResult<BackyPost>> {
             const rows = await database.select().from(blogPosts).where(eq(blogPosts.siteId, input.siteId)).orderBy(desc(blogPosts.updatedAt)) as BlogPostRow[];
             const filtered = rows
@@ -711,31 +1083,53 @@ export function createPostRepository(db: DatabaseInstance): BackyPostRepository 
         },
 
         async update(siteId: string, postId: string, input: BackyPostUpdateInput): Promise<BackyRepositoryMutationResult<BackyPost>> {
-            const updates: Record<string, unknown> = {
-                updatedAt: new Date(),
-            };
-            if (input.title !== undefined) updates.title = input.title;
-            if (input.slug !== undefined) updates.slug = input.slug;
-            if (input.excerpt !== undefined) updates.excerpt = input.excerpt;
-            if (input.content !== undefined) updates.content = contentPayload(input.content);
-            if (input.featuredImageId !== undefined) updates.featuredImageId = input.featuredImageId;
-            if (input.authorId !== undefined) updates.authorId = input.authorId;
-            if (input.meta !== undefined || input.categoryIds !== undefined || input.tagIds !== undefined) {
-                const current = await this.getById(siteId, postId);
-                updates.meta = taxonomyMeta(
-                    input.meta !== undefined ? input.meta : current?.meta || {},
-                    input.categoryIds,
-                    input.tagIds,
-                );
-            }
-            if (input.status !== undefined) {
-                updates.status = input.status;
-                updates.publishedAt = publishedAtForStatus(input.status);
-            }
-            if (input.scheduledAt !== undefined) updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+            const guarded = input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined;
+            if (input.beforeUpdateRevision && (input.expectedContent === undefined || !input.expectedUpdatedAt)) throw new BackyContentConflictError();
+            const run = async (writer: QueryDatabase): Promise<BackyRepositoryMutationResult<BackyPost>> => {
+                let lockedCurrent: BackyPost | null = null;
+                if (guarded) {
+                    const current = await firstOrNull<BlogPostRow>(
+                        writer.select().from(blogPosts).where(and(eq(blogPosts.siteId, siteId), eq(blogPosts.id, postId))).limit(1).for('update'),
+                    );
+                    lockedCurrent = current ? toPost(current) : null;
+                    assertBackyContentUpdateExpectation(input, lockedCurrent);
+                }
+                if (input.beforeUpdateRevision) {
+                    await createContentWorkflowRepository(writer as unknown as DatabaseInstance).createRevision({
+                        ...input.beforeUpdateRevision,
+                        siteId,
+                        targetType: 'post',
+                        targetId: postId,
+                    });
+                }
+                const updates: Record<string, unknown> = {
+                    // Guarded revisions advance even for metadata-only writes in the same millisecond.
+                    updatedAt: new Date(Math.max(Date.now(), lockedCurrent ? Date.parse(lockedCurrent.updatedAt) + 1 : 0)),
+                };
+                if (input.title !== undefined) updates.title = input.title;
+                if (input.slug !== undefined) updates.slug = input.slug;
+                if (input.excerpt !== undefined) updates.excerpt = input.excerpt;
+                if (input.content !== undefined) updates.content = contentPayload(input.content);
+                if (input.featuredImageId !== undefined) updates.featuredImageId = input.featuredImageId;
+                if (input.authorId !== undefined) updates.authorId = input.authorId;
+                if (input.meta !== undefined || input.categoryIds !== undefined || input.tagIds !== undefined) {
+                    const current = guarded ? lockedCurrent : await this.getById(siteId, postId);
+                    updates.meta = taxonomyMeta(
+                        input.meta !== undefined ? input.meta : current?.meta || {},
+                        input.categoryIds,
+                        input.tagIds,
+                    );
+                }
+                if (input.status !== undefined) {
+                    updates.status = input.status;
+                    updates.publishedAt = publishedAtForStatus(input.status);
+                }
+                if (input.scheduledAt !== undefined) updates.scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
 
-            const [row] = await database.update(blogPosts).set(updates).where(and(eq(blogPosts.siteId, siteId), eq(blogPosts.id, postId))).returning() as BlogPostRow[];
-            return { item: toPost(row) };
+                const [row] = await writer.update(blogPosts).set(updates).where(and(eq(blogPosts.siteId, siteId), eq(blogPosts.id, postId))).returning() as BlogPostRow[];
+                return { item: toPost(row) };
+            };
+            return guarded ? database.transaction(run) : run(database);
         },
 
         async publish(siteId: string, postId: string): Promise<BackyRepositoryMutationResult<BackyPost>> {

@@ -534,14 +534,14 @@ export function buildBackyFormSubmissionInput(
   };
   const values = Object.entries(source).reduce<Record<string, unknown>>((nextValues, [key, value]) => {
     if (transportKeys.has(key)) return nextValues;
-    const mappedKey = fieldKeys.has(key) ? key : frontendFieldKeyMap[key];
+    const mappedKey = fieldKeys.has(key) ? key : Object.hasOwn(frontendFieldKeyMap, key) ? frontendFieldKeyMap[key] : undefined;
     if (mappedKey && (fieldKeys.size === 0 || fieldKeys.has(mappedKey))) {
       nextValues[mappedKey] = value;
     } else if (options.includeUnmappedValues) {
       nextValues[key] = value;
     }
     return nextValues;
-  }, {});
+  }, Object.create(null));
 
   return {
     values,

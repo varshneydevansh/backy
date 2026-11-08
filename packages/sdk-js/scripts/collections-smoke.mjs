@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {createBackyClient, BackyApiError} from '../dist/index.js';
+const calls=[];let status=200,code='COLLECTION_IMPORT_CONFLICT';
+const client=createBackyClient({baseUrl:'https://backy.example',siteId:'site/a',fetch:async(input,init)=>{const url=new URL(input);calls.push({url,init});return status<400&&url.searchParams.get('format')==='csv'?new Response('slug,title\nrow,Title',{headers:{'content-type':'text/csv'}}):Response.json(status<400?{success:true,requestId:'fixture',data:{}}:{success:false,requestId:'fixture',error:{code,message:'Reload'}},{status});}});
+const options={adminSession:'synthetic-fixture',credentials:'include',requestId:'request'};
+const values={title:'Authored',frontendDesignElements:[{id:'parent',type:'container',children:[{id:'child',type:'codeComponent',registeredComponent:{componentKey:'fixture',version:'2'},responsive:{mobile:{width:'100%'}},animation:{from:{x:0},to:{x:55}},extension:{retain:[0,false]}}]}],extension:{retain:true}};
+await client.adminCollections({...options,limit:20,offset:40});
+await client.createAdminCollection({frontendDesignTemplateId:'collection-template'},options);
+await client.adminCollection('collection/a',options);
+await client.updateAdminCollection('collection/a',{routePattern:'/entries/:recordSlug'},options);
+await client.deleteAdminCollection('collection/a',options);
+await client.exportAdminCollectionsBackup({...options,collectionIds:['collection/a','slug'],includeRecords:false});
+await client.importAdminCollectionsBackup({data:{collections:[{name:'Imported',records:[{slug:'row',values}]}]}},{...options,upsert:true});
+await client.adminCollectionRecords('collection/a',{...options,search:'Authored',fieldKey:'title',fieldValue:'Authored',sortBy:'title',sortDirection:'desc',limit:1,offset:10});
+await client.createAdminCollectionRecord('collection/a',{slug:'row',values},options);
+await client.adminCollectionRecord('collection/a','row/a',options);
+await client.updateAdminCollectionRecord('collection/a','row/a',{values:{title:'Retitled'},expectedUpdatedAt:'2026-01-01T00:00:00Z',expectedVersion:'record-v1:'+'a'.repeat(64)},options);
+await client.deleteAdminCollectionRecord('collection/a','row/a',options);
+await client.bulkAdminCollectionRecords('collection/a',{action:'updateStatus',recordIds:['row/a'],status:'published'},options);
+await client.importAdminCollectionRecordsCsv('collection/a','slug,title\nrow,Authored',{...options,upsert:true});
+await client.adminCollectionBindingPresets(options);
+await client.updateAdminCollectionBindingPresets({presets:[{collectionId:'collection/a',fieldKey:'title',targetPath:'props.content',extension:{retained:true}}]},options);
+assert.equal(await client.adminCollectionRecordsCsv('collection/a',{...options,limit:1,offset:100}),'slug,title\nrow,Title');
+const root='/api/admin/sites/site%2Fa/collections';
+const paths=['','','/collection%2Fa','/collection%2Fa','/collection%2Fa','/export','/import','/collection%2Fa/records','/collection%2Fa/records','/collection%2Fa/records/row%2Fa','/collection%2Fa/records/row%2Fa','/collection%2Fa/records/row%2Fa','/collection%2Fa/records/bulk','/collection%2Fa/records/import'];
+for(const[i,c]of calls.entries()){assert.equal(c.url.pathname,i<14?root+paths[i]:i<16?'/api/admin/sites/site%2Fa/editor/collection-binding-presets':root+'/collection%2Fa/records');assert.equal(c.init.headers.get('x-backy-admin-session'),options.adminSession);assert.equal(c.init.headers.get('x-request-id'),'request');assert.equal(c.init.credentials,'include');}
+assert.deepEqual(calls.map(c=>c.init.method),['GET','POST','GET','PATCH','DELETE','GET','POST','GET','POST','GET','PATCH','DELETE','POST','POST','GET','PATCH','GET']);
+assert.equal(calls[0].url.searchParams.get('offset'),'40');assert.equal(calls[5].url.searchParams.get('records'),'false');assert.equal(calls[6].url.searchParams.get('upsert'),'true');assert.deepEqual(JSON.parse(calls[6].init.body).data.collections[0].records[0].values,values);assert.deepEqual(JSON.parse(calls[8].init.body).values,values);assert.equal(JSON.parse(calls[10].init.body).expectedUpdatedAt,'2026-01-01T00:00:00Z');assert.equal(JSON.parse(calls[10].init.body).expectedVersion,'record-v1:'+'a'.repeat(64));assert.equal(calls[13].init.headers.get('content-type'),'text/csv; charset=utf-8');assert.equal(calls[13].init.body,'slug,title\nrow,Authored');assert.equal(calls[16].url.searchParams.get('format'),'csv');
+for(const failure of [{status:409,code:'COLLECTION_IMPORT_CONFLICT',run:()=>client.importAdminCollectionsBackup({collections:[{name:'Conflict'}]},options)},{status:503,code:'COLLECTION_INVENTORY_INCOMPLETE',run:()=>client.createAdminCollection({name:'Incomplete'},options)}]){status=failure.status;code=failure.code;const before=calls.length;await assert.rejects(failure.run(),error=>error instanceof BackyApiError&&error.status===status&&error.code===code);assert.equal(calls.length,before+1,'No automatic write retry');}
+console.log('Collection SDK transport passed: 16 operations + CSV representation, canonical encoded identity, session/request cookies, filters, template-only creation, backup import aliases, nested values, partial CSV body, presets, conflict/incomplete no retry. Mock transport only.');

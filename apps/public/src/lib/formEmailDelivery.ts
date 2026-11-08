@@ -1,10 +1,15 @@
 import net from 'node:net';
+import { EmailSenderPolicyError, getEmailSenderPolicySummary, resolveEmailSiteSender } from './emailSenderPolicy';
+export { getEmailSenderPolicySummary } from './emailSenderPolicy';
 import tls from 'node:tls';
 import type { Comment, FormDefinition, FormSubmission } from '@backy-cms/core';
+import { getHostingerMailConfig, getHostingerMailConfigurationSummary, HostingerMailError, sendHostingerMailMessage, type HostingerMailConfig } from './hostingerMail';
 
-export type EmailDeliveryProvider = 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp';
+export type EmailDeliveryProvider = 'local-outbox' | 'http-endpoint' | 'resend' | 'smtp' | 'hostinger';
 
 export interface EmailDeliveryMessage {
+  /** Newsletter-only standard unsubscribe headers; arbitrary headers are not admitted. */
+  headers?: { 'List-Unsubscribe': string; 'List-Unsubscribe-Post': string };
   to: string;
   from: string;
   subject: string;
@@ -26,6 +31,8 @@ export interface EmailDeliveryConfig {
   from: string;
   endpoint?: string;
   apiKey?: string;
+  hostinger?: HostingerMailConfig;
+  senderPolicy?: { siteId: string; source: 'site-mapping' | 'default' };
   smtp?: {
     host: string;
     port: number;
@@ -66,7 +73,7 @@ const getEmailFromAddress = () => (
   'Backy <notifications@backy.local>'
 );
 
-export const getEmailDeliveryConfig = (): EmailDeliveryConfig => {
+const getDefaultEmailDeliveryConfig = (): EmailDeliveryConfig => {
   const providerOverride = readEnv('BACKY_EMAIL_PROVIDER', 'BACKY_TRANSACTIONAL_EMAIL_PROVIDER').toLowerCase();
   const endpoint = readEnv('BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL');
   const resendApiKey = readEnv('BACKY_RESEND_API_KEY', 'RESEND_API_KEY');
@@ -74,6 +81,15 @@ export const getEmailDeliveryConfig = (): EmailDeliveryConfig => {
   const smtpHost = readEnv('BACKY_SMTP_HOST', 'SMTP_HOST');
   const smtpPort = Number.parseInt(readEnv('BACKY_SMTP_PORT', 'SMTP_PORT') || '', 10);
   const from = getEmailFromAddress();
+
+  if (providerOverride === 'local-outbox') {
+    return { provider: 'local-outbox', from };
+  }
+
+  if (providerOverride === 'hostinger') {
+    const hostinger = getHostingerMailConfig();
+    return { provider: 'hostinger', from: hostinger.from, hostinger };
+  }
 
   if (providerOverride === 'resend') {
     return { provider: 'resend', from, endpoint: resendApiUrl, apiKey: resendApiKey };
@@ -122,7 +138,44 @@ export const getEmailDeliveryConfig = (): EmailDeliveryConfig => {
   return { provider: 'local-outbox', from };
 };
 
+export const getEmailDeliveryConfig = (siteId?: string): EmailDeliveryConfig => {
+  const config = getDefaultEmailDeliveryConfig();
+  if (siteId === undefined) {
+    if (!getEmailSenderPolicySummary().configurationValid) throw new EmailDeliveryError('BACKY_EMAIL_SITE_SENDERS must map canonical site IDs to plain sender mailbox addresses.', { statusCode: 503, metadata: { reason: 'invalid-policy' } });
+    return config;
+  }
+  try {
+    const selected = resolveEmailSiteSender(siteId, config.from);
+    return {
+      ...config,
+      from: selected.from,
+      senderPolicy: { siteId, source: selected.source },
+      ...(config.hostinger ? { hostinger: { ...config.hostinger, from: selected.from,
+        // Resolve a different authorized mailbox by address through the provider; never reuse another sender's ID.
+        mailboxId: selected.from === config.hostinger.from ? config.hostinger.mailboxId : undefined,
+      } } : {}),
+    };
+  } catch (error) {
+    if (error instanceof EmailSenderPolicyError) throw new EmailDeliveryError(error.message, { statusCode: 503, metadata: { reason: error.reason } });
+    throw new EmailDeliveryError('Site email sender configuration could not be resolved.', { statusCode: 503 });
+  }
+};
+
+/** Public-safe capability discovery, never addresses, mailbox IDs, tokens or SMTP credentials. */
+export const getEmailDeliveryCapabilitySummary = (siteId?: string) => {
+  const senderPolicy = getEmailSenderPolicySummary(siteId);
+  try {
+    const config = getEmailDeliveryConfig(siteId);
+    return { provider: config.provider, configured: senderPolicy.configurationValid && isExternalEmailDeliveryConfigured(config), senderPolicy };
+  } catch {
+    return { provider: 'unknown', configured: false, senderPolicy };
+  }
+};
+
 export const isExternalEmailDeliveryConfigured = (config: EmailDeliveryConfig): boolean => {
+  if (config.provider === 'hostinger') {
+    return Boolean(config.hostinger && getHostingerMailConfigurationSummary(config.hostinger).configured);
+  }
   if (config.provider === 'http-endpoint') {
     return Boolean(config.endpoint);
   }
@@ -368,6 +421,10 @@ const buildSmtpMessage = (message: EmailDeliveryMessage): string => {
     `Subject: ${escapeSmtpHeader(message.subject)}`,
     `Date: ${new Date().toUTCString()}`,
     `Message-ID: <${message.requestId}.${entityId}@backy.local>`,
+    ...(message.headers ? [
+      `List-Unsubscribe: ${escapeSmtpHeader(message.headers['List-Unsubscribe'])}`,
+      `List-Unsubscribe-Post: ${escapeSmtpHeader(message.headers['List-Unsubscribe-Post'])}`,
+    ] : []),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     'Content-Transfer-Encoding: 8bit',
@@ -390,7 +447,8 @@ const parseSmtpCode = (response: string): number => {
 const assertSmtpCode = (response: string, expected: number[], label: string): number => {
   const code = parseSmtpCode(response);
   if (!expected.includes(code)) {
-    throw new EmailDeliveryError(`SMTP ${label} failed with ${code || 'unknown'}: ${response.slice(0, 180)}`, {
+    // Provider replies can echo AUTH credentials or private envelope/body data.
+    throw new EmailDeliveryError(`SMTP ${label} failed with ${code || 'unknown'}.`, {
       statusCode: code || undefined,
     });
   }
@@ -402,54 +460,126 @@ async function sendSmtpMessage(config: NonNullable<EmailDeliveryConfig['smtp']>,
     throw new EmailDeliveryError('SMTP provider selected but BACKY_SMTP_HOST is not configured.');
   }
 
-  const socket = await new Promise<net.Socket | tls.TLSSocket>((resolve, reject) => {
-    const connection = config.secure
-      ? tls.connect({ host: config.host, port: config.port, servername: config.host }, () => resolve(connection))
-      : net.connect({ host: config.host, port: config.port }, () => resolve(connection));
-    connection.once('error', reject);
-    connection.setTimeout(15000, () => {
-      connection.destroy();
-      reject(new EmailDeliveryError('SMTP connection timed out.'));
-    });
-  });
-
-  socket.setEncoding('utf8');
+  const ehloDomain = readEnv('BACKY_SMTP_EHLO_DOMAIN') || 'backy.local';
+  if (!/^[a-zA-Z0-9.-]+$/.test(ehloDomain)) throw new EmailDeliveryError('SMTP EHLO domain is invalid.');
+  const tlsOptions: tls.ConnectionOptions = {
+    host: config.host,
+    port: config.port,
+    // IP identities are checked by Node against the certificate IP SAN without SNI.
+    ...(net.isIP(config.host) ? {} : { servername: config.host }),
+    rejectUnauthorized: true,
+    minVersion: 'TLSv1.2',
+  };
+  let socket: net.Socket | tls.TLSSocket = config.secure ? tls.connect(tlsOptions) : net.connect({ host: config.host, port: config.port });
   let buffer = '';
-  const pending: Array<(value: string) => void> = [];
-
-  const takeCompleteResponse = (): string | null => {
-    const lines = buffer.split(/\r?\n/).filter(Boolean);
-    if (lines.length === 0) return null;
-    const lastLine = lines[lines.length - 1] || '';
-    if (!/^\d{3} /.test(lastLine)) return null;
-    const response = buffer;
-    buffer = '';
-    return response;
+  let responseLines: string[] = [];
+  const responses: string[] = [];
+  let failure: EmailDeliveryError | undefined;
+  let pending: { resolve: (value: string) => void; reject: (error: EmailDeliveryError) => void } | undefined;
+  let completed = false;
+  const fail = (error: EmailDeliveryError) => {
+    if (completed || failure) return;
+    failure = error;
+    pending?.reject(error);
+    pending = undefined;
+    socket.destroy();
   };
-
-  const onData = (chunk: string) => {
-    buffer += chunk;
-    const response = takeCompleteResponse();
-    if (response && pending.length > 0) pending.shift()?.(response);
-  };
-  socket.on('data', onData);
-
-  const readResponse = () => new Promise<string>((resolve) => {
-    const response = takeCompleteResponse();
-    if (response) {
-      resolve(response);
+  const onError = () => fail(new EmailDeliveryError('SMTP connection or verified TLS negotiation failed.'));
+  const onClose = () => fail(new EmailDeliveryError('SMTP connection closed before delivery completed.'));
+  const onData = (chunk: Buffer) => {
+    if (failure || socket.destroyed) return;
+    buffer += chunk.toString('utf8');
+    if (buffer.length + responseLines.join('').length > 65536) {
+      fail(new EmailDeliveryError('SMTP response exceeds the supported size.'));
       return;
     }
-    pending.push(resolve);
+    let boundary: number;
+    while ((boundary = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, boundary).replace(/\r$/, '');
+      buffer = buffer.slice(boundary + 1);
+      if (!/^\d{3}[ -]/.test(line) || (responseLines.length && line.slice(0, 3) !== responseLines[0].slice(0, 3))) {
+        fail(new EmailDeliveryError('SMTP returned an invalid response.'));
+        return;
+      }
+      responseLines.push(line);
+      if (line[3] === ' ') {
+        const response = responseLines.join('\r\n');
+        responseLines = [];
+        if (pending) { const waiting = pending; pending = undefined; waiting.resolve(response); }
+        else {
+          // One greeting may arrive before its reader. Commands are sequential;
+          // further unsolicited replies are invalid and must not grow the queue.
+          if (responses.length) {
+            fail(new EmailDeliveryError('SMTP returned unsolicited responses.'));
+            return;
+          }
+          responses.push(response);
+        }
+      }
+    }
+  };
+  const attach = (connection: net.Socket) => {
+    connection.on('data', onData);
+    connection.on('error', onError);
+    connection.on('end', onClose);
+    connection.on('close', onClose);
+  };
+  const detach = (connection: net.Socket) => {
+    connection.off('data', onData);
+    connection.off('error', onError);
+    connection.off('end', onClose);
+    connection.off('close', onClose);
+  };
+  attach(socket);
+  const deadline = setTimeout(() => fail(new EmailDeliveryError('SMTP delivery timed out.')), 15000);
+  const readResponse = () => new Promise<string>((resolve, reject) => {
+    if (failure) { reject(failure); return; }
+    const response = responses.shift();
+    if (response) resolve(response);
+    else pending = { resolve, reject };
   });
   const writeCommand = async (command: string) => {
+    const response = readResponse();
+    if (failure) return response;
     socket.write(`${command}\r\n`);
-    return readResponse();
+    return response;
   };
+  const waitForTls = (connection: tls.TLSSocket) => new Promise<void>((resolve, reject) => {
+    const cleanup = () => { connection.off('secureConnect', secure); connection.off('error', failed); connection.off('close', failed); };
+    const failed = () => { cleanup(); reject(failure || new EmailDeliveryError('SMTP verified TLS negotiation failed.')); };
+    const secure = () => {
+      cleanup();
+      if (!connection.authorized) { fail(new EmailDeliveryError('SMTP server certificate could not be verified.')); reject(failure); }
+      else resolve();
+    };
+    connection.once('secureConnect', secure);
+    connection.once('error', failed);
+    connection.once('close', failed);
+  });
 
   try {
+    if (config.secure) await waitForTls(socket as tls.TLSSocket);
     assertSmtpCode(await readResponse(), [220], 'greeting');
-    assertSmtpCode(await writeCommand(`EHLO ${readEnv('BACKY_SMTP_EHLO_DOMAIN') || 'backy.local'}`), [250], 'EHLO');
+    const hello = await writeCommand(`EHLO ${ehloDomain}`);
+    assertSmtpCode(hello, [250], 'EHLO');
+    if (!config.secure) {
+      if (!hello.split('\r\n').some(line => /^250[ -]STARTTLS(?:\s|$)/i.test(line))) {
+        throw new EmailDeliveryError('SMTP server does not offer required STARTTLS.');
+      }
+      assertSmtpCode(await writeCommand('STARTTLS'), [220], 'STARTTLS');
+      // Plaintext SMTP state cannot survive the TLS boundary (RFC 3207).
+      if (buffer || responseLines.length || responses.length) throw new EmailDeliveryError('SMTP returned unexpected plaintext data before TLS.');
+      const plainSocket = socket;
+      detach(plainSocket);
+      const upgradedSocket = tls.connect({ ...tlsOptions, socket: plainSocket });
+      socket = upgradedSocket;
+      attach(upgradedSocket);
+      await waitForTls(upgradedSocket);
+      assertSmtpCode(await writeCommand(`EHLO ${ehloDomain}`), [250], 'EHLO after STARTTLS');
+    }
+    if (!(socket instanceof tls.TLSSocket) || !socket.encrypted || !socket.authorized) {
+      throw new EmailDeliveryError('SMTP requires a verified encrypted connection.');
+    }
 
     if (config.user && config.password) {
       const auth = Buffer.from(`\0${config.user}\0${config.password}`).toString('base64');
@@ -459,16 +589,17 @@ async function sendSmtpMessage(config: NonNullable<EmailDeliveryConfig['smtp']>,
     assertSmtpCode(await writeCommand(`MAIL FROM:<${extractEmailAddress(message.from)}>`), [250], 'MAIL FROM');
     assertSmtpCode(await writeCommand(`RCPT TO:<${extractEmailAddress(message.to)}>`), [250, 251], 'RCPT TO');
     assertSmtpCode(await writeCommand('DATA'), [354], 'DATA');
-    const finalResponse = await new Promise<string>((resolve) => {
-      pending.push(resolve);
-      socket.write(`${buildSmtpMessage(message)}\r\n.\r\n`);
-    });
+    const finalResponse = await writeCommand(`${buildSmtpMessage(message)}\r\n.`);
     const code = assertSmtpCode(finalResponse, [250], 'message body');
+    completed = true;
     socket.write('QUIT\r\n');
     return { statusCode: code };
   } finally {
+    clearTimeout(deadline);
     socket.off('data', onData);
-    socket.end();
+    // Keep the harmless error listener through shutdown; late peer failures must not escape.
+    if (completed) socket.end();
+    else socket.destroy();
   }
 }
 
@@ -476,8 +607,25 @@ export async function sendEmailMessage(config: EmailDeliveryConfig, message: Ema
   statusCode?: number;
   metadata?: Record<string, unknown>;
 }> {
+  if (message.from !== config.from) throw new EmailDeliveryError('The message sender is not the configured authorized sender.', { statusCode: 403 });
+  if (config.senderPolicy && message.siteId !== config.senderPolicy.siteId) throw new EmailDeliveryError('Email configuration does not belong to this site.', { statusCode: 403 });
+
   if (config.provider === 'local-outbox') {
     return { statusCode: 202, metadata: { outboxOnly: true } };
+  }
+
+  if (config.provider === 'hostinger') {
+    if (!config.hostinger) {
+      throw new EmailDeliveryError('Hostinger provider selected but server configuration is missing.');
+    }
+    try {
+      return await sendHostingerMailMessage(config.hostinger, message);
+    } catch (error) {
+      if (error instanceof HostingerMailError) {
+        throw new EmailDeliveryError(error.message, { statusCode: error.statusCode, metadata: { provider: 'hostinger', reason: error.reason } });
+      }
+      throw new EmailDeliveryError('Hostinger Mail delivery failed.');
+    }
   }
 
   if (config.provider === 'http-endpoint') {

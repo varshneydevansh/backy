@@ -1,3 +1,6 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { invalidEditorMediaReference } from "@/lib/editorMediaAdmission";
+import { getMediaById } from "@/lib/backyStore";
 /**
  * Admin blog posts endpoint.
  *
@@ -53,6 +56,7 @@ const errorResponse = (
   code: string,
   message: string,
   requestId: string,
+  details?: Record<string, unknown>,
 ) =>
   NextResponse.json(
     {
@@ -61,6 +65,7 @@ const errorResponse = (
       error: {
         code,
         message,
+        ...(details ? { details } : {}),
       },
     },
     { status },
@@ -571,6 +576,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (contentValidationError) {
         return contentValidationError;
       }
+      const invalidMedia = await invalidEditorMediaReference(site.id, createBody, (id, mediaId) => repositories.media.getById(id, mediaId), { nativeUuidIds: true });
+      if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
       const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
       const scheduleValidation = validateScheduledContentStatus(
         status,
@@ -733,6 +740,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (contentValidationError) {
       return contentValidationError;
     }
+    const invalidMedia = await invalidEditorMediaReference(site.id, createBody, getMediaById);
+    if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
     const scheduleValidation = validateScheduledContentStatus(
       status,
       scheduledAt,
@@ -781,6 +790,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 },
     );
   } catch (error) {
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin blog create API error:", error);
     return errorResponse(
       500,

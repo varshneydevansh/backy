@@ -47,3 +47,23 @@ export {
     createUnimplementedRepositoryProxy,
     type DatabaseRepositoryFactoryInput,
 } from './factory';
+
+export { createTemplateRevisionRepository } from './template-revisions';
+
+export { createVisitorAccountRepository } from './visitor-accounts';
+export { createVisitorPrivacyImpactRepository } from './visitor-privacy';
+export { createMediaStorageJobRepository } from './media-storage-jobs';
+
+export { createCommentDeliveryRepository } from './comment-deliveries';
+
+export { createFormDeliveryRepository } from './form-deliveries';
+
+export * from './site-mailbox';
+
+export { createNewsletterCampaignRepository } from './newsletter-campaigns';
+
+export { createMediaUploadSessionRepository } from './media-upload-sessions';
+
+export { createCommerceEntitlementRepository } from './commerce-entitlements';
+
+export * from './site-mailbox-management';

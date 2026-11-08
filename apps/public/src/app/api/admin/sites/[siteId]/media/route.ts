@@ -1,3 +1,5 @@
+import { mediaStorageUsageWithPending, withJournaledMediaStorageMutation, mediaStorageRecoveryErrorResponse } from '@/lib/mediaStorageRecovery';
+import { withMediaStorageMutation } from '@/lib/mediaStorageMutation';
 /**
  * Admin media endpoint.
  *
@@ -5,7 +7,7 @@
  * POST /api/admin/sites/[siteId]/media
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { extname } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
@@ -26,6 +28,7 @@ import {
   booleanQueryFlag,
   buildMediaScopeMetadataPatch,
   mediaMatchesScopeFilters,
+  readMediaLinkedFilters,
   mediaScopeRequiresTarget,
   normalizeMediaScope,
   normalizeScopeTargetId,
@@ -48,6 +51,10 @@ import {
 import { buildPublicMediaOrganization } from "@/lib/publicMediaResource";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import type { BackyJsonObject, MediaFolder, MediaItem, Site } from "@backy-cms/core";
+
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
+import { getMediaUploadReadiness } from '@/lib/mediaUploadReadiness';
+import { currentCompletingMediaUpload } from '@/lib/mediaUploadReservationContext';
 
 export const runtime = "nodejs";
 
@@ -571,6 +578,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    if (searchParams.getAll('includeQuota').length > 1) return errorResponse(400, 'INVALID_MEDIA_INCLUDE_QUOTA', 'Use one includeQuota boolean.', requestId);
+    const quotaValue = searchParams.get('includeQuota');
+    if (quotaValue !== null && quotaValue !== 'true' && quotaValue !== 'false') return errorResponse(400, 'INVALID_MEDIA_INCLUDE_QUOTA', 'Use includeQuota=true or includeQuota=false.', requestId);
+    const includeQuota = quotaValue !== 'false';
+    const linkedFilters = readMediaLinkedFilters(searchParams);
+    if (linkedFilters.invalid) return errorResponse(400, 'INVALID_MEDIA_LINK_FILTER', 'Use one nonempty linkedPageId or linkedPostId, never both or duplicate values.', requestId);
     const mediaType = mediaTypeFromInput(searchParams.get("type"));
     if (mediaType.invalid) {
       return errorResponse(
@@ -658,49 +671,42 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const pageId = searchParams.get("pageId");
       const postId = searchParams.get("postId") || searchParams.get("blogId");
       const tag = searchParams.get("tag");
+      const listInput = {
+        siteId: site.id, type: type || 'all', visibility: visibility || 'all',
+        linkedPageId: linkedFilters.linkedPageId, linkedPostId: linkedFilters.linkedPostId,
+        search: searchParams.get('search') || undefined,
+        folderId: searchParams.has('folderId') ? searchParams.get('folderId') : undefined,
+      } as const;
+      // These filters still require the existing exact in-memory refinement.
+      const needsRefinement = Boolean(mediaType.types || scope || pageId || postId || globalOnly || tag?.trim());
       const [result, folders] = await Promise.all([
-        repositories.media.list({
-          siteId: site.id,
-          type: type || "all",
-          visibility: visibility || "all",
-          search: searchParams.get("search") || undefined,
-          folderId: searchParams.has("folderId")
-            ? searchParams.get("folderId")
-            : undefined,
-          limit: 10000,
-          offset: 0,
-        }),
+        needsRefinement
+          ? readCompleteMediaInventory(site.id, pagination => repositories.media.list({ ...listInput, ...pagination }))
+          : repositories.media.list({ ...listInput, limit, offset }),
         repositories.media.listFolders(site.id),
       ]);
-      const filtered = result.items
-        .filter((item) => mediaMatchesRequestedType(item, mediaType))
-        .filter((item) =>
-          mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }),
-        )
-        .filter((item) => mediaTagMatches(item.tags, tag));
-      const payload = paginateMedia(filtered, limit, offset, folders);
-      const allMedia = (
-        await repositories.media.list({
-          siteId: site.id,
-          type: "all",
-          visibility: "all",
-          limit: 10000,
-          offset: 0,
-        })
-      ).items;
-      const settings = await repositories.settings.get();
-      const uploadPolicy = resolveMediaUploadPolicy(settings);
+      const payload = Array.isArray(result)
+        ? paginateMedia(result
+          .filter(item => mediaMatchesRequestedType(item, mediaType))
+          .filter(item => mediaMatchesScopeFilters(item, { scope, pageId, postId, globalOnly }))
+          .filter(item => mediaTagMatches(item.tags, tag)), limit, offset, folders)
+        : { media: result.items.map(item => withAdminMediaOrganization(item, folders)), pagination: result.pagination };
+      // Default remains fresh. Explicit browsing/inventory callers may omit quota;
+      // mutation admission continues using the authoritative complete inventory.
+      const quota = includeQuota ? await (async () => {
+        const settings = await repositories.settings.get();
+        const uploadPolicy = resolveMediaUploadPolicy(settings);
+        return mediaQuotaPayload(uploadPolicy.quotaBytes,
+          await mediaStorageUsageWithPending(site.id, repositories), uploadPolicy);
+      })() : undefined;
 
       return NextResponse.json({
         success: true,
         requestId,
         data: {
           ...payload,
-          quota: mediaQuotaPayload(
-            uploadPolicy.quotaBytes,
-            mediaUsageBytes(allMedia),
-            uploadPolicy,
-          ),
+          uploadReadiness: getMediaUploadReadiness({ access, siteId: site.id }),
+          ...(includeQuota ? { quota } : {}),
         },
       });
     }
@@ -711,50 +717,39 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
-    const demoMedia = getMediaList(site.id, {
-      type: type || undefined,
-      scope: scope || undefined,
-      visibility: visibility || undefined,
-      search: searchParams.get("search") || undefined,
-      tag: searchParams.get("tag") || undefined,
-      folderId: searchParams.has("folderId")
-        ? searchParams.get("folderId")
-        : undefined,
-      pageId: searchParams.get("pageId") || undefined,
-      postId:
-        searchParams.get("postId") || searchParams.get("blogId") || undefined,
-      global: globalOnly,
-      limit: mediaType.types ? 10000 : limit,
-      offset: mediaType.types ? 0 : offset,
+    const demoMedia = await readCompleteMediaInventory(site.id, async pagination => {
+      const result = getMediaList(site.id, {
+        type: type || undefined, scope: scope || undefined, visibility: visibility || undefined,
+        search: searchParams.get('search') || undefined, tag: searchParams.get('tag') || undefined,
+        folderId: searchParams.has('folderId') ? searchParams.get('folderId') : undefined,
+        pageId: searchParams.get('pageId') || undefined,
+        postId: searchParams.get('postId') || searchParams.get('blogId') || undefined,
+        linkedPageId: linkedFilters.linkedPageId, linkedPostId: linkedFilters.linkedPostId,
+        global: globalOnly, ...pagination,
+      });
+      return { items: result.media, pagination: result.pagination };
     });
     const folders = listMediaFolders(site.id);
-    const payload = mediaType.types
-      ? paginateMedia(demoMedia.media.filter((item) => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders)
-      : {
-          ...demoMedia,
-          media: demoMedia.media.map((item) => withAdminMediaOrganization(item, folders)),
-        };
+    const payload = paginateMedia(demoMedia.filter(item => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders);
 
-    const uploadPolicy = resolveMediaUploadPolicy(getAdminSettings());
+    const uploadPolicy = includeQuota ? resolveMediaUploadPolicy(getAdminSettings()) : undefined;
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         ...payload,
-        quota: mediaQuotaPayload(
+        uploadReadiness: getMediaUploadReadiness({ access, siteId: site.id }),
+        ...(uploadPolicy ? { quota: mediaQuotaPayload(
           uploadPolicy.quotaBytes,
-          mediaUsageBytes(
-            getMediaList(site.id, {
-              limit: 10000,
-              offset: 0,
-            }).media,
-          ),
+          await mediaStorageUsageWithPending(site.id, null),
           uploadPolicy,
-        ),
+        ) } : {}),
       },
     });
   } catch (error) {
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     console.error("Admin media list API error:", error);
     return errorResponse(
       500,
@@ -848,22 +843,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    return await withMediaStorageMutation(repositories?.media || null, site.id, requestId, async () => {
     const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
-    const currentMedia = repositories
-      ? (
-          await repositories.media.list({
-            siteId: site.id,
-            type: "all",
-            visibility: "all",
-            limit: 10000,
-            offset: 0,
-          })
-        ).items
-      : getMediaList(site.id, {
-          limit: 10000,
-          offset: 0,
-        }).media;
-    const currentUsageBytes = mediaUsageBytes(currentMedia);
+    const currentUsageBytes = await mediaStorageUsageWithPending(site.id, repositories);
     const nextUsageBytes = currentUsageBytes + file.size;
     const billingLimitError = enforceMediaBillingLimit(
       site.settings,
@@ -958,7 +940,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const safeName = safePathSegment(
       extension ? originalName.slice(0, -extension.length) : originalName,
     );
-    const storedFilename = `${Date.now().toString(36)}-${safeName}${extension}`;
+    const storedFilename = `${randomUUID()}-${safeName}${extension}`;
     const mediaFolder = mediaFolderForType(mediaType);
     const storagePath = getMediaStoragePath({
       siteId: site.id,
@@ -975,6 +957,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
     const metadata = parsedMetadata.metadata;
+    if (Object.prototype.hasOwnProperty.call(metadata, 'resumableUploadId') && metadata.resumableUploadId !== currentCompletingMediaUpload()) {
+      return errorResponse(400, 'INVALID_MEDIA_METADATA', 'Resumable upload identity is assigned by Backy.', requestId);
+    }
+    const storageManagedKeys = ['storagePath', 'storageProvider', 'binaryFingerprint', 'safetyScan', 'generatedTransforms', 'replacementVersions'];
+    if (storageManagedKeys.some(key => Object.prototype.hasOwnProperty.call(metadata, key))) {
+      return errorResponse(400, 'INVALID_MEDIA_METADATA', 'Storage paths, scan evidence, generated variants and replacement history are assigned by Backy.', requestId);
+    }
+
     const uploadBuffer = Buffer.from(await file.arrayBuffer());
     const binaryFingerprint = buildMediaBinaryFingerprint(uploadBuffer);
     const safetyScan = await scanMediaUploadWithProviders({
@@ -982,8 +972,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       originalName,
       mimeType,
       mediaType,
-    });
+    }, { access, siteId: site.id });
+    const responseFolders = repositories ? await repositories.media.listFolders(site.id) : listMediaFolders(site.id);
     const storage = await getMediaStorageAdapter();
+    return withJournaledMediaStorageMutation({ siteId: site.id, mediaId: null, operation: 'upload', requestId, files: [{ path: storagePath, bytes: uploadBuffer.length, purpose: 'write' }] }, repositories, async () => {
     const upload = await storage.upload(uploadBuffer, {
       path: storagePath,
       filename: storedFilename,
@@ -994,6 +986,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         originalName,
       },
     });
+    if (upload.path !== storagePath || upload.size !== uploadBuffer.length) throw new Error('Storage adapter returned an unverified planned write.');
 
     const mediaInput = {
       filename: storedFilename,
@@ -1057,6 +1050,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           })
         ).item
       : createMediaItem(site.id, mediaInput);
+    const completionWarnings: string[] = [];
+    try {
     await recordAdminAudit({
       repositories,
       siteId: site.id,
@@ -1080,7 +1075,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
       requestId,
     });
-    const cacheInvalidation = repositories
+    } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+    let cacheInvalidation: Awaited<ReturnType<typeof recordSiteCacheInvalidation>> | undefined;
+    try {
+    cacheInvalidation = repositories
       ? await recordSiteCacheInvalidation(repositories, {
           siteId: site.id,
           scope: "media",
@@ -1090,6 +1088,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           requestId,
         })
       : undefined;
+    } catch { completionWarnings.push('MEDIA_CACHE_INVALIDATION_PENDING'); }
+    try {
     await deliverMediaAssetWebhook({
       repositories,
       site: site as unknown as Site,
@@ -1099,6 +1099,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       actor: access.session?.user.id,
     });
 
+    } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
     return NextResponse.json(
       {
         success: true,
@@ -1106,17 +1107,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         data: {
           media: withAdminMediaOrganization(
             media,
-            repositories
-              ? await repositories.media.listFolders(site.id)
-              : listMediaFolders(site.id),
+            responseFolders,
           ),
+          completionWarnings,
           cacheInvalidation,
           quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         },
       },
       { status: 201 },
     );
+    });
+    });
   } catch (error) {
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     if (error instanceof MediaSafetyError) {
       return errorResponse(
         415,

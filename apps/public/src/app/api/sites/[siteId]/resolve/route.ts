@@ -7,10 +7,12 @@
 import { NextRequest } from 'next/server';
 import type { Site } from '@backy-cms/core';
 import { getSiteByIdOrSlug, getSiteNavigation, validatePreviewToken } from '@/lib/backyStore';
+import { publicPageAdmission } from '@/lib/publicPageAdmission';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeRoutePath, resolveSiteRoute } from '@/lib/routeResolver';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { listRepositoryPageSummaries } from '@/lib/repositoryPages';
 import type { ResolvedRedirectRoute } from '@/lib/redirectRules';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import { normalizePublicRouteHost, publicRouteHostMatchesSite } from '@/lib/publicRouteHost';
@@ -120,7 +122,7 @@ const redirectRouteResponse = (
       status: isGone ? 410 : 200,
       requestId,
       request,
-      cache: options.previewToken ? 'private' : 'discovery',
+      cache: options.previewToken ? 'private' : 'render',
       siteId: site.id,
       cacheRevision: options.cacheRevision,
     },
@@ -131,7 +133,7 @@ const repositoryNavigation = async (
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
   site: Site,
 ) => {
-  const result = await repositories.pages.list({
+  const result = await listRepositoryPageSummaries(repositories.pages, {
     siteId: site.id,
     includeUnpublished: false,
     status: 'published',
@@ -154,6 +156,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { siteId } = await params;
     const { searchParams } = new URL(request.url);
+    if (searchParams.has('profile')) return publicPageAdmission(request, siteId, requestId);
     const path = normalizeRoutePath(searchParams.get('path') || searchParams.get('slug') || '/');
     const previewToken = searchParams.get('previewToken');
     const routeHost = resolveRequestHost(request, searchParams);
@@ -220,7 +223,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }, {
         requestId,
         request,
-        cache: previewToken ? 'private' : 'discovery',
+        cache: previewToken ? 'private' : 'render',
         siteId: site.id,
         cacheRevision,
       });
@@ -277,7 +280,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }, {
       requestId,
       request,
-      cache: previewToken ? 'private' : 'discovery',
+      cache: previewToken ? 'private' : 'render',
       siteId: site.id,
     });
   } catch (error) {

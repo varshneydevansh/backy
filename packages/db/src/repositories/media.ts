@@ -1,3 +1,5 @@
+import { mediaMatchesLinkedFilters } from '@backy-cms/core';
+import { withSiteMediaMutationTransaction } from './media-mutation-admission';
 import {
     type BackyListResult,
     type BackyMediaCreateInput,
@@ -5,6 +7,7 @@ import {
     type BackyMediaFolderUpdateInput,
     type BackyMediaListInput,
     type BackyMediaRepository,
+    type BackyMediaSiteVersionListInput,
     type BackyMediaUpdateInput,
     type BackyMediaVersionCreateInput,
     type BackyMediaVersionDeleteInput,
@@ -17,13 +20,14 @@ import {
     type MediaVersion,
     type MediaVisibility,
 } from '@backy-cms/core';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import {
     media,
     mediaFolders,
     mediaVersions,
 } from '../schema';
 import type { DatabaseInstance } from '../adapters';
+import { createMediaStorageJobRepository } from './media-storage-jobs';
 
 type QueryDatabase = {
     select: (...args: unknown[]) => {
@@ -228,19 +232,100 @@ const metadataWithPolicy = (
     scopeTargetId: input.scopeTargetId ?? metadata?.scopeTargetId ?? null,
 });
 
-export function createMediaRepository(db: DatabaseInstance): BackyMediaRepository {
+export function createMediaRepository(db: DatabaseInstance, provider: string = 'postgres'): BackyMediaRepository {
     const database = asDb(db);
 
     return {
+        storageJobs: createMediaStorageJobRepository(db, provider),
+        async getPublicRenderAssets(input): Promise<MediaItem[]> {
+            const ids = [...new Set(input.mediaIds)];
+            if (!input.siteId || ids.length > 512 || ids.some(id => typeof id !== 'string' || !id || id.length > 200)
+                || !Number.isSafeInteger(input.maxFonts) || input.maxFonts < 1 || input.maxFonts > 256) {
+                throw new Error('Invalid public render asset budget.');
+            }
+            const visible = provider === 'postgres'
+                ? sql`coalesce(${media.metadata}->>'visibility', 'public') <> 'private'`
+                : provider === 'mysql'
+                    ? sql`coalesce(json_unquote(json_extract(${media.metadata}, '$.visibility')), 'public') <> 'private'`
+                    : sql`coalesce(json_extract(${media.metadata}, '$.visibility'), 'public') <> 'private'`;
+            const dependency = ids.length ? or(eq(media.type, 'font'), inArray(media.id, ids)) : eq(media.type, 'font');
+            const rows = await database.select().from(media)
+                .where(and(eq(media.siteId, input.siteId), visible, dependency))
+                .orderBy(desc(media.id)).limit(ids.length + input.maxFonts + 1) as MediaRow[];
+            const items = rows.map(toMediaItem);
+            if (items.some(item => item.siteId !== input.siteId || item.visibility !== 'public'
+                || (item.type !== 'font' && !ids.includes(item.id)))
+                || items.filter(item => item.type === 'font').length > input.maxFonts) {
+                throw new Error('Complete public render assets are unavailable.');
+            }
+            return items;
+        },
+        async withStorageMutationLock<T>(siteId: string, operation: () => Promise<T>): Promise<T> {
+            return withSiteMediaMutationTransaction(db, provider, siteId, async () => operation());
+        },
         async list(input: BackyMediaListInput): Promise<BackyListResult<MediaItem>> {
-            const rows = await database.select().from(media).where(eq(media.siteId, input.siteId)).orderBy(desc(media.updatedAt)) as MediaRow[];
-            const filtered = rows
-                .map(toMediaItem)
-                .filter((item) => input.type && input.type !== 'all' ? item.type === input.type : true)
-                .filter((item) => input.folderId !== undefined ? item.folderId === input.folderId : true)
-                .filter((item) => input.visibility && input.visibility !== 'all' ? item.visibility === input.visibility : true)
-                .filter((item) => input.search ? searchText(mediaSearchText(item), input.search) : true);
-            return paginate(filtered, input.limit, input.offset);
+            const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+            const conditions = [eq(media.siteId, input.siteId)];
+            if (input.type && input.type !== 'all') conditions.push(provider === 'mysql'
+                ? sql`binary ${media.type} = binary ${input.type}` : eq(media.type, input.type));
+            if (input.folderId !== undefined) conditions.push(input.folderId === null
+                ? isNull(media.folderId)
+                : provider === 'postgres' ? sql`cast(${media.folderId} as text) = ${input.folderId}`
+                    : provider === 'mysql' ? sql`binary cast(${media.folderId} as char) = binary ${input.folderId}`
+                        : sql`cast(${media.folderId} as text) = ${input.folderId} collate binary`);
+            if (input.visibility && input.visibility !== 'all') {
+                // Only the exact JSON string "private" is private in toMediaItem.
+                // MySQL's default case-insensitive collation must not broaden it.
+                const privateValue = provider === 'postgres'
+                    ? sql`${media.metadata}->>'visibility' = 'private'`
+                    : provider === 'mysql'
+                        ? sql`binary json_unquote(json_extract(${media.metadata}, '$.visibility')) = binary 'private'`
+                        : sql`json_extract(${media.metadata}, '$.visibility') = 'private' collate binary`;
+                conditions.push(sql`case when ${privateValue} then 'private' else 'public' end = ${input.visibility}`);
+            }
+            const where = and(...conditions);
+            const [countRow] = await database.select({ total: sql<number>`count(*)` })
+                .from(media).where(where) as { total: number | string }[];
+            const count = Number(countRow?.total);
+            if (!countRow || !['number', 'string'].includes(typeof countRow.total)
+                || String(countRow.total).trim() === '' || !Number.isSafeInteger(count) || count < 0) {
+                throw new Error('Media count is unavailable.');
+            }
+            const read = (pageLimit: number, pageOffset: number) => database.select().from(media)
+                .where(where).orderBy(desc(media.updatedAt), asc(media.id))
+                .limit(pageLimit).offset(pageOffset) as PromiseLike<MediaRow[]>;
+            if (!input.search && !input.linkedPageId && !input.linkedPostId) {
+                const rows = await read(limit, offset);
+                if (rows.length !== Math.min(limit, Math.max(0, count - offset))) {
+                    throw new Error('A consistent media inventory is unavailable.');
+                }
+                return { items: rows.map(toMediaItem),
+                    pagination: { total: count, limit, offset, hasMore: offset + limit < count } };
+            }
+            // JS normalization of legacy tags/association lists and Unicode search
+            // is not equivalent to SQL LIKE/JSON containment on all adapters.
+            // Preserve it exactly, scanning bounded SQL windows after cheap filters.
+            const items: MediaItem[] = [], seen = new Set<string>();
+            let total = 0;
+            const windowSize = 500;
+            for (let scanOffset = 0; scanOffset < count; scanOffset += windowSize) {
+                const rows = await read(windowSize, scanOffset);
+                if (rows.length !== Math.min(windowSize, count - scanOffset)) {
+                    throw new Error('A consistent media inventory is unavailable.');
+                }
+                for (const row of rows) {
+                    if (row.siteId !== input.siteId || seen.has(row.id)) {
+                        throw new Error('A consistent media inventory is unavailable.');
+                    }
+                    seen.add(row.id);
+                    const item = toMediaItem(row);
+                    if (input.search && !searchText(mediaSearchText(item), input.search)) continue;
+                    if (!mediaMatchesLinkedFilters(item, input)) continue;
+                    if (total >= offset && items.length < limit) items.push(item);
+                    total++;
+                }
+            }
+            return { items, pagination: { total, limit, offset, hasMore: offset + limit < total } };
         },
 
         async getById(siteId: string, mediaId: string): Promise<MediaItem | null> {
@@ -294,18 +379,18 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
             if (input.caption !== undefined) updates.caption = input.caption;
             if (input.tags !== undefined) updates.tags = input.tags;
             if (input.metadata !== undefined || input.visibility !== undefined) {
-                updates.metadata = metadataWithPolicy({
-                    ...existingMetadata,
-                    ...(input.metadata || {}),
-                }, {
-                    visibility: input.visibility,
-                    scope: (input.metadata?.scope || existingMetadata.scope) as MediaScope | undefined,
-                    scopeTargetId: typeof input.metadata?.scopeTargetId === 'string'
-                        ? input.metadata.scopeTargetId
-                        : typeof existingMetadata.scopeTargetId === 'string'
-                            ? existingMetadata.scopeTargetId
-                            : null,
-                });
+                if (provider === 'postgres') {
+                    // Merge supplied fields at the row write, so an ordinary metadata update
+                    // cannot replay prefetched storage paths/variants after a concurrent write.
+                    const patch = { ...(input.metadata || {}), ...(input.visibility !== undefined ? { visibility: input.visibility } : {}) };
+                    updates.metadata = sql`coalesce(${media.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`;
+                } else {
+                    updates.metadata = metadataWithPolicy({ ...existingMetadata, ...(input.metadata || {}) }, {
+                        visibility: input.visibility,
+                        scope: (input.metadata?.scope || existingMetadata.scope) as MediaScope | undefined,
+                        scopeTargetId: typeof input.metadata?.scopeTargetId === 'string' ? input.metadata.scopeTargetId : typeof existingMetadata.scopeTargetId === 'string' ? existingMetadata.scopeTargetId : null,
+                    });
+                }
             }
 
             const [row] = await database.update(media).set(updates).where(and(eq(media.siteId, siteId), eq(media.id, mediaId))).returning() as MediaRow[];
@@ -325,6 +410,25 @@ export function createMediaRepository(db: DatabaseInstance): BackyMediaRepositor
                 .where(and(eq(mediaVersions.siteId, input.siteId), eq(mediaVersions.mediaId, input.mediaId)))
                 .orderBy(desc(mediaVersions.replacedAt)) as MediaVersionRow[];
             return paginate(rows.map(toMediaVersion), input.limit, input.offset);
+        },
+
+        async listSiteVersions(input: BackyMediaSiteVersionListInput): Promise<BackyListResult<MediaVersion>> {
+            const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+            const where = eq(mediaVersions.siteId, input.siteId);
+            const [totals] = await database.select({ total: sql<number>`count(*)` })
+                .from(mediaVersions).where(where) as { total: number | string }[];
+            const total = Number(totals?.total);
+            if (!totals || !['number', 'string'].includes(typeof totals.total)
+                || String(totals.total).trim() === '' || !Number.isSafeInteger(total) || total < 0) {
+                throw new Error('Retained media version count is unavailable.');
+            }
+            const rows = await database.select().from(mediaVersions).where(where)
+                .orderBy(desc(mediaVersions.replacedAt), desc(mediaVersions.id))
+                .limit(limit).offset(offset) as MediaVersionRow[];
+            return {
+                items: rows.map(toMediaVersion),
+                pagination: { total, limit, offset, hasMore: offset + limit < total },
+            };
         },
 
         async createVersion(input: BackyMediaVersionCreateInput): Promise<BackyRepositoryMutationResult<MediaVersion>> {

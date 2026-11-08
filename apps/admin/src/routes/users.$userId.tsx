@@ -27,6 +27,7 @@ import {
   Trash2,
   UserRound,
 } from 'lucide-react';
+import { OperatorSiteGrants } from '@/components/users/OperatorSiteGrants';
 import { PageShell } from '@/components/layout/PageShell';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -1678,6 +1679,8 @@ function EditUserPage() {
               </label>
             </div>
           </div>
+
+          <OperatorSiteGrants key={userId} userId={userId} ownerCanManage={currentAdmin?.role === 'owner'} targetIsOwner={user?.role === 'owner'} />
 
           <div id="user-detail-permissions" className="rounded-lg border border-border bg-card p-5 shadow-sm scroll-mt-24">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

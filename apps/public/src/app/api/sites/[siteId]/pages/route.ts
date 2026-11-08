@@ -16,6 +16,7 @@ import { getHostedRouteUrl } from '@/lib/seoDiscovery';
 import { getRepositoryPageByPublicPath } from '@/lib/repositoryPages';
 import { recordPreviewTokenUse } from '@/lib/previewTokenAudit';
 import { frontendDesignProvenanceFromMetadata } from '@/lib/frontendDesignContract';
+import { publicDocumentMetadata } from '@/lib/publicDocumentMetadata';
 
 interface RouteParams {
     params: Promise<{
@@ -154,6 +155,7 @@ const publicPage = <
     origin: string,
 ) => ({
     ...page,
+    meta: publicDocumentMetadata(page.meta),
     frontendDesign: frontendDesignProvenanceFromMetadata(page.meta),
     seo: seoFromPage(page, site, origin),
 });
@@ -264,7 +266,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
                 }, {
                     requestId,
                     request,
-                    cache: previewToken ? 'private' : 'discovery',
+                    cache: previewToken ? 'private' : 'render',
                     siteId: site.id,
                     cacheRevision,
                 });
@@ -314,7 +316,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }, {
                 requestId,
                 request,
-                cache: 'discovery',
+                cache: 'render',
                 siteId: site.id,
                 cacheRevision,
             });
@@ -365,7 +367,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             }, {
                 requestId,
                 request,
-                cache: previewToken ? 'private' : 'discovery',
+                cache: previewToken ? 'private' : 'render',
                 siteId: site.id,
             });
         }
@@ -395,7 +397,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }, {
             requestId,
             request,
-            cache: 'discovery',
+            cache: 'render',
             siteId: site.id,
         });
     } catch (error) {

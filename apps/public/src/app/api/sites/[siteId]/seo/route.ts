@@ -4,16 +4,19 @@
  * GET /api/sites/[siteId]/seo
  * GET /api/sites/[siteId]/seo?format=sitemap
  * GET /api/sites/[siteId]/seo?format=robots
+ * GET /api/sites/[siteId]/seo?format=search
  */
 
 import { NextRequest } from 'next/server';
+import { admitPublicDiscoveryRoutes, withPublicDiscoveryRead, PublicDiscoveryIncompleteError, PublicDiscoveryWithdrawnError, type PublicDiscoverySite } from '@/lib/publicDiscoveryRead';
+import { BackyCollectionSearchSettingsError, backyCollectionSearchFields, backyCollectionSearchValueKeys, projectBackyCollectionSearchValues } from '@backy-cms/core';
 import type { BackyCollection, BackyCollectionRecord, BackyPage, BackyPost, Site } from '@backy-cms/core';
-import { getSiteByIdOrSlug } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, getPageSummary, getBlogPosts, listCollections, listCollectionRecords } from '@/lib/backyStore';
 import {
   applySeoDefaults,
+  applySeoRouteOverrides,
   applySeoSitemapAndRobotsSettings,
   buildRobotsTxtFromDiscovery,
-  buildSeoDiscovery,
   buildSitemapXml,
   getHostedRouteUrl,
   getSiteCanonicalBaseUrl,
@@ -31,6 +34,8 @@ import {
   publicContractResponse,
   publicContractJson,
 } from '@/lib/publicContractResponse';
+import { pageHierarchyPaths, type PageHierarchyNode } from '@/lib/pageHierarchy';
+import { collectRepositorySearchContent, collectRepositoryDiscoveryContent, readRepositorySearchSite, createSearchMetadataCollector, projectSearchMetadataRoutes, collectionRecordSearchMetadata, SearchMetadataIncompleteError } from '@/lib/searchMetadata';
 
 interface RouteParams {
   params: Promise<{
@@ -122,18 +127,24 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
   )
 );
 
-const pageCanonical = (page: BackyPage) => {
+type SeoMeta = Partial<Record<'canonical' | 'title' | 'description' | 'noIndex' | 'noFollow' | 'ogImage' | 'keywords' | 'jsonLd', unknown>>;
+type SeoPage = Pick<BackyPage, 'id' | 'siteId' | 'title' | 'slug' | 'description' | 'status' | 'isHomepage' | 'updatedAt'> & { parentId?: string | null; meta?: SeoMeta };
+type SeoPost = Pick<BackyPost, 'id' | 'title' | 'slug' | 'excerpt' | 'status' | 'updatedAt'> & { meta?: SeoMeta };
+type SeoCollection = Pick<BackyCollection, 'id' | 'name' | 'slug' | 'description' | 'status' | 'updatedAt' | 'routePattern' | 'listRoutePattern'> & { metadata?: unknown };
+type SeoRecord = Pick<BackyCollectionRecord, 'id' | 'slug' | 'status' | 'updatedAt'> & { values: Record<string, unknown> };
+
+const pageCanonical = (page: SeoPage, routePath: string) => {
   if (page.isHomepage || page.slug === 'index') {
     return '/';
   }
 
   return typeof page.meta?.canonical === 'string' && page.meta.canonical.length > 0
     ? page.meta.canonical
-    : `/${page.slug}`;
+    : routePath;
 };
 
-const pageSeoRoute = (page: BackyPage): SeoRoute => {
-  const canonical = pageCanonical(page);
+const pageSeoRoute = (page: SeoPage, routePath: string): SeoRoute => {
+  const canonical = pageCanonical(page, routePath);
   const title = typeof page.meta?.title === 'string' && page.meta.title.length > 0 ? page.meta.title : page.title;
   const description = typeof page.meta?.description === 'string' ? page.meta.description : page.description || '';
 
@@ -142,7 +153,7 @@ const pageSeoRoute = (page: BackyPage): SeoRoute => {
     id: page.id,
     title,
     description,
-    path: canonical,
+    path: routePath,
     canonical,
     status: page.status,
     updatedAt: page.updatedAt,
@@ -162,7 +173,15 @@ const pageSeoRoute = (page: BackyPage): SeoRoute => {
   };
 };
 
-const postSeoRoute = (post: BackyPost): SeoRoute => {
+const pageSeoRoutes = (pages: SeoPage[], siteId: string, inventory: readonly PageHierarchyNode[] = pages): SeoRoute[] => {
+  const paths = pageHierarchyPaths(inventory, siteId);
+  return pages.filter(isPubliclyReadable).flatMap(page => {
+    const path = paths.get(page.id);
+    return path ? [pageSeoRoute(page, path)] : [];
+  });
+};
+
+const postSeoRoute = (post: SeoPost): SeoRoute => {
   const canonical = typeof post.meta?.canonical === 'string' && post.meta.canonical.length > 0
     ? post.meta.canonical
     : `/blog/${post.slug}`;
@@ -174,7 +193,7 @@ const postSeoRoute = (post: BackyPost): SeoRoute => {
     id: post.id,
     title,
     description,
-    path: canonical,
+    path: `/blog/${post.slug}`,
     canonical,
     status: post.status,
     updatedAt: post.updatedAt,
@@ -194,22 +213,22 @@ const postSeoRoute = (post: BackyPost): SeoRoute => {
   };
 };
 
-const recordTitle = (record: BackyCollectionRecord): string => {
+const recordTitle = (record: SeoRecord): string => {
   const title = record.values.title || record.values.name || record.values.heading || record.values.slug;
   return typeof title === 'string' && title.trim().length > 0 ? title : record.slug;
 };
 
-const recordDescription = (record: BackyCollectionRecord): string => {
+const recordDescription = (record: SeoRecord): string => {
   const description = record.values.description || record.values.summary || record.values.excerpt;
   return typeof description === 'string' ? description : '';
 };
 
-const recordImage = (record: BackyCollectionRecord): string | undefined => {
+const recordImage = (record: SeoRecord): string | undefined => {
   const image = record.values.image || record.values.featuredImage || record.values.thumbnail;
   return typeof image === 'string' && image.length > 0 ? image : undefined;
 };
 
-const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectionRecord): SeoRoute => {
+const dynamicItemSeoRoute = (collection: SeoCollection, record: SeoRecord): SeoRoute => {
   const canonical = buildCollectionItemPath(collection, record.slug);
   const title = recordTitle(record);
   const description = recordDescription(record);
@@ -241,7 +260,7 @@ const dynamicItemSeoRoute = (collection: BackyCollection, record: BackyCollectio
   };
 };
 
-const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
+const dynamicListSeoRoute = (collection: SeoCollection): SeoRoute => {
   const canonical = buildCollectionListPath(collection);
   const description = collection.description || '';
 
@@ -270,62 +289,120 @@ const dynamicListSeoRoute = (collection: BackyCollection): SeoRoute => {
   };
 };
 
+const dynamicItemSearchRoute = (collection: SeoCollection, record: SeoRecord): SeoRoute => {
+  const route = dynamicItemSeoRoute(collection, record);
+  const metadata = (collection.metadata as { publicSearch?: unknown } | undefined)?.publicSearch === undefined
+    ? collectionRecordSearchMetadata(record.values) : backyCollectionSearchFields(record.values, collection.metadata);
+  return { ...route, description: metadata.description || route.description, keywords: metadata.keywords };
+};
+
+const searchRoutes = (site: { name: string; settings?: Pick<Site['settings'], 'seo'> }, routes: SeoRoute[]) => {
+  // Sitemap's includeDynamicRoutes controls sitemap inclusion, not site search.
+  // Route overrides and global robots settings still govern public admission.
+  const metadataRoutes = routes.map(route => route.type === 'dynamicList' ? { ...route, keywords: [] } : route);
+  const overridden = applySeoRouteOverrides(metadataRoutes, site).map(route => applySeoDefaults(route, site));
+  return projectSearchMetadataRoutes(overridden.map(route => ({
+    ...route,
+    robots: {
+      index: route.robots.index && site.settings?.seo?.robots?.index !== false,
+      follow: route.robots.follow && site.settings?.seo?.robots?.follow !== false,
+    },
+  })));
+};
+
+
+const searchResponse = (request: NextRequest, requestId: string, site: Pick<Site, 'id' | 'slug' | 'name'>, routes: ReturnType<typeof projectSearchMetadataRoutes>, revision?: string | null) => {
+  const data = { site: { id: site.id, slug: site.slug, name: site.name }, routes };
+  const cacheRevision = createPublicCacheRevision({ data, revision });
+  return publicContractJson({ success: true, requestId, data }, {
+    request, requestId, siteId: site.id, cache: 'render', cacheRevision, etagSeed: { data, cacheRevision },
+  });
+};
+
+const buildDemoDiscoveryRoutes = async (site: NonNullable<ReturnType<typeof getSiteByIdOrSlug>>) => {
+  const collect = createSearchMetadataCollector();
+  const pages = getPageSummary(site.id, { includeUnpublished: true });
+  const collections = listCollections(site.id);
+  const arrayPage = <T,>(items: T[], input: { limit: number; offset: number }) => ({ items: items.slice(input.offset, input.offset + input.limit), pagination: { ...input, total: items.length, hasMore: input.offset + input.limit < items.length } });
+  const pageItems = await collect(async input => arrayPage(pages, input), item => item.siteId === site.id);
+  const postItems = await collect(async input => {
+    const result = getBlogPosts(site.id, { ...input, includeUnpublished: true });
+    if (!result.pagination) throw new SearchMetadataIncompleteError();
+    return { items: result.posts, pagination: result.pagination };
+  }, item => item.siteId === site.id);
+  const collectionItems = await collect(async input => arrayPage(collections, input), item => item.siteId === site.id && item.status === 'published' && item.permissions.publicRead);
+  const routes = [
+    ...pageSeoRoutes(pageItems, site.id),
+    ...postItems.filter(isPubliclyReadable).map(postSeoRoute),
+    ...collectionItems.map(dynamicListSeoRoute),
+  ];
+  for (const collection of collectionItems) {
+    const records = await collect(async input => {
+      const result = listCollectionRecords(site.id, collection.id, { ...input, includeUnpublished: true });
+      return { items: result.records, pagination: result.pagination };
+    }, item => item.siteId === site.id && item.collectionId === collection.id);
+    routes.push(...records.filter(isPubliclyReadable).map(record => dynamicItemSearchRoute(collection, record)));
+  }
+  return routes;
+};
+
+const buildDemoSearchRoutes = async (site: NonNullable<ReturnType<typeof getSiteByIdOrSlug>>) => {
+  const collect = createSearchMetadataCollector();
+  const pages = getPageSummary(site.id, { includeUnpublished: true });
+  const collections = listCollections(site.id);
+  const arrayPage = <T,>(items: T[], input: { limit: number; offset: number }) => ({ items: items.slice(input.offset, input.offset + input.limit), pagination: { ...input, total: items.length, hasMore: input.offset + input.limit < items.length } });
+  const pageItems = await collect(async input => arrayPage(pages, input), item => item.siteId === site.id);
+  const postItems = await collect(async input => {
+    const result = getBlogPosts(site.id, input);
+    if (!result.pagination) throw new SearchMetadataIncompleteError();
+    return { items: result.posts, pagination: result.pagination };
+  }, item => item.siteId === site.id);
+  const collectionItems = await collect(async input => arrayPage(collections, input), item => item.siteId === site.id && item.status === 'published' && item.permissions.publicRead);
+  const routes = [
+    ...pageSeoRoutes(pageItems, site.id),
+    ...postItems.filter(isPubliclyReadable).map(postSeoRoute),
+    ...collectionItems.map(dynamicListSeoRoute),
+  ];
+  for (const collection of collectionItems) {
+    const records = await collect(async input => {
+      const result = listCollectionRecords(site.id, collection.id, input);
+      return { items: result.records, pagination: result.pagination };
+    }, item => item.siteId === site.id && item.collectionId === collection.id);
+    const valueKeys = backyCollectionSearchValueKeys(collection.metadata);
+    routes.push(...records.filter(isPubliclyReadable).map(record => dynamicItemSearchRoute(collection, {
+      ...record, values: projectBackyCollectionSearchValues(record.values, valueKeys),
+    })));
+  }
+  return searchRoutes(site, routes);
+};
+
+
 const buildRepositorySeoDiscovery = async (
   site: Site,
   repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
-  origin?: string,
+  origin: string,
+  forSearch = false,
 ): Promise<SeoDiscovery> => {
-  const [pages, posts] = await Promise.all([
-    repositories.pages.list({
-      siteId: site.id,
-      includeUnpublished: false,
-      status: 'published',
-      limit: 100,
-      offset: 0,
-    }),
-    repositories.posts.list({
-      siteId: site.id,
-      includeUnpublished: false,
-      status: 'published',
-      limit: 100,
-      offset: 0,
-    }),
-  ]);
-  const collections = await repositories.collections.list({
-    siteId: site.id,
-    includeUnpublished: false,
-    status: 'published',
-    limit: 100,
-    offset: 0,
-  });
-  const dynamicItems = await Promise.all(
-    collections.items
-      .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
-      .map(async (collection) => {
-        const records = await repositories.collections.listRecords({
-          siteId: site.id,
-          collectionId: collection.id,
-          includeUnpublished: false,
-          status: 'published',
-          limit: 1000,
-          offset: 0,
-        });
+  const content = await collectRepositoryDiscoveryContent(repositories, site.id);
+  const rawRoutes = [
+    ...pageSeoRoutes(content.pages, site.id, content.pageInventory),
+    ...content.posts.filter(isPubliclyReadable).map(postSeoRoute),
+    ...content.collections.map(dynamicListSeoRoute),
+    ...content.dynamicItems.filter(({ record }) => isPubliclyReadable(record))
+      .map(({ collection, record }) => forSearch ? dynamicItemSearchRoute(collection, record) : dynamicItemSeoRoute(collection, record)),
+  ];
+  return assembleSeoDiscovery(site, rawRoutes, origin, forSearch);
+};
 
-        return records.items
-          .filter(isPubliclyReadable)
-          .map((record) => dynamicItemSeoRoute(collection, record));
-      }),
-  );
+const assembleSeoDiscovery = (
+  site: PublicDiscoverySite & { id: string; isPublished: boolean; updatedAt?: string },
+  rawRoutes: SeoRoute[], origin: string, forSearch = false,
+): SeoDiscovery => {
+  // Search does not inherit the sitemap's optional dynamic-route exclusion.
+  const sitemapPolicy = forSearch ? { settings: { seo: { ...site.settings?.seo, sitemap: { ...site.settings?.seo?.sitemap, includeDynamicRoutes: true } } } } : site;
   const routes = applySeoSitemapAndRobotsSettings(
-    [
-      ...pages.items.filter(isPubliclyReadable).map(pageSeoRoute),
-      ...posts.items.filter(isPubliclyReadable).map(postSeoRoute),
-      ...collections.items
-        .filter((collection) => collection.status === 'published' && collection.permissions.publicRead)
-        .map(dynamicListSeoRoute),
-      ...dynamicItems.flat(),
-    ].map((route) => applySeoDefaults(route, site)),
-    site,
+    admitPublicDiscoveryRoutes(rawRoutes, site, origin),
+    sitemapPolicy,
   ).sort((left, right) => {
     if (left.priority !== right.priority) return right.priority - left.priority;
     return left.canonical.localeCompare(right.canonical);
@@ -418,14 +495,44 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const origin = new URL(request.url).origin;
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
+      if (new URL(request.url).searchParams.get('format') === 'search') {
+        const site = await readRepositorySearchSite(repositories.sites, siteId);
+        if (!site?.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        const revisionBefore = await repositories.cacheInvalidations?.latestRevision({ siteId: site.id });
+        const currentSite = await readRepositorySearchSite(repositories.sites, site.id);
+        if (!currentSite?.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        const siteBefore = createPublicCacheRevision(currentSite);
+        const content = await collectRepositorySearchContent(repositories, site.id);
+        const routes = searchRoutes(currentSite, [
+          ...pageSeoRoutes(content.pages, site.id, content.pageInventory),
+          ...content.posts.filter(isPubliclyReadable).map(postSeoRoute),
+          ...content.collections.map(dynamicListSeoRoute),
+          ...content.dynamicItems.filter(({ record }) => isPubliclyReadable(record)).map(({ collection, record }) => dynamicItemSearchRoute(collection, record)),
+        ]);
+        const finalSite = await readRepositorySearchSite(repositories.sites, site.id);
+        const revisionAfter = await repositories.cacheInvalidations?.latestRevision({ siteId: site.id });
+        if (!finalSite?.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        if (revisionBefore !== revisionAfter || siteBefore !== createPublicCacheRevision(finalSite)) throw new SearchMetadataIncompleteError();
+        return searchResponse(request, requestId, finalSite, routes, revisionAfter);
+      }
+
+
+      let site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
 
       if (!site || !site.isPublished) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const discovery = await buildRepositorySeoDiscovery(site, repositories, origin);
-      const cacheRevision = seoCacheRevision(site, discovery);
+      const forSearch = new URL(request.url).searchParams.get('format') === 'search';
+      const snapshot = await withPublicDiscoveryRead(repositories, site, currentSite =>
+        getRequestedFormat(request) === 'robots' && !forSearch
+          ? Promise.resolve(assembleSeoDiscovery(currentSite, [], origin))
+          : buildRepositorySeoDiscovery(currentSite, repositories, origin, forSearch));
+      site = snapshot.site;
+      const discovery = snapshot.value;
+      if (forSearch) return searchResponse(request, requestId, site,
+        projectSearchMetadataRoutes(discovery.routes.map(route => route.type === 'dynamicList' ? { ...route, keywords: [] } : route)), snapshot.revision);
+      const cacheRevision = createPublicCacheRevision({ revision: snapshot.revision, discovery: seoCacheRevision(site, discovery) });
       const format = getRequestedFormat(request);
 
       if (format === 'sitemap') {
@@ -435,7 +542,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           {
             requestId,
             request,
-            cache: 'discovery',
+            cache: 'render',
             siteId: site.id,
             cacheRevision,
             etagSeed: {
@@ -459,7 +566,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           {
             requestId,
             request,
-            cache: 'discovery',
+            cache: 'render',
             siteId: site.id,
             cacheRevision,
             etagSeed: {
@@ -484,7 +591,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }, {
         requestId,
         request,
-        cache: 'discovery',
+        cache: 'render',
         siteId: site.id,
         cacheRevision,
         etagSeed: {
@@ -500,7 +607,27 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const discovery = buildSeoDiscovery(site, { origin });
+    if (new URL(request.url).searchParams.get('format') === 'search') {
+      const before = createPublicCacheRevision(site);
+      const routes = await buildDemoSearchRoutes(site);
+      const finalSite = getSiteByIdOrSlug(site.id);
+      if (!finalSite?.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      if (before !== createPublicCacheRevision(finalSite)) throw new SearchMetadataIncompleteError();
+      return searchResponse(request, requestId, finalSite, routes);
+    }
+
+
+    const before = createPublicCacheRevision(site);
+    const robotsOnly = getRequestedFormat(request) === 'robots' && new URL(request.url).searchParams.get('format') !== 'search';
+    const rawRoutes = robotsOnly ? [] : await buildDemoDiscoveryRoutes(site);
+    const forSearch = new URL(request.url).searchParams.get('format') === 'search';
+    const discovery = assembleSeoDiscovery(site, rawRoutes, origin, forSearch);
+    const recheckedRoutes = robotsOnly ? [] : await buildDemoDiscoveryRoutes(site);
+    const finalSite = getSiteByIdOrSlug(site.id);
+    if (!finalSite?.isPublished) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (before !== createPublicCacheRevision(finalSite) || createPublicCacheRevision(rawRoutes) !== createPublicCacheRevision(recheckedRoutes)) throw new PublicDiscoveryIncompleteError();
+    if (forSearch) return searchResponse(request, requestId, finalSite,
+      projectSearchMetadataRoutes(discovery.routes.map(route => route.type === 'dynamicList' ? { ...route, keywords: [] } : route)));
     const cacheRevision = seoCacheRevision(site, discovery);
     const format = getRequestedFormat(request);
 
@@ -511,7 +638,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         {
           requestId,
           request,
-          cache: 'discovery',
+          cache: 'render',
           siteId: site.id,
           cacheRevision,
           etagSeed: {
@@ -535,7 +662,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         {
           requestId,
           request,
-          cache: 'discovery',
+          cache: 'render',
           siteId: site.id,
           cacheRevision,
           etagSeed: {
@@ -560,7 +687,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }, {
       requestId,
       request,
-      cache: 'discovery',
+      cache: 'render',
       siteId: site.id,
       cacheRevision,
       etagSeed: {
@@ -569,6 +696,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof PublicDiscoveryWithdrawnError) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (error instanceof PublicDiscoveryIncompleteError) return errorResponse(503, 'PUBLIC_DISCOVERY_INCOMPLETE', error.message, requestId);
+    if (error instanceof BackyCollectionSearchSettingsError || error instanceof SearchMetadataIncompleteError) return errorResponse(503, 'SEARCH_METADATA_INCOMPLETE', error.message, requestId);
     console.error('Public SEO API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

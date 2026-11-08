@@ -324,7 +324,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ? (
           await repositories.media.update(site.id, media.id, {
             metadata: {
-              ...media.metadata,
               pageIds: bindingUpdate.pageIds,
               postIds: bindingUpdate.postIds,
               bindings: bindingUpdate.bindings,

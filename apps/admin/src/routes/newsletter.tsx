@@ -1,3 +1,4 @@
+import { NewsletterCampaignDesk } from '@/components/newsletter/NewsletterCampaignDesk';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
   Archive,
@@ -562,6 +563,8 @@ function NewsletterRoute() {
           {notice}
         </div>
       )}
+
+      <NewsletterCampaignDesk key={`${activeSiteId}:${currentAdmin?.id||''}:${canViewNewsletter}`} siteId={activeSiteId} canView={canViewNewsletter} canManage={canManageNewsletter} canExport={canExportNewsletter} forms={newsletterForms} />
 
       <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm" data-testid="newsletter-command-center">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">

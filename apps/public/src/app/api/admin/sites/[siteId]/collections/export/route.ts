@@ -12,6 +12,7 @@ import {
   listCollectionRecords,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 
 export const runtime = 'nodejs';
 
@@ -107,32 +108,6 @@ const exportPayload = (input: {
   };
 };
 
-const listAllRepositoryRecords = async (
-  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
-  siteId: string,
-  collectionId: string,
-) => {
-  const records: ExportableRecord[] = [];
-  let offset = 0;
-  const limit = 1000;
-
-  for (;;) {
-    const page = await repositories.collections.listRecords({
-      siteId,
-      collectionId,
-      includeUnpublished: true,
-      status: 'all',
-      limit,
-      offset,
-    });
-    records.push(...page.items);
-    if (!page.pagination.hasMore) break;
-    offset += limit;
-  }
-
-  return records;
-};
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'collections.export' });
@@ -151,19 +126,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const result = await repositories.collections.list({
+      const schemas = await collectCompleteExportPages((pagination) => repositories.collections.list({
         siteId: site.id,
         includeUnpublished: true,
         status: 'all',
-        limit: 1000,
-        offset: 0,
-      });
-      const collections = result.items
+        ...pagination,
+      }), (collection) => collection.siteId === site.id);
+      const collections = schemas
         .filter((collection) => ids ? ids.has(collection.id) || ids.has(collection.slug) : true);
       const exportableCollections = await Promise.all(collections.map(async (collection) => ({
         ...collection,
         records: includeRecords
-          ? await listAllRepositoryRecords(repositories, site.id, collection.id)
+          ? await collectCompleteExportPages((pagination) => repositories.collections.listRecords({
+              siteId: site.id, collectionId: collection.id, includeUnpublished: true, status: 'all', ...pagination,
+            }), (record) => record.siteId === site.id && record.collectionId === collection.id)
           : [],
       })));
       const payload = exportPayload({
@@ -185,18 +161,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const collections = listCollections(site.id, { includeUnpublished: true })
+    const collections = await Promise.all(listCollections(site.id, { includeUnpublished: true })
       .filter((collection) => ids ? ids.has(collection.id) || ids.has(collection.slug) : true)
-      .map((collection) => ({
+      .map(async (collection) => ({
         ...collection,
         records: includeRecords
-          ? listCollectionRecords(site.id, collection.id, {
-              includeUnpublished: true,
-              limit: 1000,
-              offset: 0,
-            }).records
+          ? await collectCompleteExportPages(async (pagination) => {
+              const page = listCollectionRecords(site.id, collection.id, { includeUnpublished: true, ...pagination });
+              return { items: page.records, pagination: page.pagination };
+            }, (record) => record.siteId === site.id && record.collectionId === collection.id)
           : [],
-      }));
+      })));
     const payload = exportPayload({ requestId, siteId: site.id, siteSlug: site.slug, collections });
 
     return NextResponse.json(payload, {
@@ -205,6 +180,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(409, 'COLLECTION_EXPORT_INCOMPLETE', error.message, requestId);
     console.error('Admin collections backup export API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

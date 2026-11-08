@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
   getAdminAuthPolicySettings,
@@ -223,6 +223,9 @@ export async function POST(request: NextRequest) {
     if (!role) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Role must be owner, admin, editor, or viewer', requestId);
     }
+
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { nextRole: role });
+    if (ownerError) return ownerError;
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();

@@ -1,3 +1,5 @@
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
+import { collectCompleteExportPages, CollectionExportIncompleteError } from "@/lib/collectionExportPagination";
 /**
  * Admin site navigation endpoint.
  *
@@ -157,13 +159,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const pages = await repositories.pages.list({
-        siteId: site.id,
-        includeUnpublished: true,
-        status: "all",
-        limit: 100,
-        offset: 0,
-      });
+      const pages = await collectCompleteExportPages(
+        ({ limit, offset }) => repositories.pages.list({
+          siteId: site.id,
+          includeUnpublished: true,
+          status: "all",
+          limit,
+          offset,
+        }),
+        (page) => page.siteId === site.id,
+      );
 
       return NextResponse.json({
         success: true,
@@ -176,7 +181,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           },
           navigation: {
             settings: site.settings.navigation,
-            resolved: buildSiteNavigation(site.settings, pages.items),
+            resolved: buildSiteNavigation(site.settings, pages),
           },
         },
       });
@@ -204,6 +209,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, "NAVIGATION_INVENTORY_INCOMPLETE", "Unable to read a complete page inventory. Retry after content changes finish.", requestId);
+    }
     console.error("Admin site navigation API error:", error);
     return errorResponse(
       500,
@@ -247,13 +255,16 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         navigationInput,
         site.settings.navigation,
       );
-      const pages = await repositories.pages.list({
-        siteId: site.id,
-        includeUnpublished: true,
-        status: "all",
-        limit: 100,
-        offset: 0,
-      });
+      const pages = await collectCompleteExportPages(
+        ({ limit, offset }) => repositories.pages.list({
+          siteId: site.id,
+          includeUnpublished: true,
+          status: "all",
+          limit,
+          offset,
+        }),
+        (page) => page.siteId === site.id,
+      );
       const incomplete = incompletePageItems(navigation);
       if (incomplete.length > 0) {
         return errorResponse(
@@ -267,7 +278,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const missing = missingPageIds(
         navigation,
-        new Set(pages.items.map((page) => page.id)),
+        new Set(pages.map((page) => page.id)),
       );
       if (missing.length > 0) {
         return errorResponse(
@@ -280,10 +291,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const updated = await repositories.sites.update(site.id, {
-        settings: {
+        settings: unrelatedSiteSettingsPatch({
           ...site.settings,
           navigation,
-        },
+        }),
       });
       await recordAdminAudit({
         repositories,
@@ -343,7 +354,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
           navigation: {
             settings: updated.item.settings.navigation,
-            resolved: buildSiteNavigation(updated.item.settings, pages.items),
+            resolved: buildSiteNavigation(updated.item.settings, pages),
           },
           cacheInvalidation,
         },
@@ -386,10 +397,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = updateAdminSite(site.id, {
-      settings: {
+      settings: unrelatedSiteSettingsPatch({
         ...(site.settings || {}),
         navigation,
-      },
+      }),
     });
 
     if (!updated) {
@@ -445,6 +456,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, "NAVIGATION_INVENTORY_INCOMPLETE", "Unable to read a complete page inventory. Retry after content changes finish.", requestId);
+    }
     console.error("Admin site navigation update API error:", error);
     return errorResponse(
       500,

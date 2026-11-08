@@ -1,3 +1,5 @@
+import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from './canonicalRouteUrl';
+import { pageHierarchyPaths } from './pageHierarchy';
 import {
   getBlogPosts,
   getCanonicalPathForPage,
@@ -263,63 +265,7 @@ export const sitemapRoutes = (discovery: SeoDiscovery): SeoRoute[] => (
   discovery.sitemap.enabled ? discovery.routes.filter((route) => route.robots.index) : []
 );
 
-const normalizeDomain = (domain: string | null | undefined): string | null => {
-  if (typeof domain !== 'string' || domain.trim().length === 0) {
-    return null;
-  }
-
-  const withoutProtocol = domain.trim().replace(/^https?:\/\//i, '');
-  const hostname = withoutProtocol.split('/')[0]?.replace(/\/+$/, '').toLowerCase();
-  return hostname || null;
-};
-
-const normalizeCanonicalPath = (canonical: string): string => {
-  if (canonical === '/') {
-    return '/';
-  }
-
-  return canonical.startsWith('/') ? canonical : `/${canonical}`;
-};
-
-export const getHostedRouteUrl = (
-  origin: string,
-  siteSlug: string,
-  canonical: string,
-  customDomain?: string | null,
-): string => {
-  const normalizedCanonical = normalizeCanonicalPath(canonical);
-  const domain = normalizeDomain(customDomain);
-
-  if (domain) {
-    return `https://${domain}${normalizedCanonical}`;
-  }
-
-  const hostedPath = normalizedCanonical === '/' ? '' : normalizedCanonical;
-  return `${origin.replace(/\/$/, '')}/sites/${siteSlug}${hostedPath}`;
-};
-
-export const getSiteCanonicalBaseUrl = (
-  origin: string,
-  site: { slug: string; customDomain?: string | null },
-): string => {
-  const domain = normalizeDomain(site.customDomain);
-
-  if (domain) {
-    return `https://${domain}`;
-  }
-
-  return `${origin.replace(/\/$/, '')}/sites/${site.slug}`;
-};
-
-const customDomainSitemapUrl = (site: { customDomain?: string | null }) => {
-  const domain = normalizeDomain(site.customDomain);
-  return domain ? `https://${domain}/sitemap.xml` : undefined;
-};
-
-const customDomainRobotsUrl = (site: { customDomain?: string | null }) => {
-  const domain = normalizeDomain(site.customDomain);
-  return domain ? `https://${domain}/robots.txt` : undefined;
-};
+export { getHostedRouteUrl, getSiteCanonicalBaseUrl } from './canonicalRouteUrl';
 
 const withCanonicalUrls = (
   discovery: SeoDiscovery,
@@ -331,8 +277,8 @@ const withCanonicalUrls = (
   }
 
   const canonicalBaseUrl = getSiteCanonicalBaseUrl(origin, site);
-  const sitemapPublicUrl = customDomainSitemapUrl(site);
-  const robotsPublicUrl = customDomainRobotsUrl(site);
+  const sitemapPublicUrl = site.customDomain ? `${canonicalBaseUrl}/sitemap.xml` : undefined;
+  const robotsPublicUrl = site.customDomain ? `${canonicalBaseUrl}/robots.txt` : undefined;
 
   return {
     ...discovery,
@@ -396,8 +342,11 @@ export const buildRobotsTxtFromDiscovery = (discovery: SeoDiscovery) => [
 ].filter((line, index, lines) => line.length > 0 || index === lines.length - 1).join('\n');
 
 export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
-  const pages: SeoRoute[] = getPageSummary(siteId).map((page) => {
-    const canonical = page.isHomepage ? '/' : page.meta.canonical || getCanonicalPathForPage(page);
+  const inventory = getPageSummary(siteId, { includeUnpublished: true });
+  const paths = pageHierarchyPaths(inventory, siteId);
+  const pages: SeoRoute[] = getPageSummary(siteId).filter(page => paths.has(page.id)).map((page) => {
+    const path = paths.get(page.id)!;
+    const canonical = page.isHomepage ? '/' : page.meta.canonical || path;
     const title = page.meta.title || page.title;
     const description = page.meta.description || page.description || '';
     return {
@@ -405,7 +354,7 @@ export const buildSeoRoutes = (siteId: string): SeoRoute[] => {
       id: page.id,
       title,
       description,
-      path: canonical,
+      path,
       canonical,
       status: page.status,
       updatedAt: page.updatedAt,

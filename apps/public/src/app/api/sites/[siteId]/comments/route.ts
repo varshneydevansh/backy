@@ -9,9 +9,8 @@ import { requireAdminAccess } from '@/lib/adminAccess';
 import { hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import {
-  clearRepositoryCommentReports,
   resolveRepositorySite,
-  updateRepositoryCommentStatus,
+  moderateRepositoryComments,
 } from '@/lib/commentRepositorySupport';
 import { notifyCommentDelivery } from '@/lib/commentDelivery';
 import { publicContractJson } from '@/lib/publicContractResponse';
@@ -383,40 +382,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
       }
 
-      const updated = [];
-      const missingIds: string[] = [];
-      for (const commentId of Array.from(new Set(payload.commentIds))) {
-        const comment = await repositories.comments.getById(site.id, commentId);
-        if (!comment) {
-          missingIds.push(commentId);
-          continue;
-        }
-
-        if (payload.status) {
-          updated.push(await updateRepositoryCommentStatus(repositories, site.id, comment, {
-            status: payload.status,
-            reviewedBy: payload.reviewedBy,
-            actor: payload.actor,
-            rejectionReason: payload.rejectionReason,
-            blockReason: payload.blockReason,
-            requestId: payload.requestId,
-            defaultReviewer: 'admin',
-            clearReports: payload.clearReports,
-          }));
-        } else {
-          updated.push(await clearRepositoryCommentReports(repositories, site.id, comment, {
-            reviewedBy: payload.reviewedBy,
-            actor: payload.actor,
-            requestId: payload.requestId,
-            defaultReviewer: 'admin',
-          }));
-        }
-      }
+      const completionWarnings: string[] = [];
+      const { updated, missingIds } = await moderateRepositoryComments(repositories, site.id, {
+        commentIds: payload.commentIds, ...(payload.status ? { status: payload.status } : {}),
+        reviewedBy: payload.reviewedBy, actor: payload.actor, rejectionReason: payload.rejectionReason,
+        blockReason: payload.blockReason, requestId: payload.requestId, defaultReviewer: 'admin',
+        completionWarnings, clearReports: payload.clearReports,
+      });
 
       if (!updated.length) {
         return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
       }
-      await Promise.all(updated.map((comment) => notifyCommentDelivery({
+      const deliveries = await Promise.allSettled(updated.map((comment) => notifyCommentDelivery({
         repositories,
         siteId: site.id,
         comment,
@@ -425,7 +402,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         reason: payload.status || 'reports-cleared',
         actor: payload.actor || payload.reviewedBy,
       })));
-      await recordAdminAudit({
+      if (deliveries.some(delivery => delivery.status === "rejected" || delivery.value.failedChannels > 0)) completionWarnings.push("COMMENT_DELIVERY_PENDING");
+      try { await recordAdminAudit({
         repositories,
         siteId: site.id,
         actorId: access.session?.user.id,
@@ -442,7 +420,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           targetTypes: Array.from(new Set(updated.map((comment) => comment.targetType))),
         },
         requestId: responseRequestId,
-      });
+      }); } catch { completionWarnings.push("COMMENT_AUDIT_PENDING"); }
 
       return privateResponse({
         success: true,
@@ -452,6 +430,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           updated,
           updatedCount: updated.length,
           missingIds,
+          completionWarnings,
+          concurrencyBoundary: 'database-site-row-lock',
         },
         siteId: site.id,
         updated,
@@ -476,6 +456,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload. status or clearReports plus commentIds are required.', responseRequestId);
     }
 
+    const completionWarnings: string[] = [];
     const result = payload.status
       ? bulkUpdateCommentStatus({
         siteId: site.id,
@@ -499,7 +480,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!result.updated.length) {
       return errorResponse(404, 'COMMENTS_NOT_UPDATED', 'No comments were updated.', responseRequestId);
     }
-    await Promise.all(result.updated.map((comment) => notifyCommentDelivery({
+    const deliveries = await Promise.allSettled(result.updated.map((comment) => notifyCommentDelivery({
       siteId: site.id,
       comment,
       kind: 'comment-status',
@@ -507,7 +488,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       reason: payload.status || 'reports-cleared',
       actor: payload.actor || payload.reviewedBy,
     })));
-    await recordAdminAudit({
+    if (deliveries.some(delivery => delivery.status === "rejected" || delivery.value.failedChannels > 0)) completionWarnings.push("COMMENT_DELIVERY_PENDING");
+    try { await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
       entity: 'comment',
@@ -523,7 +505,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         targetTypes: Array.from(new Set(result.updated.map((comment) => comment.targetType))),
       },
       requestId: responseRequestId,
-    });
+    }); } catch { completionWarnings.push("COMMENT_AUDIT_PENDING"); }
 
     return privateResponse({
       success: true,
@@ -533,6 +515,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         updated: result.updated,
         updatedCount: result.updated.length,
         missingIds: result.missingIds,
+        completionWarnings,
+        concurrencyBoundary: 'demo-single-process',
       },
       siteId: site.id,
       updated: result.updated,
@@ -540,6 +524,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       missingIds: result.missingIds,
     }, responseRequestId);
   } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code === 'COMMENT_MODERATION_CONFLICT' || code === 'COMMENT_PARENT_CONFLICT') return errorResponse(409, 'COMMENT_MODERATION_CONFLICT', 'The selected comments changed. Reload before moderating.', responseRequestId);
+    if (code === 'COMMENT_MODERATION_UNAVAILABLE' || code === 'COMMENT_INVENTORY_INCOMPLETE') return errorResponse(503, code, 'The selected comments could not be moderated atomically. No moderation was committed.', responseRequestId);
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }

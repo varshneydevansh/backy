@@ -1,3 +1,4 @@
+import { commitBackyOperatorSiteGrantAuth, preserveBackyOperatorSiteGrants } from '@backy-cms/core';
 import { randomUUID } from 'node:crypto';
 import {
     type BackyJsonObject,
@@ -11,6 +12,7 @@ import { platformSettings } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
 type QueryDatabase = {
+    transaction: <T>(run: (transaction: QueryDatabase) => Promise<T>) => Promise<T>;
     select: (...args: unknown[]) => {
         from: (table: unknown) => QueryBuilder;
     };
@@ -25,12 +27,14 @@ type QueryDatabase = {
 };
 
 type QueryBuilder = {
+    for: (mode: 'update') => QueryBuilder;
     where: (condition: unknown) => QueryBuilder;
     limit: (limit: number) => QueryBuilder;
     then: Promise<unknown[]>['then'];
 };
 
 type ReturningQuery = {
+    onConflictDoNothing: () => ReturningQuery;
     returning: () => Promise<unknown[]>;
 };
 
@@ -93,13 +97,13 @@ const toSettings = (row: SettingsRow): BackySettings => ({
 export function createSettingsRepository(db: DatabaseInstance): BackySettingsRepository {
     const database = asDb(db);
 
-    const getOrCreateRow = async (): Promise<SettingsRow> => {
-        const rows = await database.select().from(platformSettings).where(eq(platformSettings.id, SETTINGS_ID)).limit(1) as SettingsRow[];
+    const getOrCreateRow = async (query = database): Promise<SettingsRow> => {
+        const rows = await query.select().from(platformSettings).where(eq(platformSettings.id, SETTINGS_ID)).limit(1) as SettingsRow[];
         if (rows[0]) {
             return rows[0];
         }
 
-        const [row] = await database.insert(platformSettings).values({
+        const [row] = await query.insert(platformSettings).values({
             id: SETTINGS_ID,
             deliveryMode: 'managed-hosting',
             apiKeys: defaultApiKeys(),
@@ -107,8 +111,11 @@ export function createSettingsRepository(db: DatabaseInstance): BackySettingsRep
             auth: {},
             integrations: {},
             updatedAt: new Date(),
-        }).returning() as SettingsRow[];
-        return row;
+        }).onConflictDoNothing().returning() as SettingsRow[];
+        if (row) return row;
+        const [existing] = await query.select().from(platformSettings).where(eq(platformSettings.id, SETTINGS_ID)).limit(1) as SettingsRow[];
+        if (!existing) throw new Error('Settings initialization failed');
+        return existing;
     };
 
     return {
@@ -116,25 +123,41 @@ export function createSettingsRepository(db: DatabaseInstance): BackySettingsRep
             return toSettings(await getOrCreateRow());
         },
 
-        async update(input: BackySettingsUpdateInput): Promise<BackyRepositoryMutationResult<BackySettings>> {
-            const current = toSettings(await getOrCreateRow());
-            const nextApiKeys = {
-                ...current.apiKeys,
-                ...(input.apiKeys || {}),
-                ...(input.rotatePublicKey ? { publicKey: defaultApiKeys().publicKey } : {}),
-                ...(input.rotateSecretKey ? { secretKeyId: defaultApiKeys().secretKeyId } : {}),
-            };
-            const updates: Record<string, unknown> = {
-                deliveryMode: input.deliveryMode || current.deliveryMode,
-                apiKeys: nextApiKeys,
-                storage: input.storage || current.storage || {},
-                auth: input.auth || current.auth || {},
-                integrations: input.integrations || current.integrations || {},
-                updatedAt: new Date(),
-            };
+        async commitOperatorSiteGrant(input) {
+            await getOrCreateRow();
+            return database.transaction(async tx => {
+                const [locked] = await tx.select().from(platformSettings).where(eq(platformSettings.id, SETTINGS_ID)).for('update') as SettingsRow[];
+                if (!locked) throw new Error('Settings not found');
+                const auth = commitBackyOperatorSiteGrantAuth(locked.auth, input);
+                const [row] = await tx.update(platformSettings).set({ auth, updatedAt: new Date() }).where(eq(platformSettings.id, SETTINGS_ID)).returning() as SettingsRow[];
+                return { item: toSettings(row) };
+            });
+        },
 
-            const [row] = await database.update(platformSettings).set(updates).where(eq(platformSettings.id, SETTINGS_ID)).returning() as SettingsRow[];
-            return { item: toSettings(row) };
+        async update(input: BackySettingsUpdateInput): Promise<BackyRepositoryMutationResult<BackySettings>> {
+            await getOrCreateRow();
+            return database.transaction(async tx => {
+                const [locked] = await tx.select().from(platformSettings).where(eq(platformSettings.id, SETTINGS_ID)).for('update') as SettingsRow[];
+                if (!locked) throw new Error('Settings not found');
+                const current = toSettings(locked);
+                const nextApiKeys = {
+                    ...current.apiKeys,
+                    ...(input.apiKeys || {}),
+                    ...(input.rotatePublicKey ? { publicKey: defaultApiKeys().publicKey } : {}),
+                    ...(input.rotateSecretKey ? { secretKeyId: defaultApiKeys().secretKeyId } : {}),
+                };
+                const updates: Record<string, unknown> = {
+                    deliveryMode: input.deliveryMode || current.deliveryMode,
+                    apiKeys: nextApiKeys,
+                    storage: input.storage || current.storage || {},
+                    auth: input.auth ? preserveBackyOperatorSiteGrants(current.auth, input.auth) : current.auth || {},
+                    integrations: input.integrations || current.integrations || {},
+                    updatedAt: new Date(),
+                };
+
+                const [row] = await tx.update(platformSettings).set(updates).where(eq(platformSettings.id, SETTINGS_ID)).returning() as SettingsRow[];
+                return { item: toSettings(row) };
+            });
         },
     };
 }

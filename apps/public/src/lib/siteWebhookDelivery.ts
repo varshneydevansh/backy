@@ -1,4 +1,5 @@
 import type { Site, SiteWebhookEventKind } from '@backy-cms/core';
+import { toAuditJsonObject } from '@/lib/adminAudit';
 import { trackWebhookEvent } from '@/lib/backyStore';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
 import type { getRequiredDatabaseRepositories } from '@/lib/repositoryRuntime';
@@ -50,7 +51,16 @@ async function recordSiteWebhookEvent(params: {
   };
 
   if (params.repositories) {
-    await recordRepositoryInteractionEvent(params.repositories, event);
+    // The deleted site cannot remain a foreign key in a post-commit journal.
+    if (params.kind === 'site-deleted') {
+      await params.repositories.auditLogs.record({
+        siteId: null, entity: 'site', entityId: params.siteId, action: params.kind,
+        actorId: params.actor || null, requestId: params.requestId,
+        metadata: toAuditJsonObject({ ...event.metadata, deletedSiteId: params.siteId, target: params.target, status: params.status, reason: event.reason, ...(params.statusCode !== undefined ? { statusCode: params.statusCode } : {}), ...(params.error ? { error: params.error } : {}) }),
+      });
+    } else {
+      await recordRepositoryInteractionEvent(params.repositories, event);
+    }
     return;
   }
 

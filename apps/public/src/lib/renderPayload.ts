@@ -3,8 +3,10 @@ import {
   canvasContentPayloadToBackyContentDocument,
   canvasElementsToBackyContentDocument,
   productCanvasDesign,
+  isBackyContentDocument,
   type BackyContentKind,
   type BackyContentStatus,
+  type BackyCanvasSize,
 } from '@backy-cms/core';
 
 import {
@@ -22,6 +24,7 @@ import {
   type StorePage,
   type StoreSite,
 } from './backyStore';
+import {withCollectionFrontendDesign,withCollectionRecordFrontendDesign} from './publicCollectionResources';
 import { buildCollectionItemPath, buildCollectionListPath } from './collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, productDesignReadinessFromValues } from './commerceCatalog';
 import {
@@ -30,6 +33,7 @@ import {
 } from './frontendDesignContract';
 import { buildPublicFontManifest } from './fontManifest';
 import { publicMediaFilePath } from './mediaResponsive';
+import { hydratePublicRichDataFigures, loadPublicDataFigureDataset, type PublicDataFigureDataset } from './publicDataFigureHydration';
 
 type JsonObject = Record<string, unknown>;
 type JsonArrayOrObject = unknown[] | JsonObject;
@@ -75,6 +79,7 @@ type MediaListResult = ReturnType<typeof getMediaList>;
 type SiteNavigationResult = ReturnType<typeof getSiteNavigation>;
 
 export interface RenderDataSource {
+  getDataFigureDataset?: (siteId: string, collectionId: string) => PublicDataFigureDataset | undefined;
   getCollectionByIdOrSlug?: (siteId: string, collectionIdOrSlug: string) => StoreCollection | undefined;
   getCollectionRecordByIdOrSlug?: (
     siteId: string,
@@ -85,7 +90,7 @@ export interface RenderDataSource {
     siteId: string,
     collectionId: string,
     options?: CollectionRecordListOptions,
-  ) => { records: StoreCollectionRecord[] };
+  ) => { records: StoreCollectionRecord[]; pagination?: { total: number; limit: number; offset: number; hasMore: boolean } };
   getMediaById?: (siteId: string, mediaId: string) => ReturnType<typeof getMediaById>;
   getMediaList?: (siteId: string, options?: MediaListOptions) => MediaListResult;
   getSiteNavigation?: (siteId: string) => SiteNavigationResult;
@@ -96,6 +101,7 @@ interface RenderPayloadContext {
 }
 
 const defaultRenderDataSource: Required<RenderDataSource> = {
+  getDataFigureDataset: () => undefined,
   getCollectionByIdOrSlug,
   getCollectionRecordByIdOrSlug,
   listCollectionRecords,
@@ -104,10 +110,14 @@ const defaultRenderDataSource: Required<RenderDataSource> = {
   getSiteNavigation,
 };
 
-const renderDataSource = (context?: RenderPayloadContext): Required<RenderDataSource> => ({
-  ...defaultRenderDataSource,
-  ...context?.dataSource,
-});
+const renderDataSource = (context?: RenderPayloadContext): Required<RenderDataSource> => {
+  const source={...defaultRenderDataSource,...context?.dataSource};
+  return {...source,
+    getCollectionByIdOrSlug: (...args) => {const item=source.getCollectionByIdOrSlug(...args);return item?withCollectionFrontendDesign(item) as StoreCollection:item;},
+    getCollectionRecordByIdOrSlug: (...args) => {const item=source.getCollectionRecordByIdOrSlug(...args);return item?withCollectionRecordFrontendDesign(item) as StoreCollectionRecord:item;},
+    listCollectionRecords: (...args) => {const result=source.listCollectionRecords(...args);return {...result,records:result.records.map(record=>withCollectionRecordFrontendDesign(record) as StoreCollectionRecord)};},
+  };
+};
 
 type CollectionTemplateRenderKind = 'list' | 'item';
 
@@ -235,7 +245,8 @@ const collectionFrontendDesignTemplate = (site: StoreSite, collection: StoreColl
 };
 
 type CollectionTemplateCanvas = {
-  canvasSize?: { width: number; height: number };
+  allowEmpty?: boolean;
+  canvasSize?: BackyCanvasSize;
   customCSS?: string;
   customJS?: string;
   themeTokenRefs?: Record<string, string>;
@@ -251,7 +262,7 @@ type CollectionTemplateCanvas = {
 };
 
 type CollectionRenderableContent = Omit<CollectionTemplateCanvas, 'canvasSize' | 'elements'> & {
-  canvasSize: { width: number; height: number };
+  canvasSize: BackyCanvasSize;
   elements: RenderElement[];
 };
 
@@ -339,7 +350,7 @@ const templateContentCanvas = (
       : '';
 
   return {
-    ...(width && height ? { canvasSize: { width, height } } : {}),
+    ...(width && height ? { canvasSize: { ...rawCanvasSize, width, height } } : {}),
     ...(customCSS ? { customCSS } : {}),
     ...(customJS ? { customJS } : {}),
     ...(stringRecordValue(content.themeTokenRefs, contentDocument?.themeTokenRefs, metadata?.themeTokenRefs)
@@ -387,6 +398,24 @@ const collectionTemplateCanvas = (
   const authoredCanvas = collectionAuthoredTemplateCanvas(collection, kind);
   if (authoredCanvas) {
     return authoredCanvas;
+  }
+
+  // The collection owns the saved instance design. Registry revisions are seeds
+  // and explicit upgrade targets, not an implicit overwrite on every public read.
+  const savedDesign = frontendDesignProvenanceFromMetadata(collection.metadata);
+  if (savedDesign) {
+    const document = isBackyContentDocument(savedDesign.contentDocument)
+      ? savedDesign.contentDocument : null;
+    const savedCanvas = templateContentCanvas({
+      ...savedDesign,
+      ...(document ? {
+        elements: document.elements,
+        canvasSize: document.metadata?.canvasSize ?? savedDesign.canvasSize,
+      } : {}),
+      customCSS: savedDesign.customCss,
+      customJS: savedDesign.customJs,
+    });
+    if (savedCanvas) return { ...savedCanvas, allowEmpty: true };
   }
 
   const template = collectionFrontendDesignTemplate(site, collection);
@@ -1142,6 +1171,55 @@ const applyBindingValue = (
   };
 };
 
+/** Same public binding projection for saved rich widgets, without rewriting their node metadata. */
+export const resolveRichInteractiveComponentBindings = (siteId: string, value: unknown, context?: RenderPayloadContext): unknown => {
+  let budget = 10_000;
+  const ancestors = new WeakSet<object>();
+  const visit = (value: unknown, depth: number): unknown => {
+    if (!value || typeof value !== 'object') return value;
+    if (depth > 40 || --budget < 0 || ancestors.has(value)) return null;
+    ancestors.add(value);
+    let next: unknown = value;
+    if (Array.isArray(value)) next = value.map((child) => visit(child, depth + 1));
+    else if (isRecord(value)) {
+      let node = value;
+      if (node.type === 'interactive_component' && isRecord(node.props) && Array.isArray(node.dataBindings)) {
+        const element = normalizeElement({ ...node, type: node.elementType, children: [] });
+        if (element) {
+          const bound = node.dataBindings.filter(isRecord).reduce<RenderElement>((current, binding, index) => {
+            const normalized = normalizeCollectionBinding(binding, current, index);
+            if (typeof normalized?.targetPath !== 'string') return current;
+            const source = isRecord(normalized.source) ? normalized.source : {};
+            const data = renderDataSource(context);
+            const collection = typeof source.collectionId === 'string' ? data.getCollectionByIdOrSlug(siteId, source.collectionId) : undefined;
+            if (!collection || collection.siteId !== siteId || collection.status !== 'published' || collection.permissions?.publicRead !== true) return current;
+            const field = typeof source.field === 'string' ? source.field : '';
+            if (!['id', 'slug', 'status', 'createdAt', 'updatedAt'].includes(field) && collection.fields.filter((item) => item.key === field).length !== 1) return current;
+            // Nested reference traversal can cross a private collection; rich widget bindings stay within this public record.
+            if (typeof source.path === 'string' && source.path.includes('.')) return current;
+            const rawSource = isRecord(binding.source) ? binding.source : {};
+            const query = isRecord(binding.query) ? binding.query : isRecord(rawSource.query) ? rawSource.query : {};
+            if (['fieldKey', 'sortBy'].some((key) => typeof query[key] === 'string' && !['id', 'slug', 'status', 'createdAt', 'updatedAt'].includes(query[key] as string)
+              && collection.fields.filter((item) => item.key === query[key]).length !== 1)) return current;
+            const record = getBoundCollectionRecord(siteId, collection.id, binding, context);
+            if (!record || record.siteId !== siteId || record.collectionId !== collection.id || record.status !== 'published') return current;
+            // Project the checked record itself; a second lookup could return a different, private record.
+            const resolved = field === 'slug'
+              ? /href|url/i.test(normalized.targetPath) ? buildCollectionItemPath(collection, record.slug) : record.slug
+              : ['id', 'status', 'createdAt', 'updatedAt'].includes(field) ? record[field as 'id' | 'status' | 'createdAt' | 'updatedAt'] : record.values[field];
+            return resolved === undefined ? current : applyBindingValue(siteId, current, normalized.targetPath, resolved, context);
+          }, element);
+          node = { ...node, props: bound.props };
+        }
+      }
+      next = Array.isArray(node.children) ? { ...node, children: visit(node.children, depth + 1) } : node;
+    }
+    ancestors.delete(value);
+    return next;
+  };
+  return visit(value, 0);
+};
+
 export const resolveElementDataBindings = (
   siteId: string,
   rawElements: unknown[],
@@ -1158,7 +1236,7 @@ export const resolveElementDataBindings = (
       };
       const withRepeaterData = hydrateRepeaterElement(siteId, withChildren, context);
 
-      return (element.dataBindings || []).reduce<RenderElement>((currentElement, binding, index) => {
+      const boundElement = (element.dataBindings || []).reduce<RenderElement>((currentElement, binding, index) => {
         const normalized = normalizeCollectionBinding(binding, currentElement, index);
         const targetPath = typeof normalized?.targetPath === 'string' ? normalized.targetPath : null;
         if (!normalized || !targetPath) {
@@ -1172,8 +1250,41 @@ export const resolveElementDataBindings = (
 
         return applyBindingValue(siteId, currentElement, targetPath, nextValue, context);
       }, withRepeaterData);
+      const sourceData = renderDataSource(context);
+      const datasets = new Map<string, PublicDataFigureDataset>();
+      const resolveDataset = (collectionId: string) => {
+        if (!datasets.has(collectionId)) datasets.set(collectionId, sourceData.getDataFigureDataset(siteId, collectionId)
+          || loadPublicDataFigureDataset(siteId, collectionId, sourceData.getCollectionByIdOrSlug, sourceData.listCollectionRecords));
+        return datasets.get(collectionId)!;
+      };
+      return Array.isArray(boundElement.props.content) ? { ...boundElement, props: { ...boundElement.props,
+        content: resolveRichInteractiveComponentBindings(siteId, hydratePublicRichDataFigures(boundElement.props.content, resolveDataset), context) } } : boundElement;
     })
 );
+
+const resolveCurrentContentBindings = (
+  siteId: string,
+  elements: RenderElement[],
+  values: Record<string, unknown>,
+  context?: RenderPayloadContext,
+): RenderElement[] => elements.map((element) => {
+  let next: RenderElement = {
+    ...element,
+    children: resolveCurrentContentBindings(siteId, element.children, values, context),
+  };
+  const binding = typeof element.props.binding === 'string' ? element.props.binding.trim() : '';
+  if (!Object.prototype.hasOwnProperty.call(values, binding)) return next;
+  const explicitTarget = typeof element.props.bindingTargetPath === 'string' ? element.props.bindingTargetPath : '';
+  const target = explicitTarget || (binding === 'post.coverImage' ? 'props.mediaId' : 'props.content');
+  // Current record text/media bindings cannot replace a component tree or executable metadata.
+  if (!['props.content', 'props.text', 'props.label', 'props.alt', 'props.title', 'props.src', 'props.mediaId', 'props.assetId'].includes(target)) return next;
+  next = applyBindingValue(siteId, next, target, values[binding], context);
+  if (binding === 'post.coverImage' && !values[binding]
+    && ['props.src', 'props.mediaId', 'props.assetId'].includes(target)) {
+    next = { ...next, props: { ...next.props, src: '', mediaId: '', assetId: '' } };
+  }
+  return next;
+});
 
 const normalizeResolvedCollectionFields = (fields: unknown): JsonObject[] => (
   Array.isArray(fields)
@@ -1989,6 +2100,7 @@ const buildCollectionCanvasContent = (
 
   return {
     canvasSize: {
+      ...canvas.canvasSize,
       width: canvas.canvasSize?.width || pageDefaultWidth,
       height: canvas.canvasSize?.height || Math.max(720, ...elements.map((element) => {
         const y = typeof element.y === 'number' ? element.y : 0;
@@ -2019,7 +2131,7 @@ export const buildCollectionTemplateContent = (
   context?: RenderPayloadContext,
 ): CollectionRenderableContent | null => {
   const canvas = collectionTemplateCanvas(site, collection, kind);
-  return canvas ? buildCollectionCanvasContent(site, collection, kind, canvas, record, context) : null;
+  return canvas ? buildCollectionCanvasContent(site, collection, kind, canvas, record, context, canvas.allowEmpty) : null;
 };
 
 const buildProductCanvasContent = (
@@ -2565,10 +2677,60 @@ export const buildCollectionItemContent = (
   };
 };
 
+const preparePageRenderElements = (site: StoreSite, page: StorePage, context: RenderPayloadContext) => (
+  resolveCurrentContentBindings(site.id,
+    resolveElementDataBindings(site.id, page.content.elements, context),
+    { 'page.title': page.title, 'page.description': page.description || '' }, context)
+);
+const preparePostRenderElements = (site: StoreSite, post: StoreBlogPost, context: RenderPayloadContext) => (
+  resolveCurrentContentBindings(site.id,
+    resolveElementDataBindings(site.id, normalizePostElements(post), context),
+    { 'post.title': post.title, 'post.excerpt': post.excerpt || '',
+      'post.publishedAt': post.publishedAt || '', 'post.coverImage': post.featuredImageId || '' }, context)
+);
+
+export type VisitorRenderTarget =
+  | { kind: 'page'; page: StorePage }
+  | { kind: 'post'; post: StoreBlogPost }
+  | { kind: 'list'; collection: StoreCollection; records: StoreCollectionRecord[] }
+  | { kind: 'item'; collection: StoreCollection; record: StoreCollectionRecord };
+
+/** Uses the actual binding/normalization path without building an editable map or a response twice. */
+export function discoverVisitorMediaRoots(site: StoreSite, target: VisitorRenderTarget, dataSource: RenderDataSource, includeBindingDatasets = false): unknown[] {
+  const context = { dataSource };
+  const design: JsonObject = isRecord(site.settings?.frontendDesign) ? site.settings.frontendDesign : {};
+  const { templates: _templates, editableMap: _map, ...chrome } = design;
+  if (target.kind === 'page') {
+    const elements = preparePageRenderElements(site, target.page, context);
+    return [site.theme, chrome, target.page.content, elements, frontendDesignProvenanceFromMetadata(target.page.meta),
+      ...(includeBindingDatasets ? [collectDataBindingManifest(site.id, elements, context)] : [])];
+  }
+  if (target.kind === 'post') {
+    const elements = preparePostRenderElements(site, target.post, context);
+    return [site.theme, chrome, target.post.content, elements, frontendDesignProvenanceFromMetadata(target.post.meta),
+      ...(includeBindingDatasets ? [collectDataBindingManifest(site.id, elements, context)] : [])];
+  }
+  if (target.kind === 'list') {
+    const collection = withCollectionFrontendDesign(target.collection) as StoreCollection;
+    const records = target.records.map(record => withCollectionRecordFrontendDesign(record) as StoreCollectionRecord);
+    const content = buildCollectionTemplateContent(site, collection, 'list', undefined, context)
+      || buildCollectionListContent(site, collection, records, context);
+    return [site.theme, chrome, content,
+      ...(includeBindingDatasets ? [collectDataBindingManifest(site.id, content.elements, context),
+        hydrateDatasetRecords(site.id, buildCollectionListDataset(collection, records), context)] : [])];
+  }
+  const collection = withCollectionFrontendDesign(target.collection) as StoreCollection;
+  const record = withCollectionRecordFrontendDesign(target.record) as StoreCollectionRecord;
+  const content = buildCollectionRecordContent(site, collection, record, context);
+  return [site.theme, chrome, content,
+    ...(includeBindingDatasets ? [collectDataBindingManifest(site.id, content.elements, context),
+      hydrateDatasetRecords(site.id, buildCollectionItemDataset(collection, record), context)] : [])];
+}
+
 export function buildPublicRenderPayload(site: StoreSite, page: StorePage, options: RenderPayloadOptions) {
   const context = { dataSource: options.dataSource };
   const sourceData = renderDataSource(context);
-  const elements = resolveElementDataBindings(site.id, page.content.elements, context);
+  const elements = preparePageRenderElements(site, page, context);
   const payloadElements = elements.map(normalizeElementForPayload);
   const mediaPayload = sourceData.getMediaList(site.id, {
     pageId: page.id,
@@ -2676,6 +2838,8 @@ export function buildPublicCollectionListRenderPayload(
   records: StoreCollectionRecord[],
   options: RenderPayloadOptions,
 ) {
+  collection=withCollectionFrontendDesign(collection) as StoreCollection;
+  records=records.map(record=>withCollectionRecordFrontendDesign(record) as StoreCollectionRecord);
   const context = { dataSource: options.dataSource };
   const sourceData = renderDataSource(context);
   const content = buildCollectionTemplateContent(site, collection, 'list', undefined, context)
@@ -2810,6 +2974,8 @@ export function buildPublicCollectionItemRenderPayload(
   record: StoreCollectionRecord,
   options: RenderPayloadOptions,
 ) {
+  collection=withCollectionFrontendDesign(collection) as StoreCollection;
+  record=withCollectionRecordFrontendDesign(record) as StoreCollectionRecord;
   const context = { dataSource: options.dataSource };
   const sourceData = renderDataSource(context);
   const content = buildCollectionRecordContent(site, collection, record, context);
@@ -2968,8 +3134,7 @@ export function buildPublicBlogPostRenderPayload(
 ) {
   const context = { dataSource: options.dataSource };
   const sourceData = renderDataSource(context);
-  const elements = normalizePostElements(post);
-  const resolvedElements = resolveElementDataBindings(site.id, elements, context);
+  const resolvedElements = preparePostRenderElements(site, post, context);
   const payloadElements = resolvedElements.map(normalizeElementForPayload);
   const mediaPayload = sourceData.getMediaList(site.id, {
     postId: post.id,

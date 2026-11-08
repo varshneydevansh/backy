@@ -1,3 +1,4 @@
+import { siteCreationAdmissionErrorDetails } from '@backy-cms/core';
 /**
  * Admin sites endpoint.
  *
@@ -9,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Site } from "@backy-cms/core";
 import {
   filterAdminTeamScopedResources,
+  selectedAdminSiteIds,
   requireAdminAccess,
   requireAdminTeamScopeAccess,
 } from "@/lib/adminAccess";
@@ -191,6 +193,26 @@ const adminSiteFromRepositorySite = (site: Site | null) => {
   };
 };
 
+// Existing list consumers expect a complete authorized inventory. Traverse the
+// repository's pages rather than marking its first default page as complete.
+const completeRepositorySiteInventory = async (
+  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
+  status: 'all' | 'published',
+): Promise<Site[]> => {
+  const sites: Site[] = [];
+  const seen = new Set<string>();
+  let offset = 0;
+  for (let page = 0; page < 50; page++) {
+    const result = await repositories.sites.list({ status, limit: 100, offset });
+    const previousCount = sites.length;
+    for (const site of result.items) if (!seen.has(site.id)) { seen.add(site.id); sites.push(site); }
+    if (!result.pagination.hasMore) return sites;
+    if (!result.items.length || sites.length === previousCount) throw new Error('Site inventory pagination did not advance');
+    offset += result.items.length;
+  }
+  throw new Error('Site inventory exceeds the complete-list limit of 5000; use repository pagination to manage this workspace');
+};
+
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") || makeRequestId();
   const access = await requireAdminAccess(request, requestId, {
@@ -206,9 +228,11 @@ export async function GET(request: NextRequest) {
       searchParams.get("includeUnpublished") === "true";
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
-      const result = await repositories.sites.list({
-        status: includeUnpublished ? "all" : "published",
-      });
+      const selectedSiteIds = selectedAdminSiteIds(access);
+      const result = selectedSiteIds !== null
+        ? { items: (await Promise.all(selectedSiteIds.map(id => repositories.sites.getById(id))))
+          .filter((site): site is Site => Boolean(site && (includeUnpublished || site.isPublished))) }
+        : { items: await completeRepositorySiteInventory(repositories, includeUnpublished ? "all" : "published") };
       const scopedItems = await filterAdminTeamScopedResources(
         access,
         result.items,
@@ -502,6 +526,7 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    const admission=siteCreationAdmissionErrorDetails(error);if(admission)return errorResponse(admission.status,admission.code,admission.message,requestId);
     console.error("Admin site create API error:", error);
     return errorResponse(
       500,

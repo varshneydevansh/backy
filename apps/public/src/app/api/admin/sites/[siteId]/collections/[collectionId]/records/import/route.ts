@@ -1,3 +1,4 @@
+import { collectCompleteCollectionInventory, CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 /**
  * Admin CMS collection record CSV import endpoint.
  *
@@ -26,7 +27,7 @@ import {
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { requireCommerceCollectionAccess } from "@/lib/adminCommerceCollectionAccess";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
-import { validateRepositoryCollectionRecordValues } from "@/lib/collectionRecordValidation";
+import { collectionRecordValidationIssuesFromError, validateRepositoryCollectionRecordValues } from "@/lib/collectionRecordValidation";
 import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
@@ -376,7 +377,15 @@ const importRows = async (input: {
       continue;
     }
 
-    const saved = await input.save(slug, values, status, scheduledAt);
+    let saved: Awaited<ReturnType<typeof input.save>>;
+    try { saved = await input.save(slug, values, status, scheduledAt); }
+    catch (error) {
+      const issues = collectionRecordValidationIssuesFromError(error);
+      if (!issues) throw error;
+      skipped += 1;
+      errors.push({ row: rowNumber, slug, message: 'Collection record values are invalid.', details: issues });
+      continue;
+    }
     if (!saved.record) {
       skipped += 1;
       errors.push({
@@ -477,6 +486,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const uniqueInventory = collection.fields.some(field => field.unique)
+        ? await collectCompleteCollectionInventory(pagination => repositories.collections.listRecords({ siteId: site.id, collectionId: collection.id, includeUnpublished: true, status: 'all', ...pagination }), record => record.siteId === site.id && record.collectionId === collection.id)
+        : null;
+      const validationRepository = uniqueInventory ? {
+        listRecords: async ({ limit = 100, offset = 0 }: { limit?: number; offset?: number }) => ({ items: uniqueInventory.slice(offset, offset + limit), pagination: { total: uniqueInventory.length, limit, offset, hasMore: offset + limit < uniqueInventory.length } }),
+      } : repositories.collections;
       const result = await importRows({
         siteId: site.id,
         collection,
@@ -490,7 +505,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             slug,
           );
           return validateRepositoryCollectionRecordValues({
-            repository: repositories.collections,
+            repository: validationRepository,
+            mediaRepository: repositories.media,
             siteId: site.id,
             collection,
             values,
@@ -533,6 +549,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
                 })
               ).item;
 
+          if (uniqueInventory) {
+            const index = uniqueInventory.findIndex(item => item.id === record.id);
+            if (index >= 0) uniqueInventory[index] = record; else uniqueInventory.push(record);
+          }
           await syncRepositoryCollectionRecordMediaReferences({
             mediaRepository: repositories.media,
             siteId: site.id,
@@ -765,6 +785,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection record import API error:", error);
     return errorResponse(
       500,

@@ -16,6 +16,8 @@ const publicSafeCollectionMetadata = (metadata: unknown) => {
   if (!isRecord(metadata)) return metadata;
   const sanitized = { ...metadata };
   delete sanitized.publicWriteToken;
+  // Baselines and private recovery/control payloads are authenticated authoring state.
+  for(const key of ['frontendTemplateInstance','frontendTemplateHistory','frontendTemplateRevisions','frontendDesignRevisions','beforeUpdateCollectionDesignRevision','beforeUpdateProductDesignRevision','expectedCollection','expectedRecord','expectedVersion'])delete sanitized[key];
 
   if (isRecord(sanitized.visitorWritePolicy)) {
     const {
@@ -40,7 +42,16 @@ export const withCollectionFrontendDesign = <TCollection extends CollectionLike>
   frontendDesign: frontendDesignProvenanceFromMetadata(collection.metadata),
 });
 
+const publicSafeCollectionRecordValues = (values:unknown) => {
+  if(!isRecord(values))return values;
+  const sanitized={...values};
+  // Entry schemas own their other keys, including ordinary version/expectation names.
+  for(const key of ['frontendTemplateInstance','frontendTemplateHistory','frontendTemplateRevisions','frontendDesignRevisions'])delete sanitized[key];
+  return sanitized;
+};
+
 export const withCollectionRecordFrontendDesign = <TRecord extends CollectionRecordLike>(record: TRecord) => ({
   ...record,
+  values: publicSafeCollectionRecordValues(record.values),
   frontendDesign: frontendDesignProvenanceFromMetadata(record.values),
 });

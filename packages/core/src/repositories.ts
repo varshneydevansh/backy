@@ -1,3 +1,10 @@
+import type { BackyProductDesignRevision, BackyProductDesignRevisionInput } from './product-design';
+import type { BackyFormDesignRevision, BackyFormUpdateInput } from './form-design';
+import type { BackyCollectionDesignRevision, BackyCollectionDesignRevisionInput } from './collection-design';
+import { serializeTemplateRevisionValue } from './template-history';
+import type { BackyMediaStorageJobRepository } from './media-storage-jobs';
+import type { BackyVisitorAccountRepository } from './visitor-accounts';
+import type { BackyTemplateRevision } from './template-history';
 import type { BackyContentDocument, BackyJsonObject, BackyJsonValue } from './content-contract';
 import type {
   BlogPost,
@@ -59,10 +66,40 @@ export interface BackyPage extends Omit<Page, 'content'> {
   content: BackyContentDocument;
 }
 
+/** Read-only identity/metadata projection; full editable content is fetched separately. */
+export type BackyPageSummary = Omit<BackyPage, 'content'>;
+
+/** Public path admission; neither canvas, title, SEO nor editor metadata is read. */
+export type BackyPageRouteMetadata = Pick<BackyPage, 'id' | 'siteId' | 'slug' | 'status' | 'scheduledAt' | 'isHomepage' | 'parentId'>;
+export type BackySiteRouteMetadata = Pick<Site, 'id' | 'slug' | 'isPublished'> & {
+  settings: Pick<SiteSettings, 'localization' | 'redirectRules'>;
+};
+
+/** Owner canvas lookup; bodies and editor/SEO metadata are never read for discovery. */
+export type BackyPageCanvasSource = Pick<BackyPage, 'id' | 'siteId' | 'title' | 'slug' | 'status'>;
+
+/** Page destination discovery; no canvas, owner metadata or SEO payloads. */
+export type BackyPageLinkMetadata = Pick<BackyPage, 'id' | 'siteId' | 'title' | 'slug' | 'status' | 'isHomepage' | 'parentId' | 'updatedAt'>;
+
 export interface BackyPost extends Omit<BlogPost, 'content' | 'contentFormat'> {
   content: BackyContentDocument;
   contentFormat: 'editor';
 }
+
+/** Visitor archive projection. Never includes a canvas, author or owner metadata. */
+export type BackyPostArchiveMetadata = Pick<BackyPost, 'id' | 'siteId' | 'title' | 'slug' | 'excerpt' | 'status' | 'publishedAt' | 'scheduledAt' | 'categoryIds' | 'tagIds'> & {
+  meta: { originalPublishedAt?: string | null };
+};
+export type BackyPostArchiveListInput = BackyPaginationInput & {
+  siteId: string; asOf: string; search?: string; categoryId?: string; tagId?: string;
+};
+export type BackyBlogArchiveTerm = { id: string; siteId: string; name: string; slug: string };
+
+/** Search reads neither editable content nor the rest of the owner metadata. */
+export type BackySearchSeoMeta = Pick<PageMeta, 'canonical' | 'title' | 'description' | 'noIndex' | 'noFollow' | 'keywords'>;
+export type BackySearchMetadataListInput = BackyPaginationInput & { siteId: string; status: 'published' | 'scheduled' };
+export type BackyPageSearchMetadata = Pick<BackyPage, 'id' | 'siteId' | 'title' | 'slug' | 'description' | 'status' | 'scheduledAt' | 'updatedAt' | 'isHomepage' | 'parentId'> & { meta: BackySearchSeoMeta };
+export type BackyPostSearchMetadata = Pick<BackyPost, 'id' | 'siteId' | 'title' | 'slug' | 'excerpt' | 'status' | 'scheduledAt' | 'updatedAt'> & { meta: BackySearchSeoMeta };
 
 export interface BackySlugAvailabilityResult {
   available: boolean;
@@ -145,7 +182,8 @@ export interface BackySiteUpdateInput {
   description?: string | null;
   customDomain?: string | null;
   theme?: Partial<ThemeConfig>;
-  settings?: Partial<SiteSettings>;
+  /** Merged atomically with current settings. Change frontendDesign through templateRevisions.commitDesign. */
+  settings?: Omit<Partial<SiteSettings>, 'frontendDesign'>;
   status?: PublishStatus;
   isPublished?: boolean;
   publishedAt?: string | null;
@@ -204,7 +242,37 @@ export interface BackyPageCreateInput {
   meta?: PageMeta;
 }
 
-export interface BackyPageUpdateInput {
+/** Optional optimistic guard. Migrations supply both the timestamp and content snapshot. */
+export interface BackyContentUpdateExpectation {
+  expectedContent?: BackyContentDocument;
+  expectedUpdatedAt?: string;
+  /** Internal baseline history write; requires both expectations and shares their transaction. */
+  beforeUpdateRevision?: Omit<BackyContentRevisionCreateInput, 'siteId' | 'targetType' | 'targetId'>;
+}
+
+export class BackyContentConflictError extends Error {
+  readonly code = 'CONTENT_REVISION_CONFLICT';
+  constructor() {
+    super('This document changed after the migration inventory was read. Reload the migration preview before retrying.');
+    this.name = 'BackyContentConflictError';
+  }
+}
+
+/** Compare JSON semantics, not object key order or timestamps alone. Call inside the write lock. */
+export function assertBackyContentUpdateExpectation(
+  input: { expectedContent?: unknown; expectedUpdatedAt?: unknown },
+  current: { content: unknown; updatedAt: string } | null,
+): void {
+  if (input.expectedContent === undefined && input.expectedUpdatedAt === undefined) return;
+  if (!current || typeof input.expectedUpdatedAt !== 'string'
+    || !Number.isFinite(Date.parse(input.expectedUpdatedAt))
+    || Date.parse(current.updatedAt) !== Date.parse(input.expectedUpdatedAt)
+    || (input.expectedContent !== undefined && serializeTemplateRevisionValue(current.content) !== serializeTemplateRevisionValue(input.expectedContent))) {
+    throw new BackyContentConflictError();
+  }
+}
+
+export interface BackyPageUpdateInput extends BackyContentUpdateExpectation {
   title?: string;
   slug?: string;
   description?: string | null;
@@ -241,7 +309,7 @@ export interface BackyPostCreateInput {
   meta?: PageMeta;
 }
 
-export interface BackyPostUpdateInput extends Partial<Omit<BackyPostCreateInput, 'siteId'>> {
+export interface BackyPostUpdateInput extends Partial<Omit<BackyPostCreateInput, 'siteId'>>, BackyContentUpdateExpectation {
   revisionNote?: string;
 }
 
@@ -334,6 +402,8 @@ export interface BackyCollectionField {
   id: string;
   key: string;
   label: string;
+  helpText?: string | null;
+  sortOrder?: number;
   type: BackyCollectionFieldType;
   required?: boolean;
   unique?: boolean;
@@ -351,6 +421,8 @@ export interface BackyCollectionPermissions {
 }
 
 export interface BackyCollection {
+  /** Derived definition authoring token; not persisted or fingerprinted recursively. */
+  version?: string;
   id: string;
   siteId: string;
   name: string;
@@ -367,6 +439,8 @@ export interface BackyCollection {
 }
 
 export interface BackyCollectionRecord {
+  /** Optional authenticated authoring response token; not persisted content. */
+  version?: string;
   id: string;
   siteId: string;
   collectionId: string;
@@ -378,6 +452,14 @@ export interface BackyCollectionRecord {
   publishedAt?: string | null;
   scheduledAt?: string | null;
 }
+
+/** Narrow search reads omit canvas definitions, field options and record provenance. */
+export type BackyCollectionSearchMetadata = Pick<BackyCollection,
+  'id' | 'siteId' | 'name' | 'slug' | 'description' | 'status' | 'updatedAt' | 'routePattern' | 'listRoutePattern'>
+  & { permissions: Pick<BackyCollectionPermissions, 'publicRead'>; metadata?: { publicSearch?: BackyJsonValue } };
+export type BackyCollectionRecordSearchMetadata = Pick<BackyCollectionRecord,
+  'id' | 'siteId' | 'collectionId' | 'slug' | 'status' | 'scheduledAt' | 'updatedAt' | 'values'>;
+export type BackyCollectionRecordSearchInput = BackySearchMetadataListInput & { collectionId: string; valueKeys: string[] };
 
 export interface BackyCollectionCreateInput {
   siteId: string;
@@ -392,7 +474,11 @@ export interface BackyCollectionCreateInput {
   metadata?: BackyJsonObject;
 }
 
-export interface BackyCollectionUpdateInput extends Partial<Omit<BackyCollectionCreateInput, 'siteId'>> {}
+export interface BackyCollectionUpdateInput extends Partial<Omit<BackyCollectionCreateInput, 'siteId'>> {
+  expectedVersion?: string;
+  expectedCollection?: BackyCollection;
+  beforeUpdateCollectionDesignRevision?: BackyCollectionDesignRevisionInput;
+}
 
 export interface BackyCollectionListInput extends BackyPaginationInput {
   siteId: string;
@@ -410,7 +496,106 @@ export interface BackyCollectionRecordCreateInput {
   values: Record<string, BackyJsonValue>;
 }
 
-export interface BackyCollectionRecordUpdateInput extends Partial<Omit<BackyCollectionRecordCreateInput, 'siteId' | 'collectionId'>> {}
+export interface BackyCollectionRecordUpdateInput extends Partial<Omit<BackyCollectionRecordCreateInput, 'siteId' | 'collectionId'>> {
+  expectedUpdatedAt?: string;
+  expectedVersion?: string;
+  /** Internal canonical snapshot; compare under the record write lock. */
+  expectedRecord?: BackyCollectionRecord;
+  /** Internal only; repository captures the locked design preimage atomically. */
+  beforeUpdateProductDesignRevision?: BackyProductDesignRevisionInput;
+}
+
+export class BackyCollectionRecordConflictError extends Error {
+  readonly code = 'COLLECTION_RECORD_CONFLICT';
+  constructor() { super('This collection record changed while you were editing. Reload the latest record before saving again.'); this.name = 'BackyCollectionRecordConflictError'; }
+}
+
+/** Canonical semantic record bytes used by server SHA-256 version tokens. */
+export function serializeBackyCollectionRecordVersion(record: BackyCollectionRecord): string {
+  const { version: _version, ...snapshot } = record;
+  return serializeTemplateRevisionValue(snapshot);
+}
+
+export function assertBackyCollectionRecordUpdateExpectation(
+  siteId: string, collectionId: string, recordId: string,
+  input: { expectedUpdatedAt?: unknown; expectedVersion?: unknown; expectedRecord?: unknown },
+  current: BackyCollectionRecord | null,
+  currentVersion?: string,
+): void {
+  if (input.expectedUpdatedAt === undefined && input.expectedRecord === undefined && input.expectedVersion === undefined) return;
+  if (!current || current.siteId !== siteId || current.collectionId !== collectionId || current.id !== recordId
+    || (input.expectedUpdatedAt !== undefined && (typeof input.expectedUpdatedAt !== 'string'
+      || !Number.isFinite(Date.parse(input.expectedUpdatedAt)) || Date.parse(current.updatedAt) !== Date.parse(input.expectedUpdatedAt)))
+    || (input.expectedVersion !== undefined && (typeof input.expectedVersion !== 'string' || input.expectedVersion !== currentVersion))
+    || (input.expectedRecord !== undefined && serializeBackyCollectionRecordVersion(current) !== serializeBackyCollectionRecordVersion(input.expectedRecord as BackyCollectionRecord))) {
+    throw new BackyCollectionRecordConflictError();
+  }
+}
+
+export interface BackyCollectionRecordValidationIssue { field: string; code: string; message: string; label?: string }
+export class BackyCollectionRecordValidationError extends Error {
+  readonly code = 'COLLECTION_RECORD_VALIDATION';
+  constructor(readonly details: BackyCollectionRecordValidationIssue[]) { super('Collection record values are invalid.'); this.name = 'BackyCollectionRecordValidationError'; }
+}
+export function normalizeBackyCollectionUniqueValue(value: unknown): string {
+  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value).trim().toLowerCase();
+  return serializeTemplateRevisionValue(value);
+}
+export function collectionRecordUniqueIssues(collection: Pick<BackyCollection, 'fields'>, values: Record<string, unknown>, records: Array<Pick<BackyCollectionRecord, 'id' | 'values'>>, excludeRecordId?: string): BackyCollectionRecordValidationIssue[] {
+  return collection.fields.filter(field => field.unique).flatMap(field => {
+    const value = normalizeBackyCollectionUniqueValue(values[field.key]);
+    return value && records.some(record => record.id !== excludeRecordId && normalizeBackyCollectionUniqueValue(record.values[field.key]) === value)
+      ? [{ field: field.key, code: 'unique', label: field.label, message: `${field.label} must be unique.` }] : [];
+  });
+}
+/** Check the final batch inventory in linear time, so legitimate unique-value swaps can commit. */
+export function assertBackyCollectionRecordInventoryUnique(collection: Pick<BackyCollection, 'fields'>, records: Array<Pick<BackyCollectionRecord, 'id' | 'values'>>): void {
+  const issues: BackyCollectionRecordValidationIssue[] = [];
+  for (const field of collection.fields.filter(field => field.unique)) {
+    const seen = new Set<string>();
+    for (const record of records) {
+      const value = normalizeBackyCollectionUniqueValue(record.values[field.key]);
+      if (!value) continue;
+      if (seen.has(value)) { issues.push({ field: field.key, code: 'unique', label: field.label, message: `${field.label} must be unique.` }); break; }
+      seen.add(value);
+    }
+  }
+  if (issues.length) throw new BackyCollectionRecordValidationError(issues);
+}
+
+/** Internally prepared full import; expectations are canonical site-scoped snapshots. */
+export interface BackyCollectionImportOperation {
+  input: Omit<BackyCollectionCreateInput, 'siteId'>;
+  expectedCollection: BackyCollection | null;
+  expectedRecords: BackyCollectionRecord[];
+  records: Array<{ input: Omit<BackyCollectionRecordCreateInput, 'siteId' | 'collectionId'>; expectedRecord: BackyCollectionRecord | null }>;
+}
+export interface BackyCollectionImportResult {
+  collections: BackyCollection[];
+  records: BackyCollectionRecord[];
+  createdCollections: number;
+  updatedCollections: number;
+  createdRecords: number;
+  updatedRecords: number;
+}
+export class BackyCollectionImportConflictError extends Error {
+  readonly code = 'COLLECTION_IMPORT_CONFLICT';
+  constructor() { super('Collection content changed while the import was prepared. Reload the collections and retry; no import changes were committed.'); }
+}
+export function assertBackyCollectionImportExpectation(siteId: string, operation: BackyCollectionImportOperation, collection: BackyCollection | null, records: BackyCollectionRecord[]): void {
+  const canonicalRecords = (value: BackyCollectionRecord[]) => [...value].sort((a, b) => a.id.localeCompare(b.id));
+  if (operation.expectedCollection && operation.expectedCollection.siteId !== siteId
+    || collection && collection.siteId !== siteId
+    || operation.expectedRecords.some(record => record.siteId !== siteId || record.collectionId !== operation.expectedCollection?.id)
+    || records.some(record => record.siteId !== siteId || record.collectionId !== collection?.id)
+    || serializeTemplateRevisionValue(operation.expectedCollection) !== serializeTemplateRevisionValue(collection)
+    || serializeTemplateRevisionValue(canonicalRecords(operation.expectedRecords)) !== serializeTemplateRevisionValue(canonicalRecords(records))) throw new BackyCollectionImportConflictError();
+  for (const record of operation.records) {
+    const actual = records.find(item => item.slug === record.input.slug) || null;
+    if (serializeTemplateRevisionValue(record.expectedRecord) !== serializeTemplateRevisionValue(actual)) throw new BackyCollectionImportConflictError();
+  }
+}
 
 export interface BackyCollectionRecordListInput extends BackyPaginationInput {
   siteId: string;
@@ -480,11 +665,17 @@ export interface BackyMediaListInput extends BackyPaginationInput {
   folderId?: string | null;
   visibility?: MediaItem['visibility'] | 'all';
   search?: string;
+  linkedPageId?: string;
+  linkedPostId?: string;
 }
 
 export interface BackyMediaVersionListInput extends BackyPaginationInput {
   siteId: string;
   mediaId: string;
+}
+
+export interface BackyMediaSiteVersionListInput extends BackyPaginationInput {
+  siteId: string;
 }
 
 export interface BackyMediaVersionDeleteInput {
@@ -533,6 +724,7 @@ export interface BackyContactListInput extends BackyPaginationInput {
 }
 
 export interface BackyCommentCreateInput {
+  visitorMemberId?: string | null;
   siteId: string;
   targetType: Comment['targetType'];
   targetId: string;
@@ -563,6 +755,24 @@ export interface BackyCommentUpdateInput {
   reportReasons?: Comment['reportReasons'];
   requestId?: string | null;
 }
+
+export interface BackyCommentReportInput {
+  reason: NonNullable<Comment['reportReasons']>[number];
+  requestId?: string | null;
+}
+
+export interface BackyCommentModerationInput {
+  commentIds: string[];
+  status?: CommentStatus;
+  clearReports?: boolean;
+  reviewedBy?: string | null;
+  actor?: string | null;
+  rejectionReason?: string | null;
+  blockReason?: string | null;
+  requestId?: string | null;
+  defaultReviewer?: string | null;
+}
+export interface BackyCommentModerationResult { updated: Comment[]; missingIds: string[] }
 
 export interface BackyCommentListInput extends BackyPaginationInput {
   siteId: string;
@@ -636,6 +846,8 @@ export interface BackyReusableSectionCreateInput {
 }
 
 export interface BackyReusableSectionUpdateInput {
+  /** Internal complete read snapshot, checked under the write lock. */
+  expectedSection?: BackyReusableSection;
   name?: string;
   slug?: string;
   description?: string | null;
@@ -647,6 +859,19 @@ export interface BackyReusableSectionUpdateInput {
   sourceElementId?: string | null;
   updatedBy?: string | null;
 }
+
+export class BackyReusableSectionConflictError extends Error {
+  readonly code = 'REUSABLE_SECTION_VERSION_CONFLICT';
+  constructor() { super('Reusable section changed after it was read. Reload the section and retry.'); this.name = 'BackyReusableSectionConflictError'; }
+}
+
+export function assertBackyReusableSectionExpectation(input: { expectedSection?: unknown }, current: unknown): void {
+  if (input.expectedSection !== undefined && (!current || serializeTemplateRevisionValue(input.expectedSection) !== serializeTemplateRevisionValue(current))) throw new BackyReusableSectionConflictError();
+}
+
+export type BackyReusableSectionBatchMutation =
+  | { type: 'create'; input: BackyReusableSectionCreateInput }
+  | { type: 'update'; sectionId: string; input: BackyReusableSectionUpdateInput & { expectedSection: BackyReusableSection } };
 
 export interface BackyReusableSectionListInput extends BackyPaginationInput {
   siteId: string;
@@ -948,6 +1173,10 @@ export interface BackyAuditLogListInput extends BackyPaginationInput {
   entityId?: string;
   action?: string;
   requestId?: string;
+  /** Scoped interaction identities, applied before count and pagination. */
+  formId?: string;
+  commentId?: string;
+  contactId?: string;
 }
 
 export type BackyCacheInvalidationScope =
@@ -991,6 +1220,14 @@ export interface BackyCacheInvalidationRecordInput {
 }
 
 export interface BackySiteRepository {
+  /** Only routing settings recognized by the public resolver; bounded, with no full-read fallback. */
+  getRouteMetadataByIdOrSlug?(identifier: string, context?: BackyRepositoryContext): Promise<BackySiteRouteMetadata | null>;
+  /** Exact identity/team admission; excludes theme, content and settings. */
+  getAccessScopeByIdOrSlug?(identifier: string, context?: BackyRepositoryContext): Promise<Pick<Site, 'id' | 'slug' | 'teamId'> | null>;
+  /** Search identity and SEO-only settings; excludes theme, design registry and other settings. */
+  getSearchMetadataByIdOrSlug?(identifier: string, context?: BackyRepositoryContext): Promise<BackySiteSearchMetadata | null>;
+  /** Fresh identity/publication admission without site settings, templates or theme. */
+  getPublicationByIdOrSlug?(identifier: string, context?: BackyRepositoryContext): Promise<Pick<Site, 'id' | 'slug' | 'isPublished'> | null>;
   list(input: BackySiteListInput, context?: BackyRepositoryContext): Promise<BackyListResult<Site>>;
   getById(siteId: string, context?: BackyRepositoryContext): Promise<Site | null>;
   getBySlug(slug: string, context?: BackyRepositoryContext): Promise<Site | null>;
@@ -1000,7 +1237,20 @@ export interface BackySiteRepository {
   delete(siteId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export type BackySiteSearchMetadata = Pick<Site, 'id' | 'slug' | 'name' | 'isPublished' | 'updatedAt'> & {
+  settings: { seo: Pick<SiteSettings['seo'], 'titleTemplate' | 'defaultDescription' | 'robots' | 'routeOverrides'> };
+};
+
 export interface BackyPageRepository {
+  listCanvasSourceMetadata?(input: BackyPaginationInput & { siteId: string; search?: string }, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPageCanvasSource>>;
+  getRouteMetadataById?(siteId: string, pageId: string, context?: BackyRepositoryContext): Promise<BackyPageRouteMetadata | null>;
+  getRouteMetadataBySlug?(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyPageRouteMetadata | null>;
+  listRouteMetadata?(input: BackyPageListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPageRouteMetadata>>;
+  listLinkMetadata?(input: BackyPaginationInput & { siteId: string }, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPageLinkMetadata>>;
+  listSearchMetadata?(input: BackySearchMetadataListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPageSearchMetadata>>;
+  listSummaries?(input: BackyPageListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPageSummary>>;
+  getSummaryById?(siteId: string, pageId: string, context?: BackyRepositoryContext): Promise<BackyPageSummary | null>;
+  getSummaryBySlug?(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyPageSummary | null>;
   list(input: BackyPageListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPage>>;
   getById(siteId: string, pageId: string, context?: BackyRepositoryContext): Promise<BackyPage | null>;
   getBySlug(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyPage | null>;
@@ -1013,6 +1263,8 @@ export interface BackyPageRepository {
 }
 
 export interface BackyPostRepository {
+  listPublicArchiveMetadata?(input: BackyPostArchiveListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPostArchiveMetadata>>;
+  listSearchMetadata?(input: BackySearchMetadataListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPostSearchMetadata>>;
   list(input: BackyPostListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyPost>>;
   getById(siteId: string, postId: string, context?: BackyRepositoryContext): Promise<BackyPost | null>;
   getBySlug(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyPost | null>;
@@ -1025,6 +1277,7 @@ export interface BackyPostRepository {
 }
 
 export interface BackyBlogTaxonomyRepository {
+  listArchiveTerms?(siteId: string, context?: BackyRepositoryContext): Promise<{ categories: BackyBlogArchiveTerm[]; tags: BackyBlogArchiveTerm[] }>;
   listCategories(siteId: string, context?: BackyRepositoryContext): Promise<BackyBlogCategory[]>;
   getCategoryByIdOrSlug(siteId: string, identifier: string, context?: BackyRepositoryContext): Promise<BackyBlogCategory | null>;
   createCategory(input: BackyBlogCategoryCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyBlogCategory>>;
@@ -1038,7 +1291,19 @@ export interface BackyBlogTaxonomyRepository {
   listAuthors(siteId: string, context?: BackyRepositoryContext): Promise<BackyBlogAuthor[]>;
 }
 
+export interface BackyCollectionRecordAdmissionContext {
+  media: Pick<BackyMediaRepository, 'getById'>;
+  settings: Pick<BackySettingsRepository, 'get'>;
+  sites: Pick<BackySiteRepository, 'getById'>;
+}
 export interface BackyCollectionRepository {
+  listSearchMetadata?(input: BackyPaginationInput & { siteId: string }, context?: BackyRepositoryContext): Promise<BackyListResult<BackyCollectionSearchMetadata>>;
+  listRecordSearchMetadata?(input: BackyCollectionRecordSearchInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyCollectionRecordSearchMetadata>>;
+  withDefinitionWriteLock?<T>(siteId: string, collectionId: string, operation: (repository: BackyCollectionRepository, collection: BackyCollection, repositories: BackyRepositories) => Promise<T>): Promise<T>;
+  listCollectionDesignRevisions?(siteId: string, collectionId: string, options?: BackyPaginationInput): Promise<BackyCollectionDesignRevision[]>;
+  getCollectionDesignRevision?(siteId: string, collectionId: string, revisionId: string): Promise<BackyCollectionDesignRevision | null>;
+  withRecordWriteLock<T>(siteId: string, collectionId: string, operation: (repository: BackyCollectionRepository, collection: BackyCollection, context: BackyCollectionRecordAdmissionContext) => Promise<T>): Promise<T>;
+  applyImport(siteId: string, operations: BackyCollectionImportOperation[], decorateWriter?: (repository: BackyCollectionRepository, repositories: BackyRepositories) => BackyCollectionRepository, reconcileRetainedRecords?: (repositories: BackyRepositories, collection: BackyCollection, records: BackyCollectionRecord[]) => Promise<void>): Promise<BackyCollectionImportResult>;
   list(input: BackyCollectionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyCollection>>;
   getById(siteId: string, collectionId: string, context?: BackyRepositoryContext): Promise<BackyCollection | null>;
   getBySlug(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyCollection | null>;
@@ -1050,16 +1315,26 @@ export interface BackyCollectionRepository {
   getRecordBySlug(siteId: string, collectionId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyCollectionRecord | null>;
   createRecord(input: BackyCollectionRecordCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyCollectionRecord>>;
   updateRecord(siteId: string, collectionId: string, recordId: string, input: BackyCollectionRecordUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyCollectionRecord>>;
+  listProductDesignRevisions?(siteId: string, collectionId: string, recordId: string, options?: BackyPaginationInput): Promise<BackyProductDesignRevision[]>;
+  getProductDesignRevision?(siteId: string, collectionId: string, recordId: string, revisionId: string): Promise<BackyProductDesignRevision | null>;
   deleteRecord(siteId: string, collectionId: string, recordId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
 export interface BackyMediaRepository {
+  /** Bounded public render dependencies plus the complete bounded public font subset; never a site inventory. */
+  getPublicRenderAssets?(input: { siteId: string; mediaIds: string[]; maxFonts: number }): Promise<MediaItem[]>;
+  /** Private durable write/cleanup journal, required by storage mutation handlers. */
+  storageJobs?: BackyMediaStorageJobRepository;
+  /** Serialize site storage writes across PostgreSQL workers; busy admission fails without waiting. */
+  withStorageMutationLock?<T>(siteId: string, operation: () => Promise<T>): Promise<T>;
   list(input: BackyMediaListInput, context?: BackyRepositoryContext): Promise<BackyListResult<MediaItem>>;
   getById(siteId: string, mediaId: string, context?: BackyRepositoryContext): Promise<MediaItem | null>;
   create(input: BackyMediaCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaItem>>;
   update(siteId: string, mediaId: string, input: BackyMediaUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaItem>>;
   delete(siteId: string, mediaId: string, context?: BackyRepositoryContext): Promise<boolean>;
   listVersions(input: BackyMediaVersionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<MediaVersion>>;
+  /** Optional complete-site retained-version pagination for quota/reference inventory. */
+  listSiteVersions?(input: BackyMediaSiteVersionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<MediaVersion>>;
   createVersion(input: BackyMediaVersionCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<MediaVersion>>;
   deleteVersion(input: BackyMediaVersionDeleteInput, context?: BackyRepositoryContext): Promise<boolean>;
   listFolders(siteId: string, context?: BackyRepositoryContext): Promise<MediaFolder[]>;
@@ -1070,10 +1345,20 @@ export interface BackyMediaRepository {
 }
 
 export interface BackyFormRepository {
+  /** Durable source privacy fence spans all follow-ups, including provider execution. Missing adapters fail closed. */
+  withSubmissionFollowup?<T>(siteId: string, formId: string, submissionId: string, operation: () => Promise<T>): Promise<T>;
+  withContactFollowup?<T>(siteId: string, contactId: string, operation: () => Promise<T>): Promise<T>;
+  /** Server-derived contributor identity; new rows are exclusive only until a manual/unknown modification. */
+  shareContactFromSubmission?(siteId: string, formId: string, submissionId: string, input: Omit<Contact, 'id' | 'createdAt' | 'updatedAt' | 'sourceSubmissionId'>, dedupeByEmail: boolean): Promise<BackyRepositoryMutationResult<Contact>>;
+  withDefinitionWriteLock?<T>(siteId: string, formId: string, operation: (repository: BackyFormRepository, form: FormDefinition, repositories: BackyRepositories) => Promise<T>): Promise<T>;
+  listFormDesignRevisions?(siteId: string, formId: string, options?: BackyPaginationInput): Promise<BackyFormDesignRevision[]>;
+  getFormDesignRevision?(siteId: string, formId: string, revisionId: string): Promise<BackyFormDesignRevision | null>;
+  /** Reviewed template-pack import: one same-site serializable transaction; unsupported adapters must refuse. */
+  withTemplatePackImportLock?<T>(siteId: string, operation: (repositories: BackyRepositories) => Promise<T>): Promise<T>;
   list(input: BackyFormListInput, context?: BackyRepositoryContext): Promise<BackyListResult<FormDefinition>>;
   getById(siteId: string, formId: string, context?: BackyRepositoryContext): Promise<FormDefinition | null>;
   create(input: Omit<FormDefinition, 'id' | 'createdAt' | 'updatedAt'>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormDefinition>>;
-  update(siteId: string, formId: string, input: Partial<FormDefinition>, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormDefinition>>;
+  update(siteId: string, formId: string, input: BackyFormUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<FormDefinition>>;
   delete(siteId: string, formId: string, context?: BackyRepositoryContext): Promise<boolean>;
   listSubmissions(input: BackyFormSubmissionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<FormSubmission>>;
   getSubmissionById(siteId: string, formId: string, submissionId: string, context?: BackyRepositoryContext): Promise<FormSubmission | null>;
@@ -1087,6 +1372,13 @@ export interface BackyFormRepository {
 }
 
 export interface BackyCommentRepository {
+  withPrivacyFollowup?<T>(siteId: string, commentId: string, operation: () => Promise<T>): Promise<T>;
+  /** One admitted transaction for selected moderation and any identity blocks. Missing scoped IDs remain explicit outcomes. */
+  moderateBatch(siteId: string, input: BackyCommentModerationInput, context?: BackyRepositoryContext): Promise<BackyCommentModerationResult>;
+  /** Reread public visibility and report state under shared comment mutation admission. No stale caller snapshot is written. */
+  report(siteId: string, commentId: string, input: BackyCommentReportInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Comment>>;
+  /** Complete nested subtree deletion under the same admission as reply creation/movement. */
+  deleteSubtree(siteId: string, commentId: string, context?: BackyRepositoryContext): Promise<Comment[]>;
   list(input: BackyCommentListInput, context?: BackyRepositoryContext): Promise<BackyListResult<Comment>>;
   getById(siteId: string, commentId: string, context?: BackyRepositoryContext): Promise<Comment | null>;
   create(input: BackyCommentCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<Comment>>;
@@ -1099,12 +1391,38 @@ export interface BackyCommentRepository {
 }
 
 export interface BackyReusableSectionRepository {
+  /** One serializable source/inventory/snapshot-guarded propagation transaction. */
+  applyPropagation(siteId: string, input: BackyReusableSectionPropagationInput, context?: BackyRepositoryContext, decorateWriter?: (repositories: BackyRepositories) => BackyRepositories): Promise<void>;
+  /** Atomic scoped import: all writes commit or all roll back. */
+  applyBatch(siteId: string, operations: BackyReusableSectionBatchMutation[], context?: BackyRepositoryContext): Promise<BackyReusableSection[]>;
   list(input: BackyReusableSectionListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyReusableSection>>;
   getById(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<BackyReusableSection | null>;
   getBySlug(siteId: string, slug: string, context?: BackyRepositoryContext): Promise<BackyReusableSection | null>;
   create(input: BackyReusableSectionCreateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyReusableSection>>;
   update(siteId: string, sectionId: string, input: BackyReusableSectionUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackyReusableSection>>;
   delete(siteId: string, sectionId: string, context?: BackyRepositoryContext): Promise<boolean>;
+}
+
+export type BackyReusableSectionPropagationTarget = {
+  type: 'page' | 'post' | 'product'; id: string; collectionId?: string;
+  updatedAt: string; content?: unknown; values?: unknown;
+};
+export type BackyReusableSectionPropagationInput = {
+  source: BackyReusableSection;
+  scope: { targetType: 'page' | 'post' | 'product' | 'all'; targetId?: string; includeProducts: boolean; productCollectionId?: string };
+  inventory: BackyReusableSectionPropagationTarget[];
+  mutations: Array<{ expected: BackyReusableSectionPropagationTarget; content?: BackyContentDocument; values?: BackyJsonObject }>;
+};
+export class BackyReusableSectionPropagationConflictError extends Error {
+  readonly code = 'REUSABLE_SECTION_PROPAGATION_CONFLICT';
+  constructor() { super('The saved source or target inventory changed. Reload the preview before refreshing instances.'); this.name = 'BackyReusableSectionPropagationConflictError'; }
+}
+export function assertBackyReusableSectionPropagationInventory(expected: BackyReusableSectionPropagationTarget[], current: BackyReusableSectionPropagationTarget[]): void {
+  const canonical = (targets: BackyReusableSectionPropagationTarget[]) => targets.map(target => ({
+    type: target.type, id: target.id, collectionId: target.collectionId,
+    updatedAt: target.updatedAt, ...(target.type === 'product' ? { values: target.values } : { content: target.content }),
+  })).sort((a, b) => `${a.type}:${a.id}`.localeCompare(`${b.type}:${b.id}`));
+  if (serializeTemplateRevisionValue(canonical(expected)) !== serializeTemplateRevisionValue(canonical(current))) throw new BackyReusableSectionPropagationConflictError();
 }
 
 export interface BackyInteractiveComponentRepository {
@@ -1150,12 +1468,21 @@ export interface BackyUserRepository {
   delete(userId: string, context?: BackyRepositoryContext): Promise<boolean>;
 }
 
+export interface BackySettingsOperatorGrantCommitInput {
+  userId: string;
+  /** Exact per-user records read alongside the HTTP expectedRevision check. */
+  expectedRecords: BackyJsonObject[];
+  record: BackyJsonObject;
+}
+
 export interface BackySettingsRepository {
+  commitOperatorSiteGrant(input: BackySettingsOperatorGrantCommitInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackySettings>>;
   get(context?: BackyRepositoryContext): Promise<BackySettings>;
   update(input: BackySettingsUpdateInput, context?: BackyRepositoryContext): Promise<BackyRepositoryMutationResult<BackySettings>>;
 }
 
 export interface BackyAuditLogRepository {
+  getById?(siteId: string, id: string): Promise<BackyAuditLogEntry | null>;
   list(input: BackyAuditLogListInput, context?: BackyRepositoryContext): Promise<BackyListResult<BackyAuditLogEntry>>;
   record(input: Omit<BackyAuditLogEntry, 'id' | 'createdAt'>, context?: BackyRepositoryContext): Promise<BackyAuditLogEntry>;
 }
@@ -1166,7 +1493,40 @@ export interface BackyCacheInvalidationRepository {
   latestRevision(input: { siteId?: string; scope?: BackyCacheInvalidationScope }, context?: BackyRepositoryContext): Promise<string | null>;
 }
 
+export interface BackyTemplateRevisionCommitInput {
+  siteId: string;
+  expectedDesignFingerprint: string;
+  frontendDesign: NonNullable<SiteSettings['frontendDesign']>;
+  source: string;
+  actorId?: string | null;
+  requestId?: string | null;
+  restoredFromRevisionId?: string | null;
+}
+/** Revision snapshots are separate from ordinary audit retention and have no update/delete API. */
+export interface BackyTemplateRevisionRepository {
+  /** Serializable site lock; all callback reads/writes, draft creation and design history share one commit. */
+  withCompositionImportLock?<T>(siteId: string, operation: (repositories: BackyRepositories) => Promise<T>): Promise<T>;
+  list(input: BackyPaginationInput & { siteId: string; templateId?: string }): Promise<BackyListResult<BackyTemplateRevision>>;
+  get(siteId: string, templateId: string, revisionId: string): Promise<BackyTemplateRevision | null>;
+  /** Atomically retains changed snapshots and writes frontendDesign after a locked conflict check. */
+  commitDesign(input: BackyTemplateRevisionCommitInput): Promise<Site>;
+}
+
 export interface BackyRepositories {
+  mailboxManagement?: import('./site-mailbox-management').BackyMailboxManagementRepository;
+  commerceEntitlements?: import('./commerce-entitlements').BackyCommerceEntitlementRepository;
+  mediaUploadSessions?: import('./media-upload-session').BackyMediaUploadSessionRepository;
+  mailboxSends?: import('./site-mailbox').BackyMailboxSendRepository;
+  newsletterCampaigns?: import('./newsletter-campaign').NewsletterCampaignRepository;
+  /** Same-connection atomic content/revision/media claims under site media admission.
+   * Unsupported adapters must refuse before invoking the callback. */
+  withMediaReferenceMutation?<T>(siteId: string, operation: (repositories: BackyRepositories) => Promise<T>): Promise<T>;
+  formDeliveries?: import('./form-delivery').BackyFormDeliveryRepository;
+  commentDeliveries?: import('./comment-delivery').BackyCommentDeliveryRepository;
+  siteBackups?: import('./site-backup').BackySiteBackupRepository;
+  siteDuplication?: import('./site-duplication').BackySiteDuplicationRepository;
+  /** Present only in the persisted database runtime; visitor auth fails closed elsewhere. */
+  visitorAccounts?: BackyVisitorAccountRepository;
   teams: BackyTeamRepository;
   sites: BackySiteRepository;
   pages: BackyPageRepository;
@@ -1179,6 +1539,7 @@ export interface BackyRepositories {
   reusableSections: BackyReusableSectionRepository;
   interactiveComponents: BackyInteractiveComponentRepository;
   contentWorkflows: BackyContentWorkflowRepository;
+  templateRevisions: BackyTemplateRevisionRepository;
   users: BackyUserRepository;
   settings: BackySettingsRepository;
   auditLogs: BackyAuditLogRepository;

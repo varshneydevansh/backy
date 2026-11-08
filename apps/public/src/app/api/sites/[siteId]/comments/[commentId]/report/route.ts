@@ -196,13 +196,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
       const requestId = payload.requestId || baseRequestId;
 
+      const completionWarnings: string[] = [];
       const updated = await reportRepositoryComment(repositories, site.id, comment, {
         reason: payload.reason,
         actor: payload.actor,
         details: payload.details,
+        completionWarnings,
         requestId: payload.requestId,
       });
-      await notifyCommentDelivery({
+      try { const delivery = await notifyCommentDelivery({
         repositories,
         siteId: site.id,
         comment: updated,
@@ -210,15 +212,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         reason: payload.reason,
         actor: payload.actor,
-      });
+      }); if (delivery.failedChannels > 0) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
 
       return privateResponse({
         success: true,
         requestId,
         data: {
+          completionWarnings,
           comment: serializeComment(updated),
           report: reportPayload(payload),
         },
+        completionWarnings,
         comment: serializeComment(updated),
         report: reportPayload(payload),
       }, requestId, 201);
@@ -256,19 +260,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(409, 'COMMENT_REPORT_FAILED', 'Unable to process report', requestId);
     }
-    await notifyCommentDelivery({
+    const completionWarnings: string[] = [];
+    try { const delivery = await notifyCommentDelivery({
       siteId: site.id,
       comment: updated,
       kind: 'comment-reported',
       requestId,
       reason: payload.reason,
       actor: payload.actor,
-    });
+    }); if (delivery.failedChannels > 0) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
 
     return privateResponse({
       success: true,
       requestId,
       data: {
+        completionWarnings,
         comment: serializeComment(updated),
         report: reportPayload(payload),
       },
@@ -276,6 +282,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       report: reportPayload(payload),
     }, requestId, 201);
   } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+    if (code === 'COMMENT_REPORT_CONFLICT' || code === 'COMMENT_REPORT_UNAVAILABLE') {
+      return errorResponse(code === 'COMMENT_REPORT_CONFLICT' ? 409 : 503, code,
+        code === 'COMMENT_REPORT_CONFLICT' ? 'The comment is no longer reportable. Reload the thread.' : 'Atomic comment reporting is unavailable.', baseRequestId);
+    }
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }

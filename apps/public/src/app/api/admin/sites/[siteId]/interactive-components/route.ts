@@ -23,6 +23,8 @@ import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/l
 import { deliverSiteWebhooks } from '@/lib/siteWebhookDelivery';
 import type { BackyJsonObject, Site } from '@backy-cms/core';
 
+import { registryPageOptions } from '@/lib/interactiveRegistryDiscovery';
+
 export const runtime = 'nodejs';
 
 interface RouteParams {
@@ -190,6 +192,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    let options;
+    try { options = registryPageOptions(request.url); } catch (cause) { return errorResponse(400, 'INVALID_PAGINATION', (cause as Error).message, requestId); }
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -207,8 +211,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         reviewStatus: reviewStatus === 'draft' || reviewStatus === 'in_review' || reviewStatus === 'approved' || reviewStatus === 'rejected' || reviewStatus === 'all' ? reviewStatus : 'all',
         type: type === 'interactiveFigure' || type === 'codeComponent' || type === 'all' ? type : 'all',
         search: searchParams.get('search') || undefined,
-        limit: 100,
-        offset: 0,
+        ...options,
       });
 
       return NextResponse.json({
@@ -241,12 +244,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       requestId,
       data: {
-        components,
+        components: components.slice(options.offset, options.offset + options.limit),
         pagination: {
           total: components.length,
-          limit: components.length,
-          offset: 0,
-          hasMore: false,
+          ...options,
+          hasMore: options.offset + options.limit < components.length,
         },
       },
     });

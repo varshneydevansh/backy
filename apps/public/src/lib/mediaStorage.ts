@@ -64,10 +64,12 @@ const localBasePath = (env: Env) => {
   const configuredPath = envValue(env, ['BACKY_LOCAL_UPLOADS_DIR', 'BACKY_STORAGE_LOCAL_PATH']);
 
   if (!configuredPath) {
-    return join(process.cwd(), 'public', 'uploads');
+    // Managed uploads are provisioned through storage at runtime, never packaged seeds.
+    return join(/* turbopackIgnore: true */ process.cwd(), 'public', 'uploads');
   }
 
-  return isAbsolute(configuredPath) ? configuredPath : join(process.cwd(), configuredPath);
+  // Operator-configured persistent storage is runtime state, not a build asset.
+  return isAbsolute(configuredPath) ? configuredPath : join(/* turbopackIgnore: true */ process.cwd(), configuredPath);
 };
 
 const missingFields = (env: Env, fields: Array<{ name: string; env: string[] }>) => (

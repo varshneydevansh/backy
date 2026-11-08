@@ -14,8 +14,12 @@ const coveredSiteRoutePrefixes = [
   '',
   'blog',
   'collections',
+  'comments',
   'collections/export',
   'collections/import',
+  'custom-frontend/compatibility',
+  'custom-frontend/connection',
+  'custom-frontend/starter',
   'commerce',
   'duplicate',
   'editor/collection-binding-presets',
@@ -27,6 +31,9 @@ const coveredSiteRoutePrefixes = [
   'media',
   'media/provider-analytics',
   'navigation',
+  'newsletter/campaigns',
+  'newsletter/issues/draft',
+  'newsletter/subscribers',
   'pages',
   'readiness',
   'redirects',
@@ -36,6 +43,8 @@ const coveredSiteRoutePrefixes = [
   'seo',
   'settings',
   'templates',
+  'visitors',
+  'backup',
 ];
 
 function assert(condition, message) {
@@ -69,6 +78,10 @@ function assertSiteScopeRouteInventoryCovered() {
 }
 
 assertSiteScopeRouteInventoryCovered();
+if (process.env.BACKY_ADMIN_SITE_SCOPE_SOURCE_ONLY === '1') {
+  console.log(JSON.stringify({ ok: true, sourceOnly: true, siteRoutes: listRouteKeys(siteRouteRoot).length, coveredSiteRoutePrefixes }, null, 2));
+  process.exit(0);
+}
 assert(adminApiKey, 'BACKY_ADMIN_API_KEY or BACKY_ADMIN_SECRET_KEY is required for admin site-scope smoke');
 
 async function request(path, init = {}) {
@@ -224,6 +237,31 @@ try {
   });
 
   const representativeNestedRequests = [
+    {
+      label: 'non-member admin moderator reply denied',
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/comments/scope-parent/replies`,
+      init: { method: 'POST', headers: scopedHeaders, body: JSON.stringify({ content: 'Denied moderator reply' }) },
+    },
+    ...[
+      ['custom frontend compatibility read', 'custom-frontend/compatibility', 'GET'],
+      ['custom frontend compatibility observation', 'custom-frontend/compatibility', 'POST'],
+      ['custom frontend connection verification', 'custom-frontend/connection', 'POST'],
+      ['custom frontend starter export', 'custom-frontend/starter', 'GET'],
+      ['newsletter subscriber read', 'newsletter/subscribers', 'GET'],
+      ['newsletter subscriber write', 'newsletter/subscribers', 'POST'],
+      ['newsletter issue draft', 'newsletter/issues/draft', 'POST'],
+      ['newsletter campaign inventory', 'newsletter/campaigns', 'GET'],
+      ['newsletter campaign create', 'newsletter/campaigns', 'POST'],
+      ['newsletter campaign send', 'newsletter/campaigns/scope-campaign/send', 'POST'],
+      ['newsletter campaign schedule', 'newsletter/campaigns/scope-campaign/schedule', 'POST'],
+      ['newsletter campaign cancel', 'newsletter/campaigns/scope-campaign/cancel', 'POST'],
+      ['newsletter campaign process', 'newsletter/campaigns/scope-campaign/process', 'POST'],
+      ['newsletter campaign feedback', 'newsletter/campaigns/scope-campaign/feedback', 'POST'],
+    ].map(([label, route, method]) => ({
+      label: `non-member admin ${label} denied`,
+      path: `/api/admin/sites/${encodeURIComponent(site.id)}/${route}`,
+      init: { method, headers: scopedHeaders, ...(method === 'POST' ? { body: '{}' } : {}) },
+    })),
     {
       label: 'non-member admin nested media list denied',
       path: `/api/admin/sites/${encodeURIComponent(site.id)}/media`,

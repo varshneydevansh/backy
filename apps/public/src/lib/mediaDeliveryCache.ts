@@ -45,21 +45,35 @@ export const buildMediaDeliveryCacheSeed = (
   siteId: string,
   media: MediaItem,
   variant: Record<string, unknown> = {},
-) => ({
-  siteId,
-  mediaId: media.id,
-  filename: media.filename,
-  originalName: media.originalName || null,
-  mimeType: media.mimeType || null,
-  type: media.type,
-  sizeBytes: media.sizeBytes,
-  visibility: media.visibility || 'public',
-  storagePath: metadataText(media.metadata, 'storagePath'),
-  binaryFingerprint: binaryFingerprintValue(media.metadata),
-  createdAt: media.createdAt || null,
-  updatedAt: media.updatedAt || null,
-  variant,
-});
+) => {
+  const binaryFingerprint = binaryFingerprintValue(media.metadata);
+  const security = media.metadata?.mediaSecurity;
+  const quarantined = security && typeof security === 'object' && !Array.isArray(security)
+    && (security as Record<string, unknown>).status === 'quarantined';
+  return {
+    siteId,
+    mediaId: media.id,
+    filename: media.filename,
+    originalName: media.originalName || null,
+    mimeType: media.mimeType || null,
+    type: media.type,
+    sizeBytes: media.sizeBytes,
+    visibility: media.visibility || 'public',
+    storagePath: metadataText(media.metadata, 'storagePath'),
+    storageProvider: metadataText(media.metadata, 'storageProvider'),
+    binaryFingerprint,
+    quarantineStatus: quarantined ? 'quarantined' : 'clear',
+    createdAt: media.createdAt || null,
+    // Delivery accounting advances updatedAt without changing the representation.
+    // Managed fingerprints identify bytes; legacy objects retain conservative
+    // timestamp invalidation until their byte identity is available.
+    updatedAt: binaryFingerprint ? null : media.updatedAt || null,
+    // A regenerated prepared image can change while the original remains intact.
+    generatedTransforms: variant.delivery === 'optimizer-transform'
+      ? media.metadata?.generatedTransforms || null : null,
+    variant,
+  };
+};
 
 export const createMediaDeliveryEtag = (seed: unknown) => (
   `"backy-media-${hashSeed(seed).slice(0, 24)}"`

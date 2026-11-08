@@ -55,6 +55,7 @@ const adminReusableSectionDetailRoute = read('../src/app/api/admin/sites/[siteId
 const adminNewsletterSubscribersRoute = read('../src/app/api/admin/sites/[siteId]/newsletter/subscribers/route.ts');
 const publicReusableSectionsRoute = read('../src/app/api/sites/[siteId]/reusable-sections/route.ts');
 const publicReusableSectionDetailRoute = read('../src/app/api/sites/[siteId]/reusable-sections/[sectionId]/route.ts');
+const publicReusableSectionLib = read('../src/lib/publicReusableSection.ts');
 const adminTemplateRegistryRoute = read('../src/app/api/admin/sites/[siteId]/templates/route.ts');
 const templateRegistryLib = read('../src/lib/templateRegistry.ts');
 const frontendDesignContractLib = read('../src/lib/frontendDesignContract.ts');
@@ -361,6 +362,7 @@ const requiredComponentApiTypes = [
   'text',
   'paragraph',
   'quote',
+  'collapsible',
   'list',
   'button',
   'link',
@@ -1751,7 +1753,8 @@ assert(
     frontendDesignContractLib.includes('merged[key] = mergeDeepRecord(fallbackRecord[key], nextRecord[key]);') &&
     frontendDesignContractLib.includes('const designStateValue = (') &&
     frontendDesignContractLib.includes('const buildFrontendDesignProvenanceFields = (') &&
-    frontendDesignContractLib.includes('meta: buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta)') &&
+    frontendDesignContractLib.includes('meta: { ...buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta), frontendTemplateInstance: instance }') &&
+    frontendDesignContractLib.includes('pinTemplateInstance(') &&
     frontendDesignContractLib.includes('const sharedChromeBindingsFromChrome = (') &&
     frontendDesignContractLib.includes("schemaVersion: 'backy.shared-chrome-bindings.v1'") &&
     frontendDesignContractLib.includes('templateSource: stringValue(metadata.templateSource)') &&
@@ -1850,8 +1853,9 @@ assert(
     renderPayloadLib.includes('canvasSize: input.canvasSize') &&
     renderPayloadLib.includes('editableMap: contentEditableMap') &&
     frontendDesignContractLib.includes('editableMap: cloneRecord(metadata.frontendDesignEditableMap)') &&
-    publicReusableSectionsRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
-    publicReusableSectionDetailRoute.includes('frontendDesignProvenanceFromMetadata(section.metadata)') &&
+    publicReusableSectionsRoute.includes('publicReusableSection') &&
+    publicReusableSectionDetailRoute.includes('publicReusableSection') &&
+    publicReusableSectionLib.includes('frontendDesignProvenanceFromMetadata(publicMetadata)') &&
     frontendDesignContractLib.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
     adminReusableSectionsRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
     adminReusableSectionDetailRoute.includes('normalizeReusableSectionInputFromDirectFrontendDesignEnvelope') &&
@@ -2067,8 +2071,8 @@ assert(
     manifestRoute.includes("schemaVersion: 'backy.pages-discovery.v1'") &&
     manifestRoute.includes("draftPreviewRequiresToken: true") &&
     manifestRoute.includes("notFound: 'PAGE_NOT_FOUND'") &&
-    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages)') &&
-    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(site.id, pages)') &&
+    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages, pagePath)') &&
+    manifestRoute.includes('pagesRuntime: buildManifestPagesDiscovery(site.id, pages, pagePath)') &&
     frontendManifestSchema.includes('"backy.pages-discovery.v1"') &&
     frontendManifestSchema.includes('"previewTokenIsNeverReturned"') &&
     frontendManifestSchema.includes('"INVALID_PAGE_LIMIT"') &&

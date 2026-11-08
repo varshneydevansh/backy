@@ -1,3 +1,5 @@
+import { isValidSectionTemplateInstancePin } from "./templateInstanceProvenance";
+
 type ReusableSectionLike = {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ type ReusableSectionLike = {
 
 export type ReusableSectionVersionEntry = {
   version: number;
+  templateProvenance?: { schemaVersion: "backy.section-template-provenance.v1"; frontendTemplateInstance: unknown | null };
   current?: boolean;
   capturedAt?: string;
   requestId?: string;
@@ -31,6 +34,23 @@ export type ReusableSectionVersionEntry = {
   updatedBy?: string | null;
   updatedAt: string;
 };
+
+/** Historical JSON is preserved for discovery, but malformed snapshots cannot restore live content. */
+export function isRestorableReusableSectionVersion(value: unknown): value is ReusableSectionVersionEntry {
+  if (!isRecord(value) || !['name', 'slug', 'category', 'updatedAt'].every(key => typeof value[key] === 'string' && (value[key] as string).trim())
+    || !['active', 'archived'].includes(String(value.status)) || !Array.isArray(value.tags) || !value.tags.every(tag => typeof tag === 'string')
+    || !isRecord(value.content) || !Array.isArray(value.content.elements) || value.content.elements.length === 0) return false;
+  if (value.templateProvenance !== undefined && (!isRecord(value.templateProvenance)
+    || value.templateProvenance.schemaVersion !== "backy.section-template-provenance.v1"
+    || (value.templateProvenance.frontendTemplateInstance !== null && !isValidSectionTemplateInstancePin(value.templateProvenance.frontendTemplateInstance)))) return false;
+  const ids = new Set<string>();
+  const valid = (nodes: unknown[], depth = 0): boolean => depth <= 100 && nodes.every(node => {
+    if (!isRecord(node) || typeof node.id !== 'string' || !node.id || ids.has(node.id) || typeof node.type !== 'string' || !node.type) return false;
+    ids.add(node.id);
+    return node.children === undefined || Array.isArray(node.children) && valid(node.children, depth + 1);
+  });
+  return valid(value.content.elements);
+}
 
 const VERSION_HISTORY_LIMIT = 25;
 
@@ -123,6 +143,7 @@ const snapshotSectionVersion = (
   status: section.status,
   tags: Array.isArray(section.tags) ? [...section.tags] : [],
   content: cloneJson(section.content),
+  templateProvenance: snapshotTemplateProvenance(section.metadata),
   sourceElementId: section.sourceElementId ?? null,
   updatedBy: section.updatedBy ?? null,
   updatedAt: section.updatedAt,
@@ -190,6 +211,7 @@ export const listReusableSectionVersions = (
         status: section.status,
         tags: Array.isArray(section.tags) ? [...section.tags] : [],
         content: cloneJson(section.content),
+        templateProvenance: snapshotTemplateProvenance(section.metadata),
         sourceElementId: section.sourceElementId ?? null,
         updatedBy: section.updatedBy ?? null,
         updatedAt: section.updatedAt,
@@ -198,3 +220,17 @@ export const listReusableSectionVersions = (
     ],
   };
 };
+
+function snapshotTemplateProvenance(metadata: unknown): NonNullable<ReusableSectionVersionEntry['templateProvenance']> {
+  const pin = toObject(metadata).frontendTemplateInstance;
+  return { schemaVersion: 'backy.section-template-provenance.v1', frontendTemplateInstance: isValidSectionTemplateInstancePin(pin) ? cloneJson(pin) : null };
+}
+/** Legacy snapshots cannot certify a template base. Invalidate the pin instead of inventing one. */
+export function restoreReusableSectionTemplateProvenance(metadata: unknown, target: ReusableSectionVersionEntry): Record<string, unknown> {
+  const result = { ...toObject(metadata) };
+  const snapshot = target.templateProvenance;
+  if (snapshot?.schemaVersion === 'backy.section-template-provenance.v1' && isValidSectionTemplateInstancePin(snapshot.frontendTemplateInstance)) {
+    result.frontendTemplateInstance = cloneJson(snapshot.frontendTemplateInstance);
+  } else { delete result.frontendTemplateInstance; }
+  return result;
+}

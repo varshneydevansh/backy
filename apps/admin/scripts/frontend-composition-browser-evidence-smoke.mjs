@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+// Verify an observed disposable CUA journey; this does not synthesize browser actions or claim provider proof.
+const file=process.argv[2];if(!file)throw Error('Pass the captured composition browser evidence JSON.');
+const observed=JSON.parse(readFileSync(file,'utf8')),requests=observed.final.requests;
+assert.equal(observed.reviewNoWrite.pagesBefore,0);assert.equal(observed.reviewNoWrite.applyBlockedForUnverifiedWidget,true);
+assert.equal(observed.invalidFile.oldReviewWasApplyEnabled,true);assert.equal(observed.invalidFile.textEmpty,true);assert.equal(observed.invalidFile.reviewEnabled,false);assert.equal(observed.invalidFile.applyEnabled,false);assert.equal(observed.invalidFile.targetCount,0);
+for(const[action,status]of [['review',200],['review',403],['apply',409],['apply',201]])assert(requests.some(request=>request.path.endsWith('/frontend-design/composition-import')&&request.action===action&&request.status===status));
+const page=observed.final.pages.find(page=>page.slug==='guided-import');assert(page);assert.equal(page.status,'draft');assert.equal(page.content.contentDocument.id,page.id);
+assert.deepEqual(page.content.elements.map(element=>element.id),['imported-header','imported-hero']);const hero=page.content.elements[1];assert.deepEqual(hero.children.map(child=>child.id),['imported-heading','imported-media']);assert.deepEqual(hero.unknownFrontendSlots,{title:'imported-heading'});assert.equal(hero.children[0].responsive.mobile.width,340);assert(JSON.stringify(hero.children[0].props.content).includes('Owner edited after import'));
+assert.equal(page.content.contentDocument.editableMap.title.elementId,'imported-heading');assert.equal(page.content.assets.media[0].id,hero.children[1].props.mediaId);assert.deepEqual(page.meta.frontendCompositionImport.routeExtensions,{unknownRoute:{nested:[0,false]}});assert.deepEqual(page.meta.frontendCompositionImport.importExtensions,{unknownPackage:{retain:true}});
+assert(observed.final.persistedPages.some(stored=>stored.id===page.id&&JSON.stringify(stored.content).includes('Owner edited after import')));
+assert(requests.some(request=>request.method==='PATCH'&&request.path.endsWith('/pages/'+page.id)&&request.status===200));assert(requests.some(request=>request.method==='GET'&&request.path.endsWith('/pages/'+page.id)&&request.status===200));assert(requests.some(request=>request.path.endsWith('/render')&&request.status===404));assert.equal(observed.console.length,0);
+const template=observed.final.frontendDesign.templates.find(template=>template.id==='guided-browser-template');assert.equal(template.version,'1.3');assert.deepEqual(template.unknownTemplate,{nested:true});
+console.log('Captured composition browser acceptance PASS: no-write review; native oversized file clears old targets;403/409 retry; draft/template201; real shared editor PATCH/GET/disk; stable nested IDs/maps/media/mobile/extensions; normal SDK public404; console empty. Synthetic auth/providers remain explicit.');

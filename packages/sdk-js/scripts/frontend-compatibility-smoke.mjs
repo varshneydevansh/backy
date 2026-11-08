@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls = [];
+const client = createBackyClient({ baseUrl: 'https://backy.example', siteId: 'site/default', fetch: async (input, init) => {
+  calls.push({ url: new URL(input), init });
+  const body = JSON.parse(init.body);
+  if (body.pageId === 'denied') return Response.json({ success: false, requestId: 'fixture', error: { code: 'FORBIDDEN', message: 'Not allowed' } }, { status: 403 });
+  return Response.json({ success: true, requestId: 'fixture', data: { report: { schemaVersion: 'backy.frontend-compatibility-report.v1', certification: 'not-live-certified', issues: [] } } });
+} });
+const observation = { siteId: 'site/default', route: '/article', frontendId: 'website', frontendVersion: '2', revision: 'r3', breakpoint: 'mobile', complete: true, elements: [{ id: 'heading', type: 'heading', parentId: null, fields: { 'styles.fontSize': 24 } }] };
+const result = await client.adminFrontendCompatibility({ pageId: 'article', observation }, { adminSession: 'fixture-session', requestId: 'fixture-request', credentials: 'include' });
+assert.equal(result.data.report.certification, 'not-live-certified');
+assert.equal(calls[0].url.pathname, '/api/admin/sites/site%2Fdefault/custom-frontend/compatibility');
+assert.equal(calls[0].init.method, 'POST');
+assert.equal(calls[0].init.credentials, 'include');
+assert.equal(calls[0].init.headers.get('x-request-id'), 'fixture-request');
+assert(calls[0].init.headers.get('authorization')?.includes('fixture-session') || calls[0].init.headers.get('x-backy-admin-session') === 'fixture-session');
+assert.deepEqual(JSON.parse(calls[0].init.body), { pageId: 'article', observation });
+await client.adminFrontendCompatibility({ templateId: 'hero' }, { siteId: 'override' });
+assert.equal(calls[1].url.pathname, '/api/admin/sites/override/custom-frontend/compatibility');
+await assert.rejects(client.adminFrontendCompatibility({ pageId: 'denied' }), error => error instanceof BackyApiError && error.status === 403);
+console.log('SDK compatibility passed: scoped authenticated request, exact observation preservation, override and permission errors.');

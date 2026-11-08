@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { queueMediaStorageMutation } from '../src/lib/mediaStorageQueue';
+const events: string[]=[];
+let release!:()=>void;const hold=new Promise<void>(r=>release=r);
+const first=queueMediaStorageMutation('site-a',async()=>{events.push('upload-a');await hold;throw Error('fixture upload failed');});
+const failure=assert.rejects(first,/fixture upload failed/);
+const second=queueMediaStorageMutation('site-a',async()=>{events.push('replace-a');return 2;});
+const third=queueMediaStorageMutation('site-a',async()=>{events.push('transforms-a');return 3;});
+assert.equal(await queueMediaStorageMutation('site-b',async()=>{events.push('upload-b');return 4;}),4);
+assert.deepEqual(events,['upload-a','upload-b']);release();await failure;
+assert.deepEqual(await Promise.all([second,third]),[2,3]);assert.deepEqual(events,['upload-a','upload-b','replace-a','transforms-a']);
+assert.equal(await queueMediaStorageMutation('site-a',async()=>5),5);
+console.log('Media storage queue PASS: same-site bulk order, different-site progress, error propagation and recovery after failure. API/browser transport is separate evidence.');

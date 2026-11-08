@@ -1,3 +1,4 @@
+import { OrderBuyerEntitlementPanel } from '@/components/commerce/BuyerDownloads';
 import { ChangeEvent, FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
@@ -3781,7 +3782,7 @@ function OrdersRoute() {
         shippingLabelProvider,
         fulfillmentCarrier,
       });
-      const { record: updated, tracking } = await refreshOrderTracking(activeSiteId, order.id, {
+      const { record: updated, tracking, completionWarnings } = await refreshOrderTracking(activeSiteId, order.id, {
         provider: executionProvider || fulfillmentCarrier,
         carrier: fulfillmentCarrier || shippingLabelProvider,
         trackingNumber: String(readOrderValue(order.values, 'trackingnumber', '') || '').trim(),
@@ -3793,7 +3794,8 @@ function OrdersRoute() {
         setFormState(orderToForm(updated));
       }
       void loadOrderAnalytics();
-      setNotice(`Tracking refreshed for ${tracking.trackingNumber}: ${tracking.status}.`);
+      setNotice(`Tracking refreshed for ${tracking.trackingNumber}: ${tracking.status}.${completionWarnings.length
+        ? ` Follow-up pending. ${completionWarnings.map(warning => warning.message).join(' ')}` : ''}`);
     } catch (trackingError) {
       setError(trackingError instanceof Error ? trackingError.message : 'Unable to refresh tracking');
     } finally {
@@ -6705,6 +6707,7 @@ function OrdersRoute() {
               icon={<Receipt className="size-4" />}
             />
             <PanelContent>
+              <>{selectedOrder && <OrderBuyerEntitlementPanel key={`${activeSiteId}:${selectedOrder.id}`} siteId={activeSiteId} orderId={selectedOrder.id} canEdit={canEditOrders && canEditCommerce} />}</>
               <form onSubmit={saveOrder} noValidate data-testid="orders-editor-form">
                 <div
                   className="sticky top-0 z-10 -mx-5 mb-4 border-y border-border bg-card/95 px-5 py-3 shadow-sm backdrop-blur"

@@ -1,3 +1,6 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { invalidEditorMediaReference } from "@/lib/editorMediaAdmission";
+import { getMediaById } from "@/lib/backyStore";
 /**
  * Admin page detail endpoint.
  *
@@ -8,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
+  BackyContentConflictError,
   canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
   type BackyJsonObject,
@@ -18,7 +22,7 @@ import {
 import {
   deleteAdminPage,
   getAdminPageById,
-  getPageByPath,
+  getPageBySlug,
   getSiteByIdOrSlug,
   listCollections,
   updateAdminPage,
@@ -39,13 +43,14 @@ import { findPageRouteConflict } from "@/lib/routeConflicts";
 import { recordSiteCacheInvalidation } from "@/lib/cacheInvalidation";
 import { normalizeInputFromDirectFrontendDesignEnvelope } from "@/lib/frontendDesignContract";
 import { recordAdminAudit } from "@/lib/adminAudit";
-import { getRepositoryPageByPublicPath } from "@/lib/repositoryPages";
 import {
   buildPageReadiness,
   buildRepositoryPageReadiness,
   readinessBlockingChecks,
 } from "@/lib/siteReadiness";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
+
+import { runCommittedMutationFollowUp, hasFailedWebhookDelivery } from "@/lib/committedMutationFollowUp";
 
 export const runtime = "nodejs";
 
@@ -564,6 +569,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (contentValidationError) {
         return contentValidationError;
       }
+      const invalidMedia = await invalidEditorMediaReference(site.id, body, (id, mediaId) => repositories.media.getById(id, mediaId), { nativeUuidIds: true });
+      if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
       const expectedUpdatedAt =
         typeof body.expectedUpdatedAt === "string"
           ? body.expectedUpdatedAt.trim()
@@ -606,11 +613,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         nextSlug &&
         (nextSlug !== page.slug || nextIsHomepage !== page.isHomepage)
       ) {
-        const conflict = await getRepositoryPageByPublicPath(
-          repositories,
-          site.id,
-          nextSlug,
-        );
+        const conflict = await repositories.pages.getBySlug(site.id, nextSlug);
         if (conflict && conflict.id !== page.id) {
           return errorResponse(
             409,
@@ -701,20 +704,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       if (readinessError) {
         return readinessError;
       }
-      await repositories.contentWorkflows.createRevision({
-        siteId: site.id,
-        targetType: "page",
-        targetId: page.id,
+      const beforeUpdateRevision = {
         snapshot: pageRevisionSnapshot(page),
         note:
           typeof body.revisionNote === "string" &&
           body.revisionNote.trim().length > 0
             ? body.revisionNote
             : "Before update",
-        operation: "update",
+        operation: "update" as const,
         createdBy: request.headers.get("x-backy-actor") || "admin",
-      });
+      };
       const updated = await repositories.pages.update(site.id, page.id, {
+        expectedUpdatedAt: expectedUpdatedAt || page.updatedAt,
+        expectedContent: page.content,
+        beforeUpdateRevision,
         title: body.title === undefined ? undefined : title,
         slug: shouldUpdateSlug ? nextSlug : undefined,
         description:
@@ -734,7 +737,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         revisionNote:
           typeof body.revisionNote === "string" ? body.revisionNote : undefined,
       });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      const completionWarnings: string[] = [];
+      const cacheInvalidation = await runCommittedMutationFollowUp(completionWarnings, "CONTENT_CACHE_INVALIDATION_PENDING", () => recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -744,8 +748,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           reason: "page-updated",
           requestId,
         },
-      );
-      await recordAdminAudit({
+      )) ?? null;
+      await runCommittedMutationFollowUp(completionWarnings, "CONTENT_AUDIT_PENDING", () => recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "page",
@@ -755,8 +759,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         after: pageAuditMetadata(updated.item),
         metadata: updateAuditMetadata(updated.item, body),
         requestId,
-      });
-      await deliverPageContentWebhook({
+      }));
+      await runCommittedMutationFollowUp(completionWarnings, "CONTENT_WEBHOOK_DELIVERY_PENDING", () => deliverPageContentWebhook({
         repositories,
         site,
         action: "page.updated",
@@ -767,7 +771,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         ),
         requestId,
         actor: access.session?.user.id,
-      });
+      }), hasFailedWebhookDelivery);
 
       return NextResponse.json({
         success: true,
@@ -775,6 +779,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         data: {
           page: adminPageFromRepositoryPage(updated.item),
           cacheInvalidation,
+          completionWarnings,
         },
       });
     }
@@ -805,6 +810,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (contentValidationError) {
       return contentValidationError;
     }
+    const invalidMedia = await invalidEditorMediaReference(site.id, body, getMediaById);
+    if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
     const expectedUpdatedAt =
       typeof body.expectedUpdatedAt === "string"
         ? body.expectedUpdatedAt.trim()
@@ -845,7 +852,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       nextSlug &&
       (nextSlug !== page.slug || nextIsHomepage !== page.isHomepage)
     ) {
-      const conflict = getPageByPath(site.id, nextSlug, {
+      const conflict = getPageBySlug(site.id, nextSlug, {
         includeUnpublished: true,
       });
       if (conflict && conflict.id !== page.id) {
@@ -936,6 +943,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     const updated = updateAdminPage(site.id, page.id, {
       ...body,
+      expectedUpdatedAt: expectedUpdatedAt || undefined,
+      expectedContent: expectedUpdatedAt ? page.content : undefined,
       ...(shouldUpdateSlug ? { slug: nextSlug } : {}),
       ...(typeof body.isHomepage === "boolean"
         ? { isHomepage: nextIsHomepage }
@@ -946,7 +955,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(404, "PAGE_NOT_FOUND", "Page not found", requestId);
     }
-    await recordAdminAudit({
+    const completionWarnings: string[] = [];
+    await runCommittedMutationFollowUp(completionWarnings, "CONTENT_AUDIT_PENDING", () => recordAdminAudit({
       siteId: site.id,
       entity: "page",
       entityId: page.id,
@@ -955,8 +965,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       after: pageAuditMetadata(updated),
       metadata: updateAuditMetadata(updated, body),
       requestId,
-    });
-    await deliverPageContentWebhook({
+    }));
+    await runCommittedMutationFollowUp(completionWarnings, "CONTENT_WEBHOOK_DELIVERY_PENDING", () => deliverPageContentWebhook({
       site: site as unknown as Site,
       action: "page.updated",
       before: page,
@@ -966,16 +976,31 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ),
       requestId,
       actor: access.session?.user.id,
-    });
+    }), hasFailedWebhookDelivery);
 
     return NextResponse.json({
       success: true,
       requestId,
       data: {
         page: updated,
+        completionWarnings,
       },
     });
   } catch (error) {
+    if (
+      error instanceof BackyContentConflictError ||
+      (isRecord(error) && error.code === "CONTENT_REVISION_CONFLICT")
+    ) {
+      return errorResponse(
+        409,
+        "PAGE_VERSION_CONFLICT",
+        "This page changed during the save. Reload the latest backend copy before saving again.",
+        requestId,
+        { reloadRequired: true },
+      );
+    }
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin page update API error:", error);
     return errorResponse(
       500,
@@ -1120,6 +1145,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin page delete API error:", error);
     return errorResponse(
       500,

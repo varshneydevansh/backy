@@ -1,4 +1,8 @@
-import type { SiteSettings } from '@backy-cms/core';
+import { pinTemplateInstance } from './templateInstanceProvenance';
+import { canonicalCollectionTemplateDesign, canonicalFormTemplateDesign } from '@backy-cms/core';
+import { parseAdminCollectionFields } from './adminCollectionFields';
+import { parseFormFields } from './adminFormFieldPolicy';
+import { canonicalProductTemplateDesign, normalizeFrontendRuntimeDeclaration, inheritRegisteredFrontendChrome, selectDefaultFrontendDesignTemplate, type BackyCanvasSize, type SiteSettings } from '@backy-cms/core';
 
 type FrontendDesignContract = NonNullable<SiteSettings['frontendDesign']>;
 type FrontendDesignTemplate = FrontendDesignContract['templates'][number];
@@ -927,6 +931,7 @@ export const normalizeFrontendDesignContract = (
           .map((template, index) => {
             const canvasSize = isRecord(template.canvasSize)
               ? {
+                  ...template.canvasSize,
                   width: Number(template.canvasSize.width) || 1200,
                   height: Number(template.canvasSize.height) || 900,
                 }
@@ -936,9 +941,11 @@ export const normalizeFrontendDesignContract = (
               : undefined;
 
             return {
+              ...Object.fromEntries(Object.entries(template).filter(([key]) => !['templateRevisions', 'frontendDesignTemplateHistory', 'retainedTemplateRevisions'].includes(key))),
               id: stringValue(template.id) || `template-${index + 1}`,
               type: normalizeTemplateType(template.type),
               name: stringValue(template.name) || `Template ${index + 1}`,
+              ...(typeof template.isDefault === 'boolean' ? { isDefault: template.isDefault } : {}),
               ...(stringValue(template.status) ? { status: stringValue(template.status) } : {}),
               ...(version !== undefined ? { version } : {}),
               ...(stringValue(template.createdAt) ? { createdAt: stringValue(template.createdAt) } : {}),
@@ -958,6 +965,7 @@ export const normalizeFrontendDesignContract = (
           .filter(isRecord)
           .map(normalizeFrontendDesignEditableMapEntry)
       : [],
+    ...(input.runtime != null ? { runtime: normalizeFrontendRuntimeDeclaration(input.runtime) } : {}),
     notes: stringValue(input.notes),
     updatedAt: options.updatedAt || stringValue(input.updatedAt),
   };
@@ -1027,9 +1035,9 @@ export const buildSiteDefaultFrontendDesignContract = (input: {
   }, { updatedAt });
 };
 
-const contentCanvasSize = (content: unknown): { width: number; height: number } | undefined => {
+const contentCanvasSize = (content: unknown): BackyCanvasSize | undefined => {
   const contentRecord = isRecord(content) ? content : {};
-  const metadata = isRecord(contentRecord.metadata) ? contentRecord.metadata : {};
+  const metadata = contentMetadata(contentRecord) || {};
   const canvasSize = isRecord(contentRecord.canvasSize)
     ? contentRecord.canvasSize
     : isRecord(metadata.canvasSize)
@@ -1039,6 +1047,7 @@ const contentCanvasSize = (content: unknown): { width: number; height: number } 
   if (!canvasSize) return undefined;
 
   return {
+    ...canvasSize,
     width: Number(canvasSize.width) || 1200,
     height: Number(canvasSize.height) || 900,
   };
@@ -2309,6 +2318,19 @@ const sectionTemplateContent = (template: FrontendDesignTemplate): Record<string
   return section ? mergeSectionTemplateDesignStateIntoContent(template, section) : content;
 };
 
+const allowsDefaultTemplate = (body: Record<string, unknown>): boolean => {
+  const meta = isRecord(body.meta) ? body.meta : {};
+  if (body.templateSource === 'backy-canvas' || meta.templateSource === 'backy-canvas'
+    || stringValue(body.templateId) || stringValue(body.starterTemplate)) return false;
+  // A caller-supplied document is already authored. Registration must not replace it.
+  const content = isRecord(body.content) ? body.content : {};
+  const values = isRecord(body.values) ? body.values : {};
+  return !Array.isArray(content.elements) && !isRecord(content.contentDocument)
+    && !isRecord(body.contentDocument) && !isRecord(body.design) && !isRecord(body.frontendDesign)
+    && !isRecord(values.design) && !Array.isArray(values.frontendDesignElements)
+    && !isRecord(values.frontendDesignContentDocument);
+};
+
 export const seedInputFromFrontendDesignTemplate = (
   input: {
     siteSettings?: SiteSettings;
@@ -2320,12 +2342,13 @@ export const seedInputFromFrontendDesignTemplate = (
     excerpt?: string | null;
   },
 ): { ok: true; body: Record<string, unknown>; template?: FrontendDesignTemplate } | { ok: false; code: string; message: string } => {
-  const requestedTemplateId = templateRequestId(input.body);
+  const frontendDesign = input.siteSettings?.frontendDesign;
+  const requestedTemplateId = templateRequestId(input.body)
+    || (allowsDefaultTemplate(input.body) ? selectDefaultFrontendDesignTemplate(frontendDesign, input.templateType)?.id : undefined);
   if (!requestedTemplateId) {
     return { ok: true, body: input.body };
   }
 
-  const frontendDesign = input.siteSettings?.frontendDesign;
   const template = findFrontendDesignTemplate(frontendDesign, input.templateType, requestedTemplateId);
   const explicitRequest = Boolean(
     stringValue(input.body.frontendDesignTemplateId)
@@ -2344,6 +2367,10 @@ export const seedInputFromFrontendDesignTemplate = (
     return { ok: true, body: input.body };
   }
 
+  const baselineContent = inheritRegisteredFrontendChrome({ ...templateContentRecord(template), ...templateContent(frontendDesign, template, input) }, frontendDesign.chrome);
+  let instance;
+  try { instance = pinTemplateInstance(template, baselineContent, input.kind, { title: input.title, description: input.description ?? null, excerpt: input.excerpt ?? null }); }
+  catch { return { ok: false, code: 'FRONTEND_TEMPLATE_INSTANCE_UNSUPPORTED', message: 'Template content exceeds safe instance limits or contains unsafe credential/prototype fields. Review the template before cloning.' }; }
   const existingMeta = isRecord(input.body.meta) ? input.body.meta : {};
   const existingContent = isRecord(input.body.content) ? input.body.content : undefined;
   const shouldSeedContent = !existingContent
@@ -2355,9 +2382,9 @@ export const seedInputFromFrontendDesignTemplate = (
     body: {
       ...input.body,
       content: shouldSeedContent
-        ? templateContent(frontendDesign, template, input)
+        ? baselineContent
         : mergeTemplateDesignStateIntoContent(frontendDesign, template, input.body.content),
-      meta: buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta),
+      meta: { ...buildFrontendDesignProvenanceFields(frontendDesign, template, existingMeta), frontendTemplateInstance: instance },
     },
   };
 };
@@ -2376,12 +2403,14 @@ const resolveTemplateSeed = (
   body: Record<string, unknown>,
   templateType: FrontendDesignTemplateType,
 ): { ok: true; frontendDesign?: FrontendDesignContract; template?: FrontendDesignTemplate } | { ok: false; code: string; message: string } => {
-  const requestedTemplateId = templateRequestId(body);
+  const frontendDesign = siteSettings?.frontendDesign;
+  const requestedTemplateId = templateRequestId(body)
+    || (templateType === 'product' && allowsDefaultTemplate(body)
+      ? selectDefaultFrontendDesignTemplate(frontendDesign, templateType)?.id : undefined);
   if (!requestedTemplateId) {
     return { ok: true };
   }
 
-  const frontendDesign = siteSettings?.frontendDesign;
   const template = findFrontendDesignTemplate(frontendDesign, templateType, requestedTemplateId);
 
   if (!frontendDesign || !template) {
@@ -2439,6 +2468,9 @@ export const seedFormInputFromFrontendDesignTemplate = (
     ...(cloneRecord(input.body.settings) || {}),
     ...designProvenanceFields(seed.frontendDesign, seed.template, input.body.settings),
   };
+  let instance;
+  try { instance = pinTemplateInstance(seed.template, buildFrontendFormTemplateBaseline(seed.frontendDesign, seed.template), 'form'); }
+  catch { return { ok: false, code: 'FRONTEND_TEMPLATE_INSTANCE_UNSUPPORTED', message: 'The form template schema or design cannot provide a safe registered baseline.' }; }
 
   return {
     ok: true,
@@ -2460,10 +2492,19 @@ export const seedFormInputFromFrontendDesignTemplate = (
       moderationMode: preferValue(input.body.moderationMode, content.moderationMode),
       contactShare: cloneRecord(input.body.contactShare) || cloneRecord(content.contactShare),
       collectionTarget: cloneRecord(input.body.collectionTarget) || cloneRecord(content.collectionTarget),
-      settings,
+      settings: { ...settings, frontendTemplateInstance: instance },
     },
   };
 };
+
+export function buildFrontendFormTemplateBaseline(frontendDesign: FrontendDesignContract, template: FrontendDesignTemplate) {
+  const content = templateContentRecord(template);
+  const fields = parseFormFields(content.fields) || [];
+  if (!fields.length || !Array.isArray(content.fields) || fields.length !== content.fields.length
+    || content.fields.some((field, index) => !isRecord(field) || typeof field.key !== 'string' || !field.key.trim() || typeof field.type !== 'string' || field.type !== fields[index].type)
+    || new Set(content.fields.map(field => (field as Record<string, unknown>).key)).size !== fields.length) throw Error('FORM_TEMPLATE_SCHEMA_INVALID');
+  return canonicalFormTemplateDesign({ fields, settings: designProvenanceFields(frontendDesign, template, {}) });
+}
 
 export const seedSectionInputFromFrontendDesignTemplate = (
   input: {
@@ -2483,6 +2524,9 @@ export const seedSectionInputFromFrontendDesignTemplate = (
     ? mergeSectionTemplateDesignStateIntoContent(seed.template, currentContent)
     : sectionTemplateContent(seed.template);
 
+  let instance;
+  try { instance = pinTemplateInstance(seed.template, sectionTemplateContent(seed.template), 'section'); }
+  catch { return { ok: false, code: 'FRONTEND_TEMPLATE_INSTANCE_UNSUPPORTED', message: 'Section template content exceeds safe instance limits or contains unsafe fields. Review it before cloning.' }; }
   return {
     ok: true,
     template: seed.template,
@@ -2494,7 +2538,7 @@ export const seedSectionInputFromFrontendDesignTemplate = (
       status: preferValue(input.body.status, content.status),
       tags: nonEmptyArray(input.body.tags) || nonEmptyArray(content.tags),
       content: seededContent,
-      metadata: designProvenanceFields(seed.frontendDesign, seed.template, input.body.metadata),
+      metadata: { ...designProvenanceFields(seed.frontendDesign, seed.template, input.body.metadata), frontendTemplateInstance: instance },
     },
   };
 };
@@ -2512,6 +2556,9 @@ export const seedCollectionInputFromFrontendDesignTemplate = (
   }
 
   const content = templateContentRecord(seed.template);
+  let instance;
+  try { instance = pinTemplateInstance(seed.template,buildFrontendCollectionTemplateBaseline(seed.frontendDesign,seed.template),'collection'); }
+  catch { return {ok:false,code:'FRONTEND_TEMPLATE_INSTANCE_UNSUPPORTED',message:'The collection template schema or design cannot provide a safe registered baseline.'}; }
 
   return {
     ok: true,
@@ -2529,6 +2576,7 @@ export const seedCollectionInputFromFrontendDesignTemplate = (
       metadata: {
         ...(cloneRecord(content.metadata) || {}),
         ...designProvenanceFields(seed.frontendDesign, seed.template, input.body.metadata),
+        frontendTemplateInstance: instance,
       },
     },
   };
@@ -2549,12 +2597,26 @@ export const seedCollectionRecordInputFromFrontendDesignTemplate = (
 
   const content = templateContentRecord(seed.template);
   const templateValues = cloneRecord(content.values) || {};
+  if (isRecord(templateValues.design)) {
+    templateValues.design = inheritRegisteredFrontendChrome(templateValues.design, seed.frontendDesign.chrome);
+  } else if (Array.isArray(content.elements) || isRecord(content.contentDocument)) {
+    templateValues.design = inheritRegisteredFrontendChrome(content, seed.frontendDesign.chrome);
+  }
   const currentValues = cloneRecord(input.body.values) || {};
-  const designValues = designProvenanceFields(seed.frontendDesign, seed.template, currentValues);
+  const hydratedTemplate = isRecord(templateValues.design)
+    ? { ...seed.template, content: { ...content, ...templateValues.design } }
+    : seed.template;
+  const designValues = designProvenanceFields(seed.frontendDesign, hydratedTemplate, currentValues);
+  let instance;
+  if ((input.templateType || 'product') === 'product') {
+    try { instance = pinTemplateInstance(seed.template, buildFrontendTemplateInstanceBaseline(seed.frontendDesign, seed.template, 'product'), 'product'); }
+    catch { return { ok: false, code: 'FRONTEND_TEMPLATE_INSTANCE_UNSUPPORTED', message: 'Product template design exceeds safe instance limits or contains unsafe fields. Review it before cloning.' }; }
+  }
   const values = {
     ...templateValues,
     ...currentValues,
     ...designValues,
+    ...(instance ? { frontendTemplateInstance: instance } : {}),
   };
 
   return {
@@ -2569,3 +2631,23 @@ export const seedCollectionRecordInputFromFrontendDesignTemplate = (
     },
   };
 };
+
+/** The identical page/blog template seed used for clone provenance and reviewed upgrades. */
+export const buildFrontendTemplateInstanceBaseline = (frontendDesign: FrontendDesignContract, template: FrontendDesignTemplate, kind: 'page' | 'post' | 'section' | 'product', seedContext: { title: string; description?: string | null; excerpt?: string | null } = { title: '' }) =>
+  kind === 'product' ? productTemplateBaseline(frontendDesign, template) : kind === 'section' ? sectionTemplateContent(template) : inheritRegisteredFrontendChrome({ ...templateContentRecord(template), ...templateContent(frontendDesign, template, { kind, ...seedContext }) }, frontendDesign.chrome);
+
+function productTemplateBaseline(frontendDesign: FrontendDesignContract, template: FrontendDesignTemplate) {
+  const content = templateContentRecord(template), values = cloneRecord(content.values) || {};
+  const { values: _values, slug: _slug, status: _status, scheduledAt: _scheduledAt, ...templateDesign } = content;
+  const envelope = isRecord(values.design) ? values.design : templateDesign;
+  return canonicalProductTemplateDesign({ design: inheritRegisteredFrontendChrome(envelope, frontendDesign.chrome), ...Object.fromEntries(Object.entries(values).filter(([key]) => key.startsWith('frontendDesign'))) });
+}
+
+export function buildFrontendCollectionTemplateBaseline(frontendDesign: FrontendDesignContract,template:FrontendDesignTemplate) {
+ const content=templateContentRecord(template),parsed=parseAdminCollectionFields(content.fields);
+ if(!parsed.ok||!parsed.fields?.length||!Array.isArray(content.fields)||content.fields.some((field,index)=>!isRecord(field)||typeof field.key!=='string'||field.key!==parsed.fields![index].key||typeof field.type!=='string'||field.type!==parsed.fields![index].type))throw Error('COLLECTION_TEMPLATE_SCHEMA_INVALID');
+ const rawPermissions=isRecord(content.permissions)?content.permissions:{};
+ for(const key of ['publicRead','publicCreate','publicUpdate','publicDelete'])if(rawPermissions[key]!==undefined&&typeof rawPermissions[key]!=='boolean')throw Error('COLLECTION_TEMPLATE_SCHEMA_INVALID');
+ const permissions={...rawPermissions,publicRead:rawPermissions.publicRead??true,publicCreate:rawPermissions.publicCreate??false,publicUpdate:rawPermissions.publicUpdate??false,publicDelete:rawPermissions.publicDelete??false};
+ return canonicalCollectionTemplateDesign({fields:parsed.fields,metadata:designProvenanceFields(frontendDesign,template,{}) as any},{permissions,routePattern:content.routePattern??template.routePattern??null,listRoutePattern:content.listRoutePattern??null,metadata:Object.fromEntries(Object.entries(isRecord(content.metadata)?content.metadata:{}).filter(([key])=>!key.startsWith('frontendDesign')&&key!=='frontendTemplateInstance'))});
+}

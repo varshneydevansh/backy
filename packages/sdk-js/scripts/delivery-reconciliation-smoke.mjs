@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls = []; let responseStatus = 200;
+const input = { expectedUpdatedAt: '2026-10-08T00:00:00.000Z', expectedState: 'uncertain', expectedReviewVersion: 2, evidence: 'recipient-report-reviewed', disposition: 'retain-without-resend' };
+const review = { id: 'delivery-review-fixture', version: 3, actorId: 'owner', requestId: 'proof', createdAt: input.expectedUpdatedAt, observedUpdatedAt: input.expectedUpdatedAt, observedState: 'uncertain', evidence: input.evidence, disposition: input.disposition };
+const warnings = [{ code: 'DELIVERY_RECONCILIATION_AUDIT_PENDING', message: 'Investigation saved; reload history.' }];
+const client = createBackyClient({ baseUrl: 'https://fixture.invalid', siteId: 'site/a', fetch: async (url, init) => {
+  calls.push({ url: new URL(url), init });
+  if (responseStatus !== 200) return Response.json({ success: false, requestId: 'proof', error: { code: responseStatus === 409 ? 'DELIVERY_RECONCILIATION_CONFLICT' : 'OWNER_SESSION_REQUIRED', message: 'Review denied.' } }, { status: responseStatus });
+  return Response.json({ success: true, requestId: 'proof', data: { attempt: { id: 'attempt/a', status: 'uncertain', updatedAt: input.expectedUpdatedAt, reconciliationVersion: 3, reconciliations: [review] }, reconciliation: review, completionWarnings: warnings } });
+} });
+const comment = await client.reconcileCommentDelivery('comment/a', 'attempt/a', input, { siteId: 'override/a', adminSession: 'synthetic-owner', credentials: 'include', requestId: 'proof' });
+assert.equal(calls[0].url.pathname, '/api/sites/override%2Fa/comments/comment%2Fa/delivery-attempts/attempt%2Fa/reconciliation');
+assert.equal(calls[0].init.method, 'POST'); assert.equal(calls[0].init.credentials, 'include'); assert.equal(calls[0].init.headers.get('x-backy-admin-session'), 'synthetic-owner'); assert.equal(calls[0].init.headers.get('x-request-id'), 'proof'); assert.deepEqual(JSON.parse(calls[0].init.body), input);
+assert.equal(comment.data.attempt.status, 'uncertain'); assert.equal(comment.data.attempt.updatedAt, input.expectedUpdatedAt); assert.deepEqual(comment.data.completionWarnings, warnings); assert.equal(comment.data.reconciliation.version, 3);
+const form = await client.reconcileFormDelivery('form/a', 'submission/a', 'attempt/a', input, { credentials: 'include' });
+assert.equal(calls[1].url.pathname, '/api/admin/sites/site%2Fa/forms/form%2Fa/submissions/submission%2Fa/delivery-attempts/attempt%2Fa/reconciliation'); assert.deepEqual(JSON.parse(calls[1].init.body), input); assert.deepEqual(form.data.completionWarnings, warnings);
+responseStatus = 409; await assert.rejects(client.reconcileCommentDelivery('comment/a', 'attempt/a', input), e => e instanceof BackyApiError && e.status === 409 && e.code === 'DELIVERY_RECONCILIATION_CONFLICT');
+responseStatus = 403; await assert.rejects(client.reconcileFormDelivery('form/a', 'submission/a', 'attempt/a', input), e => e instanceof BackyApiError && e.status === 403 && e.code === 'OWNER_SESSION_REQUIRED');
+assert.equal(calls.length, 4, 'No automatic repeat on committed warnings, stale409 or owner403.');
+console.log('Delivery reconciliation SDK transport PASS 17: scoped encoded paths, exact snapshot body, explicit session/cookie options, retained state, warnings, conflict/owner errors without replay. Synthetic transport only.');

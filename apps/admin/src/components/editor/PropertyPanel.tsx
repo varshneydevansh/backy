@@ -1,3 +1,4 @@
+import { registeredComponentProps, registeredComponentControls } from './registeredComponentModel';
 /**
  * ============================================================================
  * BACKY CMS - PROPERTY PANEL
@@ -11,7 +12,7 @@
  * @license MIT
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Type,
   Palette,
@@ -34,9 +35,17 @@ import {
 } from 'lucide-react';
 import { cn, generateId } from '@/lib/utils';
 import { PORTAL_TOOLBAR_CONTAINER_ID } from '@backy-cms/editor';
+import { DataFigure } from '@backy-cms/editor/data-figure';
 import {
   buildBackyThemeTokenReferences,
   buildBackyThemeTokens,
+  resolveBackyVideoSource,
+  isBackyDataFigureKey,
+  loadBackyPublicDataFigureRecords,
+  createBackyDataFigureSample,
+  resolveBackyChildLayout,
+  type BackyDataFigureConfig,
+  type BackyDataFigureLoader,
   type ThemeConfig,
 } from '@backy-cms/core';
 // import { RichTextEditor } from './RichTextEditor';
@@ -61,10 +70,11 @@ import { buildEditorFormBuilderAction } from './editorFormBuilderActions';
 import { buildEditorActionStatus } from './editorActionStatus';
 import type { CanvasElement, ComponentBindingSlot, ElementProps } from '@/types/editor';
 import {
-  listCollectionBindingPresets,
+  listCollectionBindingPresetState,
+  getAdminApiBase,
   listCollections,
   listCollectionRecords,
-  saveCollectionBindingPresets,
+  saveCollectionBindingPresetState,
   type Collection,
   type CollectionBindingPreset,
   type CollectionField,
@@ -72,6 +82,7 @@ import {
   type InteractiveComponentRegistryEntry,
 } from '@/lib/adminContentApi';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
+import { hasLegacyCollectionBindingPresets, normalizeSavedCollectionBindingPresets, persistSavedCollectionBindingPresets, upsertCollectionBindingPreset } from './collectionBindingPresetCache';
 import {
   buildListContentFromItems,
   normalizeListContent,
@@ -216,7 +227,33 @@ const PROPERTY_SECTION_METADATA: Array<{
 
 const normalizePropertySectionQuery = (value: string) => value.trim().toLowerCase();
 
-const matchingPropertySectionsForQuery = (query: string): PropertySectionId[] => {
+export const contentControlKeywordsForElement = (element: CanvasElement | null | undefined, registry: InteractiveComponentRegistryEntry[] = []): string[] => {
+  if (!element) return [];
+  const aliases: Record<string, string[]> = {
+    collapsible: ['collapsible', 'accordion', 'details', 'title', 'summary', 'open by default', 'default open', 'expanded', 'rich content', 'body'],
+    video: ['source', 'src', 'poster', 'youtube', 'vimeo', 'drive', 'autoplay', 'muted', 'loop', 'plays inline', 'play inline', 'show controls', 'object fit'],
+    audio: ['source', 'src', 'autoplay', 'muted', 'loop', 'show controls', 'preload', 'audio'],
+    code: ['language', 'syntax', 'snippet', 'code'],
+    codeComponent: ['registry', 'component key', 'version', 'sandbox', 'runtime', 'fallback', 'controls', 'interactive'],
+    interactiveFigure: ['registry', 'component key', 'version', 'runtime', 'fallback', 'controls', 'interactive'],
+  };
+  const keywords = [...(aliases[element.type] || [])];
+  if (element.type === 'codeComponent' || element.type === 'interactiveFigure') {
+    const component = registry.find((entry) => entry.type === element.type && entry.componentKey === element.props.componentKey
+      && (!element.props.version || entry.version === element.props.version));
+    const controls = registeredComponentControls(Array.isArray(element.props.controls) ? element.props.controls : component?.controls, element.props.propsSchema || component?.propsSchema);
+    for (const control of controls) {
+      if (control && typeof control === 'object') {
+        for (const key of ['key', 'id', 'name', 'label']) {
+          if (typeof control[key] === 'string') keywords.push(control[key]);
+        }
+      }
+    }
+  }
+  return keywords;
+};
+
+const matchingPropertySectionsForQuery = (query: string, element?: CanvasElement | null, registry: InteractiveComponentRegistryEntry[] = []): PropertySectionId[] => {
   const normalizedQuery = normalizePropertySectionQuery(query);
   if (!normalizedQuery) {
     return [...PROPERTY_SECTION_IDS];
@@ -229,10 +266,12 @@ const matchingPropertySectionsForQuery = (query: string): PropertySectionId[] =>
         section.title,
         section.shortTitle,
         ...section.keywords,
+        ...(section.id === 'content' ? contentControlKeywordsForElement(element, registry) : []),
       ].map((value) => value.toLowerCase());
 
       return haystack.some((value) => (
-        value.includes(normalizedQuery) || normalizedQuery.includes(value)
+        value === normalizedQuery || (value.length > 2
+          && (value.includes(normalizedQuery) || normalizedQuery.includes(value)))
       ));
     })
     .map((section) => section.id);
@@ -786,6 +825,7 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
     'interactiveFigure',
     'codeBlock',
     'codeComponent',
+    'collapsible',
   ];
 
   return knownTypes.includes(normalized as CanvasElement['type'])
@@ -1034,6 +1074,8 @@ interface PropertyPanelProps {
   onChange: (updates: Partial<CanvasElement>) => void;
   /** Callback when element is deleted */
   onDelete?: () => void;
+  onEditText?: () => void;
+  onPreviewAnimation?: () => void;
   theme?: ThemeConfig;
   mediaContext?: MediaContext;
   disabled?: boolean;
@@ -1064,6 +1106,8 @@ export function PropertyPanel({
   element,
   onChange,
   onDelete,
+  onEditText,
+  onPreviewAnimation,
   theme,
   mediaContext,
   disabled = false,
@@ -1202,8 +1246,8 @@ export function PropertyPanel({
     [propertySectionQuery],
   );
   const visiblePropertySectionIds = useMemo(
-    () => matchingPropertySectionsForQuery(normalizedPropertySectionQuery),
-    [normalizedPropertySectionQuery],
+    () => matchingPropertySectionsForQuery(normalizedPropertySectionQuery, element, interactiveComponents),
+    [normalizedPropertySectionQuery, element, interactiveComponents],
   );
   const visiblePropertySectionSet = useMemo(
     () => new Set(visiblePropertySectionIds),
@@ -1363,7 +1407,7 @@ export function PropertyPanel({
 
   const updatePropertySectionSearch = (value: string) => {
     setPropertySectionQuery(value);
-    const nextMatches = matchingPropertySectionsForQuery(value);
+    const nextMatches = matchingPropertySectionsForQuery(value, element, interactiveComponents);
     setExpandedSections(
       normalizePropertySectionQuery(value)
         ? nextMatches
@@ -1696,8 +1740,10 @@ export function PropertyPanel({
             onToggle={() => toggleSection('content')}
           >
             <ContentProperties
+              siteId={mediaContext?.siteId}
               element={element}
               onChange={updateProps}
+              onEditText={onEditText}
               onElementChange={guardedOnChange}
               collections={collections}
               collectionsError={collectionsError}
@@ -1809,7 +1855,7 @@ export function PropertyPanel({
             isExpanded={expandedSectionSet.has('animation')}
             onToggle={() => toggleSection('animation')}
           >
-            <AnimationProperties element={element} onChange={guardedOnChange} theme={theme} />
+            <AnimationProperties element={element} onChange={guardedOnChange} theme={theme} onPreview={onPreviewAnimation} />
           </PropertySection>
         )}
 
@@ -2065,6 +2111,8 @@ function PropertySection({
 // ============================================
 
 interface ContentPropertiesProps {
+  siteId?: string;
+  onEditText?: () => void;
   element: CanvasElement;
   onChange: (updates: Partial<ElementProps>) => void;
   onElementChange?: (updates: Partial<CanvasElement>) => void;
@@ -2416,8 +2464,10 @@ const getInteractivePreviewModel = (
 };
 
 function ContentProperties({
+  siteId,
   element,
   onChange,
+  onEditText,
   onElementChange,
   onOpenMedia,
   onOpenEmoji,
@@ -2435,7 +2485,7 @@ function ContentProperties({
 }: ContentPropertiesProps) {
   const normalizedType = normalizeCanvasElementType(element.type);
   const textElementContent = normalizeTextElementContent(element.props.content, normalizedType, element.props);
-  const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list'].includes(normalizedType);
+  const hasTextContent = ['text', 'heading', 'paragraph', 'quote', 'list', 'collapsible'].includes(normalizedType);
   const hasImageContent = normalizedType === 'image';
   const hasVideoContent = normalizedType === 'video';
   const hasAudioContent = normalizedType === 'audio';
@@ -2452,6 +2502,17 @@ function ContentProperties({
   const hasCommentContent = normalizedType === 'comment';
   const hasCodeBlockContent = normalizedType === 'codeBlock';
   const hasInteractiveContent = normalizedType === 'interactiveFigure' || normalizedType === 'codeComponent';
+  const hasNativeDataFigure = normalizedType === 'interactiveFigure' && isBackyDataFigureKey(element.props.componentKey);
+  const loadFigureRecords = useCallback<BackyDataFigureLoader>((collectionId, { signal, requestedFields }) => {
+    if (!siteId) return Promise.reject(new Error('This data source is unavailable.'));
+    return loadBackyPublicDataFigureRecords({
+      apiBaseUrl: getAdminApiBase().replace(/\/api\/admin$/, '/api'),
+      siteId, collectionId, signal, requestedFields,
+    });
+  }, [siteId]);
+  const publicFigureCollections = useMemo(() => collections
+    .filter((collection) => collection.siteId === siteId && collection.status === 'published' && collection.permissions.publicRead === true)
+    .map(({ id, name }) => ({ id, name })), [collections, siteId]);
   const hasListContent = normalizedType === 'list';
   const fieldOptionsText = formatOptionValues(element.props.options);
   const listItems = getListItemsFromProps(element.props);
@@ -2600,17 +2661,10 @@ function ContentProperties({
     () => getInteractiveBindingPresets(selectedInteractiveComponent),
     [selectedInteractiveComponent],
   );
-  const interactiveControls = useMemo<Record<string, unknown>[]>(() => {
-    const rawControls = Array.isArray(element.props.controls)
-      ? element.props.controls
-      : Array.isArray(selectedInteractiveComponent?.controls)
-        ? selectedInteractiveComponent.controls
-        : [];
-
-    return rawControls.filter((control): control is Record<string, unknown> => (
-      !!control && typeof control === 'object' && !Array.isArray(control) && Boolean(getInteractiveControlKey(control))
-    ));
-  }, [element.props.controls, selectedInteractiveComponent?.controls]);
+  const interactiveControls = useMemo<Record<string, unknown>[]>(() => registeredComponentControls(
+    Array.isArray(element.props.controls) ? element.props.controls : selectedInteractiveComponent?.controls,
+    element.props.propsSchema || selectedInteractiveComponent?.propsSchema,
+  ), [element.props.controls, element.props.propsSchema, selectedInteractiveComponent]);
   const interactivePreviewModel = useMemo(
     () => getInteractivePreviewModel(selectedInteractiveComponent, element.props, interactiveControls),
     [element.props, interactiveControls, selectedInteractiveComponent],
@@ -2678,42 +2732,17 @@ function ContentProperties({
       return;
     }
 
-    const fallbackTitle = interactiveFallback.title || element.props.title || component.displayName;
-    const fallbackText = interactiveFallback.text || element.props.fallbackText || component.description || '';
-    onChange({
-      componentKey: component.componentKey,
-      version: component.version,
-      ...(component.renderMode === 'sandbox-iframe' && component.runtime?.sandboxUrl
-        ? { sandboxUrl: component.runtime.sandboxUrl }
-        : {}),
-      controls: Array.isArray(component.controls) ? component.controls : [],
-      fallback: {
-        ...interactiveFallback,
-        title: fallbackTitle,
-        text: fallbackText,
-        ariaLabel: interactiveFallback.ariaLabel || component.displayName,
-      },
-      title: fallbackTitle,
-      fallbackText,
-      renderCapabilities: {
-        ...interactiveRenderCapabilities,
-        hydrationMode: component.renderMode,
-        requiresSandbox: component.renderMode === 'sandbox-iframe',
-        requiresSignedBundle: component.integrity?.signatureRequiredForCustomCode === true,
-        fallbackRequired: true,
-        postMessageProtocol: 'backy.interactive-component.v1',
-      },
+    const updates: Partial<ElementProps> = {
+      ...registeredComponentProps(component, element.props),
+      ...(isBackyDataFigureKey(component.componentKey) && !Array.isArray(element.props.records) && !element.props.source
+        ? createBackyDataFigureSample(component.componentKey) : {}),
       dataBindingPreset: undefined,
       dataBindingTargetPath: undefined,
-    });
-  }, [
-    compatibleInteractiveComponents,
-    element.props.fallbackText,
-    element.props.title,
-    interactiveFallback,
-    interactiveRenderCapabilities,
-    onChange,
-  ]);
+    };
+    if (onElementChange && Array.isArray(updates.dataBindings)) {
+      onElementChange({ props: { ...element.props, ...updates }, dataBindings: updates.dataBindings });
+    } else onChange(updates);
+  }, [compatibleInteractiveComponents, element.props, onChange, onElementChange]);
   const [formFieldsDraft, setFormFieldsDraft] = useState('');
   const [formFieldsError, setFormFieldsError] = useState('');
   const [formBuilderDraft, setFormBuilderDraft] = useState({
@@ -2838,6 +2867,28 @@ function ContentProperties({
             onElementContentChange={updateTextContent}
           />
         )}
+
+      {normalizedType === 'collapsible' && (
+        <div className="space-y-3" data-testid="editor-collapsible-controls">
+          <label className="block text-xs text-muted-foreground">
+            Title
+            <input type="text" value={typeof element.props.title === 'string' ? element.props.title : ''}
+              onChange={(event) => onChange({ title: event.target.value })}
+              disabled={disabled} data-testid="editor-collapsible-title"
+              className="mt-1 min-h-11 w-full rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={element.props.defaultOpen === true}
+              onChange={(event) => onChange({ defaultOpen: event.target.checked })}
+              disabled={disabled} data-testid="editor-collapsible-default-open" />
+            Open by default on the published page
+          </label>
+          {onEditText && <button type="button" onClick={onEditText} disabled={disabled}
+            data-testid="editor-collapsible-edit-body"
+            className="min-h-11 w-full rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50">Edit rich content on canvas</button>}
+          <p className="text-xs leading-5 text-muted-foreground">The body stays open while editing. Use the rich text controls above to format its content.</p>
+        </div>
+      )}
 
       {/* Quote Properties */}
       {hasQuoteContent && (
@@ -3227,7 +3278,7 @@ function ContentProperties({
                   'flex-1 px-2 py-1.5 text-sm rounded-md border bg-background',
                   'focus:outline-none focus:ring-2 focus:ring-ring'
                 )}
-                placeholder="https://example.com/video.mp4"
+                placeholder="Direct video, YouTube, Vimeo or Drive URL"
               />
               {renderMediaPickerButton({
                 field: 'video',
@@ -3244,7 +3295,13 @@ function ContentProperties({
               })}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Enter a direct video URL (.mp4, .webm)
+              {(() => {
+                const source = resolveBackyVideoSource(element.props.src);
+                if (source.kind === 'invalid') return source.message;
+                if (source.kind === 'drive') return 'Google Drive preview player. Viewers need access to this file; a sharing link is not a direct video file.';
+                if (source.kind === 'youtube' || source.kind === 'vimeo') return `${source.kind === 'youtube' ? 'YouTube' : 'Vimeo'} player. Resize this element to change the player size.`;
+                return 'A direct video URL plays in the website’s video player. You can also paste a YouTube, Vimeo or Drive link.';
+              })()}
             </p>
           </div>
           <div>
@@ -5265,7 +5322,9 @@ function ContentProperties({
             {interactiveInspectorActionStatus}
           </span>
           <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Interactive blocks hydrate in the public frontend from Backy's component registry. The editor and unsupported clients render the saved fallback.
+            {hasNativeDataFigure
+              ? 'Edit the data and fields here. Charts and tables use the same controls in writing, layout previews, and public pages.'
+              : "Interactive blocks hydrate in the public frontend from Backy's component registry. The editor and unsupported clients render the saved fallback."}
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">
@@ -5332,7 +5391,16 @@ function ContentProperties({
                 Data scopes: {selectedInteractiveComponent.allowedDataScopes.join(', ')}. Bind collection data from the Data panel.
               </p>
             ) : null}
-            {interactivePreviewModel && (
+            {hasNativeDataFigure && (
+              <DataFigure
+                config={element.props as BackyDataFigureConfig}
+                editable={!disabled}
+                onChange={onChange}
+                loadRecords={siteId ? loadFigureRecords : undefined}
+                collections={publicFigureCollections}
+              />
+            )}
+            {!hasNativeDataFigure && interactivePreviewModel && (
               <div
                 className="mb-3 overflow-hidden rounded-md border border-border bg-background"
                 data-testid="editor-interactive-visual-preview"
@@ -6390,8 +6458,52 @@ interface LayoutPropertiesProps {
 }
 
 function LayoutProperties({ element, onChange }: LayoutPropertiesProps) {
+  const childLayout = resolveBackyChildLayout(element);
+  const isContainer = ['container', 'section', 'header', 'footer', 'box', 'nav'].includes(element.type);
+  const updateLayoutStyle = (key: string, value: string | number) => onChange({ styles: { ...(element.styles || {}), [key]: typeof value === 'string' && ['width', 'height', 'gap'].includes(key) && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value } });
   return (
     <div className="space-y-3">
+      {isContainer && (
+        <div className="space-y-2" data-testid="editor-parent-flow-controls">
+          <label className="block text-xs font-medium">
+            Child layout
+            <select
+              value={childLayout}
+              onChange={event => {
+                const layout = event.target.value;
+                onChange({ props: { ...element.props, layout, display: layout === 'free' || layout === 'flow' ? 'block' : layout },
+                  styles: { ...(element.styles || {}), display: layout === 'free' || layout === 'flow' ? 'block' : layout } });
+              }}
+              className="mt-1 min-h-11 w-full rounded border bg-background px-2 text-sm"
+              data-testid="editor-child-layout"
+            >
+              <option value="free">Free position</option><option value="flow">Block flow</option><option value="flex">Flex</option><option value="grid">Grid</option>
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">Flow places children by content, size and order. Their saved X/Y remain available when you return to free position. Absolute or fixed child positioning stays independent.</p>
+          {childLayout === 'flex' && (
+            <label className="block text-xs font-medium">Direction
+              <select value={element.styles?.flexDirection ?? element.props.flexDirection ?? 'column'} onChange={event => updateLayoutStyle('flexDirection', event.target.value)} className="mt-1 min-h-11 w-full rounded border bg-background px-2 text-sm" data-testid="editor-flow-direction">
+                <option value="column">Column</option><option value="row">Row</option><option value="column-reverse">Column reverse</option><option value="row-reverse">Row reverse</option>
+              </select>
+            </label>
+          )}
+          {(childLayout === 'flex' || childLayout === 'grid') && <label className="block text-xs font-medium">Gap
+            <input value={String(element.styles?.gap ?? element.props.gap ?? '')} onChange={event => updateLayoutStyle('gap', event.target.value || 0)} placeholder="16px or 1rem" className="mt-1 min-h-11 w-full rounded border bg-background px-2 text-sm" data-testid="editor-flow-gap" />
+          </label>}
+          {childLayout === 'grid' && <label className="block text-xs font-medium">Grid columns
+            <input value={String(element.styles?.gridTemplateColumns ?? element.props.gridTemplateColumns ?? '')} onChange={event => updateLayoutStyle('gridTemplateColumns', event.target.value || 'minmax(0, 1fr)')} placeholder="repeat(2, minmax(0, 1fr))" className="mt-1 min-h-11 w-full rounded border bg-background px-2 text-sm" data-testid="editor-flow-grid-columns" />
+          </label>}
+        </div>
+      )}
+      <div className="space-y-2" data-testid="editor-intrinsic-size-controls">
+        <p className="text-xs text-muted-foreground">Layout size applies inside flow parents and to flow containers. Use auto, %, rem or CSS functions. Numeric width and height below keep the free-position fallback.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(['width', 'height'] as const).map(axis => <label key={axis} className="block text-xs font-medium">Layout {axis}
+            <input value={String(element.styles?.[axis] ?? element.props[axis] ?? '')} onChange={event => updateLayoutStyle(axis, event.target.value || element[axis])} placeholder={`${element[axis]}px`} className="mt-1 min-h-11 w-full rounded border bg-background px-2 text-sm" data-testid={`editor-flow-${axis}`} />
+          </label>)}
+        </div>
+      </div>
       {/* Position */}
       <div className="grid grid-cols-2 gap-2">
         <NumberInput
@@ -7830,64 +7942,8 @@ const collectionBindingPresetOptions = (
 
 type SavedCollectionBindingPreset = CollectionBindingPreset;
 
-const COLLECTION_BINDING_PRESET_STORAGE_KEY = 'backy.editor.collectionBindingPresets.v1';
 const CURRENT_RECORD_FILTER_VALUE = '$currentRecord.id';
 const LEGACY_CURRENT_RECORD_FILTER_VALUE = '$record.id';
-
-const normalizeSavedCollectionBindingPresets = (value: unknown): SavedCollectionBindingPreset[] => (
-  Array.isArray(value)
-    ? value
-        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object' && !Array.isArray(item)))
-        .map((item, index): SavedCollectionBindingPreset => ({
-          id: typeof item.id === 'string' && item.id.trim() ? item.id : `preset_${index}`,
-          name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : `Preset ${index + 1}`,
-          collectionId: typeof item.collectionId === 'string' ? item.collectionId : '',
-          fieldKey: typeof item.fieldKey === 'string' ? item.fieldKey : '',
-          targetPath: typeof item.targetPath === 'string' ? item.targetPath : 'props.content',
-          sourcePath: typeof item.sourcePath === 'string' ? item.sourcePath : '',
-          search: typeof item.search === 'string' ? item.search : '',
-          filterField: typeof item.filterField === 'string' ? item.filterField : '',
-          filterValue: typeof item.filterValue === 'string' ? item.filterValue : '',
-          sortBy: typeof item.sortBy === 'string' ? item.sortBy : '',
-          sortDirection: item.sortDirection === 'desc' ? 'desc' : 'asc',
-          limit: typeof item.limit === 'string' ? item.limit : '',
-          offset: typeof item.offset === 'string' ? item.offset : '',
-          updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString(),
-        }))
-        .filter((item) => item.collectionId && item.fieldKey)
-    : []
-);
-
-const loadSavedCollectionBindingPresets = (): SavedCollectionBindingPreset[] => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    return normalizeSavedCollectionBindingPresets(
-      JSON.parse(window.localStorage.getItem(COLLECTION_BINDING_PRESET_STORAGE_KEY) || '[]'),
-    );
-  } catch {
-    return [];
-  }
-};
-
-const persistSavedCollectionBindingPresets = (presets: SavedCollectionBindingPreset[]) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(COLLECTION_BINDING_PRESET_STORAGE_KEY, JSON.stringify(presets));
-};
-
-const mergeCollectionBindingPresets = (
-  primary: SavedCollectionBindingPreset[],
-  secondary: SavedCollectionBindingPreset[],
-): SavedCollectionBindingPreset[] => {
-  const seen = new Set<string>();
-  return [...primary, ...secondary]
-    .filter((preset) => {
-      if (seen.has(preset.id)) return false;
-      seen.add(preset.id);
-      return true;
-    })
-    .slice(0, 48);
-};
 
 const collectionBindingForSlot = (
   element: CanvasElement,
@@ -9694,7 +9750,9 @@ function DataBindingProperties({
   const [referencePreviewRecords, setReferencePreviewRecords] = useState<Record<string, CollectionRecord[]>>({});
   const [referencePreviewLoading, setReferencePreviewLoading] = useState(false);
   const [referencePreviewError, setReferencePreviewError] = useState<string | null>(null);
-  const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>(() => loadSavedCollectionBindingPresets());
+  const [savedBindingPresets, setSavedBindingPresets] = useState<SavedCollectionBindingPreset[]>([]);
+  const presetSession = useRef(0);
+  const [presetScopeId, setPresetScopeId] = useState('');
   const [savedPresetSyncState, setSavedPresetSyncState] = useState<'loading' | 'shared' | 'local'>('loading');
   const [savedPresetSyncError, setSavedPresetSyncError] = useState<string | null>(null);
   const [savedPresetBusy, setSavedPresetBusy] = useState<'saving' | 'deleting' | null>(null);
@@ -9705,39 +9763,40 @@ function DataBindingProperties({
   const [datasetRecordsUrlCopyState, setDatasetRecordsUrlCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   useEffect(() => {
-    let cancelled = false;
-    const localPresets = loadSavedCollectionBindingPresets();
-
+    const session = ++presetSession.current;
+    setPresetScopeId('');
+    setSavedBindingPresets([]);
+    setSelectedSavedPresetId('');
+    setSavedPresetBusy(null);
+    setSavedPresetSyncError(null);
     if (!siteId) {
       setSavedPresetSyncState('local');
-      setSavedPresetSyncError(null);
-      setSavedBindingPresets(localPresets);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-
     setSavedPresetSyncState('loading');
-    setSavedPresetSyncError(null);
-    listCollectionBindingPresets(siteId)
-      .then((presets) => {
-        if (cancelled) return;
+    listCollectionBindingPresetState(siteId)
+      .then(({ site, presets }) => {
+        if (session !== presetSession.current) return;
+        // The authenticated response resolves slugs/aliases to the canonical site ID.
         const normalized = normalizeSavedCollectionBindingPresets(presets);
-        const nextPresets = mergeCollectionBindingPresets(normalized, localPresets);
-        setSavedBindingPresets(nextPresets);
-        persistSavedCollectionBindingPresets(nextPresets);
+        setPresetScopeId(site.id);
+        setSavedBindingPresets(normalized);
         setSavedPresetSyncState('shared');
+        try {
+          persistSavedCollectionBindingPresets(window.localStorage, site.id, normalized);
+          if (hasLegacyCollectionBindingPresets(window.localStorage)) {
+            setSavedPresetSyncError('Legacy local presets require review; they are not attached to this site.');
+          }
+        } catch {
+          setSavedPresetSyncError('Shared presets loaded; browser cache is unavailable.');
+        }
       })
       .catch((error) => {
-        if (cancelled) return;
-        setSavedBindingPresets(localPresets);
+        if (session !== presetSession.current) return;
         setSavedPresetSyncState('local');
         setSavedPresetSyncError(error instanceof Error ? error.message : 'Unable to load shared presets');
       });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { ++presetSession.current; };
   }, [siteId]);
 
   useEffect(() => {
@@ -10092,7 +10151,9 @@ function DataBindingProperties({
   const savePresetAction = buildEditorDataBindingAction({
     label: 'Save binding preset',
     busy: savedPresetBusy === 'saving',
-    disabledReason: !selectedFieldKey
+    disabledReason: !presetScopeId
+      ? 'Load the selected site before saving a shared preset.'
+      : !selectedFieldKey
       ? 'Choose a field before saving a preset.'
       : presetSyncBusyReason,
     readyStatus: savedPresetName.trim()
@@ -10323,32 +10384,31 @@ function DataBindingProperties({
   };
 
   const persistSharedBindingPresets = async (nextPresets: SavedCollectionBindingPreset[]) => {
-    persistSavedCollectionBindingPresets(nextPresets);
-
-    if (!siteId) {
-      setSavedPresetSyncState('local');
-      setSavedPresetSyncError(null);
-      return nextPresets;
-    }
-
+    if (!presetScopeId) return nextPresets;
+    const session = presetSession.current;
+    const scopeId = presetScopeId;
     try {
-      const persisted = normalizeSavedCollectionBindingPresets(
-        await saveCollectionBindingPresets(siteId, nextPresets),
-      );
+      const result = await saveCollectionBindingPresetState(scopeId, nextPresets);
+      if (session !== presetSession.current) return nextPresets;
+      if (result.site.id !== scopeId) throw new Error('Preset response belongs to a different site. Reload the selected site.');
+      const persisted = normalizeSavedCollectionBindingPresets(result.presets);
       setSavedPresetSyncState('shared');
       setSavedPresetSyncError(null);
-      persistSavedCollectionBindingPresets(persisted);
       setSavedBindingPresets(persisted);
+      try { persistSavedCollectionBindingPresets(window.localStorage, scopeId, persisted); }
+      catch { setSavedPresetSyncError('Shared presets saved; browser cache is unavailable.'); }
       return persisted;
     } catch (error) {
+      if (session !== presetSession.current) return nextPresets;
       setSavedPresetSyncState('local');
       setSavedPresetSyncError(error instanceof Error ? error.message : 'Unable to save shared presets');
+      try { persistSavedCollectionBindingPresets(window.localStorage, scopeId, nextPresets); } catch { /* Keep the unsaved state visible. */ }
       return nextPresets;
     }
   };
 
   const saveCurrentBindingPreset = async () => {
-    if (!selectedCollection || !selectedFieldKey || savedPresetBusy) return;
+    if (!presetScopeId || !selectedCollection || !selectedFieldKey || savedPresetBusy) return;
     const name = savedPresetName.trim() || `${selectedCollection.name} ${selectedField?.label || selectedFieldKey}`;
     const now = new Date().toISOString();
     const existing = savedBindingPresets.find((preset) => (
@@ -10356,6 +10416,7 @@ function DataBindingProperties({
       && preset.name.toLowerCase() === name.toLowerCase()
     ));
     const preset: SavedCollectionBindingPreset = {
+      ...existing,
       id: existing?.id || `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name,
       collectionId: selectedCollection.id,
@@ -10371,10 +10432,13 @@ function DataBindingProperties({
       offset: selectedOffset,
       updatedAt: now,
     };
-    const nextPresets = [
-      preset,
-      ...savedBindingPresets.filter((item) => item.id !== preset.id),
-    ].slice(0, 24);
+    let nextPresets: SavedCollectionBindingPreset[];
+    try { nextPresets = upsertCollectionBindingPreset(savedBindingPresets, preset); }
+    catch (error) {
+      setSavedPresetSyncError(error instanceof Error ? error.message : 'Unable to save preset');
+      return;
+    }
+    const session = presetSession.current;
     setSavedBindingPresets(nextPresets);
     setSavedPresetName('');
     setSelectedSavedPresetId(preset.id);
@@ -10382,7 +10446,7 @@ function DataBindingProperties({
     try {
       await persistSharedBindingPresets(nextPresets);
     } finally {
-      setSavedPresetBusy(null);
+      if (session === presetSession.current) setSavedPresetBusy(null);
     }
   };
 
@@ -10403,7 +10467,8 @@ function DataBindingProperties({
   };
 
   const deleteSavedBindingPreset = async () => {
-    if (!selectedSavedPreset || savedPresetBusy) return;
+    if (!presetScopeId || !selectedSavedPreset || savedPresetBusy) return;
+    const session = presetSession.current;
     const nextPresets = savedBindingPresets.filter((preset) => preset.id !== selectedSavedPreset.id);
     setSavedBindingPresets(nextPresets);
     setSelectedSavedPresetId(nextPresets.find((preset) => preset.collectionId === selectedCollectionId)?.id || '');
@@ -10411,7 +10476,7 @@ function DataBindingProperties({
     try {
       await persistSharedBindingPresets(nextPresets);
     } finally {
-      setSavedPresetBusy(null);
+      if (session === presetSession.current) setSavedPresetBusy(null);
     }
   };
 
@@ -10637,7 +10702,7 @@ function DataBindingProperties({
                   ? 'Loading shared presets'
                   : savedPresetSyncState === 'shared'
                     ? 'Shared with this site'
-                    : 'Local fallback'}
+                    : presetScopeId ? 'Unsaved changes for this site' : 'Presets unavailable'}
               </span>
             </div>
             <div className="space-y-2">
@@ -10657,7 +10722,7 @@ function DataBindingProperties({
                 <button
                   type="button"
                   onClick={saveCurrentBindingPreset}
-                  disabled={!selectedFieldKey || Boolean(savedPresetBusy)}
+                  disabled={!presetScopeId || !selectedFieldKey || Boolean(savedPresetBusy)}
                   title={savePresetAction.actionStatus}
                   aria-describedby={dataBindingControlActionStatusId}
                   data-action-state={savePresetAction.actionState}
@@ -10726,7 +10791,7 @@ function DataBindingProperties({
               )}
               {savedPresetSyncError && (
                 <div className="text-xs text-amber-700" data-testid="editor-data-saved-preset-sync-error">
-                  Shared preset sync failed: {savedPresetSyncError}
+                  Preset status: {savedPresetSyncError}
                 </div>
               )}
             </div>
@@ -11109,12 +11174,13 @@ function DataBindingProperties({
 // ============================================
 
 interface AnimationPropertiesProps {
+  onPreview?: () => void;
   element: CanvasElement;
   onChange: (updates: Partial<CanvasElement>) => void;
   theme?: ThemeConfig;
 }
 
-function AnimationProperties({ element, onChange, theme }: AnimationPropertiesProps) {
+function AnimationProperties({ element, onChange, theme, onPreview }: AnimationPropertiesProps) {
   const animation = element.animation as AnimationConfig | undefined;
   const themeTokens = useMemo(
     () => buildBackyThemeTokens(theme || {}),
@@ -11234,6 +11300,7 @@ function AnimationProperties({ element, onChange, theme }: AnimationPropertiesPr
         </div>
       </div>
       <AnimationBuilder
+        onPreview={onPreview}
         animation={animation}
         onChange={(nextAnimation) => {
           onChange({ animation: nextAnimation || undefined });

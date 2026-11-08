@@ -1,3 +1,5 @@
+import { deliverFormSubmission } from '@/lib/formSubmissionDelivery';
+import { requireSiteVisitor, VisitorAccessError } from '@/lib/visitor-auth/routes';
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonValue, Contact, FormDefinition, FormSubmission } from '@backy-cms/core';
 import {
@@ -7,6 +9,8 @@ import {
   createFormSubmission,
   getAdminSettings,
   listFormSubmissions,
+  listFormsBySite,
+  getMediaList,
   getFormById,
   getSiteByIdOrSlug,
   normalizeFormSubmissionValues,
@@ -20,18 +24,16 @@ import {
   frontendFormFieldKeyMapFromMetadata,
 } from '@/lib/frontendDesignContract';
 import { recordRepositoryInteractionEvent } from '@/lib/commentRepositorySupport';
-import {
-  buildFormNotificationEmail,
-  EmailDeliveryError,
-  getEmailDeliveryConfig,
-  sendEmailMessage,
-} from '@/lib/formEmailDelivery';
 import { verifyFormCaptcha } from '@/lib/formCaptcha';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { requirePublicFormAudienceAccess } from '@/lib/publicFormAudienceAccess';
 import { validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { admitFormAttachmentUpload, formAttachmentsFromValues, readFormSubmissionRequest, storeFormAttachments, FormAttachmentError } from '@/lib/formAttachments';
+import { FormAttachmentStorageError } from '@/lib/formAttachmentStorage';
+import { MediaSafetyError } from '@/lib/mediaSafety';
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 
 export const runtime = 'nodejs';
 
@@ -47,7 +49,6 @@ const SUBMISSION_STATUSES = ['pending', 'approved', 'rejected', 'spam'] as const
 type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 type FormRepositories = Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>;
 type WebhookEventKind = 'form-submission' | 'contact-shared' | 'contact-status';
-type NotificationDeliveryStatus = 'queued' | 'succeeded' | 'failed';
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 const CAPTCHA_TRANSPORT_KEYS = new Set([
@@ -412,152 +413,12 @@ const resolveFormSubmissionEmailRecipient = (
   return settingsRecipient ? { email: settingsRecipient, source: 'settings' } : null;
 };
 
-async function recordEmailDeliveryEvent(params: {
-  repositories?: FormRepositories | null;
-  siteId: string;
-  formId: string;
-  submissionId: string;
-  target: string;
-  status: NotificationDeliveryStatus;
-  requestId: string;
-  statusCode?: number;
-  error?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  await recordWebhookDeliveryEvent({
-    repositories: params.repositories,
-    kind: 'form-submission',
-    siteId: params.siteId,
-    formId: params.formId,
-    target: params.target,
-    status: params.status,
-    requestId: params.requestId,
-    submissionId: params.submissionId,
-    statusCode: params.statusCode,
-    error: params.error,
-    metadata: {
-      channel: 'email',
-      ...(params.metadata || {}),
-    },
-  });
-}
-
-async function notifyFormSubmissionEmail(params: {
-  repositories?: FormRepositories | null;
-  siteId: string;
-  form: FormDefinition;
-  submission: FormSubmission;
-  values: Record<string, unknown>;
-  requestId: string;
-}) {
-  if (params.submission.status === 'spam' || params.submission.status === 'rejected') {
-    return;
-  }
-
-  const notifications = await getNotificationSettings(params.repositories);
-  if (!formSubmissionEmailEnabled(notifications)) {
-    return;
-  }
-
-  const recipient = resolveFormSubmissionEmailRecipient(params.form, notifications);
-  if (!recipient) {
-    return;
-  }
-
-  const to = recipient.email;
-  const target = `mailto:${to}`;
-  const config = getEmailDeliveryConfig();
-  const message = buildFormNotificationEmail({
-    config,
-    siteId: params.siteId,
-    form: params.form,
-    submission: params.submission,
-    values: params.values,
-    requestId: params.requestId,
-    to,
-  });
-
-  await recordEmailDeliveryEvent({
-    repositories: params.repositories,
-    siteId: params.siteId,
-    formId: params.form.id,
-    submissionId: params.submission.id,
-    target,
-    status: 'queued',
-    requestId: params.requestId,
-    metadata: {
-      provider: config.provider,
-      from: config.from,
-      submissionStatus: params.submission.status,
-      recipientSource: recipient.source,
-    },
-  });
-
-  if (config.provider === 'local-outbox') {
-    const result = await sendEmailMessage(config, message);
-    await recordEmailDeliveryEvent({
-      repositories: params.repositories,
-      siteId: params.siteId,
-      formId: params.form.id,
-      submissionId: params.submission.id,
-      target,
-      status: 'succeeded',
-      statusCode: result.statusCode,
-      requestId: params.requestId,
-      metadata: {
-        provider: config.provider,
-        from: config.from,
-        subject: message.subject,
-        ...(result.metadata || {}),
-        submissionStatus: params.submission.status,
-        recipientSource: recipient.source,
-      },
-    });
-    return;
-  }
-
-  try {
-    const result = await sendEmailMessage(config, message);
-
-    await recordEmailDeliveryEvent({
-      repositories: params.repositories,
-      siteId: params.siteId,
-      formId: params.form.id,
-      submissionId: params.submission.id,
-      target,
-      status: 'succeeded',
-      statusCode: result.statusCode,
-      requestId: params.requestId,
-      metadata: {
-        provider: config.provider,
-        from: config.from,
-        subject: message.subject,
-        ...(result.metadata || {}),
-        submissionStatus: params.submission.status,
-        recipientSource: recipient.source,
-      },
-    });
-  } catch (error) {
-    await recordEmailDeliveryEvent({
-      repositories: params.repositories,
-      siteId: params.siteId,
-      formId: params.form.id,
-      submissionId: params.submission.id,
-      target,
-      status: 'failed',
-      statusCode: error instanceof EmailDeliveryError ? error.statusCode : undefined,
-      requestId: params.requestId,
-      error: error instanceof Error ? error.message : 'Unknown email delivery error',
-      metadata: {
-        provider: config.provider,
-        from: config.from,
-        subject: message.subject,
-        ...(error instanceof EmailDeliveryError ? error.metadata || {} : {}),
-        submissionStatus: params.submission.status,
-        recipientSource: recipient.source,
-      },
-    });
-  }
+async function notifyFormSubmissionEmail(params: {repositories?:FormRepositories|null;siteId:string;form:FormDefinition;submission:FormSubmission;values:Record<string,unknown>;requestId:string}) {
+ if(['spam','rejected'].includes(params.submission.status))return;
+ const notifications=await getNotificationSettings(params.repositories);
+ if(!formSubmissionEmailEnabled(notifications))return;
+ const recipient=resolveFormSubmissionEmailRecipient(params.form,notifications);if(!recipient)return;
+ return deliverFormSubmission({...params,channel:'email',target:'mailto:'+recipient.email});
 }
 
 const parseShareValue = (values: Record<string, unknown>, field?: string): string | null => {
@@ -599,44 +460,10 @@ const buildRepositoryContactShare = async (
     return null;
   }
 
-  const dedupeByEmail = resolvedShare.dedupeByEmail !== false;
-  const existing = dedupeByEmail && email
-    ? (await repositories.forms.listContacts({
-        siteId: form.siteId,
-        formId: form.id,
-        search: email,
-        limit: 100,
-        offset: 0,
-      })).items.find((contact) => normalizeIdentifier(contact.email || '') === normalizeIdentifier(email))
-    : null;
-  const mergedNotes = [existing?.notes, notes].filter(Boolean).join(existing?.notes ? '\n' : '');
-
-  if (existing) {
-    return (await repositories.forms.updateContact(form.siteId, existing.id, {
-      name: name ?? existing.name,
-      email: email ?? existing.email,
-      phone: phone ?? existing.phone,
-      notes: mergedNotes,
-      sourceValues: values,
-      status: 'new',
-    })).item;
-  }
-
-  return (await repositories.forms.createContact({
-    siteId: form.siteId,
-    formId: form.id,
-    pageId: submission.pageId ?? null,
-    postId: submission.postId ?? null,
-    name,
-    email,
-    phone,
-    notes,
-    sourceValues: values,
-    status: 'new',
-    sourceSubmissionId: submission.id,
-    requestId: submission.requestId,
-    sourceIpHash: submission.ipHash,
-  })).item;
+  if (!repositories.forms.shareContactFromSubmission) throw Object.assign(new Error('Persisted contact contributor provenance is unavailable.'), {code:'VISITOR_PRIVACY_FENCE_UNAVAILABLE'});
+  return (await repositories.forms.shareContactFromSubmission(form.siteId,form.id,submission.id,{
+    siteId:form.siteId,formId:form.id,pageId:submission.pageId??null,postId:submission.postId??null,name,email,phone,notes,sourceValues:values,status:'new',requestId:submission.requestId,sourceIpHash:submission.ipHash,
+  },resolvedShare.dedupeByEmail !== false)).item;
 };
 
 const createRepositoryCollectionRecordFromSubmission = async (
@@ -841,67 +668,7 @@ async function notifyFormSubmissionWebhook(params: {
     return;
   }
 
-  const payload = {
-    formId: params.form.id,
-    siteId: params.siteId,
-    values: params.submission.values || params.values,
-    submissionId: params.submission.id,
-    status: params.submission.status,
-    pageId: params.pageId,
-    postId: params.postId,
-  };
-
-  await recordWebhookDeliveryEvent({
-    repositories: params.repositories,
-    kind: 'form-submission',
-    siteId: params.siteId,
-    formId: params.form.id,
-    target,
-    status: 'queued',
-    requestId: params.requestId,
-    submissionId: params.submission.id,
-    metadata: { submissionStatus: params.submission.status },
-  });
-
-  try {
-    const response = await fetch(target, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-backy-site-id': params.siteId,
-        'x-backy-form-id': params.form.id,
-        'x-backy-submission-id': params.submission.id,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    await recordWebhookDeliveryEvent({
-      repositories: params.repositories,
-      kind: 'form-submission',
-      siteId: params.siteId,
-      formId: params.form.id,
-      target,
-      status: response.ok ? 'succeeded' : 'failed',
-      statusCode: response.status,
-      requestId: params.requestId,
-      submissionId: params.submission.id,
-      error: response.ok ? undefined : `Webhook returned ${response.status}`,
-      metadata: { submissionStatus: params.submission.status },
-    });
-  } catch (error) {
-    await recordWebhookDeliveryEvent({
-      repositories: params.repositories,
-      kind: 'form-submission',
-      siteId: params.siteId,
-      formId: params.form.id,
-      target,
-      status: 'failed',
-      requestId: params.requestId,
-      submissionId: params.submission.id,
-      error: error instanceof Error ? error.message : 'Unknown webhook error',
-      metadata: { submissionStatus: params.submission.status },
-    });
-  }
+  const delivery=await deliverFormSubmission({...params,channel:'webhook',target});
 
   if (params.contact) {
     await notifyContactWebhook({
@@ -917,6 +684,7 @@ async function notifyFormSubmissionWebhook(params: {
       values: params.values,
     });
   }
+  return delivery;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -996,7 +764,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', responseRequestId);
     }
 
-    const submissions = listFormSubmissions(form.id, {
+    const submissions = listFormSubmissions(form.id, { siteId: site.id,
       status: status === 'all' ? undefined : status,
       requestId: filterRequestId,
       limit,
@@ -1017,8 +785,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 }
 
+async function notificationWarnings(params:Parameters<typeof notifyFormSubmissionWebhook>[0]):Promise<string[]> {
+ const warnings:string[]=[];
+ for(const notify of [()=>notifyFormSubmissionWebhook(params),()=>notifyFormSubmissionEmail(params)]){
+  try{const outcome=await notify();warnings.push(...(outcome?.completionWarnings||[]));if(outcome&&outcome.status!=='succeeded')warnings.push('FORM_NOTIFICATION_PENDING');}
+  catch{warnings.push('FORM_NOTIFICATION_PENDING');}
+ }
+ return [...new Set(warnings)];
+}
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const responseRequestId = request.headers.get('x-request-id') || makeRequestId();
+  let attachmentBatch: Awaited<ReturnType<typeof storeFormAttachments>> | null = null;
+  let attachmentsPersisted = false;
 
   try {
     const { siteId, formId } = await params;
@@ -1042,7 +821,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         return audienceAccess;
       }
 
-      const parsed = parseRequestBody(await request.json().catch(() => null));
+      const uploadInput = await readFormSubmissionRequest(request, form, frontendFormFieldKeyMapFromMetadata(form.settings) || {});
+      const parsed = parseRequestBody(uploadInput.raw);
       if (!parsed) {
         return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
       }
@@ -1093,7 +873,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      if (uploadInput.pending.length) {
+        const [media, submissions, settings] = await Promise.all([
+          collectCompleteExportPages((pagination) => repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', ...pagination }), (media) => media.siteId === site.id),
+          collectCompleteExportPages((pagination) => repositories.forms.listSubmissions({ siteId: site.id, status: 'all', ...pagination }), (submission) => submission.siteId === site.id),
+          repositories.settings.get(),
+        ]);
+        admitFormAttachmentUpload(site.id, form.id, ipHash, submissions);
+        const currentUsageBytes = media.reduce((total, media) => total + media.sizeBytes, 0) + submissions.reduce((total, submission) => total + formAttachmentsFromValues(submission.values).reduce((total, file) => total + file.sizeBytes, 0), 0);
+        attachmentBatch = await storeFormAttachments({ siteId: site.id, formId: form.id, pending: uploadInput.pending, settings, siteSettings: site.settings, currentUsageBytes });
+      }
+      if (uploadInput.pending.length) {
+        const currentForm = await repositories.forms.getById(site.id, form.id);
+        if (!currentForm || currentForm.siteId !== site.id || !currentForm.isActive || currentForm.audience !== form.audience) throw new FormAttachmentError(409, 'FORM_ATTACHMENT_FORM_UNAVAILABLE', 'This form can no longer accept file submissions.');
+      }
+      const visitor = form.audience === 'authenticated' ? await requireSiteVisitor(request, site.id) : null;
       let submission = (await repositories.forms.createSubmission({
+        visitorMemberId: visitor?.id || null,
         siteId: site.id,
         formId: form.id,
         values: submissionValues,
@@ -1109,9 +905,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         collectionRecord: null,
         collectionRecordErrors: [],
       })).item;
+      attachmentsPersisted = true;
 
       let contact: Contact | null = null;
       let collectionRecordResult: Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>> | null = null;
+      if (classification.status === 'approved') {
+      if (!repositories.forms.withSubmissionFollowup) throw Object.assign(new Error('Persisted submission privacy fence unavailable'), {code:'VISITOR_PRIVACY_FENCE_UNAVAILABLE'});
+      const followup = await repositories.forms.withSubmissionFollowup(site.id,form.id,submission.id,async():Promise<{contact:Contact|null;recordResult:Awaited<ReturnType<typeof createRepositoryCollectionRecordFromSubmission>>|null;submission:FormSubmission}>=>{
       if (classification.status === 'approved') {
         contact = await buildRepositoryContactShare(repositories, form, submissionValues, submission);
         collectionRecordResult = await createRepositoryCollectionRecordFromSubmission(
@@ -1127,7 +927,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         })).item;
       }
 
-      await notifyFormSubmissionWebhook({
+      return {contact,recordResult:collectionRecordResult,submission};
+      });
+      contact=followup.contact;collectionRecordResult=followup.recordResult;submission=followup.submission;
+      }
+      const completionWarnings=await notificationWarnings({
         repositories,
         siteId: site.id,
         form,
@@ -1138,14 +942,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
         contact,
       });
-      await notifyFormSubmissionEmail({
-        repositories,
-        siteId: site.id,
-        form,
-        submission,
-        values: submissionValues,
-        requestId,
-      });
 
       return privateResponse(
         {
@@ -1155,7 +951,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           message: submission.status === 'pending'
             ? 'Submission received and awaiting moderation.'
             : 'Submission received.',
+          completionWarnings,
           data: {
+            completionWarnings,
             status: submission.status,
             message: submission.status === 'pending'
               ? 'Submission received and awaiting moderation.'
@@ -1193,7 +991,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return audienceAccess;
     }
 
-    const parsed = parseRequestBody(await request.json().catch(() => null));
+    const uploadInput = await readFormSubmissionRequest(request, form, frontendFormFieldKeyMapFromMetadata(form.settings) || {});
+    const parsed = parseRequestBody(uploadInput.raw);
     if (!parsed) {
       return errorResponse(400, 'INVALID_PAYLOAD', 'Invalid payload', responseRequestId);
     }
@@ -1244,6 +1043,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    if (uploadInput.pending.length) {
+      const submissions = (await Promise.all(listFormsBySite(site.id).map((candidate) => collectCompleteExportPages(async (pagination) => {
+        const page = listFormSubmissions(candidate.id, { ...pagination, siteId: site.id });
+        return { items: page.data, pagination: page.pagination };
+      }, (submission) => submission.siteId === site.id && submission.formId === candidate.id)))).flat();
+      const media = await collectCompleteExportPages(async (pagination) => {
+        const page = getMediaList(site.id, { ...pagination });
+        return { items: page.media, pagination: page.pagination };
+      }, (media) => media.siteId === site.id);
+      admitFormAttachmentUpload(site.id, form.id, ipHash, submissions);
+      const currentUsageBytes = media.reduce((total, media) => total + media.sizeBytes, 0) + submissions.reduce((total, submission) => total + formAttachmentsFromValues(submission.values).reduce((total, file) => total + file.sizeBytes, 0), 0);
+      attachmentBatch = await storeFormAttachments({ siteId: site.id, formId: form.id, pending: uploadInput.pending, settings: getAdminSettings(), siteSettings: site.settings, currentUsageBytes });
+    }
+    if (uploadInput.pending.length) {
+      const currentForm = getFormById(site.id, form.id);
+      if (!currentForm || currentForm.siteId !== site.id || !currentForm.isActive || currentForm.audience !== form.audience) throw new FormAttachmentError(409, 'FORM_ATTACHMENT_FORM_UNAVAILABLE', 'This form can no longer accept file submissions.');
+    }
     let submission = createFormSubmission({
       siteId: site.id,
       formId: form.id,
@@ -1255,6 +1071,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
       status: classification.status,
     });
+    attachmentsPersisted = true;
 
     let contact = null;
     let collectionRecordResult = null;
@@ -1280,7 +1097,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }) || submission;
     }
 
-    await notifyFormSubmissionWebhook({
+    const completionWarnings=await notificationWarnings({
       siteId: site.id,
       form,
       submission,
@@ -1289,13 +1106,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       postId: parsed.postId,
       requestId,
       contact,
-    });
-    await notifyFormSubmissionEmail({
-      siteId: site.id,
-      form,
-      submission,
-      values: submissionValues,
-      requestId,
     });
 
     return privateResponse(
@@ -1306,7 +1116,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         message: submission.status === 'pending'
           ? 'Submission received and awaiting moderation.'
           : 'Submission received.',
+        completionWarnings,
         data: {
+          completionWarnings,
           status: submission.status,
           message: submission.status === 'pending'
             ? 'Submission received and awaiting moderation.'
@@ -1325,6 +1137,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       201,
     );
   } catch (error) {
+    if (attachmentBatch && !attachmentsPersisted) {
+      try { await attachmentBatch.cleanup(); }
+      catch (cleanupError) { error = cleanupError; }
+    }
+    if (error instanceof FormAttachmentError) return errorResponse(error.status, error.code, error.message, responseRequestId);
+    if (error instanceof FormAttachmentStorageError) return errorResponse(503, 'FORM_ATTACHMENT_STORAGE_NOT_CONFIGURED', error.message, responseRequestId);
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'FORM_ATTACHMENT_QUOTA_UNAVAILABLE', 'Unable to verify the complete site storage quota.', responseRequestId);
+    if (error instanceof MediaSafetyError) {
+      const unavailable = ['production-media-scanner-required', 'missing-scanner-endpoint', 'scanner-request-failed', 'clamav-request-failed', 'scanner-http-error'].includes(String(error.details?.reason || ''));
+      return errorResponse(unavailable ? 503 : 415, 'FORM_ATTACHMENT_SCAN_FAILED', 'The attachment could not pass the configured safety scan.', responseRequestId);
+    }
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'VISITOR_MEMBERSHIP_REQUIRED') return errorResponse(401, 'VISITOR_AUTHENTICATION_REQUIRED', 'A current website account is required.', responseRequestId);
+    if (error instanceof VisitorAccessError) return errorResponse(error.status, error.code, error.message, responseRequestId);
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }

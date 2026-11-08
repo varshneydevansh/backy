@@ -1,3 +1,4 @@
+import { listCompleteFormContacts } from '@/lib/formManagementInventory';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
@@ -35,7 +36,6 @@ import {
   listAdminAuditLogs,
   listContactSavedLists,
   listContactSegments,
-  listFormContacts,
   promoteContactToCustomer,
   promoteContactToUser,
   saveContactSavedList,
@@ -1093,8 +1093,11 @@ function ContactsRoute() {
 
   useEffect(() => loadContactPermissions(), [loadContactPermissions]);
 
+  const [contactInventoryLoaded, setContactInventoryLoaded] = useState(false);
+  const contactLoadGeneration = useRef(0);
   const loadContacts = async () => {
-    if (isContactsBusy) return;
+    if (isContactMutationBusy) return;
+    const generation = ++contactLoadGeneration.current;
     if (!canViewForms) {
       setForms([]);
       setContactsByForm({});
@@ -1107,6 +1110,9 @@ function ContactsRoute() {
     }
 
     setIsLoading(true);
+    setContactInventoryLoaded(false);
+    setForms([]);
+    setContactsByForm({});
     setError(null);
     setNotice(null);
 
@@ -1118,7 +1124,7 @@ function ContactsRoute() {
       ]);
       const inboxPairs = await Promise.all(
         loadedForms.map(async (form) => {
-          const result = await listFormContacts(activeSiteId, form.id, { limit: 100 });
+          const result = await listCompleteFormContacts(activeSiteId, form.id);
           return [form.id, {
             form,
             contacts: result.contacts,
@@ -1127,8 +1133,10 @@ function ContactsRoute() {
         }),
       );
 
+      if (generation !== contactLoadGeneration.current) return;
       setForms(loadedForms);
       setContactsByForm(Object.fromEntries(inboxPairs));
+      setContactInventoryLoaded(true);
       setContactSegments(loadedSegments);
       setContactSavedLists(loadedSavedLists);
       const loadedContactIds = new Set(inboxPairs.flatMap(([, inbox]) => inbox.contacts.map((contact) => contact.id)));
@@ -1139,9 +1147,15 @@ function ContactsRoute() {
           : 'all'
       ));
     } catch (loadError) {
+      if (generation !== contactLoadGeneration.current) return;
+      setForms([]);
+      setContactsByForm({});
+      setContactSegments(null);
+      setContactSavedLists([]);
+      setSelectedContactIds([]);
       setError(loadError instanceof Error ? loadError.message : 'Unable to load contacts');
     } finally {
-      setIsLoading(false);
+      if (generation === contactLoadGeneration.current) setIsLoading(false);
     }
   };
 
@@ -1572,7 +1586,7 @@ function ContactsRoute() {
         Array.from(contactsBySourceForm.keys()).map(async (formId) => {
           const form = formById.get(formId);
           if (!form) return null;
-          const inbox = await listFormContacts(activeSiteId, formId, { limit: 100 });
+          const inbox = await listCompleteFormContacts(activeSiteId, formId);
           return { formId, form, inbox };
         }),
       );
@@ -1993,7 +2007,7 @@ function ContactsRoute() {
     try {
       const csv = await file.text();
       const result = await importFormContactsCsv(activeSiteId, apiForm.id, csv, { upsertByEmail: true });
-      const refreshed = await listFormContacts(activeSiteId, apiForm.id, { limit: 100 });
+      const refreshed = await listCompleteFormContacts(activeSiteId, apiForm.id);
       setContactsByForm((current) => ({
         ...current,
         [apiForm.id]: {
@@ -3032,7 +3046,7 @@ function ContactsRoute() {
       <Panel id="contacts-inbox" className="scroll-mt-24">
         <PanelHeader
           title="Lead Inbox"
-          description={`${filteredContacts.length}/${allContacts.length} visible contacts`}
+          description={contactInventoryLoaded ? `${filteredContacts.length}/${allContacts.length} visible contacts · complete inboxes` : 'Contact inboxes not loaded'}
           icon={<Contact className="size-4" />}
           action={
             <div className="flex flex-wrap items-center gap-2">

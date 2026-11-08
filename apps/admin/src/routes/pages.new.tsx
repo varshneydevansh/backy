@@ -44,7 +44,7 @@ import {
     serializeCanvasContent,
 } from '@/components/editor/editorCatalog';
 import type { CanvasElement } from '@/types/editor';
-import type { BackyContentDocument, SiteNavigationConfig, SiteNavigationConfigItem, SiteSettings } from '@backy-cms/core';
+import { inheritRegisteredFrontendChrome, selectDefaultFrontendDesignTemplate, type BackyContentDocument, type SiteNavigationConfig, type SiteNavigationConfigItem, type SiteSettings } from '@backy-cms/core';
 
 interface NewPageSearch {
     siteId?: string;
@@ -1948,7 +1948,7 @@ function NewPageRoute() {
         : selectedDatasetCollection
             ? `${selectedDatasetCollection.name} dataset ${selectedDatasetMode || 'list'} page`
         : selectedTemplate.name;
-    const effectiveCanvasSize = selectedFrontendTemplate ? getFrontendTemplateCanvasSize(selectedFrontendTemplate) : DEFAULT_CANVAS_SIZE;
+    const effectiveCanvasSize = selectedFrontendTemplate ? getFrontendTemplateCanvasSize(selectedFrontendTemplate) : { ...DEFAULT_CANVAS_SIZE, layout: 'fluid' as const };
     const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(selectedFrontendTemplate) || formData.template === 'blank';
     const templateSourceStatus = isCustomFrontendTemplateSource
         ? selectedFrontendTemplate
@@ -2043,6 +2043,17 @@ function NewPageRoute() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.designTemplateId, formData.templateSourceMode, frontendDesign, frontendPageTemplates]);
+
+    useEffect(() => {
+        if (frontendDesignLoading || !frontendDesign || hasUserEditedDraft || autosavePausedForRecovery
+            || search.templateSource || search.template || search.designTemplate || search.collectionId
+            || formData.designTemplateId || formData.collectionId || !canEditPages) return;
+        const defaultTemplate = selectDefaultFrontendDesignTemplate(frontendDesign, 'page');
+        if (!defaultTemplate) return;
+        updatePageDraft({ templateSourceMode: 'custom-frontend', designTemplateId: defaultTemplate.id }, { markEdited: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [frontendDesign, frontendDesignLoading, hasUserEditedDraft, autosavePausedForRecovery, search.templateSource,
+        search.template, search.designTemplate, search.collectionId, formData.designTemplateId, formData.collectionId, canEditPages]);
 
     const handleTemplateSourceChange = (nextSourceMode: PageTemplateSourceMode) => {
         if (templateSelectionDisabled || !canEditPages || nextSourceMode === formData.templateSourceMode) return;
@@ -5448,14 +5459,15 @@ function createInitialPageContent(input: {
     description: string;
 }) {
     const elements = input.frontendTemplate
-        ? buildFrontendTemplateElements(input.frontendTemplate, input)
+        ? buildFrontendTemplateElements(input.frontendTemplate, input, input.frontendDesign?.chrome)
         : input.datasetCollection
             ? buildCollectionDatasetPageElements(input.datasetCollection, input.datasetMode || 'list', input)
         : buildTemplateElements(input);
     const canvasSize = input.frontendTemplate
-        ? getFrontendTemplateCanvasSize(input.frontendTemplate)
+        ? { ...getFrontendTemplateCanvasSize(input.frontendTemplate), height: Math.max(getFrontendTemplateCanvasSize(input.frontendTemplate).height, getCanvasHeightForElements(elements)) }
         : {
             ...DEFAULT_CANVAS_SIZE,
+            layout: 'fluid' as const,
             height: getCanvasHeightForElements(elements),
         };
     const templateDesignState = input.frontendTemplate
@@ -5727,16 +5739,17 @@ function buildCollectionDatasetPageElements(
 function buildFrontendTemplateElements(
     template: SiteFrontendDesignTemplate,
     input: { template: PageTemplate; title: string; slug: string; description: string },
+    chrome?: SiteFrontendDesignContract['chrome'],
 ): CanvasElement[] {
     const content = isRecord(template.content) ? template.content : {};
     const contentDocument = isRecord(content.contentDocument) ? content.contentDocument : {};
 
     if (Array.isArray(content.elements)) {
-        return applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content);
+        return inheritRegisteredFrontendChrome({ elements: applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content) }, chrome).elements as CanvasElement[];
     }
 
     if (Array.isArray(contentDocument.elements)) {
-        return applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument);
+        return inheritRegisteredFrontendChrome({ elements: applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument) }, chrome).elements as CanvasElement[];
     }
 
     const templateCanvasSize = getFrontendTemplateCanvasSize(template, { ...DEFAULT_CANVAS_SIZE, height: 900 });

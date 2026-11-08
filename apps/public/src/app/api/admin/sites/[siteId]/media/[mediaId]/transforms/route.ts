@@ -1,3 +1,5 @@
+import { mediaStorageUsageWithPending, mediaStorageRetirementFiles, withDynamicJournaledMediaStorageMutation, mediaStorageRecoveryErrorResponse, MediaStorageRecoveryError } from '@/lib/mediaStorageRecovery';
+import { withMediaStorageMutation } from '@/lib/mediaStorageMutation';
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminAccess } from "@/lib/adminAccess";
 import { recordAdminAudit } from "@/lib/adminAudit";
@@ -30,6 +32,8 @@ import {
 } from "@/lib/repositoryRuntime";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import type { BackyJsonObject, MediaItem, Site } from "@backy-cms/core";
+
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
 
 export const runtime = "nodejs";
 
@@ -227,6 +231,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
     }
 
+    return await withMediaStorageMutation(repositories?.media || null, site.id, requestId, async () => {
     const beforeMedia = repositories
       ? await repositories.media.getById(site.id, mediaId)
       : getMediaById(site.id, mediaId);
@@ -281,6 +286,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       typeof body.preparedBy === "string" && body.preparedBy.trim().length > 0
         ? body.preparedBy.trim()
         : "admin";
+    const settings = repositories
+      ? await repositories.settings.get()
+      : getAdminSettings();
+    const uploadPolicy = resolveMediaUploadPolicy(settings);
+    const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
+    const currentMedia = await readCompleteMediaInventory(site.id, async pagination => {
+      if (repositories) return repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', ...pagination });
+      const result = getMediaList(site.id, pagination);
+      return { items: result.media, pagination: result.pagination };
+    });
+    const currentUsageBytes = await mediaStorageUsageWithPending(site.id, repositories);
+    return withDynamicJournaledMediaStorageMutation({ siteId: site.id, mediaId: beforeMedia.id, operation: 'transforms', requestId }, repositories, async beginJournal => {
+    let journalRecorded = false;
     const generatedTransforms = await generateImageTransformManifest({
       siteId: site.id,
       media: beforeMedia,
@@ -289,27 +307,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       sizes,
       preparedAt,
       preparedBy,
+      beforeUpload: async files => {
+        const plannedBytes = files.reduce((sum, file) => sum + file.bytes, 0);
+        const peakUsage = currentUsageBytes + plannedBytes;
+        if (readMediaBillingLimit(site.settings, settings, peakUsage).blocked) throw new MediaStorageRecoveryError('BILLING_MEDIA_LIMIT', 'Preparing responsive variants would exceed the site billing storage limit while prior variants are retained.');
+        if (peakUsage > siteMediaQuotaBytes) throw new MediaStorageRecoveryError('SITE_MEDIA_QUOTA_EXCEEDED', 'Preparing responsive variants would exceed the storage quota while prior variants are retained.');
+        const retired = mediaStorageRetirementFiles(site.id, beforeMedia).filter(file => file.path.includes(`/generated/media/${beforeMedia.id}/`));
+        await beginJournal([...files.map(file => ({ ...file, purpose: 'write' as const })), ...retired]);
+        journalRecorded = true;
+      },
     });
-    const settings = repositories
-      ? await repositories.settings.get()
-      : getAdminSettings();
-    const uploadPolicy = resolveMediaUploadPolicy(settings);
-    const siteMediaQuotaBytes = uploadPolicy.quotaBytes;
-    const currentMedia = repositories
-      ? (
-          await repositories.media.list({
-            siteId: site.id,
-            type: "all",
-            visibility: "all",
-            limit: 10000,
-            offset: 0,
-          })
-        ).items
-      : getMediaList(site.id, {
-          limit: 10000,
-          offset: 0,
-        }).media;
-    const currentUsageBytes = mediaUsageBytes(currentMedia);
+    if (!journalRecorded) throw new MediaStorageRecoveryError('MEDIA_STORAGE_JOURNAL_UNAVAILABLE', 'Responsive variant writes could not be verified against their durable journal.');
     const nextUsageBytes =
       currentUsageBytes -
       generatedTransformBytes(beforeMedia.metadata) +
@@ -321,7 +329,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
 
     if (billingLimit.blocked) {
-      await deleteGeneratedTransformFiles({ generatedTransforms });
+      await deleteGeneratedTransformFiles({ generatedTransforms }, undefined, { siteId: site.id, mediaId: beforeMedia.id });
       return errorResponse(
         402,
         "BILLING_MEDIA_LIMIT",
@@ -332,7 +340,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (nextUsageBytes > siteMediaQuotaBytes) {
-      await deleteGeneratedTransformFiles({ generatedTransforms });
+      await deleteGeneratedTransformFiles({ generatedTransforms }, undefined, { siteId: site.id, mediaId: beforeMedia.id });
       return errorResponse(
         413,
         "SITE_MEDIA_QUOTA_EXCEEDED",
@@ -342,10 +350,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    await deleteGeneratedTransformFiles(beforeMedia.metadata);
-
     const metadata = {
-      ...(beforeMedia.metadata || {}),
       generatedTransforms,
     };
     const updated = repositories
@@ -362,15 +367,50 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    await recordAdminAudit({
-      repositories,
-      siteId: site.id,
-      entity: "media",
-      entityId: updated.id,
-      action: "media.transforms.prepare",
-      before: beforeMedia,
-      after: updated,
-      metadata: {
+    // Preserve the currently referenced variants until replacement metadata is saved.
+    // The durable journal reconciles retired variants after metadata commit.
+    const completionWarnings: string[] = [];
+    // The metadata write above has committed. Failures in follow-up work must not report a rollback.
+    try {
+      await recordAdminAudit({
+        repositories,
+        siteId: site.id,
+        entity: "media",
+        entityId: updated.id,
+        action: "media.transforms.prepare",
+        before: beforeMedia,
+        after: updated,
+        metadata: {
+          widths,
+          quality,
+          sizes,
+          preparedBy,
+          generatedBytes: generatedTransforms.generatedBytes,
+          storageProvider: generatedTransforms.storageProvider,
+          format: generatedTransforms.format,
+        },
+        requestId,
+      });
+    } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+    let cacheInvalidation: Awaited<ReturnType<typeof recordSiteCacheInvalidation>> | undefined;
+    try {
+      cacheInvalidation = repositories
+        ? await recordSiteCacheInvalidation(repositories, {
+            siteId: site.id,
+            scope: "media",
+            entity: "media",
+            entityId: updated.id,
+            reason: "media-transforms-prepared",
+            requestId,
+          })
+        : undefined;
+    } catch { completionWarnings.push('MEDIA_CACHE_INVALIDATION_PENDING'); }
+    try {
+      await deliverMediaTransformWebhook({
+        repositories,
+        site: site as Site,
+        before: beforeMedia,
+        after: updated,
         widths,
         quality,
         sizes,
@@ -378,34 +418,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         generatedBytes: generatedTransforms.generatedBytes,
         storageProvider: generatedTransforms.storageProvider,
         format: generatedTransforms.format,
-      },
-      requestId,
-    });
-    const cacheInvalidation = repositories
-      ? await recordSiteCacheInvalidation(repositories, {
-          siteId: site.id,
-          scope: "media",
-          entity: "media",
-          entityId: updated.id,
-          reason: "media-transforms-prepared",
-          requestId,
-        })
-      : undefined;
-    await deliverMediaTransformWebhook({
-      repositories,
-      site: site as Site,
-      before: beforeMedia,
-      after: updated,
-      widths,
-      quality,
-      sizes,
-      preparedBy,
-      generatedBytes: generatedTransforms.generatedBytes,
-      storageProvider: generatedTransforms.storageProvider,
-      format: generatedTransforms.format,
-      requestId,
-      actor: access.session?.user.id,
-    });
+        requestId,
+        actor: access.session?.user.id,
+      });
+    } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
 
     return NextResponse.json({
       success: true,
@@ -413,11 +429,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       data: {
         media: updated,
         responsive: generatedTransforms,
+        completionWarnings,
         quota: mediaQuotaPayload(siteMediaQuotaBytes, nextUsageBytes),
         cacheInvalidation,
       },
     });
+    });
+    });
   } catch (error) {
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     if (error instanceof MediaTransformGenerationError) {
       return errorResponse(
         422,

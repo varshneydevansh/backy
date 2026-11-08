@@ -1,3 +1,5 @@
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
+import { collectCompleteExportPages, CollectionExportIncompleteError } from "@/lib/collectionExportPagination";
 /**
  * Admin site redirects endpoint.
  *
@@ -375,40 +377,31 @@ const buildRepositoryRouteCandidates = async (
   siteId: string,
 ) => {
   const [pages, posts, collections] = await Promise.all([
-    repositories.pages.list({
-      siteId,
-      includeUnpublished: true,
-      status: "all",
-      limit: 1000,
-      offset: 0,
-    }),
-    repositories.posts.list({
-      siteId,
-      includeUnpublished: true,
-      status: "all",
-      limit: 1000,
-      offset: 0,
-    }),
-    repositories.collections.list({
-      siteId,
-      includeUnpublished: true,
-      status: "all",
-      limit: 1000,
-      offset: 0,
-    }),
+    collectCompleteExportPages(
+      ({ limit, offset }) => repositories.pages.list({ siteId, includeUnpublished: true, status: "all", limit, offset }),
+      (item) => item.siteId === siteId,
+    ),
+    collectCompleteExportPages(
+      ({ limit, offset }) => repositories.posts.list({ siteId, includeUnpublished: true, status: "all", limit, offset }),
+      (item) => item.siteId === siteId,
+    ),
+    collectCompleteExportPages(
+      ({ limit, offset }) => repositories.collections.list({ siteId, includeUnpublished: true, status: "all", limit, offset }),
+      (item) => item.siteId === siteId,
+    ),
   ]);
 
-  const collectionItems = collections.items;
+  const collectionItems = collections;
   return {
     collections: collectionItems,
     routes: [
-      ...pages.items.map((page) => ({
+      ...pages.map((page) => ({
         type: "page" as const,
         id: page.id,
         path: pagePath(page),
         title: routeTitle(page.title, page.slug),
       })),
-      ...posts.items.map((post) => ({
+      ...posts.map((post) => ({
         type: "post" as const,
         id: post.id,
         path: postPath(post),
@@ -546,6 +539,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ),
     );
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, "REDIRECT_INVENTORY_INCOMPLETE", "Unable to read a complete route inventory. Retry after content changes finish.", requestId);
+    }
     console.error("Admin site redirects API error:", error);
     return errorResponse(
       500,
@@ -627,6 +623,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ),
     );
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, "REDIRECT_INVENTORY_INCOMPLETE", "Unable to read a complete route inventory. Retry after content changes finish.", requestId);
+    }
     console.error("Admin site redirect preview API error:", error);
     return errorResponse(
       500,
@@ -675,11 +674,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const routeCandidates = await buildRepositoryRouteCandidates(
+        repositories,
+        site.id,
+      );
       const updated = await repositories.sites.update(site.id, {
-        settings: {
+        settings: unrelatedSiteSettingsPatch({
           ...site.settings,
           redirectRules: validation.rules,
-        },
+        }),
       });
       await recordAdminAudit({
         repositories,
@@ -732,10 +735,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         },
       );
 
-      const routeCandidates = await buildRepositoryRouteCandidates(
-        repositories,
-        site.id,
-      );
+
       return responsePayload(
         requestId,
         updated.item,
@@ -754,10 +754,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = updateAdminSite(site.id, {
-      settings: {
+      settings: unrelatedSiteSettingsPatch({
         ...(site.settings || {}),
         redirectRules: validation.rules,
-      },
+      }),
     });
 
     if (!updated) {
@@ -810,6 +810,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ),
     );
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) {
+      return errorResponse(503, "REDIRECT_INVENTORY_INCOMPLETE", "Unable to read a complete route inventory. Retry after content changes finish.", requestId);
+    }
     console.error("Admin site redirects update API error:", error);
     return errorResponse(
       500,

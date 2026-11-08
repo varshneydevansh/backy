@@ -368,13 +368,13 @@ async function main(): Promise<void> {
   ].map((item) => [item.id, item]));
 
   const repository = {
-    list: async () => ({
-      items: Array.from(repositoryMedia.values()),
+    list: async (input: { limit: number; offset: number }) => ({
+      items: Array.from(repositoryMedia.values()).slice(input.offset, input.offset + input.limit),
       pagination: {
         total: repositoryMedia.size,
-        limit: 10000,
-        offset: 0,
-        hasMore: false,
+        limit: input.limit,
+        offset: input.offset,
+        hasMore: input.offset + input.limit < repositoryMedia.size,
       },
     }),
     update: async (_siteId: string, mediaId: string, input: { metadata?: MediaItem['metadata'] }) => {

@@ -7,7 +7,9 @@ export type PublicContractCacheScope = 'discovery' | 'render' | 'private' | 'err
 
 const cacheControlByScope: Record<PublicContractCacheScope, string> = {
   discovery: 'public, max-age=60, stale-while-revalidate=300',
-  render: 'public, max-age=30, stale-while-revalidate=120',
+  // Publication may be withdrawn between reads. Revalidate at the origin even
+  // with an unchanged URL; ETag still avoids resending an unchanged payload.
+  render: 'public, no-cache, must-revalidate',
   private: 'no-store',
   error: 'no-store',
 };

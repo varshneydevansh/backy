@@ -132,6 +132,11 @@ export function createAuditLogRepository(db: DatabaseInstance): BackyAuditLogRep
     const database = asDb(db);
 
     return {
+        async getById(siteId, id) {
+            if (!isUuid(id)) return null;
+            const rows = await database.select().from(activityLogs).where(and(eq(activityLogs.siteId, siteId), eq(activityLogs.id, id))).limit(1) as AuditLogRow[];
+            return rows[0] ? toAuditLogEntry(rows[0]) : null;
+        },
         async list(input: BackyAuditLogListInput): Promise<BackyListResult<BackyAuditLogEntry>> {
             if (input.actorId && !isUuid(input.actorId)) {
                 return paginate([], input.limit, input.offset);
@@ -145,11 +150,17 @@ export function createAuditLogRepository(db: DatabaseInstance): BackyAuditLogRep
             if (input.entityId) conditions.push(eq(activityLogs.entityId, input.entityId));
             if (input.action) conditions.push(eq(activityLogs.action, input.action));
             if (input.requestId) conditions.push(sql`${activityLogs.details}->>'requestId' = ${input.requestId}`);
-            const baseQuery = conditions.length > 0
-                ? database.select().from(activityLogs).where(and(...conditions))
-                : database.select().from(activityLogs);
-            const rows = await baseQuery.orderBy(desc(activityLogs.createdAt)) as AuditLogRow[];
-            return paginate(rows.map(toAuditLogEntry), input.limit, input.offset);
+            if (input.formId) conditions.push(sql`jsonb_typeof(${activityLogs.details}->'formId') = 'string' AND ${activityLogs.details}->>'formId' = ${input.formId}`);
+            // Canonical entity identity has the same precedence as the event DTO.
+            if (input.commentId) conditions.push(sql`CASE WHEN ${activityLogs.entityType} = 'comment' THEN ${activityLogs.entityId} ELSE CASE WHEN jsonb_typeof(${activityLogs.details}->'commentId') = 'string' THEN ${activityLogs.details}->>'commentId' END END = ${input.commentId}`);
+            if (input.contactId) conditions.push(sql`CASE WHEN ${activityLogs.entityType} = 'contact' THEN ${activityLogs.entityId} ELSE CASE WHEN jsonb_typeof(${activityLogs.details}->'contactId') = 'string' THEN ${activityLogs.details}->>'contactId' END END = ${input.contactId}`);
+            const condition = conditions.length > 0 ? and(...conditions) : undefined;
+            const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+            const totals = await database.select({ total: sql<number>`count(*)` }).from(activityLogs).where(condition) as unknown as { total: number | string }[];
+            const total = Number(totals[0]?.total || 0);
+            const rows = await database.select().from(activityLogs).where(condition)
+                .orderBy(desc(activityLogs.createdAt), desc(activityLogs.id)).limit(limit).offset(offset) as AuditLogRow[];
+            return { items: rows.map(toAuditLogEntry), pagination: { total, limit, offset, hasMore: offset + limit < total } };
         },
 
         async record(input: Omit<BackyAuditLogEntry, 'id' | 'createdAt'>): Promise<BackyAuditLogEntry> {

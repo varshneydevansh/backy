@@ -116,7 +116,7 @@ async function evaluate(expression) {
 }
 
 function assertSourceGuards() {
-  const publicRenderer = read('apps/public/src/components/PageRenderer.tsx');
+  const publicRenderer = read('apps/public/src/components/InteractiveComponentContent.tsx');
   const adminCanvas = read('apps/admin/src/components/editor/Canvas.tsx');
   const validation = read('apps/public/src/lib/interactiveComponentValidation.ts');
   const sandboxRoute = read('apps/public/src/app/api/sites/[siteId]/interactive-components/[componentKey]/[version]/sandbox/route.ts');
@@ -544,7 +544,7 @@ async function cleanup() {
     server = null;
   }
   if (userDataDir) {
-    rmSync(userDataDir, { recursive: true, force: true });
+    rmSync(userDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     userDataDir = '';
   }
 }

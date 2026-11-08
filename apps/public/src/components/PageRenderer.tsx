@@ -13,16 +13,34 @@
 
 import {
   BACKY_CODE_HIGHLIGHT_THEMES,
+  resolveBackyVideoSource,
+  adaptBackyFluidCanvasElements,
+  resolveBackyCanvasViewport,
+  resolveBackyChildLayout,
+  buildBackyCanvasElementGeometry,
+  buildBackyCanvasContentStyles,
+  buildBackyCanvasContentProps,
+  buildBackyFlowContainerStyle,
+  orderBackyFlowChildrenForRender,
+  resolveBackyCanvasBreakpointSize,
+  isBackyFlowChild,
   buildBackyThemeCssVariables,
   buildBackyThemeTokenReferences,
   buildBackyThemeTokenRefStyle,
   buildBackyThemeTokens,
   normalizeBackyCodeHighlightTheme,
   normalizeBackyCodeLanguage,
+  normalizeBackyAnimationSequence,
   tokenizeBackyCodeLine,
+  type BackyAnimationSequence,
   type BackyContentDocument,
+  type BackyCanvasSize,
+  type BackyChildLayout,
 } from '@backy-cms/core';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RichTextContent } from './RichTextContent';
+import { InteractiveComponentElement } from './InteractiveComponentContent';
+import { buildFormSubmissionTransport, formSubmissionTextValues, FormSubmissionTransportError } from '../lib/formSubmissionTransport';
 
 // ============================================================================
 // TYPES (matching page builder editor types)
@@ -61,6 +79,7 @@ export type KnownElementType =
   | 'html'
   | 'map'
   | 'box'
+  | 'collapsible'
   | 'quote'
   | 'comment'
   | 'interactiveFigure'
@@ -105,12 +124,6 @@ export interface CanvasElement {
 
 type RenderBreakpoint = 'desktop' | 'tablet' | 'mobile';
 
-const RENDER_BREAKPOINT_CANVAS_SIZE: Record<RenderBreakpoint, { width: number; height: number }> = {
-  desktop: { width: 1200, height: 800 },
-  tablet: { width: 768, height: 1024 },
-  mobile: { width: 375, height: 812 },
-};
-
 interface ResponsiveElementOverride {
   x?: number;
   y?: number;
@@ -127,6 +140,7 @@ interface ResponsiveElementOverride {
 
 /** Animation configuration for GSAP */
 export interface AnimationConfig {
+  sequence?: BackyAnimationSequence;
   type: string;
   duration: number;
   delay?: number;
@@ -146,7 +160,7 @@ export interface AnimationConfig {
 /** Page content structure */
 export interface PageContent {
   elements: CanvasElement[];
-  canvasSize: { width: number; height: number };
+  canvasSize: BackyCanvasSize;
   customCSS?: string;
   customJS?: string;
   contentDocument?: BackyContentDocument;
@@ -301,6 +315,9 @@ const animationFromRecord = (animation: unknown): AnimationConfig | undefined =>
     return undefined;
   }
 
+  const sequence = animation.sequence === undefined ? undefined : normalizeBackyAnimationSequence(animation.sequence);
+  if (animation.sequence !== undefined && !sequence) return undefined;
+
   const tokenRefs = stringRecord(animation.tokenRefs);
   const duration = finiteAnimationNumber(animation.duration)
     ?? (tokenRefs?.duration || tokenRefs?.['animation.duration']
@@ -308,6 +325,7 @@ const animationFromRecord = (animation: unknown): AnimationConfig | undefined =>
       : undefined);
 
   return {
+    ...(sequence ? { sequence } : {}),
     type,
     duration: duration ?? DEFAULT_RENDERER_ANIMATION_DURATION_SECONDS,
     delay: finiteAnimationNumber(animation.delay),
@@ -350,7 +368,8 @@ const animationFromMetadata = (element: CanvasElement): AnimationConfig | undefi
 const toRenderableElements = (elements: CanvasElement[]): CanvasElement[] => (
   elements.map((element) => ({
     ...element,
-    animation: animationFromRecord(element.animation) || animationFromMetadata(element),
+    animation: animationFromRecord(element.animation)
+      || (element.animation?.sequence === undefined ? animationFromMetadata(element) : undefined),
     children: element.children ? toRenderableElements(element.children) : undefined,
   }))
 );
@@ -487,8 +506,9 @@ const collectPublicRenderedContentBounds = (
     const height = Number.isFinite(element.height) ? element.height : 0;
     const elementOffsetX = offsetX + x;
     const elementOffsetY = offsetY + y;
-    const childBounds = element.children?.length
-      ? collectPublicRenderedContentBounds(element.children, elementOffsetX, elementOffsetY)
+    const positionedChildren = element.children?.filter(child => !isBackyFlowChild(child, resolveBackyChildLayout(element)));
+    const childBounds = positionedChildren?.length
+      ? collectPublicRenderedContentBounds(positionedChildren, elementOffsetX, elementOffsetY)
       : { maxX: 0, maxY: 0 };
 
     return {
@@ -849,6 +869,7 @@ const normalizeRendererType = (value: string): KnownElementType => {
     'html',
     'map',
     'box',
+    'collapsible',
     'quote',
     'comment',
     'interactiveFigure',
@@ -955,6 +976,8 @@ interface ElementRendererContext {
 
 interface ElementRendererProps extends ElementRendererContext {
   element: CanvasElement;
+  parentLayout?: BackyChildLayout;
+  frameGeometry?: React.CSSProperties;
 }
 
 interface SlateNode {
@@ -1828,99 +1851,6 @@ const normalizeIframeReferrerPolicy = (value: unknown): IframeReferrerPolicy | u
     : undefined;
 };
 
-const INTERACTIVE_IFRAME_SANDBOX_DEFAULT = 'allow-scripts allow-forms';
-const INTERACTIVE_IFRAME_SANDBOX_TOKENS = new Set([
-  'allow-downloads',
-  'allow-forms',
-  'allow-pointer-lock',
-  'allow-presentation',
-  'allow-scripts',
-]);
-const INTERACTIVE_IFRAME_PERMISSION_TOKENS = new Set([
-  'accelerometer',
-  'ambient-light-sensor',
-  'autoplay',
-  'clipboard-read',
-  'clipboard-write',
-  'display-capture',
-  'encrypted-media',
-  'fullscreen',
-  'geolocation',
-  'gyroscope',
-  'magnetometer',
-  'midi',
-  'payment',
-  'picture-in-picture',
-  'screen-wake-lock',
-  'serial',
-  'usb',
-  'web-share',
-  'xr-spatial-tracking',
-]);
-
-const parseTokenList = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => parseTokenList(item));
-  }
-
-  return sanitizeText(value)
-    .split(/[\s,;]+/)
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean);
-};
-
-const normalizeInteractiveIframeSandbox = (value: unknown): string => {
-  const tokens = parseTokenList(value)
-    .filter((token) => INTERACTIVE_IFRAME_SANDBOX_TOKENS.has(token));
-
-  if (tokens.length === 0) {
-    return INTERACTIVE_IFRAME_SANDBOX_DEFAULT;
-  }
-
-  return Array.from(new Set(tokens)).join(' ');
-};
-
-const interactiveIframeUsesOpaqueOrigin = (sandbox: string): boolean => (
-  !sandbox.split(/\s+/).includes('allow-same-origin')
-);
-
-const normalizeInteractiveIframeAllow = (value: unknown): string | undefined => {
-  const tokens = parseTokenList(value)
-    .filter((token) => INTERACTIVE_IFRAME_PERMISSION_TOKENS.has(token));
-
-  return tokens.length > 0
-    ? Array.from(new Set(tokens)).join('; ')
-    : undefined;
-};
-
-const normalizeInteractiveSandboxUrl = (value: unknown): string => {
-  const raw = sanitizeText(value);
-  if (!raw) {
-    return '';
-  }
-
-  if (/^(javascript|data|blob|file|vbscript):/i.test(raw)) {
-    return '';
-  }
-
-  if (raw.startsWith('/')) {
-    return raw.startsWith('//') ? '' : raw;
-  }
-
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    const parsed = new URL(raw, window.location.origin);
-    return parsed.origin === window.location.origin && (parsed.protocol === 'https:' || parsed.protocol === 'http:')
-      ? parsed.href
-      : '';
-  } catch {
-    return '';
-  }
-};
-
 const normalizeEmbedHost = (value: string): string => {
   const raw = value.trim().toLowerCase();
   if (!raw) {
@@ -2141,7 +2071,7 @@ const getMapSource = (props: Record<string, unknown>): string => {
 /**
  * Render a text element
  */
-function TextElement({ element }: ElementRendererProps) {
+function TextElement({ element, siteId }: ElementRendererProps) {
   const { props, styles } = element;
   const htmlContent = sanitizeHtmlMarkup(props.content);
   const textContent = getSlateText(props.content) || getNameClass(props.text);
@@ -2152,6 +2082,10 @@ function TextElement({ element }: ElementRendererProps) {
       ...getTypographyStyle(props as Record<string, unknown>),
     },
   };
+
+  if (Array.isArray(props.content)) {
+    return <div {...tagProps}><RichTextContent value={props.content} siteId={siteId} /></div>;
+  }
 
   if (htmlContent) {
     return React.createElement(
@@ -2173,6 +2107,17 @@ function TextElement({ element }: ElementRendererProps) {
 /**
  * Render an icon/symbol element
  */
+function CollapsibleElement({ element, siteId }: ElementRendererProps) {
+  const { props, styles } = element;
+  return (
+    <details open={props.defaultOpen === true} data-backy-collapsible={element.id}
+      style={{ ...getTypographyStyle(props as Record<string, unknown>), ...getAppearanceStyle(props as Record<string, unknown>), boxSizing: 'border-box', width: '100%', ...styles }}>
+      <summary style={{ cursor: 'pointer', fontWeight: 600, minHeight: 28 }}>{typeof props.title === 'string' ? props.title : 'Details'}</summary>
+      <div style={{ paddingTop: 12 }}><RichTextContent value={props.content} siteId={siteId} /></div>
+    </details>
+  );
+}
+
 function IconElement({ element }: ElementRendererProps) {
   const { props, styles } = element;
   const label = getNameClass(props.ariaLabel);
@@ -2224,7 +2169,7 @@ function HeadingElement({ element }: ElementRendererProps) {
         ...getTypographyStyle(props as Record<string, unknown>),
       }}
     >
-      {headingText}
+      {Array.isArray(props.content) ? <RichTextContent value={props.content} inline /> : headingText}
     </Tag>
   );
 }
@@ -2232,9 +2177,10 @@ function HeadingElement({ element }: ElementRendererProps) {
 /**
  * Render an image element
  */
-function ImageElement({ element }: ElementRendererProps) {
+function ImageElement({ element, frameGeometry }: ElementRendererProps) {
   const { props, styles, width, height } = element;
   const src = resolveElementMediaSource(props as Record<string, unknown>, 'src');
+  const intrinsicAxis = (value: unknown) => value === undefined || typeof value === 'string' && /^(auto|min-content|max-content|fit-content)(\(|$)/.test(value.trim());
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -2245,6 +2191,10 @@ function ImageElement({ element }: ElementRendererProps) {
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
       style={{
+        // Global responsive-image CSS must not override a fixed authored frame.
+        // Intrinsic flow dimensions keep their natural image aspect ratio.
+        width: intrinsicAxis(frameGeometry?.width) ? undefined : '100%',
+        height: intrinsicAxis(frameGeometry?.height) ? 'auto' : '100%',
         objectFit: (props.objectFit as React.CSSProperties['objectFit']) || 'cover',
         objectPosition: getNameClass(props.objectPosition) || 'center center',
         ...getAppearanceStyle(props as Record<string, unknown>),
@@ -2266,10 +2216,13 @@ function VideoElement({ element }: ElementRendererProps) {
   const muted = getBooleanWithFallback(props.muted, autoPlay);
   const src = resolveElementMediaSource(props as Record<string, unknown>, 'src');
   const poster = resolveMediaSource(props.poster);
+  const source = resolveBackyVideoSource(src, { controls: getBooleanWithFallback(props.controls, true), autoplay: autoPlay, muted, loop: getBooleanWithFallback(props.loop, false), playsInline: getBooleanWithFallback(props.playsInline, true) });
+  if (source.kind === 'empty' || source.kind === 'invalid') return <div role="note">{source.message}</div>;
+  if (source.kind !== 'native') return <iframe src={source.src} title={getNameClass(props.title) || 'Video player'} loading="lazy" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen data-backy-video-provider={source.kind} style={{ width: '100%', height: '100%', border: 0, ...styles }} />;
 
   return (
     <video
-      src={src}
+      src={source.src}
       width={typeof width === 'number' ? width : undefined}
       height={typeof height === 'number' ? height : undefined}
       title={getNameClass(props.title) || undefined}
@@ -2400,6 +2353,7 @@ function ButtonElement({ element }: ElementRendererProps) {
  */
 function ContainerElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
+  const childLayout = resolveBackyChildLayout(element);
 
   return (
     <div
@@ -2426,13 +2380,15 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId, repeater
         boxShadow: getNameClass(props.boxShadow) || undefined,
         margin: getLength(props.margin),
         ...styles,
+        ...buildBackyFlowContainerStyle(element) as React.CSSProperties,
       }}
       aria-label={getNameClass(props.ariaLabel)}
     >
-      {children?.map((child) => (
+      {orderBackyFlowChildrenForRender(children || [], childLayout).map((child) => (
         <ElementRenderer
           key={child.id}
           element={child}
+          parentLayout={childLayout}
           isPreview={isPreview}
           siteId={siteId}
           pageId={pageId}
@@ -2449,6 +2405,7 @@ function ContainerElement({ element, isPreview, siteId, pageId, postId, repeater
  */
 function NavElement({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const { props, styles, children } = element;
+  const childLayout = resolveBackyChildLayout(element);
   const items = parseNavigationItems(props.navItems);
   const isVertical = props.navDirection === 'vertical';
   const { navigationSource, navigationBinding, chromeRole } = resolveNavigationBindingMetadata(
@@ -2464,7 +2421,10 @@ function NavElement({ element, isPreview, siteId, pageId, postId, repeaterRecord
       data-backy-navigation-binding={navigationBinding}
       data-backy-chrome-role={chromeRole}
       style={{
-        display: 'flex',
+        position: children?.length ? 'relative' : undefined,
+        width: '100%',
+        height: '100%',
+        display: children?.length ? 'block' : 'flex',
         flexDirection: isVertical ? 'column' : 'row',
         alignItems: props.alignItems as React.CSSProperties['alignItems'] || (isVertical ? 'stretch' : 'center'),
         justifyContent: props.justifyContent as React.CSSProperties['justifyContent'] || (isVertical ? 'flex-start' : 'center'),
@@ -2475,12 +2435,14 @@ function NavElement({ element, isPreview, siteId, pageId, postId, repeaterRecord
         borderRadius: getLength(props.borderRadius),
         ...getAppearanceStyle(props as Record<string, unknown>),
         ...styles,
+        ...buildBackyFlowContainerStyle(element) as React.CSSProperties,
       }}
     >
-      {children && children.length > 0 ? children.map((child) => (
+      {children && children.length > 0 ? orderBackyFlowChildrenForRender(children, childLayout).map((child) => (
         <ElementRenderer
           key={child.id}
           element={child}
+          parentLayout={childLayout}
           isPreview={isPreview}
           siteId={siteId}
           pageId={pageId}
@@ -2800,492 +2762,6 @@ function CodeBlockElement({ element }: ElementRendererProps) {
           {caption}
         </figcaption>
       )}
-    </figure>
-  );
-}
-
-const clampInteractiveNumber = (value: unknown, fallback: number, min: number, max: number): number => {
-  const parsed = typeof value === 'number'
-    ? value
-    : typeof value === 'string' && value.trim()
-      ? Number.parseFloat(value)
-      : fallback;
-
-  return Math.max(min, Math.min(max, Number.isFinite(parsed) ? Math.round(parsed) : fallback));
-};
-
-const interactiveControlValue = (
-  controls: Array<Record<string, unknown>> | undefined,
-  key: string,
-): unknown => (
-  controls?.find((control) => getNameClass(control.key) === key)?.value
-    ?? controls?.find((control) => getNameClass(control.key) === key)?.defaultValue
-);
-
-function CommunicationRoundsFigure({
-  element,
-  fallback,
-  componentKey,
-  version,
-}: {
-  element: CanvasElement;
-  fallback: InteractiveFallback;
-  componentKey: string;
-  version: string;
-}) {
-  const { props, styles } = element;
-  const controls = Array.isArray(element.controls)
-    ? element.controls
-    : Array.isArray(props.controls)
-      ? props.controls as Array<Record<string, unknown>>
-      : undefined;
-  const roundCount = clampInteractiveNumber(
-    props.rounds ?? interactiveControlValue(controls, 'rounds'),
-    4,
-    1,
-    12,
-  );
-  const speed = getNameClass(props.speed ?? interactiveControlValue(controls, 'speed')) || 'normal';
-  const intervalMs = speed === 'fast' ? 1100 : speed === 'slow' ? 2600 : 1700;
-  const [activeRound, setActiveRound] = useState(1);
-
-  useEffect(() => {
-    setActiveRound((current) => Math.min(current, roundCount));
-  }, [roundCount]);
-
-  useEffect(() => {
-    if (speed === 'paused') {
-      return undefined;
-    }
-
-    const interval = window.setInterval(() => {
-      setActiveRound((current) => (current >= roundCount ? 1 : current + 1));
-    }, intervalMs);
-
-    return () => window.clearInterval(interval);
-  }, [intervalMs, roundCount, speed]);
-
-  const title = getNameClass(fallback.title) || getNameClass(props.title) || 'Self-correction at work';
-  const text = getNameClass(fallback.text) || getNameClass(props.fallbackText) || 'Outputs improve as feedback is exchanged across communication rounds.';
-  const rounds = Array.from({ length: roundCount }, (_, index) => {
-    const round = index + 1;
-    const progress = round / roundCount;
-    return {
-      round,
-      label: `Round ${round}`,
-      quality: Math.round(42 + progress * 52),
-      active: round === activeRound,
-      completed: round <= activeRound,
-    };
-  });
-
-  return (
-    <figure
-      style={{
-        display: 'grid',
-        gridTemplateRows: 'auto 1fr auto',
-        gap: 14,
-        minHeight: '100%',
-        margin: 0,
-        padding: 18,
-        border: '1px solid #cbd5e1',
-        borderRadius: 8,
-        background: '#f8fafc',
-        color: '#111827',
-        overflow: 'hidden',
-        ...styles,
-      }}
-      role="group"
-      aria-label={getNameClass(fallback.ariaLabel) || title}
-      data-backy-interactive-component={componentKey}
-      data-backy-interactive-version={version}
-      data-backy-hydration-mode="trusted-component"
-    >
-      <figcaption style={{ display: 'grid', gap: 4 }}>
-        <strong style={{ fontSize: 18, lineHeight: 1.2 }}>{title}</strong>
-        <span style={{ fontSize: 13, lineHeight: 1.45, color: '#475569' }}>{text}</span>
-      </figcaption>
-
-      <div
-        style={{
-          display: 'grid',
-          alignItems: 'center',
-          gap: 12,
-          minHeight: 0,
-        }}
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${roundCount}, minmax(0, 1fr))`,
-            gap: 8,
-            alignItems: 'end',
-          }}
-          aria-label="Communication round progression"
-        >
-          {rounds.map((round) => (
-            <button
-              key={round.round}
-              type="button"
-              onClick={() => setActiveRound(round.round)}
-              style={{
-                minWidth: 0,
-                height: Math.max(42, 54 + round.quality * 0.9),
-                border: `1px solid ${round.active ? '#0f766e' : '#cbd5e1'}`,
-                borderRadius: 6,
-                background: round.completed ? '#ccfbf1' : '#ffffff',
-                color: '#0f172a',
-                padding: '8px 4px',
-                display: 'grid',
-                alignContent: 'end',
-                gap: 6,
-                cursor: 'pointer',
-                transition: 'height 220ms ease, background 220ms ease, border-color 220ms ease, transform 220ms ease',
-                transform: round.active ? 'translateY(-4px)' : 'translateY(0)',
-              }}
-              aria-pressed={round.active}
-              aria-label={`${round.label}, quality ${round.quality} percent`}
-            >
-              <span style={{ fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                R{round.round}
-              </span>
-              <span style={{ fontSize: 11, color: '#0f766e' }}>{round.quality}%</span>
-            </button>
-          ))}
-        </div>
-
-        <div
-          style={{
-            minHeight: 72,
-            borderRadius: 8,
-            border: '1px solid #dbeafe',
-            background: '#eff6ff',
-            padding: 12,
-            display: 'grid',
-            gap: 6,
-          }}
-        >
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>
-            Active round {activeRound}
-          </span>
-          <span style={{ fontSize: 14, lineHeight: 1.45, color: '#1e293b' }}>
-            {activeRound === 1
-              ? 'The first response establishes a baseline.'
-              : activeRound === roundCount
-                ? 'The final response integrates the accumulated corrections.'
-                : 'Feedback is incorporated and the next response becomes more aligned.'}
-          </span>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, color: '#64748b' }}>{componentKey} {version}</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" onClick={() => setActiveRound((current) => Math.max(1, current - 1))} style={{ border: '1px solid #cbd5e1', borderRadius: 6, background: '#ffffff', padding: '4px 8px', fontSize: 12 }}>
-            Previous
-          </button>
-          <button type="button" onClick={() => setActiveRound((current) => (current >= roundCount ? 1 : current + 1))} style={{ border: '1px solid #0f766e', borderRadius: 6, background: '#0f766e', color: '#ffffff', padding: '4px 8px', fontSize: 12 }}>
-            Next
-          </button>
-        </div>
-      </div>
-    </figure>
-  );
-}
-
-const buildInteractiveSandboxPayload = (
-  element: CanvasElement,
-  componentKey: string,
-  version: string,
-  fallback: InteractiveFallback,
-): Record<string, unknown> => {
-  const props = JSON.parse(JSON.stringify(element.props || {})) as Record<string, unknown>;
-  delete props.sandboxUrl;
-  delete props.iframeUrl;
-  delete props.url;
-  delete props.src;
-  delete props.fallback;
-  delete props.renderCapabilities;
-
-  return {
-    type: 'backy.interactive-component.init',
-    protocol: 'backy.interactive-component.v1',
-    componentKey,
-    version,
-    props,
-    controls: Array.isArray(element.controls) ? element.controls : props.controls,
-    fallback,
-  };
-};
-
-function SandboxedCodeComponentFrame({
-  element,
-  fallback,
-  componentKey,
-  version,
-  src,
-  renderCapabilities,
-  siteId,
-  pageId,
-  postId,
-}: {
-  element: CanvasElement;
-  fallback: InteractiveFallback;
-  componentKey: string;
-  version: string;
-  src: string;
-  renderCapabilities: Record<string, unknown>;
-  siteId?: string;
-  pageId?: string;
-  postId?: string;
-}) {
-  const { props, styles } = element;
-  const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const title = getNameClass(fallback.title) || getNameClass(props.title) || 'Sandboxed component';
-  const iframeSandbox = normalizeInteractiveIframeSandbox(props.sandbox ?? renderCapabilities.sandbox);
-  const [frameHeight, setFrameHeight] = useState<number | null>(null);
-  const [runtimeError, setRuntimeError] = useState('');
-  const payload = useMemo(
-    () => buildInteractiveSandboxPayload(element, componentKey, version, fallback),
-    [componentKey, element, fallback, version],
-  );
-  const reportRuntimeError = useCallback((message: string, messageType: string) => {
-    if (!siteId || typeof window === 'undefined') {
-      return;
-    }
-
-    const body = {
-      type: messageType,
-      componentKey,
-      version,
-      elementId: element.id,
-      pageId,
-      postId,
-      message,
-    };
-
-    window.fetch(`/api/sites/${encodeURIComponent(siteId)}/interactive-components/runtime-events`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      keepalive: true,
-    }).catch(() => {
-      // Runtime telemetry is diagnostic only; rendering should not depend on it.
-    });
-  }, [componentKey, element.id, pageId, postId, siteId, version]);
-  const postInitPayload = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const frame = frameRef.current;
-    if (!frame?.contentWindow) {
-      return;
-    }
-
-    const targetOrigin = interactiveIframeUsesOpaqueOrigin(iframeSandbox)
-      ? '*'
-      : new URL(src, window.location.origin).origin;
-    frame.contentWindow.postMessage(payload, targetOrigin);
-  }, [iframeSandbox, payload, src]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(postInitPayload, 0);
-
-    return () => window.clearTimeout(timeout);
-  }, [postInitPayload]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return undefined;
-    }
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow || !isRecord(event.data)) {
-        return;
-      }
-
-      const protocol = getNameClass(event.data.protocol);
-      if (protocol !== 'backy.interactive-component.v1') {
-        return;
-      }
-
-      const messageComponentKey = getNameClass(event.data.componentKey);
-      const messageVersion = getNameClass(event.data.version);
-      if (messageComponentKey && messageComponentKey !== componentKey) {
-        return;
-      }
-      if (messageVersion && messageVersion !== version) {
-        return;
-      }
-
-      const messageType = getNameClass(event.data.type);
-      if (messageType === 'backy.interactive-component.ready') {
-        setRuntimeError('');
-        postInitPayload();
-      }
-
-      if (messageType === 'backy.interactive-component.resize') {
-        const nextHeight = typeof event.data.height === 'number'
-          ? event.data.height
-          : typeof event.data.height === 'string'
-            ? Number.parseFloat(event.data.height)
-            : null;
-
-        if (nextHeight !== null && Number.isFinite(nextHeight)) {
-          setFrameHeight(Math.max(120, Math.min(2400, Math.round(nextHeight))));
-        }
-      }
-
-      if (messageType === 'backy.interactive-component.error') {
-        const message = getNameClass(event.data.message) || 'Interactive component failed to load.';
-        setRuntimeError(message);
-        reportRuntimeError(message, messageType);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [componentKey, postInitPayload, reportRuntimeError, version]);
-
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gap: runtimeError ? 8 : 0,
-        width: '100%',
-        height: '100%',
-        minHeight: '100%',
-      }}
-      data-backy-interactive-component={componentKey}
-      data-backy-interactive-version={version}
-      data-backy-hydration-mode="sandbox-iframe"
-      data-backy-sandboxed-code-component="true"
-      data-backy-sandbox-runtime-error={runtimeError || undefined}
-    >
-      <iframe
-        ref={frameRef}
-        title={title}
-        src={src}
-        sandbox={iframeSandbox}
-        allow={normalizeInteractiveIframeAllow(props.allow ?? renderCapabilities.allowedPermissions)}
-        loading={normalizeIframeLoading(props.loading)}
-        referrerPolicy="no-referrer"
-        onLoad={postInitPayload}
-        style={{
-          width: '100%',
-          height: frameHeight ? `${frameHeight}px` : '100%',
-          minHeight: '100%',
-          border: '1px solid #374151',
-          borderRadius: 8,
-          background: '#111827',
-          color: '#f9fafb',
-          ...styles,
-        }}
-        aria-label={getNameClass(fallback.ariaLabel) || title}
-      />
-      {runtimeError && (
-        <p style={{ margin: 0, color: '#b91c1c', fontSize: 13, lineHeight: 1.4 }}>
-          {runtimeError}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Render trusted built-in interactive components, otherwise keep a static
- * fallback until a registry bundle or sandbox runtime is mounted.
- */
-function InteractiveComponentElement({ element, siteId, pageId, postId }: ElementRendererProps) {
-  const { props, styles } = element;
-  const rawFallback = element.fallback ?? props.fallback;
-  const fallback = typeof rawFallback === 'string'
-    ? { text: rawFallback }
-    : isRecord(rawFallback)
-      ? rawFallback as InteractiveFallback
-      : {};
-  const title = getNameClass(fallback.title) || getNameClass(props.title) || getNameClass(props.componentKey) || element.componentKey || 'Interactive component';
-  const text = getNameClass(fallback.text) || getNameClass(props.fallbackText) || 'Interactive content is available in supported frontends.';
-  const html = sanitizeHtmlMarkup(fallback.html);
-  const imageUrl = getNameClass(fallback.imageUrl);
-  const alt = getNameClass(fallback.alt) || title;
-  const componentKey = element.componentKey || getNameClass(props.componentKey);
-  const version = element.version || getNameClass(props.version);
-  const renderCapabilities = isRecord(element.renderCapabilities)
-    ? element.renderCapabilities
-    : isRecord(props.renderCapabilities)
-      ? props.renderCapabilities
-      : {};
-  const hydrationMode = getNameClass(renderCapabilities.hydrationMode);
-
-  if (element.type === 'interactiveFigure' && componentKey === 'backy.figure.rounds') {
-    return (
-      <CommunicationRoundsFigure
-        element={element}
-        fallback={fallback}
-        componentKey={componentKey}
-        version={version || '1.0.0'}
-      />
-    );
-  }
-
-  const sandboxSrc = normalizeInteractiveSandboxUrl(props.sandboxUrl ?? props.iframeUrl ?? props.url ?? props.src);
-  if (element.type === 'codeComponent' && hydrationMode === 'sandbox-iframe' && sandboxSrc) {
-    return (
-      <SandboxedCodeComponentFrame
-        element={element}
-        fallback={fallback}
-        componentKey={componentKey || 'backy.custom.sandboxed'}
-        version={version || '1.0.0'}
-        src={sandboxSrc}
-        renderCapabilities={renderCapabilities}
-        siteId={siteId}
-        pageId={pageId}
-        postId={postId}
-      />
-    );
-  }
-
-  return (
-    <figure
-      style={{
-        display: 'grid',
-        alignContent: 'center',
-        minHeight: '100%',
-        margin: 0,
-        padding: '16px',
-        border: '1px solid #d1d5db',
-        background: '#f9fafb',
-        color: '#111827',
-        ...styles,
-      }}
-      role="group"
-      aria-label={getNameClass(fallback.ariaLabel) || title}
-      data-backy-interactive-component={componentKey || undefined}
-      data-backy-interactive-version={version || undefined}
-      data-backy-hydration-mode="static-fallback"
-    >
-      {imageUrl && (
-        <img
-          src={imageUrl}
-          alt={alt}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-          loading="lazy"
-        />
-      )}
-      <figcaption>
-        <strong>{title}</strong>
-        {html ? (
-          <span dangerouslySetInnerHTML={{ __html: html }} />
-        ) : (
-          <span>{text}</span>
-        )}
-      </figcaption>
     </figure>
   );
 }
@@ -3713,7 +3189,7 @@ function QuoteElement({ element }: ElementRendererProps) {
         ...getTypographyStyle(props as Record<string, unknown>),
       }}
     >
-      {quoteText}
+      {Array.isArray(props.content) ? <RichTextContent value={props.content} inline /> : quoteText}
       {citation ? (
         <cite
           style={{
@@ -3883,6 +3359,7 @@ function FormSchemaFieldElement({
         id={fieldId}
         type={normalizeInputType(field.type)}
         name={field.key}
+        multiple={field.type === 'file' ? true : undefined}
         placeholder={field.placeholder}
         required={field.required}
         disabled={field.disabled}
@@ -3915,6 +3392,7 @@ function FormSchemaFieldElement({
       ) : null}
       {control}
       {field.helpText ? <p style={helpStyle}>{field.helpText}</p> : null}
+      {field.type === 'file' ? <p style={helpStyle}>Up to 5 files and 4 MB total. The site may apply a lower limit.</p> : null}
     </div>
   );
 }
@@ -4136,26 +3614,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId, repeaterRecor
     setSubmitValidation([]);
 
     const formData = new FormData(event.currentTarget);
-    const values: Record<string, unknown> = {};
+    const values = formSubmissionTextValues(formData);
     const startedAt = startedAtRef.current;
-
-    formData.forEach((value, key) => {
-      const normalized = key;
-      const valueAsText = value.toString();
-      const existing = values[normalized];
-
-      if (existing === undefined) {
-        values[normalized] = valueAsText;
-        return;
-      }
-
-      if (Array.isArray(existing)) {
-        existing.push(valueAsText);
-        return;
-      }
-
-      values[normalized] = [existing as string, valueAsText];
-    });
     const captchaToken = readFormValue(values, FORM_CAPTCHA_TOKEN_FIELDS);
 
     const body = {
@@ -4175,12 +3635,11 @@ function FormElement({ element, isPreview, siteId, pageId, postId, repeaterRecor
     }
 
     try {
+      const transport = buildFormSubmissionTransport(formData, body);
       const response = await fetch(configuredAction, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
+        headers: transport.headers,
+        body: transport.body,
       });
 
       let responseBody = null;
@@ -4199,7 +3658,8 @@ function FormElement({ element, isPreview, siteId, pageId, postId, repeaterRecor
         setSubmitMessage(
           typeof responseBody?.message === 'string'
             ? responseBody.message
-            : 'Something went wrong while sending the form.',
+            : getNameClass(responseBody?.errorMessage) || getNameClass(responseBody?.error?.message)
+              || 'Something went wrong while sending the form.',
         );
         return;
       }
@@ -4230,9 +3690,9 @@ function FormElement({ element, isPreview, siteId, pageId, postId, repeaterRecor
         window.location.assign(safeSuccessRedirectUrl);
       }
       event.currentTarget.reset();
-    } catch {
+    } catch (error) {
       setSubmitState('error');
-      setSubmitMessage('Could not connect to the submission endpoint.');
+      setSubmitMessage(error instanceof FormSubmissionTransportError ? error.message : 'Could not connect to the submission endpoint.');
     }
   };
 
@@ -5331,6 +4791,7 @@ const ELEMENT_RENDERERS: Record<
   html: HtmlElement,
   map: MapElement,
   box: ContainerElement,
+  collapsible: CollapsibleElement,
   quote: QuoteElement,
   comment: CommentThreadElement,
   interactiveFigure: InteractiveComponentElement,
@@ -5341,7 +4802,7 @@ const ELEMENT_RENDERERS: Record<
 /**
  * Main element renderer - routes to specific element renderers
  */
-export function ElementRenderer({ element, isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
+export function ElementRenderer({ element, parentLayout = 'free', isPreview, siteId, pageId, postId, repeaterRecord }: ElementRendererProps) {
   const boundElement = repeaterRecord ? applyRepeaterRecordBindings(element, repeaterRecord) : element;
   const normalizedType = normalizeRendererType(boundElement.type);
   const Renderer = ELEMENT_RENDERERS[normalizedType];
@@ -5359,13 +4820,10 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId, re
     return null;
   }
 
-  // Build position styles for absolute positioning
+  // Explicit parent flow owns positioning; saved free coordinates remain intact.
+  const geometry = buildBackyCanvasElementGeometry(boundElement, parentLayout);
   const positionStyles: React.CSSProperties = {
-    position: 'absolute',
-    left: boundElement.x,
-    top: boundElement.y,
-    width: boundElement.width,
-    height: boundElement.height,
+    ...geometry as React.CSSProperties,
     transform: boundElement.rotation ? `rotate(${boundElement.rotation}deg)` : undefined,
     zIndex: boundElement.zIndex,
     opacity:
@@ -5391,10 +4849,14 @@ export function ElementRenderer({ element, isPreview, siteId, pageId, postId, re
       data-backy-element-type={boundElement.type}
       data-element-id={boundElement.id}
       data-element-type={boundElement.type}
+      data-backy-parent-layout={parentLayout}
+      data-backy-child-layout={resolveBackyChildLayout(boundElement)}
+      data-backy-intrinsic-height={geometry.height === undefined || typeof geometry.height === 'string' && /^(auto|min-content|max-content|fit-content)(\(|$)/.test(geometry.height) ? 'true' : undefined}
       {...animationAttrs}
     >
       <Renderer
-        element={boundElement}
+        element={{ ...boundElement, props: buildBackyCanvasContentProps(boundElement, parentLayout), styles: buildBackyCanvasContentStyles(boundElement, parentLayout) as React.CSSProperties }}
+        frameGeometry={positionStyles}
         isPreview={isPreview}
         siteId={siteId}
         pageId={pageId}
@@ -5448,6 +4910,8 @@ export function PageRenderer({
     [content.contentDocument, content.elements],
   );
   const canvasSize = {
+    ...(documentCanvasSize || {}),
+    ...content.canvasSize,
     width: content.canvasSize?.width || Number(documentCanvasSize?.width) || 1200,
     height: content.canvasSize?.height || Number(documentCanvasSize?.height) || 800,
   };
@@ -5456,12 +4920,22 @@ export function PageRenderer({
       ? content.contentDocument.metadata.customCSS
       : undefined
   );
-  const [scale, setScale] = useState(1);
+  const [viewportWidth, setViewportWidth] = useState<number | undefined>();
+  const [flowContentHeight, setFlowContentHeight] = useState(0);
   const [activeBreakpoint, setActiveBreakpoint] = useState<RenderBreakpoint>('desktop');
   const viewportRef = useRef<HTMLDivElement>(null);
-  const elements = useMemo(
+  const responsiveElements = useMemo(
     () => applyResponsiveOverrides(sourceElements, activeBreakpoint),
     [activeBreakpoint, sourceElements],
+  );
+  const activeCanvasSize = resolveBackyCanvasBreakpointSize(canvasSize, activeBreakpoint);
+  const viewport = resolveBackyCanvasViewport(activeCanvasSize, viewportWidth);
+  const scale = viewport.scale;
+  const elements = useMemo(
+    () => viewport.layout === 'fluid'
+      ? adaptBackyFluidCanvasElements(responsiveElements, activeCanvasSize.width, viewport.width)
+      : responsiveElements,
+    [activeCanvasSize.width, responsiveElements, viewport.layout, viewport.width],
   );
   const themeTokenContract = useMemo(() => buildBackyThemeTokens(themeForTokenCompiler(theme)), [theme]);
   const backyThemeVars = useMemo(
@@ -5476,19 +4950,16 @@ export function PageRenderer({
     () => applyThemeTokenRefsToElements(elements, themeTokenReferences, backyThemeVars),
     [backyThemeVars, elements, themeTokenReferences],
   );
-  const activeCanvasSize = activeBreakpoint === 'desktop'
-    ? canvasSize
-    : RENDER_BREAKPOINT_CANVAS_SIZE[activeBreakpoint];
   const contentBounds = useMemo(
     () => collectPublicRenderedContentBounds(elements),
     [elements],
   );
   const renderCanvasSize = useMemo(
     () => ({
-      width: activeCanvasSize.width,
-      height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48)),
+      width: viewport.width,
+      height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48), flowContentHeight),
     }),
-    [activeCanvasSize.height, activeCanvasSize.width, contentBounds.maxY],
+    [activeCanvasSize.height, viewport.width, contentBounds.maxY, flowContentHeight],
   );
 
   useEffect(() => {
@@ -5500,16 +4971,11 @@ export function PageRenderer({
     const calculateScale = () => {
       const visualViewportWidth = window.visualViewport?.width || Number.POSITIVE_INFINITY;
       const windowViewportWidth = window.innerWidth || Number.POSITIVE_INFINITY;
-      const viewportWidth = Math.floor(Math.min(visualViewportWidth, windowViewportWidth, container.clientWidth));
-      const availableWidth = Math.max(320, Math.min(container.clientWidth, viewportWidth) - 24);
+      const measuredWidth = Math.floor(Math.min(visualViewportWidth, windowViewportWidth, container.clientWidth));
+      const availableWidth = Math.max(1, measuredWidth - (canvasSize.layout === 'fluid' ? 0 : 24));
       const nextBreakpoint = resolveRendererBreakpoint(availableWidth);
-      const nextCanvasSize = nextBreakpoint === 'desktop'
-        ? canvasSize
-        : RENDER_BREAKPOINT_CANVAS_SIZE[nextBreakpoint];
       setActiveBreakpoint(nextBreakpoint);
-      const ratio = availableWidth / Math.max(nextCanvasSize.width, 1);
-      const nextScale = Math.max(0.32, Math.min(1, ratio));
-      setScale(nextScale);
+      setViewportWidth(measuredWidth);
     };
 
     calculateScale();
@@ -5525,17 +4991,34 @@ export function PageRenderer({
       window.visualViewport?.removeEventListener('resize', calculateScale);
       window.removeEventListener('resize', calculateScale);
     };
-  }, [canvasSize.width]);
+  }, [canvasSize.width, canvasSize.layout]);
+
+  useEffect(() => {
+    const canvas = viewportRef.current?.querySelector<HTMLElement>('.backy-canvas');
+    if (!canvas) return;
+    const flows = [...canvas.querySelectorAll<HTMLElement>('[data-backy-intrinsic-height="true"]')];
+    const measure = () => {
+      const origin = canvas.getBoundingClientRect();
+      const actualScale = origin.width / Math.max(renderCanvasSize.width, 1) || 1;
+      const height = flows.reduce((maximum, node) => Math.max(maximum, (node.getBoundingClientRect().bottom - origin.top) / actualScale + 48), 0);
+      setFlowContentHeight(Math.max(0, Math.ceil(height)));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    flows.forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, [themedElements, renderCanvasSize.width, scale]);
 
   const styleHeight = Math.round(renderCanvasSize.height * scale);
 
   const viewportStyle: React.CSSProperties = {
     width: '100%',
+    boxSizing: 'border-box',
     display: 'flex',
     justifyContent: 'center',
     overflowX: 'hidden',
     overflowY: 'auto',
-    padding: '12px',
+    padding: viewport.gutter,
     minHeight: styleHeight,
   };
 
@@ -5687,6 +5170,7 @@ export function PageRenderer({
         className="backy-render-root"
         style={{ ...viewportStyle, ...themeVars }}
         data-backy-render-breakpoint={activeBreakpoint}
+        data-backy-canvas-layout={viewport.layout}
         data-backy-render-scale={scale.toFixed(3)}
         data-backy-render-content-bounds="expanded"
       >

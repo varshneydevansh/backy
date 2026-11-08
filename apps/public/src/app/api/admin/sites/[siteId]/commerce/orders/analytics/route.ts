@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
 import { getAdminSettings, getCollectionByIdOrSlug, getSiteByIdOrSlug, listCollectionRecords } from '@/lib/backyStore';
@@ -38,7 +39,6 @@ interface ProviderStatusBucket extends Bucket {
 const ORDERS_COLLECTION_SLUG = 'orders';
 const ORDER_ANALYTICS_SCHEMA_VERSION = 'backy.order-analytics.v1';
 const ORDER_PROVIDER_CERTIFICATION_OPERATOR_GATE = 'BACKY_COMMERCE_PROVIDER_CERTIFICATION_REQUIRED=1 npm run ci:commerce-provider-certification';
-const ORDER_ANALYTICS_LIMIT = 1000;
 const TREND_DAYS = 14;
 
 const ORDER_PROVIDER_CERTIFICATION_SCENARIOS = [
@@ -333,7 +333,8 @@ const buildOrderAnalytics = (records: OrderAnalyticsRecord[]) => {
   return {
     schemaVersion: ORDER_ANALYTICS_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
-    recordLimit: ORDER_ANALYTICS_LIMIT,
+    recordLimit: records.length,
+    inventoryComplete: true,
     orderCount: records.length,
     revenue: {
       grossTotal: roundMoney(grossTotal),
@@ -776,21 +777,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ]);
       if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
 
-      const result = await repositories.collections.listRecords({
-        siteId: site.id,
-        collectionId: ordersCollection.id,
-        includeUnpublished: true,
-        limit: ORDER_ANALYTICS_LIMIT,
-        offset: 0,
-      });
-      const analytics = buildOrderAnalytics(result.items);
+      const records = await collectCompleteExportPages(pagination => repositories.collections.listRecords({
+        siteId: site.id, collectionId: ordersCollection.id, includeUnpublished: true, ...pagination,
+      }), record => record.siteId === site.id && record.collectionId === ordersCollection.id);
+      const analytics = buildOrderAnalytics(records);
       const providerCertification = buildOrderProviderCertification({
         site,
         settings: settings.integrations?.commerce,
         hasCatalog: productsCollection?.status === 'published',
         hasOrderIntake: ordersCollection.status === 'published',
         analytics,
-        records: result.items,
+        records,
       });
 
       return privateAnalyticsResponse({
@@ -812,11 +809,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
     const productsCollection = getCollectionByIdOrSlug(site.id, PRODUCT_COLLECTION_SLUG, { includeUnpublished: true });
 
-    const records = listCollectionRecords(site.id, ordersCollection.id, {
-      includeUnpublished: true,
-      limit: ORDER_ANALYTICS_LIMIT,
-      offset: 0,
-    }).records;
+    const records = await collectCompleteExportPages(async pagination => {
+      const result = listCollectionRecords(site.id, ordersCollection.id, { includeUnpublished: true, ...pagination });
+      return { items: result.records, pagination: result.pagination };
+    }, record => record.siteId === site.id && record.collectionId === ordersCollection.id);
     const analytics = buildOrderAnalytics(records);
     const providerCertification = buildOrderProviderCertification({
       site,
@@ -838,6 +834,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     }, requestId, site.id);
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'ORDER_INVENTORY_INCOMPLETE', 'The complete order inventory could not be verified. Retry after content changes finish.', requestId);
     console.error('Admin order analytics API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

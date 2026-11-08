@@ -1,3 +1,6 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { invalidEditorMediaReference } from "@/lib/editorMediaAdmission";
+import { getMediaById } from "@/lib/backyStore";
 /**
  * Admin pages endpoint.
  *
@@ -18,7 +21,7 @@ import {
 import {
   createAdminPage,
   getAdminSettings,
-  getPageByPath,
+  getPageBySlug,
   getPageSummary,
   getSiteByIdOrSlug,
   listCollections,
@@ -41,7 +44,6 @@ import {
   seedInputFromFrontendDesignTemplate,
 } from "@/lib/frontendDesignContract";
 import { recordAdminAudit } from "@/lib/adminAudit";
-import { getRepositoryPageByPublicPath } from "@/lib/repositoryPages";
 import {
   buildPageReadiness,
   buildRepositoryPageReadiness,
@@ -662,11 +664,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      const slugConflict = await getRepositoryPageByPublicPath(
-        repositories,
-        site.id,
-        slug,
-      );
+      const slugConflict = await repositories.pages.getBySlug(site.id, slug);
       if (slugConflict) {
         return errorResponse(
           409,
@@ -740,6 +738,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       if (contentValidationError) {
         return contentValidationError;
       }
+      const invalidMedia = await invalidEditorMediaReference(site.id, createBody, (id, mediaId) => repositories.media.getById(id, mediaId), { nativeUuidIds: true });
+      if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
       const scheduledAt = normalizeScheduledAtInput(createBody.scheduledAt);
       const scheduleValidation = validateScheduledContentStatus(
         status,
@@ -898,7 +898,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    if (getPageByPath(site.id, slug, { includeUnpublished: true })) {
+    if (getPageBySlug(site.id, slug, { includeUnpublished: true })) {
       return errorResponse(
         409,
         "SLUG_CONFLICT",
@@ -956,6 +956,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (contentValidationError) {
       return contentValidationError;
     }
+    const invalidMedia = await invalidEditorMediaReference(site.id, createBody, getMediaById);
+    if (invalidMedia) return errorResponse(400, "INVALID_EDITOR_MEDIA_REFERENCE", "The managed media ID is unavailable in this site. Select or upload a same-site asset.", requestId, invalidMedia);
     const scheduleValidation = validateScheduledContentStatus(
       status,
       scheduledAt,
@@ -1047,6 +1049,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       { status: 201 },
     );
   } catch (error) {
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin page create API error:", error);
     return errorResponse(
       500,

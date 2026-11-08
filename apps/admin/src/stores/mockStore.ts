@@ -118,6 +118,8 @@ export interface MediaOrganization {
 }
 
 export interface MediaAsset {
+  storageCleanup?: { status: 'complete' | 'pending' | 'blocked'; deletedFiles: number; remainingFiles: number };
+  completionWarnings?: string[];
   id: string;
   name: string;
   type: 'image' | 'video' | 'audio' | 'file' | 'font' | 'other';
@@ -194,30 +196,7 @@ interface AppState {
 // INITIAL MOCK DATA
 // ============================================
 
-const INITIAL_SITES: Site[] = [
-    {
-        id: '1',
-        name: 'My Portfolio',
-        slug: 'portfolio',
-        description: 'Personal design portfolio showcasing my latest work.',
-        customDomain: 'portfolio.design',
-        publicSiteId: 'site-demo',
-        status: 'published',
-        pageCount: 5,
-        lastUpdated: new Date().toISOString(),
-    },
-    {
-        id: '2',
-        name: 'Tech Blog',
-        slug: 'tech-blog',
-        description: 'Weekly articles about web development.',
-        customDomain: null,
-        publicSiteId: 'site-cook',
-        status: 'draft',
-        pageCount: 12,
-        lastUpdated: new Date(Date.now() - 86400000).toISOString(),
-    },
-];
+// Site identity always comes from the authenticated backend, including demo mode.
 
 const INITIAL_POSTS: BlogPost[] = [
     {
@@ -326,7 +305,7 @@ const INITIAL_SETTINGS: AppSettings = {
 export const useStore = create<AppState>()(
     persist(
         (set) => ({
-            sites: INITIAL_SITES,
+            sites: [],
             pages: [],
             posts: INITIAL_POSTS,
             users: INITIAL_USERS,
@@ -474,6 +453,13 @@ export const useStore = create<AppState>()(
         }),
         {
             name: 'backy-db',
+            partialize: ({ sites: _sites, ...state }) => state,
+            merge: (persisted, current) => ({
+                ...current,
+                ...(persisted && typeof persisted === 'object' ? persisted : {}),
+                // Discard legacy cached/mock site identities across sessions.
+                sites: current.sites,
+            }),
         }
     )
 );

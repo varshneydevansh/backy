@@ -146,8 +146,8 @@ const assertMediaRouteSourceContract = () => {
     source.includes('const loadMediaPermissions = useCallback(() => {') &&
       source.includes('const canUseMediaRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
       source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseMediaRoleDefaults;') &&
-      source.includes("const canViewMedia = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');") &&
-      source.includes("const canConfigureMediaStorage = isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');") &&
+      source.includes("const canViewMedia = Boolean(activeSite) && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.view');") &&
+      source.includes("const canConfigureMediaStorage = Boolean(activeSite) && isMediaPermissionAllowed(permissionMatrix, currentAdmin, 'media.configure');") &&
       source.includes('const isMediaLibraryBusy = isLoading || isMediaMutationBusy;') &&
       source.includes('return MEDIA_ACCESS_RULES') &&
       source.includes('?.roles.includes(currentAdmin.role as MediaAdminRole) ?? false;') &&
@@ -226,7 +226,7 @@ const assertMediaRouteSourceContract = () => {
   assert(
     source.includes("const uploadActionStatusId = 'media-upload-action-status';") &&
       source.includes('const uploadActionDisabledReason = isUploading') &&
-      source.includes('getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner)') &&
+      source.includes('getMediaUploadRuntimeDisabledReason(runtimeStorage, runtimeMediaScanner, uploadReadiness)') &&
       source.includes('data-testid="media-upload-runtime-notice"') &&
       source.includes('const uploadActionState = isUploading ?') &&
       source.includes('const uploadActionStatus = isUploading') &&
@@ -247,6 +247,15 @@ const assertMediaRouteSourceContract = () => {
       source.includes('setMedia(['),
     'Media primary upload controls must expose shared action-status metadata, known runtime prerequisites and permissions instead of unrelated media mutations.',
   );
+  for (const mediaSurface of [source, modalSource]) {
+    assert(
+      mediaSurface.includes('const uploadScanPolicyNotice = getMediaUploadScanPolicyNotice(uploadReadiness);') &&
+        mediaSurface.includes('{uploadScanPolicyNotice && (') &&
+        mediaSurface.includes('data-testid="media-upload-scan-policy-notice"') &&
+        mediaSurface.includes('{uploadScanPolicyNotice}'),
+      'Media workspace and shared picker must display the server-admitted owner-static notice.',
+    );
+  }
   assert(
     source.includes("const MEDIA_FILE_FILTER_TYPES = new Set<MediaAsset['type']>(['file', 'other'])") &&
       source.includes("if (filter === 'file') return MEDIA_FILE_FILTER_TYPES.has(mediaType)") &&
@@ -257,12 +266,25 @@ const assertMediaRouteSourceContract = () => {
   assert(
     adminMediaApiSource.includes('return { types: ["document", "other"] };') &&
       adminMediaApiSource.includes('mediaMatchesRequestedType') &&
-      adminMediaApiSource.includes('const payload = mediaType.types') &&
-      adminMediaApiSource.includes('paginateMedia(demoMedia.media.filter((item) => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders)') &&
+      adminMediaApiSource.includes('const type = mediaType.type === "all" || mediaType.types ? undefined : mediaType.type;') &&
+      adminMediaApiSource.includes('const filtered = result') &&
+      adminMediaApiSource.includes('filter((item) => mediaMatchesRequestedType(item, mediaType))') &&
+      adminMediaApiSource.includes('paginateMedia(demoMedia.filter(item => mediaMatchesRequestedType(item, mediaType)), limit, offset, folders)') &&
       publicMediaApiSource.includes("return { types: ['document', 'other'] };") &&
       publicMediaApiSource.includes('mediaMatchesRequestedType') &&
       publicMediaApiSource.includes('filter((item) => mediaMatchesRequestedType(item, mediaType))'),
     'Admin and public media APIs must treat type=file as documents plus arbitrary other files.',
+  );
+  // Complete inventory is now an array in both admin repository modes. Filter
+  // that inventory before response pagination, never a capped repository page.
+  assert(
+    adminMediaApiSource.includes('readCompleteMediaInventory(site.id, pagination => repositories.media.list({') &&
+      adminMediaApiSource.includes('const demoMedia = await readCompleteMediaInventory(site.id, async pagination => {') &&
+      adminMediaApiSource.includes('return { items: result.media, pagination: result.pagination };') &&
+      adminMediaApiSource.includes('paginateMedia(filtered, limit, offset, folders)') &&
+      adminMediaApiSource.includes('global: globalOnly, ...pagination,') &&
+      !adminMediaApiSource.includes('limit: 10000'),
+    'Admin media file filtering, totals and quota must use complete inventories with effective repository pagination before response pagination.',
   );
   assert(
     publicMediaResourceSource.includes('folderAncestors: Array<') &&
@@ -323,7 +345,7 @@ const assertMediaRouteSourceContract = () => {
       source.includes('Load and select matching'),
     'Media bulk management must load and select every matching asset and expose shared action-state/status metadata before applying cross-library folder, tag, safety, or delete actions.',
   );
-  assert(modalSource.includes('listMediaLibrary') && modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must keep loading scoped media through the admin media API');
+  assert(modalSource.includes('listMediaLibrary') && modalSource.includes('siteId,\n        limit: MEDIA_PICKER_PAGE_SIZE') && !modalSource.includes("pageId: targetScope === 'page' ? targetId : undefined") && !modalSource.includes("postId: targetScope === 'post' ? targetId : undefined"), 'Editor media picker must load the authorized site inventory without narrowing browse to its upload target');
   assert(modalSource.includes('scope: targetScope') && modalSource.includes('scopeTargetId: targetId || null'), 'Editor media uploads must keep persisting page/post scope metadata');
   assert(
     modalSource.includes('const [newFolderSubmitted, setNewFolderSubmitted] = useState(false);') &&

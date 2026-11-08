@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides, type AdminSession } from '@/lib/admin-auth/sessionStore';
 import { getAdminSessionTokenFromRequest } from '@/lib/admin-auth/sessionCookie';
+import { adminCookieWriteOriginError } from '@/lib/admin-auth/cookieWriteOrigin';
 import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import { getAdminSettings, getSiteByIdOrSlug, listAdminTeamMembers, listAdminUserPermissionOverrides, updateAdminSettings } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { operatorSiteScopeFromAuth, type AdminOperatorSiteScope } from '@/lib/adminOperatorSiteScope';
+import { ADMIN_SITE_SERVICE_PERMISSIONS, legacyWorkspaceServiceKeyScope, parseAdminServiceKeyScope, serviceKeySiteRouteIsClassified, type AdminServiceKeyScope } from '@/lib/adminServiceKeyScope';
 
 type AdminRole = AdminSession['user']['role'];
 type AdminTeamScopeAction = 'view' | 'content' | 'manage';
@@ -13,9 +16,12 @@ type DatabaseRepositories = Awaited<ReturnType<typeof getRequiredDatabaseReposit
 export type AdminAccessContext = {
   type: 'session' | 'api-key';
   session: AdminSession | null;
+  serviceKeyScope?: AdminServiceKeyScope;
+  operatorSiteScope?: AdminOperatorSiteScope;
 };
 
 export type AdminTeamScopedResource = {
+  id?: string;
   teamId?: string | null;
 };
 
@@ -49,6 +55,7 @@ const keyHash = (value: string) => createHash('sha256').update(value).digest('he
 
 type ConfiguredAdminKeyMatch = {
   kind: 'primary' | 'service';
+  scope?: AdminServiceKeyScope | null;
   touchLastUsed?: () => Promise<void>;
 };
 
@@ -57,6 +64,7 @@ type ServiceAdminKeyGrant = {
   keyHash?: unknown;
   revokedAt?: unknown;
   status?: unknown;
+  scope?: unknown;
 };
 
 const serviceKeyGrants = (auth: unknown) => {
@@ -87,7 +95,7 @@ const findActiveServiceAdminKey = (auth: unknown, providedKey: string) => {
       !candidate.revokedAt &&
       candidate.status !== 'revoked'
     ) {
-      return candidate.id;
+      return { id: candidate.id, scope: candidate.scope === undefined ? legacyWorkspaceServiceKeyScope() : parseAdminServiceKeyScope(candidate.scope) };
     }
   }
 
@@ -121,13 +129,14 @@ const resolveConfiguredAdminKey = async (providedKey: string): Promise<Configure
       return { kind: 'primary' };
     }
 
-    const serviceKeyId = findActiveServiceAdminKey(settings.auth, providedKey);
-    return serviceKeyId
+    const serviceKey = findActiveServiceAdminKey(settings.auth, providedKey);
+    return serviceKey
       ? {
           kind: 'service',
+          scope: serviceKey.scope,
           touchLastUsed: async () => {
             const currentSettings = getAdminSettings();
-            const auth = withTouchedServiceKey(currentSettings.auth, serviceKeyId, new Date().toISOString());
+            const auth = withTouchedServiceKey(currentSettings.auth, serviceKey.id, new Date().toISOString());
             if (auth) {
               updateAdminSettings({ auth });
             }
@@ -142,13 +151,14 @@ const resolveConfiguredAdminKey = async (providedKey: string): Promise<Configure
     return { kind: 'primary' };
   }
 
-  const serviceKeyId = findActiveServiceAdminKey(settings.auth, providedKey);
-  return serviceKeyId
+  const serviceKey = findActiveServiceAdminKey(settings.auth, providedKey);
+  return serviceKey
     ? {
         kind: 'service',
+        scope: serviceKey.scope,
         touchLastUsed: async () => {
           const currentSettings = await repositories.settings.get();
-          const auth = withTouchedServiceKey(currentSettings.auth, serviceKeyId, new Date().toISOString());
+          const auth = withTouchedServiceKey(currentSettings.auth, serviceKey.id, new Date().toISOString());
           if (auth) {
             await repositories.settings.update({ auth });
           }
@@ -236,9 +246,27 @@ export const adminAccessError = (status: number, code: string, message: string, 
         message,
       },
     },
-    { status },
+    // Legacy protected /api/sites routes return this response directly, without
+    // the /api/admin proxy's private cache policy.
+    { status, headers: { 'Cache-Control': 'private, no-store' } },
   )
 );
+
+export const isOwnerAdminSession = (access: AdminAccessContext): boolean => (
+  access.type === 'session' && access.session?.user.role === 'owner'
+  && access.session.user.status === 'active'
+);
+
+/** Ordinary user management must never create, take over, or mutate an owner. */
+export function requireAdminOwnerManagementAccess(
+  access: AdminAccessContext,
+  requestId: string,
+  resource: { currentRole?: unknown; nextRole?: unknown },
+): NextResponse | null {
+  if (resource.currentRole !== 'owner' && resource.nextRole !== 'owner') return null;
+  if (isOwnerAdminSession(access)) return null;
+  return adminAccessError(403, 'OWNER_SESSION_REQUIRED', 'Managing owner accounts requires an active owner admin session.', requestId);
+}
 
 const getScopedTeamMemberRole = async (
   access: AdminAccessContext,
@@ -259,6 +287,13 @@ const getScopedTeamMemberRole = async (
   return member?.role || null;
 };
 
+/** Canonical IDs for a credential restricted to selected sites. */
+export function selectedAdminSiteIds(access: AdminAccessContext): string[] | null {
+  if (access.serviceKeyScope?.mode === 'selected-sites') return access.serviceKeyScope.siteIds;
+  if (access.operatorSiteScope?.mode === 'selected-sites') return access.operatorSiteScope.grants.filter(grant => grant.permissions.includes('sites.view')).map(grant => grant.siteId);
+  return null;
+}
+
 export async function canAdminAccessTeamScope(
   access: AdminAccessContext,
   teamId: string | null | undefined,
@@ -267,6 +302,8 @@ export async function canAdminAccessTeamScope(
     allowUnowned?: boolean;
   } = {},
 ): Promise<boolean> {
+  // A bare team identifier cannot prove a selected-site credential's scope.
+  if (access.serviceKeyScope?.mode === 'selected-sites' || access.operatorSiteScope?.mode === 'selected-sites') return false;
   const normalizedTeamId = normalizeTeamId(teamId);
   if (!normalizedTeamId) {
     return options.allowUnowned !== false;
@@ -297,6 +334,13 @@ export async function filterAdminTeamScopedResources<T extends AdminTeamScopedRe
     allowUnowned?: boolean;
   } = {},
 ): Promise<T[]> {
+  if (access.serviceKeyScope?.mode === 'selected-sites') {
+    return resources.filter(resource => Boolean(resource.id && access.serviceKeyScope?.siteIds.includes(resource.id)));
+  }
+  if (access.operatorSiteScope?.mode === 'selected-sites') {
+    const ids = selectedAdminSiteIds(access)!;
+    return filterAdminTeamScopedResources({ ...access, operatorSiteScope: undefined }, resources.filter(resource => Boolean(resource.id && ids.includes(resource.id))), options);
+  }
   if (access.type === 'api-key' || access.session?.user.role === 'owner') {
     return resources;
   }
@@ -330,6 +374,14 @@ export async function requireAdminTeamScopeAccess(
     message?: string;
   } = {},
 ): Promise<NextResponse | null> {
+  if (access.serviceKeyScope?.mode === 'selected-sites') {
+    return resource.id && access.serviceKeyScope.siteIds.includes(resource.id)
+      ? null : adminAccessError(403, 'FORBIDDEN_SITE_SCOPE', 'This service key does not grant access to this site.', requestId);
+  }
+  if (access.operatorSiteScope?.mode === 'selected-sites') {
+    if (!resource.id || !access.operatorSiteScope.grants.some(grant => grant.siteId === resource.id)) return adminAccessError(403, 'FORBIDDEN_SITE_SCOPE', 'This operator policy does not grant access to this site.', requestId);
+    return requireAdminTeamScopeAccess({ ...access, operatorSiteScope: undefined }, requestId, resource, options);
+  }
   const allowed = await canAdminAccessTeamScope(access, resource.teamId, options);
   if (allowed) {
     return null;
@@ -343,18 +395,18 @@ export async function requireAdminTeamScopeAccess(
   );
 }
 
-export async function requireAdminAccess(
+type ResolvedAdminCredential = {
+  access: AdminAccessContext;
+  repositories: DatabaseRepositories | null;
+  touchLastUsed?: () => Promise<void>;
+};
+
+// Authentication only: route permission, site membership and scoped capability
+// checks remain in requireAdminAccess. Never cache this result across requests.
+const resolveAdminCredential = async (
   request: NextRequest,
   requestId: string,
-  options: {
-    roles?: AdminRole[];
-    permission?: string;
-  } = {},
-): Promise<AdminAccessContext | NextResponse> {
-  const allowedRoles = options.roles || ['owner', 'admin'];
-  if (options.permission && !isAdminPermissionKey(options.permission)) {
-    return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${options.permission}`, requestId);
-  }
+): Promise<ResolvedAdminCredential | NextResponse> => {
   const providedKey = getProvidedAdminKey(request);
   const environmentKeys = getEnvironmentAdminKeys();
   const configuredKeyMatch = providedKey && !environmentKeys.includes(providedKey)
@@ -362,28 +414,27 @@ export async function requireAdminAccess(
     : null;
 
   if (providedKey && (environmentKeys.includes(providedKey) || configuredKeyMatch)) {
-    if (options.permission && isOwnerOnlyAdminPermission(options.permission)) {
-      return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
-    }
-    if (configuredKeyMatch?.touchLastUsed) {
-      try {
-        await configuredKeyMatch.touchLastUsed();
-      } catch (error) {
-        console.error('Unable to update admin service key usage timestamp:', error);
-      }
+    const scope = configuredKeyMatch?.kind === 'service' ? configuredKeyMatch.scope : legacyWorkspaceServiceKeyScope();
+    if (!scope || (scope.expiresAt && Date.parse(scope.expiresAt) <= Date.now())) {
+      return adminAccessError(403, 'SERVICE_KEY_SCOPE_INVALID', 'This service key policy is invalid or expired.', requestId);
     }
     return {
-      type: 'api-key',
-      session: null,
+      access: { type: 'api-key', session: null, serviceKeyScope: scope },
+      repositories: null,
+      touchLastUsed: configuredKeyMatch?.touchLastUsed,
     };
   }
+
+  // Only an actually matched API key bypasses ambient-cookie origin checks.
+  const cookieOriginError = adminCookieWriteOriginError(request);
+  if (cookieOriginError) return adminAccessError(403, cookieOriginError.code, cookieOriginError.message, requestId);
 
   const repositories = !shouldUseDemoStoreFallback()
     ? await getRequiredDatabaseRepositories()
     : null;
   const authSettings = repositories
     ? (await repositories.settings.get()).auth
-    : undefined;
+    : getAdminSettings().auth;
   const session = await getAdminSessionWithPersistence(
     getAdminSessionTokenFromRequest(request),
     repositories ? {
@@ -394,6 +445,83 @@ export async function requireAdminAccess(
   );
   if (!session) {
     return adminAccessError(401, 'UNAUTHORIZED', 'A valid admin session or admin API key is required.', requestId);
+  }
+
+  // Owner authority remains workspace-wide. Other operators read current policy,
+  // rather than caching a grant in a long-lived session token.
+  const operatorSiteScope = session.user.role === 'owner' ? undefined : operatorSiteScopeFromAuth(authSettings, session.user.id);
+  if (operatorSiteScope === null || (operatorSiteScope?.expiresAt && Date.parse(operatorSiteScope.expiresAt) <= Date.now())) {
+    return adminAccessError(403, 'OPERATOR_SITE_SCOPE_INVALID', 'This operator site policy is invalid or expired.', requestId);
+  }
+  return { access: { type: 'session', session, ...(operatorSiteScope ? { operatorSiteScope } : {}) }, repositories };
+};
+
+/** Credential gate for the deployment proxy; this grants no route permissions. */
+export async function requireAdminCredential(
+  request: NextRequest,
+  requestId: string,
+): Promise<AdminAccessContext | NextResponse> {
+  const resolved = await resolveAdminCredential(request, requestId);
+  return resolved instanceof NextResponse ? resolved : resolved.access;
+}
+
+const checkResolvedAdminAccess = async (
+  request: NextRequest,
+  requestId: string,
+  resolved: ResolvedAdminCredential,
+  options: { roles?: AdminRole[]; permission?: string },
+): Promise<AdminAccessContext | NextResponse> => {
+  const allowedRoles = options.roles || ['owner', 'admin'];
+  const { access, repositories } = resolved;
+  if (access.type === 'api-key') {
+    if (options.permission && isOwnerOnlyAdminPermission(options.permission)) {
+      return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
+    }
+    const scope = access.serviceKeyScope!;
+    if (scope.mode === 'selected-sites') {
+      if (!options.permission || !scope.permissions.includes(options.permission)) {
+        return adminAccessError(403, 'FORBIDDEN_SERVICE_KEY_PERMISSION', 'This service key does not grant the required permission.', requestId);
+      }
+      const siteIdentifier = nestedAdminSiteIdentifierFromRequest(request);
+      const siteList = request.method === 'GET' && new URL(request.url).pathname === '/api/admin/sites' && options.permission === 'sites.view';
+      if (!siteList && (!siteIdentifier || !serviceKeySiteRouteIsClassified(request.url))) {
+        return adminAccessError(403, 'FORBIDDEN_SERVICE_KEY_ROUTE', 'Selected-site keys cannot access workspace or unclassified routes.', requestId);
+      }
+      if (siteIdentifier) {
+        const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
+        const site = await resolveAdminSiteScopeResource(siteIdentifier, repositories);
+        if (!site) return adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+        if (!site.id || !scope.siteIds.includes(site.id)) return adminAccessError(403, 'FORBIDDEN_SITE_SCOPE', 'This service key does not grant access to this site.', requestId);
+      }
+    }
+    return {
+      type: 'api-key',
+      session: null,
+      serviceKeyScope: scope,
+    };
+  }
+
+  const session = access.session!;
+
+  if (access.operatorSiteScope?.mode === 'selected-sites') {
+    const siteIdentifier = nestedAdminSiteIdentifierFromRequest(request);
+    const pathname = new URL(request.url).pathname;
+    const selfPermissions = request.method === 'GET' && pathname === `/api/admin/users/${encodeURIComponent(session.user.id)}/permissions` && !options.permission;
+    const siteList = request.method === 'GET' && pathname === '/api/admin/sites' && options.permission === 'sites.view';
+    if (!selfPermissions && !siteList) {
+      if (!siteIdentifier || !serviceKeySiteRouteIsClassified(request.url) || !options.permission || !ADMIN_SITE_SERVICE_PERMISSIONS.includes(options.permission)) {
+        return adminAccessError(403, 'FORBIDDEN_OPERATOR_SITE_ROUTE', 'Selected-site operators cannot access workspace or unclassified routes.', requestId);
+      }
+      const site = await resolveAdminSiteScopeResource(siteIdentifier, repositories);
+      if (!site) return adminAccessError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+      const grant = access.operatorSiteScope.grants.find(grant => grant.siteId === site.id);
+      if (!grant) return adminAccessError(403, 'FORBIDDEN_SITE_SCOPE', 'This operator policy does not grant access to this site.', requestId);
+      if (!grant.permissions.includes(options.permission)) return adminAccessError(403, 'FORBIDDEN_OPERATOR_SITE_PERMISSION', 'This operator policy does not grant the required site permission.', requestId);
+    }
+  }
+
+  if (options.permission && isOwnerOnlyAdminPermission(options.permission) && session.user.role !== 'owner') {
+    return adminAccessError(403, 'FORBIDDEN_PERMISSION', 'Owner-only permissions require an owner admin session.', requestId);
   }
 
   if (options.permission) {
@@ -418,7 +546,7 @@ export async function requireAdminAccess(
       }
 
       const scopedAccess = await requireAdminTeamScopeAccess(
-        { type: 'session', session },
+        access,
         requestId,
         site,
         { action: teamScopeActionForPermission(options.permission) },
@@ -428,10 +556,7 @@ export async function requireAdminAccess(
       }
     }
 
-    return {
-      type: 'session',
-      session,
-    };
+    return access;
   }
 
   if (!hasRequiredRole(session.user.role, allowedRoles)) {
@@ -446,7 +571,7 @@ export async function requireAdminAccess(
     }
 
     const scopedAccess = await requireAdminTeamScopeAccess(
-      { type: 'session', session },
+      access,
       requestId,
       site,
       { action: teamScopeActionForPermission(options.permission) },
@@ -456,8 +581,36 @@ export async function requireAdminAccess(
     }
   }
 
-  return {
-    type: 'session',
-    session,
-  };
+  return access;
+};
+
+/** All required permissions must pass before recording service-key usage. */
+export async function requireAdminAccess(
+  request: NextRequest,
+  requestId: string,
+  options: {
+    roles?: AdminRole[];
+    permission?: string;
+    permissions?: readonly string[];
+    /** Preliminary admission for routes with resource-dependent capabilities. */
+    recordUsage?: boolean;
+  } = {},
+): Promise<AdminAccessContext | NextResponse> {
+  const permissions = [...new Set([...(options.permission ? [options.permission] : []), ...(options.permissions || [])])];
+  // Bound aggregate checks independently of caller-provided input.
+  if (permissions.length > 32) return adminAccessError(500, 'PERMISSION_LIMIT', 'Too many required admin permissions.', requestId);
+  for (const permission of permissions) {
+    if (!isAdminPermissionKey(permission)) return adminAccessError(500, 'UNKNOWN_PERMISSION', `Unknown admin permission: ${permission}`, requestId);
+  }
+  const resolved = await resolveAdminCredential(request, requestId);
+  if (resolved instanceof NextResponse) return resolved;
+  for (const permission of permissions.length ? permissions : [undefined]) {
+    const checked = await checkResolvedAdminAccess(request, requestId, resolved, { roles: options.roles, permission });
+    if (checked instanceof NextResponse) return checked;
+  }
+  if (options.recordUsage !== false && resolved.touchLastUsed) {
+    try { await resolved.touchLastUsed(); }
+    catch (error) { console.error('Unable to update admin service key usage timestamp:', error); }
+  }
+  return resolved.access;
 }

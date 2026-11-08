@@ -166,12 +166,12 @@ const toEvidenceContact = (
   };
 };
 
-const listAllDemoContacts = (formId: string): Contact[] => {
+const listAllDemoContacts = (formId: string, siteId: string): Contact[] => {
   const items: Contact[] = [];
   let offset = 0;
 
   while (true) {
-    const page = listFormContacts(formId, { limit: PAGE_SIZE, offset });
+    const page = listFormContacts(formId, { siteId, limit: PAGE_SIZE, offset });
     items.push(...page.contacts);
     if (!page.pagination.hasMore) break;
     offset += PAGE_SIZE;
@@ -312,7 +312,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const consentFields = findConsentFields(form.fields || []);
     const consentFieldKeys = consentFields.map((field) => field.key);
     const deleteAfterDays = readDeleteAfterDays(form, retentionDaysFilter.value);
-    const allContacts = listAllDemoContacts(form.id);
+    const allContacts = listAllDemoContacts(form.id, site.id);
     const contacts = contactIds.length > 0
       ? allContacts.filter((contact) => contactIds.includes(contact.id))
       : allContacts;
@@ -326,7 +326,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const updated = dryRun
       ? []
       : dueContacts.flatMap((contact) => {
-        const anonymized = anonymizeFormContactConsentEvidence(form.id, contact.id, consentFieldKeys, actor);
+        const anonymized = anonymizeFormContactConsentEvidence(form.id, contact.id, consentFieldKeys, actor, site.id);
         return anonymized ? [anonymized] : [];
       });
     if (!dryRun) {

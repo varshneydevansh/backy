@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Comment, CommentStatus } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { isCommentTargetPublished, hasCommentCredentials, serializeComment, resolveCommentUserId } from '@/lib/commentPrivacy';
+import { isCommentTargetPublished, hasCommentCredentials, serializeComment, resolveCommentVisitor } from '@/lib/commentPrivacy';
 import { resolveCommentSubmissionPolicy } from '@/lib/commentPolicy';
 import {
   getAdminBlogPostById,  createComment,
@@ -347,11 +347,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
-      const userId = await resolveCommentUserId(request, responseRequestId);
-      if (userId instanceof NextResponse) return userId;
+      // Only an admitted site moderator can request immediate publication.
+      // Anonymous and website-account submissions keep the site policy.
+      if (body.moderationMode === 'auto-approve' && hasCommentCredentials(request)) {
+        const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.manage' });
+        if (access instanceof NextResponse) return access;
+        policy.moderationMode = 'auto-approve';
+      }
+      const visitor = await resolveCommentVisitor(request, responseRequestId, site.id);
+      if (visitor instanceof NextResponse) return visitor;
+      const userId = visitor?.id || '';
 
-      const authorName = parseTextInput(body.authorName);
-      const authorEmail = parseTextInput(body.authorEmail);
+      const authorName = visitor?.displayName || parseTextInput(body.authorName);
+      const authorEmail = visitor?.email || parseTextInput(body.authorEmail);
       const authorWebsite = parseTextInput(body.authorWebsite);
       const parentId = typeof body.parentId === 'string' ? body.parentId : null;
       const commentThreadId = parseTextInput(
@@ -427,6 +435,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const resolvedCommentThreadId = commentThreadId || parent?.commentThreadId || undefined;
 
       const classification = validateAndClassifyComment({
+        checkBlockedIdentity: false,
         siteId: site.id,
         targetType: 'post',
         targetId: postId,
@@ -461,13 +470,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         authorEmail,
         authorWebsite,
         commentThreadId: resolvedCommentThreadId,
-        userId,
+        userId: null,
+        visitorMemberId: visitor?.id || null,
         parentId,
         requestId,
         ipHash,
         status: classification.status,
       })).item;
-      await recordRepositoryInteractionEvent(repositories, {
+      const completionWarnings: string[] = [];
+      try { await recordRepositoryInteractionEvent(repositories, {
         kind: 'comment-submitted',
         siteId: comment.siteId,
         commentId: comment.id,
@@ -483,27 +494,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           hasAuthorEmail: Boolean(comment.authorEmail),
           hasAuthorWebsite: Boolean(comment.authorWebsite),
         },
-      });
-      await notifyCommentDelivery({
+      }); } catch { completionWarnings.push("COMMENT_ACTIVITY_PENDING"); }
+      try { const delivery = await notifyCommentDelivery({
         repositories,
         siteId: site.id,
         comment,
         kind: 'comment-submitted',
         requestId: comment.requestId,
         reason: comment.status,
-      });
+      }); if (delivery.failedChannels > 0) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
 
       return privateResponse(
         {
           success: true,
           requestId: responseRequestId,
           data: {
+            completionWarnings,
             comment: serializeComment(comment),
             message:
               comment.status === 'approved'
                 ? 'Comment submitted and published.'
                 : 'Comment submitted for moderation.',
           },
+          completionWarnings,
           comment: serializeComment(comment),
           message:
             comment.status === 'approved'
@@ -536,11 +549,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     const policy = resolveCommentSubmissionPolicy(site.settings?.commentPolicy, body);
-    const userId = await resolveCommentUserId(request, responseRequestId);
-    if (userId instanceof NextResponse) return userId;
+    // Only an admitted site moderator can request immediate publication.
+    // Anonymous and website-account submissions keep the site policy.
+    if (body.moderationMode === 'auto-approve' && hasCommentCredentials(request)) {
+      const access = await requireAdminAccess(request, responseRequestId, { permission: 'comments.manage' });
+      if (access instanceof NextResponse) return access;
+      policy.moderationMode = 'auto-approve';
+    }
+    const visitor = await resolveCommentVisitor(request, responseRequestId, site.id);
+    if (visitor instanceof NextResponse) return visitor;
+    const userId = visitor?.id || '';
 
-    const authorName = parseTextInput(body.authorName);
-    const authorEmail = parseTextInput(body.authorEmail);
+    const authorName = visitor?.displayName || parseTextInput(body.authorName);
+    const authorEmail = visitor?.email || parseTextInput(body.authorEmail);
     const authorWebsite = parseTextInput(body.authorWebsite);
     const parentId = typeof body.parentId === 'string' ? body.parentId : null;
     const commentThreadId = parseTextInput(
@@ -656,19 +677,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ipHash,
       status: classification.status,
     });
-    await notifyCommentDelivery({
+    const completionWarnings: string[] = [];
+    try { const delivery = await notifyCommentDelivery({
       siteId: site.id,
       comment,
       kind: 'comment-submitted',
       requestId: comment.requestId,
       reason: comment.status,
-    });
+    }); if (delivery.failedChannels > 0) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
 
     return privateResponse(
       {
         success: true,
         requestId: responseRequestId,
         data: {
+          completionWarnings,
           comment: serializeComment(comment),
           message:
             comment.status === 'approved'
@@ -685,6 +708,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       201,
     );
   } catch (error) {
+    if ((error as { code?: string })?.code === 'COMMENT_IDENTITY_BLOCKED') return errorResponse(422, 'COMMENT_IDENTITY_BLOCKED', 'This identity cannot submit a comment.', responseRequestId);
+    if ((error as { code?: string })?.code === 'COMMENT_SUBMISSION_UNAVAILABLE') return errorResponse(503, 'COMMENT_SUBMISSION_UNAVAILABLE', 'Comment identity admission is temporarily unavailable.', responseRequestId);
+    if ((error as { code?: string })?.code === 'COMMENT_PARENT_CONFLICT') return errorResponse(409, 'COMMENT_PARENT_CONFLICT', 'The reply parent changed or was removed. Reload the thread before retrying.', responseRequestId);
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'VISITOR_MEMBERSHIP_REQUIRED') return errorResponse(401, 'VISITOR_AUTHENTICATION_REQUIRED', 'A current website account is required.', responseRequestId);
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', responseRequestId);
   }

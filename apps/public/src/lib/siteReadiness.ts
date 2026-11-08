@@ -14,6 +14,8 @@ import {
 import type { Site } from '@backy-cms/core';
 import type { BackyPage, BackyPost, BackyRepositories } from '@backy-cms/core/repositories';
 
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
+
 type ReadinessSeverity = 'error' | 'warning' | 'info';
 type ReadinessStatus = 'pass' | 'fail' | 'notice';
 
@@ -450,16 +452,51 @@ const withCanonicalConflictChecks = (
   };
 };
 
+/** Demo callers remain synchronous; validate every page before reporting readiness. */
+const collectDemoReadinessPages = <T extends { id: string; siteId: string }>(
+  siteId: string,
+  read: (input: { limit: number; offset: number }) => { items: T[]; pagination?: { total: number; limit: number; offset: number; hasMore: boolean } },
+): T[] => {
+  const items: T[] = [], ids = new Set<string>();
+  let total: number | undefined;
+  for (;;) {
+    const offset = items.length;
+    let page: ReturnType<typeof read>;
+    try { page = read({ limit: 100, offset }); }
+    catch { throw new CollectionExportIncompleteError(); }
+    const p = page.pagination;
+    if (!p || !Array.isArray(page.items) || !Number.isSafeInteger(p.total) || p.total < 0
+      || p.limit !== 100 || p.offset !== offset || typeof p.hasMore !== 'boolean'
+      || total !== undefined && total !== p.total
+      || page.items.length !== Math.min(p.limit, p.total - offset)
+      || p.hasMore !== (offset + page.items.length < p.total)) throw new CollectionExportIncompleteError();
+    total = p.total;
+    for (const item of page.items) {
+      if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || item.siteId !== siteId) throw new CollectionExportIncompleteError();
+      ids.add(item.id); items.push(item);
+    }
+    if (!p.hasMore) return items;
+  }
+};
+
 export const buildSiteReadiness = (site: StoreSite): SiteReadiness => {
   const pageSummaries = getPageSummary(site.id, { includeUnpublished: true });
-  const pages = pageSummaries
-    .map((page) => getAdminPageById(site.id, page.id))
-    .filter((page): page is StorePage => !!page);
+  const pages = pageSummaries.map((summary) => {
+    const page = getAdminPageById(site.id, summary.id);
+    if (!page || page.siteId !== site.id || page.id !== summary.id) throw new CollectionExportIncompleteError();
+    return page;
+  });
   const homepageCount = pages.filter((page) => page.isHomepage).length;
   const publishedPages = pages.filter((page) => page.status === 'published').length;
-  const posts = getBlogPosts(site.id, { includeUnpublished: true, limit: 1000 }).posts;
+  const posts = collectDemoReadinessPages(site.id, (input) => {
+    const result = getBlogPosts(site.id, { ...input, includeUnpublished: true });
+    return { items: result.posts, pagination: result.pagination };
+  });
   const collections = listCollections(site.id, { includeUnpublished: true });
-  const media = getMediaList(site.id, { limit: 1000 }).media;
+  const media = collectDemoReadinessPages(site.id, (input) => {
+    const result = getMediaList(site.id, input);
+    return { items: result.media, pagination: result.pagination };
+  });
   const reusableSections = listReusableSections(site.id, { status: 'all' });
   const navigation = getSiteNavigation(site.id, { includeUnpublished: true }).primary;
 
@@ -528,18 +565,18 @@ export const buildRepositorySiteReadiness = async (
     mediaResult,
     reusableSectionResult,
   ] = await Promise.all([
-    repositories.pages.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
-    repositories.posts.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
-    repositories.collections.list({ siteId: site.id, includeUnpublished: true, status: 'all', limit: 1000 }),
-    repositories.media.list({ siteId: site.id, type: 'all', visibility: 'all', limit: 1000 }),
-    repositories.reusableSections.list({ siteId: site.id, status: 'all', limit: 1000 }),
+    collectCompleteExportPages((input) => repositories.pages.list({ ...input, siteId: site.id, includeUnpublished: true, status: 'all' }), (item) => item.siteId === site.id),
+    collectCompleteExportPages((input) => repositories.posts.list({ ...input, siteId: site.id, includeUnpublished: true, status: 'all' }), (item) => item.siteId === site.id),
+    collectCompleteExportPages((input) => repositories.collections.list({ ...input, siteId: site.id, includeUnpublished: true, status: 'all' }), (item) => item.siteId === site.id),
+    collectCompleteExportPages((input) => repositories.media.list({ ...input, siteId: site.id, type: 'all', visibility: 'all' }), (item) => item.siteId === site.id),
+    collectCompleteExportPages((input) => repositories.reusableSections.list({ ...input, siteId: site.id, status: 'all' }), (item) => item.siteId === site.id),
   ]);
 
-  const pages = pageResult.items.map(repositoryPageToStorePage);
-  const posts = postResult.items.map(repositoryPostToStorePost);
-  const collections = collectionResult.items;
-  const media = mediaResult.items;
-  const reusableSections = reusableSectionResult.items;
+  const pages = pageResult.map(repositoryPageToStorePage);
+  const posts = postResult.map(repositoryPostToStorePost);
+  const collections = collectionResult;
+  const media = mediaResult;
+  const reusableSections = reusableSectionResult;
   const homepageCount = pages.filter((page) => page.isHomepage).length;
   const publishedPages = pages.filter((page) => page.status === 'published').length;
   const navigation = pages.filter((page) => page.status !== 'archived');

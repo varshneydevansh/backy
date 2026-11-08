@@ -1,8 +1,9 @@
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
 import { NextRequest, NextResponse } from 'next/server';
-import { DEFAULT_SITE_SETTINGS, type SiteEditorCollectionBindingPreset, type SiteSettings } from '@backy-cms/core';
+import { DEFAULT_SITE_SETTINGS, normalizeBackyJsonObject, type SiteEditorCollectionBindingPreset, type SiteSettings } from '@backy-cms/core';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { requireAdminAccess } from '@/lib/adminAccess';
-import { getSiteByIdOrSlug, updateAdminSite } from '@/lib/backyStore';
+import { getSiteByIdOrSlug, getCollectionByIdOrSlug, updateAdminSite } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
 export const runtime = 'nodejs';
@@ -60,6 +61,7 @@ const normalizePreset = (
   const id = textValue(value.id) || previous?.id || `binding-preset-${Date.now().toString(36)}-${index}`;
 
   return {
+    ...normalizeBackyJsonObject(value),
     id,
     name,
     collectionId,
@@ -73,10 +75,10 @@ const normalizePreset = (
     sortDirection: value.sortDirection === 'desc' ? 'desc' : 'asc',
     limit: textValue(value.limit),
     offset: textValue(value.offset),
-    createdAt: textValue(value.createdAt) || previous?.createdAt || now,
+    createdAt: previous?.createdAt || (actorId ? now : textValue(value.createdAt) || now),
     updatedAt: actorId ? now : textValue(value.updatedAt) || previous?.updatedAt || now,
-    createdBy: textValue(value.createdBy) || previous?.createdBy || actorId || null,
-    updatedBy: actorId || previous?.updatedBy || null,
+    createdBy: previous?.createdBy || actorId || textValue(value.createdBy) || null,
+    updatedBy: actorId || previous?.updatedBy || textValue(value.updatedBy) || null,
   };
 };
 
@@ -96,8 +98,35 @@ const normalizePresets = (
       if (seen.has(preset.id)) return false;
       seen.add(preset.id);
       return true;
-    })
-    .slice(0, MAX_PRESETS);
+    });
+};
+
+// Reject lossy replacement payloads rather than silently discard a user's presets.
+const presetPayloadError = (presets: unknown[]): string | null => {
+  if (presets.length > MAX_PRESETS) return `At most ${MAX_PRESETS} binding presets can be saved. Remove presets explicitly before saving.`;
+  const ids = new Set<string>();
+  for (const [index, preset] of presets.entries()) {
+    if (!isRecord(preset) || !textValue(preset.collectionId) || !textValue(preset.fieldKey)) return `Preset ${index + 1} requires a collectionId and fieldKey.`;
+    const id = textValue(preset.id);
+    if (id && ids.has(id)) return `Duplicate binding preset id: ${id}.`;
+    if (id) ids.add(id);
+    for (const path of [preset.targetPath, preset.sourcePath, preset.fieldKey]) {
+      if (typeof path === 'string' && path.split('.').some(key => ['__proto__', 'constructor', 'prototype'].includes(key))) return `Preset ${index + 1} contains an unsafe binding path.`;
+    }
+  }
+  return null;
+};
+
+const validatePresetCollections = async (presets: SiteEditorCollectionBindingPreset[], siteId: string, getCollection: (id: string) => Promise<{ id: string; siteId: string; fields: Array<{ key: string }> } | null>): Promise<string | null> => {
+  const reservedFields = new Set(['id', 'slug', 'status', 'createdAt', 'updatedAt', 'publishedAt', 'scheduledAt']);
+  const checked = new Map<string, Awaited<ReturnType<typeof getCollection>>>();
+  for (const preset of presets) {
+    if (!checked.has(preset.collectionId)) checked.set(preset.collectionId, await getCollection(preset.collectionId));
+    const collection = checked.get(preset.collectionId);
+    if (!collection || collection.siteId !== siteId || collection.id !== preset.collectionId) return `Preset "${preset.name}" must reference a collection ID in the selected site.`;
+    if (!reservedFields.has(preset.fieldKey) && !collection.fields.some(field => field.key === preset.fieldKey)) return `Preset "${preset.name}" references a field that is not declared by its collection.`;
+  }
+  return null;
 };
 
 const savedPresets = (settings: SiteSettings): SiteEditorCollectionBindingPreset[] => (
@@ -105,15 +134,12 @@ const savedPresets = (settings: SiteSettings): SiteEditorCollectionBindingPreset
 );
 
 const settingsWithPresets = (
-  settings: SiteSettings,
   presets: SiteEditorCollectionBindingPreset[],
 ): SiteSettings => ({
-  ...settings,
   editor: {
-    ...(settings.editor || {}),
     collectionBindingPresets: presets,
   },
-});
+} as SiteSettings);
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -167,6 +193,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!Array.isArray(body.presets)) {
       return errorResponse(400, 'VALIDATION_ERROR', 'Preset payload must include a presets array.', requestId);
     }
+    const invalid = presetPayloadError(body.presets);
+    if (invalid) return errorResponse(400, 'VALIDATION_ERROR', invalid, requestId);
 
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
@@ -176,7 +204,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       const settings = siteSettings(site.settings);
       const before = savedPresets(settings);
       const presets = normalizePresets(body.presets, before, access.session?.user.id);
-      const updated = await repositories.sites.update(site.id, { settings: settingsWithPresets(settings, presets) });
+      const invalidCollection = await validatePresetCollections(presets, site.id, id => repositories.collections.getById(site.id, id));
+      if (invalidCollection) return errorResponse(400, 'VALIDATION_ERROR', invalidCollection, requestId);
+      const updated = await repositories.sites.update(site.id, { settings: unrelatedSiteSettingsPatch(settingsWithPresets(presets)) });
       await recordAdminAudit({
         repositories,
         siteId: site.id,
@@ -206,7 +236,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const settings = siteSettings(site.settings);
     const before = savedPresets(settings);
     const presets = normalizePresets(body.presets, before, access.session?.user.id);
-    const updated = updateAdminSite(site.id, { settings: settingsWithPresets(settings, presets) });
+    const invalidCollection = await validatePresetCollections(presets, site.id, async id => getCollectionByIdOrSlug(site.id, id, { includeUnpublished: true }) || null);
+    if (invalidCollection) return errorResponse(400, 'VALIDATION_ERROR', invalidCollection, requestId);
+    const updated = updateAdminSite(site.id, { settings: unrelatedSiteSettingsPatch(settingsWithPresets(presets)) });
     if (!updated) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     await recordAdminAudit({
       siteId: site.id,

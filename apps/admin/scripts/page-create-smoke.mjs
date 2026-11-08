@@ -1553,8 +1553,8 @@ const assertPageCreateSourceContracts = () => {
       frontendDesignContractSource.includes('|| cloneProvenanceArray(content.assets)') &&
       frontendDesignContractSource.includes('const interactions = cloneArrayOrRecord(current.frontendDesignInteractions)') &&
       frontendDesignContractSource.includes('|| cloneArrayOrRecord(content.interactions)') &&
-      source.includes('return applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content);') &&
-      source.includes('return applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument);') &&
+      source.includes('inheritRegisteredFrontendChrome({ elements: applyFrontendTemplatePageText(content.elements as CanvasElement[], template, input, content) }, chrome)') &&
+      source.includes('inheritRegisteredFrontendChrome({ elements: applyFrontendTemplatePageText(contentDocument.elements as CanvasElement[], template, input, contentDocument) }, chrome)') &&
       source.includes('collectFrontendTemplateBindingElementIds') &&
       source.includes('element.props?.binding === source') &&
       source.includes("sourceRecord?.kind === 'page'"),

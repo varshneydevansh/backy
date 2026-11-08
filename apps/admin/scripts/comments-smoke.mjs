@@ -136,8 +136,9 @@ const assertCommentsRouteSourceContract = () => {
   );
   assert(
     source.includes('const loadCommentPermissions = useCallback(() => {') &&
-      source.includes('const canUseCommentRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
-      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCommentRoleDefaults;') &&
+      !source.includes('canUseCommentRoleDefaults') &&
+      source.includes('isCommentPermissionAllowedForSite(permissionMatrix, currentAdmin?.id, activeSiteId, key, isPermissionsLoading)') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading;') &&
       source.includes('const isCommentPermissionAllowed = (key: CommentPermissionKey) => (') &&
       source.includes("const canViewComments = isCommentPermissionAllowed('comments.view');") &&
       source.includes("const canManageComments = isCommentPermissionAllowed('comments.manage');") &&

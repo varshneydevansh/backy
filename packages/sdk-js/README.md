@@ -2,6 +2,8 @@
 
 Small TypeScript client for custom/generated frontends that consume Backy through public APIs.
 
+JSON requests use `cache: "no-store"` so ordinary `render()` calls reread publication and withdrawal state, matching the separate frontend starter. Conditional helpers such as `renderCached()` still send the supplied ETag and return `notModified: true` for a server304; callers retain their own prior body only after that validation. Do not continue displaying a retained body after a404/410 withdrawal. This transport policy does not purge an independently configured CDN or a frontend's own static page cache.
+
 For a minimal separate website project, start from [../../examples/custom-frontend-next](../../examples/custom-frontend-next). It vendors a tiny public client with the same `createBackyCustomFrontendClient({ env: process.env })` shape, host-aware `render()`, API-addressable element attributes, newsletter signup, and public form submissions without placing admin/database/provider secrets in the frontend. Use the full SDK here when it is published to your package registry.
 
 ```ts
@@ -315,3 +317,17 @@ BACKY_DATABASE_DISPOSABLE_CONFIRMED=true BACKY_DATABASE_URL="postgresql://user:p
 `test:smoke` expects a running Backy public app at `http://localhost:3001` unless `BACKY_SDK_BASE_URL` is set.
 By default it also creates and deletes a temporary site through the local admin API so it can verify SDK SEO/reusable-section reads and public writes for collection records, forms, form delivery retries, contacts, comments, reports, and events. Set `BACKY_SDK_SKIP_WRITE_SMOKE=1` to run the read-only smoke against an environment where admin fixture setup is unavailable.
 `ci:sdk-postgres-smoke` runs the same SDK typecheck/build/server/smoke flow with `BACKY_DATA_MODE=database`; it requires `BACKY_DATABASE_URL` or `DATABASE_URL` pointing at a disposable migrated Supabase/Postgres database plus `BACKY_DATABASE_DISPOSABLE_CONFIRMED=true` after confirming the target is safe. The manual `SDK Postgres Smoke` GitHub Actions workflow runs this gate with the `BACKY_DATABASE_URL` or `DATABASE_URL` repository secret alias, forwards `disposable_database_confirmed=true` to `BACKY_DATABASE_DISPOSABLE_CONFIRMED`, and uses an ephemeral admin API key.
+
+### Optional public runtime render schema
+
+Existing `render()` defaults remain canonical. Consumers that support response-only runtime documents may explicitly request:
+
+```ts
+import { BACKY_RUNTIME_RENDER_SCHEMA, type BackyRuntimeRenderPayload } from '@backy/sdk-js';
+const rendered = await client.render<BackyRuntimeRenderPayload>('/about', {
+  schemaVersion: BACKY_RUNTIME_RENDER_SCHEMA,
+  sitePublicHost: 'www.example.com',
+});
+```
+
+The full `rendered.data.editableMap` is preserved. Only the two known nested duplicate maps may use the literal `editableMapRef: "#/data/editableMap"`. Distinct maps stay inline; all other fields remain unchanged. Runtime content is labelled `backy.content.runtime.v1` and must not be saved/imported as canonical `backy.content.v1`. Use canonical render for private preview tokens; runtime plus a preview token returns 406. Conditional callers may use `renderCached<BackyRuntimeRenderPayload>()` with the same schema option and must verify `meta.schemaVersion` before accepting a stored body. Public responses still revalidate at the origin; this is payload projection, not a TTL cache.

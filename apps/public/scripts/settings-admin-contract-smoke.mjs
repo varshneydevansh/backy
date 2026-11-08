@@ -1446,12 +1446,26 @@ includesAll(
 includesAll(
   billingRoutes.siteDuplicate,
   [
-    "enforceSiteBillingLimit",
-    "BILLING_SITE_LIMIT",
-    "before duplicating another site",
+    "duplicateAdminSiteAtomically(input)",
+    "repositories.siteDuplication!.duplicate(input)",
+    "siteCreationAdmissionErrorDetails(error)",
+    "SITE_CREATION_UNAVAILABLE",
   ],
-  "Site duplication billing guard",
+  "Site duplication atomic admission dispatch",
 );
+
+includesAll(read("../src/lib/backyStore.ts"),
+  ["assertSiteCreationQuota(SETTINGS,SITE_LIST.length)", "persistDemoSiteDuplication"],
+  "Demo duplication quota admission");
+includesAll(read("../../../packages/db/src/repositories/site-duplication.ts"),
+  ["withSiteCreationAdmission(db,adapterType", "tx.insert(sites)", "},true)"],
+  "Database duplication atomic admission");
+includesAll(read("../../../packages/db/src/repositories/site-creation-admission.ts"),
+  ["LOCK TABLE public.sites IN EXCLUSIVE MODE", "LOCK TABLE public.platform_settings IN SHARE MODE", "assertSiteCreationQuota(settings||{},count)", "return run(tx"],
+  "Database duplication fresh locked billing quota");
+includesAll(read("../../../packages/core/src/site-duplication.ts"),
+  ["BILLING_SITE_LIMIT", "commerce.overageMode==='block'&&count>=limit"],
+  "Shared duplication billing policy");
 
 includesAll(
   billingRoutes.siteUpdate,
@@ -1716,11 +1730,12 @@ includesAll(
   "SDK generated site webhook payload type smoke",
 );
 
-includesAll(
-  sdkTypeGeneratorSource,
-  ["operationId:\\s*['\"]([^'\"]+)['\"]"],
-  "SDK OpenAPI operation id generator quote handling",
-);
+// Exercise the generator's actual regex rather than pinning its source spelling.
+const operationRegexLiteral = sdkTypeGeneratorSource.match(/source\.matchAll\(\/(.+)\/([a-z]+)\)/);
+assert(operationRegexLiteral, "SDK operation ID extraction regex is present");
+const operationRegex = new RegExp(operationRegexLiteral[1], operationRegexLiteral[2]);
+const operationIds = [...`operationId: 'single', operationId: "double", "operationId": "quotedKey"`.matchAll(operationRegex)].map((match) => match[1]);
+assert(JSON.stringify(operationIds) === JSON.stringify(['single', 'double', 'quotedKey']), "SDK operation ID extraction handles both value quotes and quoted JSON keys");
 
 const siteOwnedInvalidationRoutesMissingWebhooks = listRouteFiles(
   new URL("../src/app/api/admin/sites/[siteId]/", import.meta.url),

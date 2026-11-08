@@ -347,7 +347,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const post = getAdminBlogPostById(site.id, postId) as IssuePost | undefined;
     if (!post) return errorResponse(404, 'POST_NOT_FOUND', 'Post not found', requestId);
     const forms = listFormsBySite(site.id).filter(isNewsletterForm);
-    const contacts = forms.flatMap((form) => listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
+    const contacts = forms.flatMap((form) => listFormContacts(form.id, { siteId: site.id, limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts);
     const issueDraft = buildIssueDraft({
       origin,
       site,

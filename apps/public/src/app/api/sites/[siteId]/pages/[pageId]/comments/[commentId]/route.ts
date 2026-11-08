@@ -275,7 +275,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       rejectionReason: body.rejectionReason,
       blockReason: body.blockReason,
       requestId: body.requestId,
-    });
+    }, site.id);
 
     if (!nextComment) {
       return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);
@@ -290,6 +290,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       comment: nextComment,
     }, requestId);
   } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (code === 'COMMENT_MODERATION_UNAVAILABLE' || code === 'COMMENT_INVENTORY_INCOMPLETE') return errorResponse(503, code, 'The selected moderation could not be committed atomically.', baseRequestId);
+    if (code === 'COMMENT_MODERATION_CONFLICT' || code === 'COMMENT_PARENT_CONFLICT') return errorResponse(409, 'COMMENT_MODERATION_CONFLICT', 'The selected comment changed. Reload before moderating.', baseRequestId);
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }

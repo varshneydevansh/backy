@@ -1,3 +1,4 @@
+import type { BackyAnimationSequence } from '@backy-cms/core';
 /**
  * Editor Types
  * 
@@ -20,6 +21,11 @@ export interface Point {
 export interface CanvasSize {
   width: number;
   height: number;
+  /** Hosted width behavior; existing and imported designs default to fixed. */
+  layout?: 'fixed' | 'fluid';
+  /** Optional authored sizes; merely previewing a breakpoint does not create one. */
+  responsive?: Partial<Record<'tablet' | 'mobile', { width?: number; height?: number; layout?: 'fixed' | 'fluid' }>>;
+  [key: string]: unknown;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -103,6 +109,7 @@ export type ElementType =
   | 'table'    // For HTML table/raw markup blocks
   | 'list'     // For bullet/numbered lists
   | 'link'     // For hyperlinks
+  | 'collapsible' // Native disclosure with a rich body
   | 'quote'    // For blockquotes
   | 'repeater' // For collection-backed repeaters
   | 'comment' // For comment/thread blocks
@@ -202,6 +209,7 @@ export interface ReusableSectionContent {
   slug?: string;
   name?: string;
   sourceUpdatedAt?: string;
+  siteId?: string;
   syncMode?: 'synced' | 'detached';
   rootIndex?: number;
   sourceElementId?: string;
@@ -416,6 +424,7 @@ export interface SelectionBounds {
 // ============================================
 
 export interface AnimationConfig {
+  sequence?: BackyAnimationSequence;
   trigger: 'load' | 'scroll' | 'hover';
   type: 'none' | 'fadeIn' | 'slideIn' | 'scaleIn' | 'bounce' | 'rotate' | 'custom';
   duration: number;

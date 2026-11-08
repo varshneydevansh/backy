@@ -9,7 +9,9 @@ const { renderToStaticMarkup } = require('react-dom/server');
 const root = path.resolve(fs.existsSync('examples/custom-frontend-next/src/lib') ? 'examples/custom-frontend-next/src/lib' : 'src/lib');
 const cache = new Map();
 function load(name) {
-  const file = path.join(root, `${name}.tsx`);
+  const candidates = [name, `${name}.tsx`, `${name}.ts`, `${name}.js`].map(candidate => path.join(root, candidate));
+  const file = candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+  if (!file) throw new Error(`Missing starter runtime module: ${name}`);
   if (cache.has(file)) return cache.get(file);
   const source = fs.readFileSync(file, 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;

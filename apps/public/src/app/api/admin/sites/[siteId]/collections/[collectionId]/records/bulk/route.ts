@@ -21,10 +21,8 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
-import {
-  removeRepositoryCollectionRecordMediaReferences,
-  syncRepositoryCollectionRecordMediaReferences,
-} from "@/lib/repositoryMediaReferenceSync";
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { collectionRecordWithVersion } from "@/lib/collectionRecordVersion";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
 export const runtime = "nodejs";
@@ -64,7 +62,7 @@ const errorResponse = (
 ) =>
   NextResponse.json(
     { success: false, requestId, error: { code, message, details } },
-    { status },
+    { status, headers: { "Cache-Control": "private, no-store" } },
   );
 
 const toRecord = (value: unknown): Record<string, unknown> =>
@@ -266,222 +264,66 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      if (action === "delete") {
-        let deleted = 0;
-        let skipped = 0;
-        const deletedRecords: CollectionRecordAuditSource[] = [];
-
-        for (const recordId of recordIds) {
-          const record =
-            (await repositories.collections.getRecordById(
-              site.id,
-              collection.id,
-              recordId,
-            )) ||
-            (await repositories.collections.getRecordBySlug(
-              site.id,
-              collection.id,
-              recordId,
-            ));
-          if (!record) {
-            skipped += 1;
-            continue;
-          }
-
-          if (
-            await repositories.collections.deleteRecord(
-              site.id,
-              collection.id,
-              record.id,
-            )
-          ) {
-            await removeRepositoryCollectionRecordMediaReferences({
-              mediaRepository: repositories.media,
-              siteId: site.id,
-              collectionId: collection.id,
-              recordId: record.id,
-            });
-            deletedRecords.push(record);
-            deleted += 1;
-          } else {
-            skipped += 1;
-          }
-        }
-
-        for (const record of deletedRecords) {
-          await recordAdminAudit({
-            repositories,
-            siteId: site.id,
-            entity: "collectionRecord",
-            entityId: record.id,
-            action: "delete",
-            before: collectionRecordAuditMetadata(collection, record),
-            metadata: bulkRecordAuditMetadata(collection, record, {
-              action,
-              requestedRecordIds: recordIds,
-              matchedCount: deleted,
-            }),
-            requestId,
-          });
-        }
-
-        const cacheInvalidation =
-          deleted > 0
-            ? await recordSiteCacheInvalidation(repositories, {
-                siteId: site.id,
-                scope: "content",
-                entity: "collection",
-                entityId: collection.id,
-                reason: "collection-records-deleted",
-                requestId,
-              })
-            : undefined;
-        if (deleted > 0) {
-          await deliverCollectionRecordBulkWebhook({
-            repositories,
-            site,
-            collection,
-            action: "collectionRecord.bulk.deleted",
-            before: deletedRecords,
-            requestedRecordIds: recordIds,
-            deleted,
-            updated: 0,
-            skipped,
-            requestId,
-            actor: access.session?.user.id,
-          });
-        }
-
-        return NextResponse.json({
-          success: true,
-          requestId,
-          data: {
-            action,
-            deleted,
-            updated: 0,
-            skipped,
-            records: [],
-            cacheInvalidation,
-          },
-        });
-      }
-
-      if (action === "updateStatus") {
-        const status = parseRecordStatus(body.status);
-        if (!status) {
-          return errorResponse(
-            400,
-            "VALIDATION_ERROR",
-            "A valid status is required for bulk status updates",
-            requestId,
-          );
-        }
-
+      if (action === "delete" || action === "updateStatus") {
+        const status = action === "updateStatus" ? parseRecordStatus(body.status) : null;
+        if (action === "updateStatus" && !status) return errorResponse(400, "VALIDATION_ERROR", "A valid status is required for bulk status updates", requestId);
+        const appliedRecordIds: string[] = [], skippedRecordIds: string[] = [], notAttemptedRecordIds: string[] = [];
+        const failedTargets: Array<{ recordId: string; code: string }> = [];
+        const committed: Array<{ before: CollectionRecordAuditSource; after?: CollectionRecordAuditSource }> = [];
         const records = [];
-        const updatedRecords: Array<{
-          before: CollectionRecordAuditSource;
-          after: CollectionRecordAuditSource;
-        }> = [];
-        let updated = 0;
-        let skipped = 0;
-
-        for (const recordId of recordIds) {
-          const record =
-            (await repositories.collections.getRecordById(
-              site.id,
-              collection.id,
-              recordId,
-            )) ||
-            (await repositories.collections.getRecordBySlug(
-              site.id,
-              collection.id,
-              recordId,
-            ));
-          if (!record) {
-            skipped += 1;
-            continue;
+        const completionWarnings: string[] = [];
+        const warn = (code: string) => { if (!completionWarnings.includes(code)) completionWarnings.push(code); };
+        for (let index = 0; index < recordIds.length; index++) {
+          const recordId = recordIds[index];
+          try {
+            const record = (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recordId) ? await repositories.collections.getRecordById(site.id, collection.id, recordId) : null) || (await repositories.collections.getRecordBySlug(site.id, collection.id, recordId));
+            if (!record) { skippedRecordIds.push(recordId); continue; }
+            if (action === "delete") {
+              // The runtime decorator commits row deletion and reference removal together.
+              if (!await repositories.collections.deleteRecord(site.id, collection.id, record.id)) { skippedRecordIds.push(recordId); continue; }
+              committed.push({ before: record });
+            } else {
+              // Admit the exact row read above; preserve concurrent author changes and values.
+              const saved = (await repositories.collections.updateRecord(site.id, collection.id, record.id, { status: status!, expectedRecord: record })).item;
+              records.push(collectionRecordWithVersion(saved));
+              committed.push({ before: record, after: saved });
+            }
+            appliedRecordIds.push(record.id);
+          } catch (cause) {
+            if (!appliedRecordIds.length) throw cause;
+            const rawCode = cause && typeof cause === "object" && "code" in cause ? cause.code : undefined;
+            const code = typeof rawCode === "string" && ["MEDIA_STORAGE_MUTATION_BUSY", "MEDIA_STORAGE_LOCK_UNAVAILABLE", "INVALID_EDITOR_MEDIA_REFERENCE", "COLLECTION_RECORD_CONFLICT", "COLLECTION_RECORD_VALIDATION"].includes(rawCode) ? rawCode : "COLLECTION_RECORD_WRITE_FAILED";
+            failedTargets.push({ recordId, code });
+            notAttemptedRecordIds.push(...recordIds.slice(index + 1));
+            warn("COLLECTION_BULK_APPLY_INCOMPLETE");
+            break;
           }
-
-          const saved = (
-            await repositories.collections.updateRecord(
-              site.id,
-              collection.id,
-              record.id,
-              { status },
-            )
-          ).item;
-          await syncRepositoryCollectionRecordMediaReferences({
-            mediaRepository: repositories.media,
-            siteId: site.id,
-            collectionId: collection.id,
-            recordId: saved.id,
-            values: saved.values,
-          });
-          records.push(saved);
-          updatedRecords.push({ before: record, after: saved });
-          updated += 1;
         }
-
-        for (const { before, after } of updatedRecords) {
-          await recordAdminAudit({
-            repositories,
-            siteId: site.id,
-            entity: "collectionRecord",
-            entityId: after.id,
-            action: "update",
-            before: collectionRecordAuditMetadata(collection, before),
-            after: collectionRecordAuditMetadata(collection, after),
-            metadata: bulkRecordAuditMetadata(collection, after, {
-              action,
-              requestedRecordIds: recordIds,
-              matchedCount: updated,
-              changedFields: ["status"],
-            }),
-            requestId,
-          });
+        // Only committed records produce follow-ups. Failures here do not erase
+        // committed outcomes or request an automatic replay of successful writes.
+        for (const { before, after } of committed) {
+          try {
+            await recordAdminAudit({ repositories, siteId: site.id, entity: "collectionRecord", entityId: before.id, action: action === "delete" ? "delete" : "update",
+              before: collectionRecordAuditMetadata(collection, before), ...(after ? { after: collectionRecordAuditMetadata(collection, after) } : {}),
+              metadata: bulkRecordAuditMetadata(collection, after || before, { action, requestedRecordIds: recordIds, matchedCount: appliedRecordIds.length, changedFields: action === "updateStatus" ? ["status"] : [] }), requestId });
+          } catch { warn("COLLECTION_BULK_AUDIT_PENDING"); }
         }
-
-        const cacheInvalidation =
-          updated > 0
-            ? await recordSiteCacheInvalidation(repositories, {
-                siteId: site.id,
-                scope: "content",
-                entity: "collection",
-                entityId: collection.id,
-                reason: "collection-records-status-updated",
-                requestId,
-              })
-            : undefined;
-        if (updated > 0) {
-          await deliverCollectionRecordBulkWebhook({
-            repositories,
-            site,
-            collection,
-            action: "collectionRecord.bulk.statusUpdated",
-            before: updatedRecords.map(({ before }) => before),
-            after: updatedRecords.map(({ after }) => after),
-            requestedRecordIds: recordIds,
-            deleted: 0,
-            updated,
-            skipped,
-            changedFields: ["status"],
-            requestId,
-            actor: access.session?.user.id,
-          });
+        let cacheInvalidation;
+        if (appliedRecordIds.length) {
+          try { cacheInvalidation = await recordSiteCacheInvalidation(repositories, { siteId: site.id, scope: "content", entity: "collection", entityId: collection.id, reason: action === "delete" ? "collection-records-deleted" : "collection-records-status-updated", requestId }); }
+          catch { warn("COLLECTION_BULK_CACHE_INVALIDATION_PENDING"); }
+          try {
+            const deliveries = await deliverCollectionRecordBulkWebhook({ repositories, site, collection, action: action === "delete" ? "collectionRecord.bulk.deleted" : "collectionRecord.bulk.statusUpdated", before: committed.map(item => item.before), after: committed.flatMap(item => item.after ? [item.after] : []),
+              requestedRecordIds: appliedRecordIds, deleted: action === "delete" ? appliedRecordIds.length : 0, updated: action === "updateStatus" ? appliedRecordIds.length : 0, skipped: skippedRecordIds.length,
+              changedFields: action === "updateStatus" ? ["status"] : [], requestId, actor: access.session?.user.id });
+            if (deliveries.some(delivery => delivery.status === "failed")) warn("COLLECTION_BULK_WEBHOOK_DELIVERY_PENDING");
+          } catch { warn("COLLECTION_BULK_WEBHOOK_DELIVERY_PENDING"); }
         }
-
-        return NextResponse.json({
-          success: true,
-          requestId,
-          data: {
-            action,
-            deleted: 0,
-            updated,
-            skipped,
-            records,
-            cacheInvalidation,
-          },
-        });
+        return NextResponse.json({ success: true, requestId, data: {
+          action, deleted: action === "delete" ? appliedRecordIds.length : 0, updated: action === "updateStatus" ? appliedRecordIds.length : 0, skipped: skippedRecordIds.length, records, cacheInvalidation,
+          outcome: completionWarnings.length ? "partial" : "complete", appliedRecordIds, skippedRecordIds, failedTargets, notAttemptedRecordIds, completionWarnings,
+          reloadRequired: !!completionWarnings.length, concurrencyBoundary: "database-per-record-transaction",
+        } }, { headers: { "Cache-Control": "private, no-store" } });
       }
 
       return errorResponse(
@@ -698,6 +540,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       requestId,
     );
   } catch (error) {
+    const admissionError = editorMediaMutationErrorResponse(error, requestId);
+    if (admissionError) return admissionError;
+    const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    if (code === "COLLECTION_RECORD_CONFLICT") return errorResponse(409, "COLLECTION_RECORD_CONFLICT", "The record changed. Reload before retrying.", requestId, { reloadRequired: true });
+    if (code === "COLLECTION_RECORD_VALIDATION") return errorResponse(400, "VALIDATION_ERROR", "Collection record values are invalid.", requestId);
     console.error("Admin collection record bulk API error:", error);
     return errorResponse(
       500,

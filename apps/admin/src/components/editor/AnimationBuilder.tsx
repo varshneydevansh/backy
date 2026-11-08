@@ -9,6 +9,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import type { AnimationConfig as SharedAnimationConfig } from '@/types/editor';
+import { AnimationSequenceEditor } from './AnimationSequenceEditor';
 import { buildEditorActionStatus } from './editorActionStatus';
 
 // ==========================================================================
@@ -23,6 +24,7 @@ export interface AnimationConfig extends Omit<SharedAnimationConfig, 'type' | 't
 interface AnimationBuilderProps {
     animation?: AnimationConfig;
     onChange: (animation: AnimationConfig | undefined) => void;
+    onPreview?: () => void;
 }
 
 // ==========================================================================
@@ -85,6 +87,7 @@ const DEFAULT_CUSTOM_TO: Record<string, unknown> = {
 
 const normalizeAnimationConfig = (animation?: AnimationConfig): AnimationConfig => ({
     ...DEFAULT_ANIMATION,
+    type: 'none',
     ...(animation || {}),
 });
 
@@ -157,22 +160,6 @@ const styles = {
     half: {
         flex: 1,
     } as React.CSSProperties,
-    preview: {
-        marginTop: '16px',
-        padding: '24px',
-        backgroundColor: '#f3f4f6',
-        borderRadius: '8px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    } as React.CSSProperties,
-    previewBox: {
-        width: '80px',
-        height: '80px',
-        backgroundColor: '#3b82f6',
-        borderRadius: '8px',
-        transition: 'all 0.3s ease',
-    } as React.CSSProperties,
     checkbox: {
         display: 'flex',
         alignItems: 'center',
@@ -200,10 +187,9 @@ const optionLabel = <T extends readonly { value: string; label: string }[]>(opti
 // ANIMATION BUILDER COMPONENT
 // ==========================================================================
 
-export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps) {
+export function AnimationBuilder({ animation, onChange, onPreview }: AnimationBuilderProps) {
     const initialConfig = normalizeAnimationConfig(animation);
     const [config, setConfig] = useState<AnimationConfig>(initialConfig);
-    const [isPlaying, setIsPlaying] = useState(false);
     const [customFromText, setCustomFromText] = useState(() => (
         stringifyCustomAnimationObject(initialConfig.from || DEFAULT_CUSTOM_FROM)
     ));
@@ -263,23 +249,18 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
         updateConfig(target === 'from' ? { from: parsed.value } : { to: parsed.value });
     }, [updateConfig]);
 
-    const playPreview = useCallback(() => {
-        setIsPlaying(true);
-        setTimeout(() => setIsPlaying(false), (config.duration + config.delay) * 1000 + 100);
-    }, [config]);
-
     const showDirectionOption = config.type === 'slideIn';
     const showScrollOptions = config.trigger === 'scroll';
     const animationActionStatusId = 'editor-animation-action-status';
-    const activeAnimationLabel = optionLabel(ANIMATION_TYPES, config.type);
+    const activeAnimationLabel = config.sequence ? 'Layer timeline' : optionLabel(ANIMATION_TYPES, config.type);
     const activeTriggerLabel = optionLabel(TRIGGER_OPTIONS, config.trigger);
-    const hasCustomJsonError = Boolean(customJsonErrors.from || customJsonErrors.to);
+    const hasCustomJsonError = !config.sequence && Boolean(customJsonErrors.from || customJsonErrors.to);
     const animationBuilderAction = buildEditorActionStatus({
         label: 'Animation builder',
         disabledReason: hasCustomJsonError ? customJsonErrors.from || customJsonErrors.to || 'Fix the custom animation JSON.' : '',
         selected: config.type !== 'none',
         readyStatus: 'Animation builder ready. Choose an animation type to enable motion.',
-        selectedStatus: `${activeAnimationLabel} animation uses ${activeTriggerLabel.toLowerCase()}, ${config.duration.toFixed(1)}s duration, and ${config.delay.toFixed(1)}s delay.`,
+        selectedStatus: config.sequence ? `${config.sequence.steps.length}-step timeline uses ${activeTriggerLabel.toLowerCase()}, ${Math.max(...config.sequence.steps.map(step => step.at + step.duration)).toFixed(1)}s span, and ${config.delay.toFixed(1)}s delay.` : `${activeAnimationLabel} animation uses ${activeTriggerLabel.toLowerCase()}, ${config.duration.toFixed(1)}s duration, and ${config.delay.toFixed(1)}s delay.`,
     });
     const animationTypeAction = buildEditorActionStatus({
         label: 'Animation type',
@@ -318,14 +299,14 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
         selectedStatus: 'Scroll scrub is on.',
     });
     const previewAction = buildEditorActionStatus({
-        label: 'Preview animation',
-        busy: isPlaying,
-        busyStatus: `Previewing ${activeAnimationLabel} animation.`,
-        readyStatus: `Preview ${activeAnimationLabel} animation.`,
+        label: 'Canvas motion preview',
+        disabledReason: hasCustomJsonError ? 'Fix the custom animation JSON before previewing.'
+            : !onPreview ? 'Canvas preview is unavailable in this host.' : '',
+        readyStatus: `Preview ${activeAnimationLabel} animation on the selected layer in its full layout.`,
     });
     const animationActionSummary = [
         animationBuilderAction.actionStatus,
-        hasCustomJsonError ? 'Custom JSON has validation errors.' : 'Custom JSON is valid.',
+        config.sequence ? 'Sequence states are validated.' : hasCustomJsonError ? 'Custom JSON has validation errors.' : 'Custom JSON is valid.',
         previewAction.actionStatus,
     ].join(' ');
 
@@ -335,7 +316,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
             data-testid="editor-animation-builder"
             data-animation-type={config.type}
             data-animation-trigger={config.trigger}
-            data-animation-playing={isPlaying ? 'true' : 'false'}
+            data-animation-preview="full-canvas"
             data-action-state={animationBuilderAction.actionState}
             data-action-status={animationBuilderAction.actionStatus}
             data-disabled-reason={animationBuilderAction.disabledReason || undefined}
@@ -361,7 +342,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
 
             {/* Animation Type */}
             <div style={styles.section}>
-                <label style={styles.label}>Animation Type</label>
+                <label style={styles.label}>{config.sequence ? 'Single tween fallback type' : 'Animation Type'}</label>
                 <select
                     style={styles.select}
                     data-testid="editor-animation-type"
@@ -405,6 +386,15 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         </select>
                     </div>
 
+                    <div style={styles.section}>
+                        <label style={styles.label}>Motion structure</label>
+                        <select aria-label="Motion structure" data-testid="editor-animation-structure" style={styles.select} value={config.sequence ? 'sequence' : 'single'} onChange={event => updateConfig({ sequence: event.target.value === 'single' ? undefined : { version: 1, steps: [{ id: 'entrance', label: 'Entrance', at: 0, duration: Math.min(60, config.duration), easing: config.easing, from: { opacity: 0 }, to: { opacity: 1 } }] } })}>
+                            <option value="single">Single tween</option><option value="sequence">Layer timeline</option>
+                        </select>
+                        {config.sequence ? <label style={styles.label}>Timeline delay (s)<input aria-label="Timeline delay seconds" style={styles.input} type="number" min={0} step={0.1} value={config.delay} onChange={event => { const delay = Number(event.target.value); if (Number.isFinite(delay) && delay >= 0) updateConfig({ delay }); }} /></label> : null}
+                        {config.sequence ? <AnimationSequenceEditor value={config.sequence} onChange={sequence => updateConfig({ sequence })} /> : null}
+                    </div>
+                    {!config.sequence && <>
                     {/* Direction (for slideIn) */}
                     {showDirectionOption && (
                         <div style={styles.section}>
@@ -587,6 +577,7 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                         </select>
                     </div>
 
+                    </>}
                     {/* Scroll Trigger Options */}
                     {showScrollOptions && (
                         <div
@@ -684,42 +675,30 @@ export function AnimationBuilder({ animation, onChange }: AnimationBuilderProps)
                             aria-describedby={animationActionStatusId}
                             data-action-state={previewAction.actionState}
                             data-action-status={previewAction.actionStatus}
-                            onClick={playPreview}
+                            disabled={Boolean(previewAction.disabledReason)}
+                            data-disabled-reason={previewAction.disabledReason || undefined}
+                            onClick={onPreview}
                             style={{
                                 width: '100%',
                                 padding: '10px',
-                                backgroundColor: '#3b82f6',
+                                backgroundColor: '#0f766e',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '6px',
                                 fontSize: '14px',
                                 fontWeight: 500,
-                                cursor: 'pointer',
+                                cursor: previewAction.disabledReason ? 'not-allowed' : 'pointer',
                             }}
                         >
-                            ▶ Preview Animation
+                            Preview selected layer
                         </button>
                     </div>
 
-                    <div style={styles.preview}>
-                        <div
-                            data-testid="editor-animation-preview-box"
-                            style={{
-                                ...styles.previewBox,
-                                opacity: isPlaying ? 1 : 0.5,
-                                transform: isPlaying
-                                    ? 'translateY(0) scale(1)'
-                                    : config.type === 'slideIn'
-                                        ? 'translateY(20px)'
-                                        : config.type === 'scaleIn'
-                                            ? 'scale(0.8)'
-                                            : 'none',
-                                transition: isPlaying
-                                    ? `all ${config.duration}s ${config.easing}`
-                                    : 'none',
-                            }}
-                        />
-                    </div>
+                    <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
+                        Opens the actual layer in the full canvas layout. Scroll the preview for scroll motion;
+                        hover or focus the layer for hover motion. Reduced motion uses the final state.
+                        Return with Edit layout.
+                    </p>
                 </>
             )}
         </div>

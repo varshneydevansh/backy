@@ -1,5 +1,10 @@
-import type { CSSProperties, ReactNode } from "react";
+import React, { type CSSProperties, type ReactNode } from "react";
+import { BackyFrontendInspection } from "./inspection";
+import { BACKY_FRONTEND_IDENTITY } from "./frontend-identity";
 import { BackyInteractiveComponent } from "./interactive";
+import { BackyWebsiteForm } from "./form";
+import { BackyWebsiteComments } from "./comments";
+import { BackyPortableRichText } from "./portable-rich-text";
 
 import type {
   BackyElement,
@@ -259,52 +264,6 @@ const formOption = (option: string | { label?: string; value?: string }) =>
     ? { label: option, value: option }
     : { label: option.label || option.value || "Option", value: option.value || option.label || "" };
 
-function BackyFormField({ field }: { field: BackyFormFieldDefinition }) {
-  const type = asText(field.type).toLowerCase() || "text";
-  const label = asText(field.label) || field.key;
-  const placeholder = asText(field.placeholder) || label;
-  const options = (field.options || []).map(formOption);
-
-  if (type === "textarea" || type === "long-text") {
-    return (
-      <label>
-        <span>{label}</span>
-        <textarea name={field.key} placeholder={placeholder} required={field.required} />
-      </label>
-    );
-  }
-
-  if (type === "select") {
-    return (
-      <label>
-        <span>{label}</span>
-        <select name={field.key} required={field.required} defaultValue="">
-          <option value="" disabled>{placeholder}</option>
-          {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-      </label>
-    );
-  }
-
-  if (type === "checkbox") {
-    return (
-      <label>
-        <input name={field.key} type="checkbox" value="true" required={field.required} />
-        <span>{label}</span>
-      </label>
-    );
-  }
-
-  const inputType = ["email", "tel", "url", "number", "date", "time", "password"].includes(type)
-    ? type
-    : "text";
-  return (
-    <label>
-      <span>{label}</span>
-      <input name={field.key} type={inputType} placeholder={placeholder} required={field.required} />
-    </label>
-  );
-}
 
 function elementStyle(element: BackyElement): CSSProperties {
   const props = asRecord(element.props);
@@ -345,6 +304,8 @@ function BackyElementFrame({
     <div
       data-backy-element-id={element.id}
       data-backy-element-type={element.type}
+      data-backy-observe-geometry={['x', 'y', 'width', 'height'].filter(key => typeof element[key] === 'number' || responsiveBreakpointOrder.some(breakpoint => typeof responsiveOverrideRecord(element, breakpoint)[key] === 'number')).join(',')}
+      data-backy-observation-unknown={!['paragraph', 'text', 'richText', 'heading', 'quote', 'image', 'video', 'audio', 'button', 'link', 'navigation', 'nav', 'repeater', 'form', 'commentThread', 'codeBlock', 'container', 'section', 'box', 'columns'].includes(element.type) ? '' : undefined}
       data-backy-parent-id={element.parentId}
       data-backy-component-key={typeof element.componentKey === "string" ? element.componentKey : undefined}
       data-backy-component-contract-pointer={`agent-handoff.componentApiContract.componentTypeContracts.${element.type}`}
@@ -359,6 +320,7 @@ function BackyElementFrame({
       data-backy-binding-count={countAttr(element.dataBindings)}
       data-backy-binding-slot-count={countAttr(element.bindingSlots)}
       data-backy-animation-type={typeAttr(animation.type)}
+      data-animation={typeAttr(animation.type) ? JSON.stringify(animation) : undefined}
       data-backy-accessibility-label={typeAttr(accessibility.label)}
       data-backy-editable-entry-count={editableEntryCount(payload, element.id)}
       data-backy-editable-map-pointer="render.data.editableMap"
@@ -381,6 +343,14 @@ export function BackyElementView({
   const props = asRecord(element.props);
   const children = elementChildren(element);
   const text = asText(props.content, props.text, props.label, element.name);
+
+  if (Array.isArray(props.content) && ["paragraph", "text", "richText", "heading", "quote"].includes(element.type)) {
+    const rich = <BackyPortableRichText value={props.content} siteId={payload.site.id} apiBaseUrl={publicApiBaseUrl} inline={element.type === "heading" || element.type === "quote"} />;
+    const level = /^h[1-6]$/.test(asText(props.level)) ? asText(props.level) : "h1";
+    return <BackyElementFrame element={element} payload={payload}>
+      {element.type === "heading" ? React.createElement(level, null, rich) : element.type === "quote" ? <blockquote>{rich}</blockquote> : rich}
+    </BackyElementFrame>;
+  }
 
   if (element.type === "codeComponent" || element.type === "interactiveFigure") {
     return <BackyElementFrame element={element} payload={payload}><BackyInteractiveComponent element={element} siteId={payload.site.id} publicApiBaseUrl={publicApiBaseUrl} /></BackyElementFrame>;
@@ -485,16 +455,17 @@ export function BackyElementView({
     const fields = formFields(element, payload);
     return (
       <BackyElementFrame element={element} payload={payload}>
-        <form method="post" action="/api/backy-form" data-backy-form-id={formId}>
-          <input type="hidden" name="formId" value={formId} />
-          {(fields.length > 0 ? fields : [
-            { key: "email", label: "Email", type: "email", required: true },
-            { key: "message", label: "Message", type: "textarea" },
-          ]).map((field) => <BackyFormField key={field.key} field={field} />)}
-          <button type="submit">{asText(props.submitLabel) || "Submit"}</button>
-        </form>
+        <BackyWebsiteForm formId={formId} initialFields={fields} submitLabel={asText(props.submitLabel) || "Submit"} pageId={payload.route.type === 'page' ? asText(payload.route.resource?.id) : undefined} postId={payload.route.type === 'post' || payload.route.type === 'blog' ? asText(payload.route.resource?.id) : undefined} enableCaptcha={props.enableCaptcha === true} captchaProvider={asText(props.captchaProvider)} captchaSiteKey={asText(props.captchaSiteKey)} />
       </BackyElementFrame>
     );
+  }
+
+  if (element.type === "commentThread") {
+    const threads = Array.isArray(payload.interactions.comments) ? payload.interactions.comments.map(asRecord) : [];
+    const thread = threads.find(value => value.targetId === payload.route.resource?.id) || threads[0];
+    const targetType = thread?.targetType === 'post' || payload.route.type === 'post' || payload.route.type === 'blog' ? 'post' : 'page';
+    const targetId = asText(thread?.targetId, payload.route.resource?.id);
+    return <BackyElementFrame element={element} payload={payload}>{targetId ? <BackyWebsiteComments targetType={targetType} targetId={targetId} commentThreadId={element.id} blockPolicy={props}/> : <p>Comments need a published page or blog post target.</p>}</BackyElementFrame>;
   }
 
   if (element.type === "codeBlock") {
@@ -533,20 +504,36 @@ export function BackyElementView({
 export function BackyPage({
   payload,
   publicApiBaseUrl = "",
+  inspect = false,
 }: {
   payload: BackyRenderPayload;
   publicApiBaseUrl?: string;
+  inspect?: boolean;
 }) {
   const elements = extractBackyElements(payload);
   const canvas = asRecord(payload.content.canvas);
   const width = asNumber(canvas.width) || 1200;
   const height = asNumber(canvas.height) || 900;
   const responsiveCss = buildBackyResponsiveCss(elements);
+  const document = asRecord(payload.content.contentDocument);
+  const rawVersion = document.version ?? payload.content.version;
+  const revision = typeof rawVersion === 'string' ? rawVersion : asText(asRecord(rawVersion).id);
+  // Expected IDs only; no props, form values or content is sent to the capture client.
+  const expectedIds: string[] = [];
+  let expectedInventoryValid = true;
+  const collectIds = (nodes: BackyElement[], depth = 0) => {
+    if (depth > 64 || expectedIds.length > 10000) { expectedInventoryValid = false; return; }
+    for (const node of nodes) { expectedIds.push(node.id); if (expectedIds.length > 10000) return; collectIds(elementChildren(node), depth + 1); }
+  };
+  if (inspect) collectIds(elements);
 
   return (
     <main
       data-backy-site-id={payload.site.id}
       data-backy-route={payload.route.path}
+      data-backy-frontend-id={BACKY_FRONTEND_IDENTITY.frontendId}
+      data-backy-frontend-version={BACKY_FRONTEND_IDENTITY.version}
+      data-backy-revision={revision || undefined}
       data-backy-component-contract-pointer="agent-handoff.componentApiContract.componentTypeContracts"
       data-backy-property-map-pointer="agent-handoff.componentApiContract.propertyMap"
       data-backy-editable-map-pointer="render.data.editableMap"
@@ -556,6 +543,7 @@ export function BackyPage({
       {responsiveCss ? (
         <style data-backy-responsive-css="media-query">{responsiveCss}</style>
       ) : null}
+      {inspect ? <BackyFrontendInspection expectedIds={expectedInventoryValid ? expectedIds : undefined} /> : null}
       {elements.map((element) => (
         <BackyElementView key={element.id} element={element} payload={payload} publicApiBaseUrl={publicApiBaseUrl} />
       ))}

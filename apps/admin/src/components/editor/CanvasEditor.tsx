@@ -1,3 +1,5 @@
+import { getInteractiveComponentRegistry } from '@/lib/adminContentApi';
+import { resolveEditorCanvasFrame } from '@/lib/editorCanvasFrame';
 /**
  * ============================================================================
  * BACKY CMS - PAGE EDITOR
@@ -12,6 +14,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import './editorWorkspace.css';
 import type {
   CSSProperties,
   FocusEvent as ReactFocusEvent,
@@ -22,8 +25,15 @@ import type {
 import {
   buildBackyThemeCssVariables,
   buildBackyThemeTokens,
+  diffBackyCanvasOverrideMap,
+  resolveBackyCanvasBreakpointSize,
+  updateBackyCanvasBreakpointSize,
+  resolveBackyChildLayout,
+  isBackyFlowChild,
+  reorderBackyFlowChildren,
   buildCustomFrontendAgentHandoff,
   CUSTOM_FRONTEND_AGENT_HANDOFF_DOC,
+  isBackyDataFigureKey,
   type ThemeConfig,
 } from '@backy-cms/core';
 import {
@@ -84,15 +94,18 @@ import { LayersPanel } from '@/components/editor/LayersPanel';
 import { PropertyPanel } from '@/components/editor/PropertyPanel';
 import { PageSettingsModal, type PageSettings } from '@/components/editor/PageSettingsModal';
 import { ActiveEditorProvider } from '@/components/editor/ActiveEditorContext';
+import { RichTextAuthoringProvider } from './RichTextAuthoringContext';
+import type { BackyInteractiveRegistryEntry } from '@backy-cms/editor';
+import { authoringInteractiveEntries } from '@/lib/blogAuthoringInteractive';
 import type { MediaContext } from '@/components/editor/MediaLibraryModal';
 import {
-  BREAKPOINT_CANVAS_SIZE,
   CANVAS_COMPONENT_LIBRARY,
   DEFAULT_CANVAS_SIZE,
   createCanvasElementFromLibraryItem,
   createCanvasElementsFromReusableContent,
 } from '@/components/editor/editorCatalog';
 import { buildCustomFontFaces, buildGoogleFontImportUrl, getFontFamilyOptions } from '@/components/editor/fontCatalog';
+import { getCustomFontFailures, observeCustomFontFailures, retryCustomFontDelivery } from './fontLoading';
 import type {
   CanvasElement,
   CanvasSize,
@@ -105,7 +118,7 @@ import { getPublicMediaFileUrl, listMedia, uploadMedia } from '@/lib/mediaApi';
 import {
   createReusableSection,
   deleteReusableSection,
-  getInteractiveComponentRegistry,
+  getAdminApiBase,
   listReusableSections,
   type InteractiveComponentRegistryEntry,
   type ReusableSection,
@@ -148,6 +161,7 @@ const KNOWN_CANVAS_ELEMENT_TYPES: CanvasElement['type'][] = [
   'interactiveFigure',
   'codeBlock',
   'codeComponent',
+  'collapsible',
 ];
 
 type CanvasAlignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
@@ -264,7 +278,7 @@ const INSPECTOR_PANEL_PURPOSE = 'selected-layer properties, layer tree, and quic
 const INSPECTOR_PANEL_PURPOSE_KEY = 'selected-layer-properties-layer-tree-actions';
 
 const CANVAS_TEXT_EDIT_EVENT = 'backy-open-text-editor';
-const CANVAS_TEXT_EDITABLE_TYPES = new Set<CanvasElement['type']>(['text', 'heading', 'paragraph', 'quote', 'list']);
+const CANVAS_TEXT_EDITABLE_TYPES = new Set<CanvasElement['type']>(['text', 'heading', 'paragraph', 'quote', 'list', 'collapsible']);
 
 type EditorCommandRegistry = {
   schemaVersion: 'backy.editor-command-registry.v1';
@@ -820,7 +834,10 @@ export const collectInteractiveReadinessIssues = (elements: CanvasElement[]): st
           issues.push(`${label}: choose a hydration mode.`);
         }
 
-        if (!hasInteractiveFallback(props)) {
+        const nativeDataFigure = element.type === 'interactiveFigure'
+          && isBackyDataFigureKey(componentKey)
+          && (Array.isArray(props.records) || Boolean(props.source));
+        if (!nativeDataFigure && !hasInteractiveFallback(props)) {
           issues.push(`${label}: add crawlable fallback text, HTML, or an image.`);
         }
 
@@ -1180,8 +1197,9 @@ const collectCanvasContentBounds = (
       const top = offsetY + element.y;
       const right = left + element.width;
       const bottom = top + element.height;
-      const childBounds = element.children?.length
-        ? collectCanvasContentBounds(element.children, left, top)
+      const positionedChildren = element.children?.filter(child => !isBackyFlowChild(child, resolveBackyChildLayout(element)));
+      const childBounds = positionedChildren?.length
+        ? collectCanvasContentBounds(positionedChildren, left, top)
         : { maxX: 0, maxY: 0 };
 
       return {
@@ -1455,23 +1473,12 @@ const mergeDisplayedElementsIntoBreakpoint = (
       }
     });
 
-    if (!jsonEqual(displayed.props, base.props)) {
-      nextOverride.props = displayed.props;
-    } else {
-      delete nextOverride.props;
-    }
-
-    if (!jsonEqual(displayed.styles || {}, base.styles || {})) {
-      nextOverride.styles = displayed.styles;
-    } else {
-      delete nextOverride.styles;
-    }
-
-    if (!jsonEqual(displayed.tokenRefs || {}, base.tokenRefs || {})) {
-      nextOverride.tokenRefs = displayed.tokenRefs;
-    } else {
-      delete nextOverride.tokenRefs;
-    }
+    const props = diffBackyCanvasOverrideMap(base.props, displayed.props);
+    const styles = diffBackyCanvasOverrideMap(base.styles, displayed.styles);
+    const tokenRefs = diffBackyCanvasOverrideMap(base.tokenRefs, displayed.tokenRefs);
+    if (props) nextOverride.props = props; else delete nextOverride.props;
+    if (styles) nextOverride.styles = styles as ResponsiveElementOverride['styles']; else delete nextOverride.styles;
+    if (tokenRefs) nextOverride.tokenRefs = tokenRefs as Record<string, string>; else delete nextOverride.tokenRefs;
 
     const nextChildren = displayed.children?.map(mergeNode);
     return setResponsiveOverride(
@@ -1513,18 +1520,21 @@ const applyUpdatesForBreakpoint = (
     }
 
     if (key === 'props' && isPlainRecord(value)) {
-      override.props = value;
+      const changed = diffBackyCanvasOverrideMap(element.props, value);
+      if (changed) override.props = changed; else delete override.props;
       return;
     }
 
     if (key === 'styles' && isPlainRecord(value)) {
-      override.styles = value as ResponsiveElementOverride['styles'];
+      const changed = diffBackyCanvasOverrideMap(element.styles, value);
+      if (changed) override.styles = changed as ResponsiveElementOverride['styles']; else delete override.styles;
       return;
     }
 
     if (key === 'tokenRefs') {
       if (isPlainRecord(value) && Object.keys(value).length > 0) {
-        override.tokenRefs = value as ResponsiveElementOverride['tokenRefs'];
+        const changed = diffBackyCanvasOverrideMap(element.tokenRefs, value);
+        if (changed) override.tokenRefs = changed as ResponsiveElementOverride['tokenRefs']; else delete override.tokenRefs;
       } else {
         delete override.tokenRefs;
       }
@@ -2322,6 +2332,7 @@ export function CanvasEditor({
   const setMedia = useStore((state) => state.setMedia);
   const fontOptions = useMemo(() => getFontFamilyOptions(media), [media]);
   const activeSiteId = mediaContext?.siteId;
+  const interactiveApiBase = import.meta.env.VITE_BACKY_PUBLIC_API_BASE_URL || getAdminApiBase().replace(/\/api\/admin$/, '/api');
   const editorThemeTokens = useMemo(() => buildBackyThemeTokens(theme || {}), [theme]);
   const editorThemeCssVariables = useMemo(
     () => buildBackyThemeCssVariables(editorThemeTokens) as CSSProperties,
@@ -2402,8 +2413,21 @@ export function CanvasEditor({
     };
   }, [activeSiteId, canViewMedia, setMedia]);
 
-  // Load fonts
+  const [failedCustomFonts, setFailedCustomFonts] = useState<string[]>([]);
+  const [isRetryingCustomFonts, setIsRetryingCustomFonts] = useState(false);
+  const runtimeFontOptionsRef = useRef(fontOptions);
+  const fontRetryRef = useRef<AbortController | null>(null);
+  const fontDeliveriesRef = useRef(new Set<Awaited<ReturnType<typeof retryCustomFontDelivery>>>());
+
+  // Load fonts. CSS registration does not imply successful byte delivery.
   useEffect(() => {
+    const pendingRetry = fontRetryRef.current;
+    pendingRetry?.abort();
+    fontDeliveriesRef.current.forEach((delivery) => delivery.dispose());
+    fontDeliveriesRef.current.clear();
+    fontRetryRef.current = null;
+    runtimeFontOptionsRef.current = fontOptions;
+    setIsRetryingCustomFonts(false);
     const googleFontsUrl = buildGoogleFontImportUrl(fontOptions);
     const link = document.getElementById('backy-editor-fonts') as HTMLLinkElement | null;
 
@@ -2423,15 +2447,77 @@ export function CanvasEditor({
 
     const customFontStyleId = 'backy-editor-custom-fonts';
     const existingStyle = document.getElementById(customFontStyleId) as HTMLStyleElement | null;
-    const styleEl = existingStyle || document.createElement('style');
+    const styleEl = document.createElement('style');
     styleEl.id = customFontStyleId;
     styleEl.dataset.generatedBy = 'backy-cms';
     styleEl.textContent = buildCustomFontFaces(fontOptions);
 
-    if (!existingStyle) {
+    if (existingStyle) {
+      existingStyle.replaceWith(styleEl);
+    } else {
       document.head.appendChild(styleEl);
     }
-  }, [fontOptions]);
+    setFailedCustomFonts([]);
+    if (!document.fonts) return;
+    const stopObserving = observeCustomFontFailures(
+      document.fonts,
+      fontOptions.filter((font) => font.source === 'custom').map((font) => font.value),
+      (failed) => {
+        if (fontRetryRef.current && !fontRetryRef.current.signal.aborted) return;
+        setFailedCustomFonts((current) => (
+          current.length === failed.length && current.every((name, index) => name === failed[index]) ? current : failed
+        ));
+      },
+    );
+    return () => {
+      stopObserving();
+      fontRetryRef.current?.abort();
+      fontDeliveriesRef.current.forEach((delivery) => delivery.dispose());
+      fontDeliveriesRef.current.clear();
+      fontRetryRef.current = null;
+      styleEl.remove();
+    };
+  }, [activeSiteId, fontOptions]);
+
+  const retryFailedCustomFonts = async () => {
+    if (isRetryingCustomFonts || (fontRetryRef.current && !fontRetryRef.current.signal.aborted) || !document.fonts) return;
+    const retry = new AbortController();
+    fontRetryRef.current = retry;
+    setIsRetryingCustomFonts(true);
+    try {
+      const retryOptions = fontOptions.map((font) => failedCustomFonts.includes(font.value)
+        ? font
+        : runtimeFontOptionsRef.current.find((runtime) => runtime.value === font.value && runtime.source === font.source) || font);
+      const result = await retryCustomFontDelivery(retryOptions, failedCustomFonts, retry.signal);
+      if (retry.signal.aborted || fontRetryRef.current !== retry) { result.dispose(); return; }
+      const style = document.getElementById('backy-editor-custom-fonts');
+      if (!style) { result.dispose(); return; }
+      runtimeFontOptionsRef.current = result.fonts;
+      style.textContent = buildCustomFontFaces(result.fonts);
+      fontDeliveriesRef.current.add(result);
+      const referencedUrls = new Set(result.fonts.flatMap((font) => (font.faces || []).map((face) => face.url)));
+      fontDeliveriesRef.current.forEach((delivery) => {
+        if (!delivery.releaseUnused(referencedUrls)) fontDeliveriesRef.current.delete(delivery);
+      });
+      const failed = new Set(result.failed);
+      await Promise.all(result.retried.flatMap((font) => (font.faces || []).map(async (face) => {
+        try {
+          const loaded = await document.fonts.load(`${face.style} ${face.weight} 16px "${font.value.replace(/["\\]/g, '')}"`);
+          if (!loaded.length) failed.add(font.value);
+        } catch { failed.add(font.value); }
+      })));
+      if (retry.signal.aborted || fontRetryRef.current !== retry) return;
+      getCustomFontFailures(document.fonts, fontOptions.filter((font) => font.source === 'custom').map((font) => font.value)).forEach((family) => failed.add(family));
+      setFailedCustomFonts(Array.from(failed).sort());
+    } catch {
+      // Leave the confirmed failure visible; unavailable/CORS delivery is not success.
+    } finally {
+      if (fontRetryRef.current === retry && !retry.signal.aborted) {
+        retry.abort(); // Resume observation, retaining successful runtime URLs until replacement.
+        setIsRetryingCustomFonts(false);
+      }
+    }
+  };
 
   // Canvas state
   const [elements, setElements] = useState<CanvasElement[]>(initialElements);
@@ -2441,8 +2527,9 @@ export function CanvasEditor({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const selectedIdsRef = useRef<string[]>([]);
-  const [size, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
+  const [canvasSourceSize, setSize] = useState<CanvasSize>(initialSize || DEFAULT_CANVAS_SIZE);
   const [breakpoint, setBreakpoint] = useState<EditorBreakpoint>('desktop');
+  const size = useMemo(() => resolveBackyCanvasBreakpointSize(canvasSourceSize, breakpoint), [canvasSourceSize, breakpoint]);
   const [rightPanel, setRightPanel] = useState<'properties' | 'layers'>('properties');
   const [isPreview, setIsPreview] = useState(false);
   const [showComponentPanel, setShowComponentPanel] = useState(true);
@@ -2489,6 +2576,13 @@ export function CanvasEditor({
   const saveInFlightRef = useRef(false);
   const activeSaveModeRef = useRef<EditorSaveMode | null>(null);
   const queuedManualSaveRef = useRef(false);
+  const queuedManualSaveSettingsRef = useRef<PageSettings | undefined>(undefined);
+  const queuedManualReplayTimeoutRef = useRef<number | null>(null);
+  const currentSaveCallbackRef = useRef<((settingsOverride?: PageSettings, silent?: boolean) => Promise<boolean>) | null>(null);
+  const saveReplayContext = JSON.stringify([mode, activeSiteId, mediaContext?.scope, mediaContext?.targetId, savePersistence]);
+  const saveReplayContextRef = useRef(saveReplayContext);
+  const saveReplayGenerationRef = useRef(0);
+  const editorSaveMountedRef = useRef(true);
   const manualSaveRequestedRef = useRef(false);
   const changeSequenceRef = useRef(0);
   const pendingTransformRef = useRef<{
@@ -2576,8 +2670,8 @@ export function CanvasEditor({
     [displayedElements],
   );
   const renderedCanvasSize = useMemo<CanvasSize>(
-    () => expandCanvasSizeToContent(size, displayedContentBounds),
-    [displayedContentBounds, size],
+    () => resolveEditorCanvasFrame(size, displayedContentBounds, isPreview, CANVAS_CONTENT_PADDING),
+    [displayedContentBounds, isPreview, size],
   );
   const scaledCanvasWidth = Math.max(1, Math.round(renderedCanvasSize.width * activeCanvasScale));
   const scaledCanvasHeight = Math.max(1, Math.round(renderedCanvasSize.height * activeCanvasScale));
@@ -3231,32 +3325,41 @@ export function CanvasEditor({
       return;
     }
     const normalizedSize = {
+      ...size,
       ...nextSize,
       width: clampCanvasDimension(nextSize.width, 'width'),
       height: clampCanvasDimension(nextSize.height, 'height'),
     };
+    const nextSourceSize = updateBackyCanvasBreakpointSize(canvasSourceSize, nextBreakpoint, normalizedSize);
     setBreakpoint(nextBreakpoint);
-    setSize(normalizedSize);
+    setSize(nextSourceSize);
     markChanges();
     if (onChange) {
-      onChange(elements, pageSettings, normalizedSize);
+      onChange(elements, pageSettings, nextSourceSize);
     }
-  }, [breakpoint, editDisabledReason, elements, isCanvasMutationDisabled, markChanges, onChange, pageSettings]);
+  }, [breakpoint, canvasSourceSize, editDisabledReason, elements, isCanvasMutationDisabled, markChanges, onChange, pageSettings, size]);
+
+  // Canvas owns only automatic/manual height extension. Its edit frame may be
+  // wider than the selected breakpoint so authored overflow stays reachable.
+  const applyCanvasRenderedHeight = useCallback((nextSize: CanvasSize) => {
+    applyCanvasSize({ ...size, height: nextSize.height });
+  }, [applyCanvasSize, size]);
 
   const growCanvasSizeForElements = useCallback((nextElements: CanvasElement[]) => {
-    setSize((currentSize) => {
+    setSize((currentSourceSize) => {
+      const currentSize = resolveBackyCanvasBreakpointSize(currentSourceSize, breakpoint);
       const expandedSize = expandCanvasSizeToContent(currentSize, collectCanvasContentBounds(nextElements));
       const nextSize: CanvasSize = {
         ...currentSize,
-        width: clampCanvasDimension(expandedSize.width, 'width'),
+        width: breakpoint === 'desktop' ? clampCanvasDimension(expandedSize.width, 'width') : currentSize.width,
         height: clampCanvasDimension(expandedSize.height, 'height'),
       };
 
       return nextSize.width !== currentSize.width || nextSize.height !== currentSize.height
-        ? nextSize
-        : currentSize;
+        ? updateBackyCanvasBreakpointSize(currentSourceSize, breakpoint, nextSize)
+        : currentSourceSize;
     });
-  }, []);
+  }, [breakpoint]);
 
   const activeCanvasPresetId = useMemo(() => (
     CANVAS_SIZE_PRESETS.find((preset) => preset.width === size.width && preset.height === size.height)?.id || 'custom'
@@ -3409,23 +3512,6 @@ export function CanvasEditor({
   }, []);
 
   useEffect(() => {
-    if (externalElementsRevision === undefined || externalElementsRevision === lastExternalElementsRevisionRef.current) {
-      return;
-    }
-
-    lastExternalElementsRevisionRef.current = externalElementsRevision;
-    const nextElements = cloneElements(initialElements);
-    if (historyElementsEqual(nextElements, elementsRef.current)) {
-      return;
-    }
-
-    elementsRef.current = nextElements;
-    setElements(nextElements);
-    setSelectedId((current) => (current && findElementById(nextElements, current) ? current : null));
-    setSelectedIds((current) => current.filter((id) => Boolean(findElementById(nextElements, id))));
-  }, [cloneElements, externalElementsRevision, findElementById, initialElements]);
-
-  useEffect(() => {
     if (!initialSelectedElementId) {
       return;
     }
@@ -3510,6 +3596,7 @@ export function CanvasEditor({
       zIndex: number;
       rootIndex?: number;
       sourceElementId?: string;
+      linkage?: Record<string, unknown>;
     },
   ): CanvasElement => {
     const cloneNode = (node: CanvasElement, nextParentId: string | null, isRoot = false): CanvasElement => {
@@ -3519,7 +3606,9 @@ export function CanvasEditor({
 
       if (isRoot) {
         nextProps.reusableSection = {
+          ...options.linkage,
           mode: 'synced',
+          siteId: section.siteId,
           sectionId: section.id,
           slug: section.slug,
           name: section.name,
@@ -3566,9 +3655,15 @@ export function CanvasEditor({
     return templateElement;
   }, []);
 
+  const reusableSectionsRequestRef = useRef(0);
+  const interactiveComponentsRequestRef = useRef(0);
+  const interactiveComponentsAbortRef = useRef<AbortController | null>(null);
+
   const loadReusableSections = useCallback(async () => {
+    const request = ++reusableSectionsRequestRef.current;
+    setReusableSections([]);
     if (!activeSiteId || !canView) {
-      setReusableSections([]);
+      setReusableSectionsLoading(false);
       setReusableSectionsError(null);
       return;
     }
@@ -3577,21 +3672,26 @@ export function CanvasEditor({
     setReusableSectionsError(null);
     try {
       const sections = await listReusableSections(activeSiteId, { status: 'active' });
-      setReusableSections(sections);
+      if (request === reusableSectionsRequestRef.current) setReusableSections(sections);
     } catch (error) {
-      setReusableSectionsError(error instanceof Error ? error.message : 'Unable to load reusable sections');
+      if (request === reusableSectionsRequestRef.current) setReusableSectionsError(error instanceof Error ? error.message : 'Unable to load reusable sections');
     } finally {
-      setReusableSectionsLoading(false);
+      if (request === reusableSectionsRequestRef.current) setReusableSectionsLoading(false);
     }
   }, [activeSiteId, canView]);
 
   useEffect(() => {
     void loadReusableSections();
+    return () => { reusableSectionsRequestRef.current += 1; };
   }, [loadReusableSections]);
 
   const loadInteractiveComponents = useCallback(async () => {
+    const request = ++interactiveComponentsRequestRef.current;
+    interactiveComponentsAbortRef.current?.abort();
+    const controller = new AbortController(); interactiveComponentsAbortRef.current = controller;
+    setInteractiveComponents([]);
     if (!activeSiteId || !canView) {
-      setInteractiveComponents([]);
+      setInteractiveComponentsLoading(false);
       setInteractiveComponentsError(null);
       return;
     }
@@ -3599,17 +3699,18 @@ export function CanvasEditor({
     setInteractiveComponentsLoading(true);
     setInteractiveComponentsError(null);
     try {
-      const registry = await getInteractiveComponentRegistry(activeSiteId);
-      setInteractiveComponents(registry.components);
+      const entries = authoringInteractiveEntries(await getInteractiveComponentRegistry(activeSiteId, controller.signal));
+      if (request === interactiveComponentsRequestRef.current && !controller.signal.aborted) setInteractiveComponents(entries.map((entry) => ({ ...entry, displayName: entry.displayName || entry.componentKey, source: typeof entry.source === 'string' ? entry.source : 'registry' })));
     } catch (error) {
-      setInteractiveComponentsError(error instanceof Error ? error.message : 'Unable to load interactive components');
+      if (request === interactiveComponentsRequestRef.current) setInteractiveComponentsError(error instanceof Error ? error.message : 'Unable to load interactive components');
     } finally {
-      setInteractiveComponentsLoading(false);
+      if (request === interactiveComponentsRequestRef.current) setInteractiveComponentsLoading(false);
     }
-  }, [activeSiteId, canView]);
+  }, [activeSiteId, canView, interactiveApiBase]);
 
   useEffect(() => {
     void loadInteractiveComponents();
+    return () => { interactiveComponentsRequestRef.current += 1; interactiveComponentsAbortRef.current?.abort(); };
   }, [loadInteractiveComponents]);
 
   const updateElementById = (
@@ -3847,10 +3948,14 @@ export function CanvasEditor({
 
   // Sync changes to parent
   useEffect(() => {
+    // A parent-owned writing edit is still being applied. Publishing the old
+    // canvas snapshot here would overwrite it before the next render.
+    if (externalElementsRevision !== undefined && externalElementsRevision !== lastExternalElementsRevisionRef.current) return;
+    if (elements !== elementsRef.current) return;
     if (onChange) {
-      onChange(elements, pageSettings, size);
+      onChange(elements, pageSettings, canvasSourceSize);
     }
-  }, [elements, pageSettings, onChange, size]);
+  }, [canvasSourceSize, elements, externalElementsRevision, pageSettings, onChange]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) {
@@ -4042,6 +4147,25 @@ export function CanvasEditor({
     setHistory(nextHistory);
     setHistoryIndex(nextIndex);
   }, [resolveSelectionSnapshot, selectedId, selectedIds]);
+
+  useEffect(() => {
+    if (externalElementsRevision === undefined || externalElementsRevision === lastExternalElementsRevisionRef.current) return;
+    lastExternalElementsRevisionRef.current = externalElementsRevision;
+    const nextElements = cloneElements(initialElements);
+    const previousElements = elementsRef.current;
+    // A completed authoring edit supersedes any pre-edit drag snapshot.
+    pendingTransformRef.current = null;
+    if (!historyElementsEqual(nextElements, previousElements)) {
+      const selection = resolveSelectionSnapshot(nextElements, selectedIdRef.current, selectedIdsRef.current);
+      elementsRef.current = nextElements;
+      setElements(nextElements);
+      setSelectedId(selection.selectedId);
+      setSelectedIds(selection.selectedIds);
+      addToHistory(nextElements, selection.selectedId, selection.selectedIds, previousElements);
+      markChanges();
+    }
+    if (initialSize) setSize(initialSize);
+  }, [addToHistory, cloneElements, externalElementsRevision, initialElements, initialSize, markChanges, resolveSelectionSnapshot]);
 
   /**
    * Undo
@@ -6505,26 +6629,28 @@ export function CanvasEditor({
       try {
         const sections = await listReusableSections(activeSiteId, { status: 'active' });
         setReusableSections(sections);
-        reusableSectionSource = sections.find((section) => section.id === selectedReusableSectionMeta.sectionId)
-          || reusableSectionSource;
+        reusableSectionSource = sections.find((section) => section.id === selectedReusableSectionMeta.sectionId);
       } catch (error) {
-        if (!reusableSectionSource) {
-          setEditorNotice(error instanceof Error ? error.message : 'Unable to refresh saved section source.');
-          return;
-        }
+        setEditorNotice(error instanceof Error ? error.message : 'Unable to refresh saved section source.');
+        return;
       }
     }
 
     if (!reusableSectionSource || !reusableSectionSource.content.elements.length) {
+      setEditorNotice('This saved section source is unavailable. Reinsert or detach the section instance before refreshing.');
       return;
     }
 
     const sectionRoots = reusableSectionSource.content.elements;
-    const sourceRoot = selectedReusableSectionMeta?.rootIndex !== undefined
-      ? sectionRoots[selectedReusableSectionMeta.rootIndex]
-      : selectedReusableSectionMeta?.sourceElementId
-        ? sectionRoots.find((element) => element.id === selectedReusableSectionMeta.sourceElementId)
+    const sourceRoot = selectedReusableSectionMeta?.sourceElementId
+      ? sectionRoots.find((element) => element.id === selectedReusableSectionMeta.sourceElementId)
+      : selectedReusableSectionMeta?.rootIndex !== undefined
+        ? sectionRoots[selectedReusableSectionMeta.rootIndex]
         : undefined;
+    if ((selectedReusableSectionMeta?.sourceElementId || selectedReusableSectionMeta?.rootIndex !== undefined) && !sourceRoot) {
+      setEditorNotice('This linked source root no longer exists. Reinsert or detach the section instance before refreshing.');
+      return;
+    }
     const sourceRootIndex = sourceRoot
       ? sectionRoots.findIndex((element) => element === sourceRoot)
       : 0;
@@ -6549,6 +6675,7 @@ export function CanvasEditor({
         zIndex: selectedEntry.element.zIndex || 1,
         rootIndex: sourceRootIndex >= 0 ? sourceRootIndex : undefined,
         sourceElementId: refreshSourceElement.id,
+        linkage: selectedEntry.element.props?.reusableSection as Record<string, unknown> | undefined,
       },
     );
 
@@ -6772,14 +6899,29 @@ export function CanvasEditor({
     }
 
     updateElementsWithHistory((currentElements) => {
-      const primaryEntry = findElementEntry(currentElements, selectedId);
+      const displayedElements = applyResponsiveOverridesToElements(currentElements, breakpoint);
+      const primaryEntry = findElementEntry(displayedElements, selectedId);
       if (!primaryEntry || isLayerLocked(primaryEntry.element)) {
         return currentElements;
       }
 
+      const parent = primaryEntry.parentId ? findElementEntry(displayedElements, primaryEntry.parentId)?.element : undefined;
+      const parentLayout = parent ? resolveBackyChildLayout(parent) : 'free';
+      if (parent && isBackyFlowChild(primaryEntry.element, parentLayout)) {
+        const siblings = (parent.children || []).filter(child => isBackyFlowChild(child, parentLayout) && !isLayerHidden(child))
+          .map((child, index) => ({ child, index })).sort((a, b) => (Number(a.child.styles?.order ?? a.child.props.order) || 0) - (Number(b.child.styles?.order ?? b.child.props.order) || 0) || a.index - b.index).map(item => item.child);
+        const index = siblings.findIndex(child => child.id === selectedId);
+        const reverse = String(parent.styles?.flexDirection ?? parent.props.flexDirection ?? '').endsWith('reverse');
+        const direction = (deltaX + deltaY > 0 ? 1 : -1) * (reverse ? -1 : 1);
+        if (index < 0 || index + direction < 0 || index + direction >= siblings.length) return currentElements;
+        const beforeId = direction < 0 ? siblings[index - 1].id : siblings[index + 2]?.id;
+        const result = updateElementById(displayedElements, parent.id, node => ({ ...node, children: reorderBackyFlowChildren(node.children || [], selectedId, beforeId) }));
+        return mergeDisplayedElementsIntoBreakpoint(currentElements, result.elements, breakpoint);
+      }
+
       const nudgeEntries = (selectedIds.length > 1
         ? selectedIds
-            .map((id) => findElementEntry(currentElements, id))
+            .map((id) => findElementEntry(displayedElements, id))
             .filter((entry): entry is { element: CanvasElement; parentId: string | null } => (
               !!entry &&
               entry.parentId === primaryEntry.parentId &&
@@ -6794,7 +6936,7 @@ export function CanvasEditor({
       }
 
       const parentBounds = primaryEntry.parentId
-        ? findElementEntry(currentElements, primaryEntry.parentId)?.element
+        ? findElementEntry(displayedElements, primaryEntry.parentId)?.element
         : null;
       const boundsWidth = parentBounds?.width ?? size.width;
       const boundsHeight = parentBounds?.height ?? size.height;
@@ -6811,7 +6953,7 @@ export function CanvasEditor({
         return currentElements;
       }
 
-      let nextElements = currentElements;
+      let nextElements = displayedElements;
       for (const entry of nudgeEntries) {
         const result = updateElementById(nextElements, entry.element.id, (element) => ({
           ...element,
@@ -6822,9 +6964,9 @@ export function CanvasEditor({
         nextElements = result.updated ? result.elements : nextElements;
       }
 
-      return nextElements;
+      return mergeDisplayedElementsIntoBreakpoint(currentElements, nextElements, breakpoint);
     }, selectedId);
-  }, [findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
+  }, [breakpoint, findElementEntry, selectedId, selectedIds, size.height, size.width, updateElementsWithHistory]);
 
   const alignSelectedElement = useCallback((alignment: CanvasAlignment) => {
     if (!selectedId) {
@@ -7422,6 +7564,7 @@ export function CanvasEditor({
     if (saveInFlightRef.current) {
       if (requestedSaveMode === 'manual' && activeSaveModeRef.current === 'autosave') {
         queuedManualSaveRef.current = true;
+        queuedManualSaveSettingsRef.current = settingsOverride;
         setSaveStatus('saving');
         setAutosaveDueAt(null);
       }
@@ -7470,9 +7613,17 @@ export function CanvasEditor({
     activeSaveModeRef.current = requestedSaveMode;
     setIsSaving(true);
     setSaveStatus(requestedSaveMode === 'autosave' ? 'autosaving' : 'saving');
+    const savingContext = saveReplayContext;
+    const savingGeneration = saveReplayGenerationRef.current;
+    const isCurrentSaveContext = () => editorSaveMountedRef.current
+      && saveReplayContextRef.current === savingContext
+      && saveReplayGenerationRef.current === savingGeneration;
+    let saveCompleted = false;
 
     try {
-      await Promise.resolve(onSave(elementsRef.current, nextSettings, size));
+      await Promise.resolve(onSave(elementsRef.current, nextSettings, canvasSourceSize));
+      if (!isCurrentSaveContext()) return false;
+      saveCompleted = true;
       if (changeSequenceRef.current === saveSequence) {
         const completedSaveMode =
           requestedSaveMode === 'autosave' && manualSaveRequestedRef.current
@@ -7494,6 +7645,7 @@ export function CanvasEditor({
       }
       return true;
     } catch (error) {
+      if (!isCurrentSaveContext()) return false;
       const message = error instanceof Error && error.message
         ? error.message
         : 'Unable to save page. Please try again.';
@@ -7501,8 +7653,8 @@ export function CanvasEditor({
       setSaveStatus('error');
       setLastSaveError(message);
       setAutosaveDueAt(null);
+      manualSaveRequestedRef.current = false;
       if (!silent) {
-        manualSaveRequestedRef.current = false;
         setEditorNotice(message);
       } else {
         console.error('Auto-save failed');
@@ -7510,23 +7662,48 @@ export function CanvasEditor({
       return false;
     } finally {
       const shouldRunQueuedManualSave =
-        requestedSaveMode === 'autosave' && queuedManualSaveRef.current;
-
-      if (shouldRunQueuedManualSave) {
-        queuedManualSaveRef.current = false;
-      }
+        saveCompleted && isCurrentSaveContext()
+        && requestedSaveMode === 'autosave' && queuedManualSaveRef.current;
+      const queuedSettings = queuedManualSaveSettingsRef.current;
+      queuedManualSaveRef.current = false;
+      queuedManualSaveSettingsRef.current = undefined;
 
       saveInFlightRef.current = false;
       activeSaveModeRef.current = null;
       setIsSaving(false);
 
       if (shouldRunQueuedManualSave) {
-        window.setTimeout(() => {
-          void handleSaveWrapper(settingsOverride, false);
+        queuedManualReplayTimeoutRef.current = window.setTimeout(() => {
+          queuedManualReplayTimeoutRef.current = null;
+          if (isCurrentSaveContext()) {
+            void currentSaveCallbackRef.current?.(queuedSettings, false);
+          }
         }, 0);
       }
     }
-  }, [canEdit, editDisabledReason, hasUnsavedChanges, isParentPersistence, normalizedSaveOwnerLabel, onSave, pageSettings, size, validateSettings]);
+  }, [canEdit, canvasSourceSize, editDisabledReason, hasUnsavedChanges, isParentPersistence, normalizedSaveOwnerLabel, onSave, pageSettings, saveReplayContext, validateSettings]);
+
+  // Replay only through a committed render, after the parent has admitted its
+  // new save token. The completed autosave's closure retains the old token.
+  useLayoutEffect(() => {
+    currentSaveCallbackRef.current = handleSaveWrapper;
+    saveReplayContextRef.current = saveReplayContext;
+  }, [handleSaveWrapper, saveReplayContext]);
+
+  useLayoutEffect(() => {
+    editorSaveMountedRef.current = true;
+    return () => {
+      editorSaveMountedRef.current = false;
+      saveReplayGenerationRef.current += 1;
+      queuedManualSaveRef.current = false;
+      queuedManualSaveSettingsRef.current = undefined;
+      manualSaveRequestedRef.current = false;
+      if (queuedManualReplayTimeoutRef.current !== null) {
+        window.clearTimeout(queuedManualReplayTimeoutRef.current);
+        queuedManualReplayTimeoutRef.current = null;
+      }
+    };
+  }, [saveReplayContext]);
 
   const handleSettingsSave = useCallback(async (newSettings: PageSettings) => {
     if (!canEdit) {
@@ -7697,6 +7874,7 @@ export function CanvasEditor({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!editorShellRef.current?.getClientRects().length) return;
       if (isSaving && ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's')) {
         e.preventDefault();
         return;
@@ -7999,13 +8177,17 @@ export function CanvasEditor({
    */
   const handleBreakpointChange = useCallback(
     (bp: EditorBreakpoint) => {
-      applyCanvasSize(BREAKPOINT_CANVAS_SIZE[bp], bp);
+      if (isCanvasMutationDisabled) {
+        setEditorNotice(editDisabledReason);
+        return;
+      }
+      setBreakpoint(bp);
     },
-    [applyCanvasSize]
+    [editDisabledReason, isCanvasMutationDisabled]
   );
 
   useEffect(() => {
-    if (!hasUnsavedChanges || isSaving || isParentPersistence) {
+    if (!hasUnsavedChanges || isSaving || isParentPersistence || saveStatus === 'error') {
       setAutosaveDueAt(null);
       return;
     }
@@ -8026,7 +8208,7 @@ export function CanvasEditor({
         clearTimeout(autosaveTimeoutRef.current);
       }
     };
-  }, [handleSaveWrapper, hasUnsavedChanges, isParentPersistence, isSaving]);
+  }, [handleSaveWrapper, hasUnsavedChanges, isParentPersistence, isSaving, saveStatus]);
 
   useEffect(() => () => {
     if (autosaveTimeoutRef.current) {
@@ -8128,6 +8310,7 @@ export function CanvasEditor({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!editorShellRef.current?.getClientRects().length) return;
       if (event.key !== ' ' || event.repeat || shouldIgnoreEditorShortcut(event.target)) {
         return;
       }
@@ -8314,7 +8497,7 @@ export function CanvasEditor({
   const zoomSliderActionStatus = `Canvas zoom slider set to ${zoomPercent}%. Range ${CANVAS_ZOOM_MIN * 100}-${CANVAS_ZOOM_MAX * 100}%`;
   const editorZoomActionStatus = [
     isPreview
-      ? 'Preview zoom is canvas-scoped and uses the expanded rendered content bounds.'
+      ? 'Preview zoom is canvas-scoped and fits the selected viewport width while scrolling the full content height.'
       : editorCommandStatusText(panCommand),
     editorCommandStatusText(zoomOutCommand),
     zoomSliderActionStatus,
@@ -8678,7 +8861,7 @@ export function CanvasEditor({
         )}
       >
         <Eye className="h-4 w-4" />
-        {isPreview ? 'Edit' : 'Preview'}
+        {isPreview ? 'Edit layout' : 'Preview layout'}
       </button>
 
       {!hideSettings && (
@@ -8792,7 +8975,8 @@ export function CanvasEditor({
 
   return (
     <ActiveEditorProvider>
-      <div className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950", className || "fixed inset-0")}>
+      <RichTextAuthoringProvider entries={interactiveComponents as BackyInteractiveRegistryEntry[]} loading={interactiveComponentsLoading} error={interactiveComponentsError || undefined} reload={loadInteractiveComponents} apiBaseUrl={interactiveApiBase} mediaContext={mediaContext} selectedId={selectedId} disabled={isCanvasMutationDisabled} canViewMedia={canViewMedia} canCreateMedia={canCreateMedia} mediaViewDisabledReason={mediaViewDisabledReason} mediaCreateDisabledReason={mediaCreateDisabledReason}>
+      <div className={cn("backy-canvas-editor flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 text-slate-950", className || "fixed inset-0")}>
         {/* Header */}
         <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 overflow-x-auto border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
           {/* Left */}
@@ -9012,6 +9196,21 @@ export function CanvasEditor({
                 <Copy className="h-3 w-3" />
               </button>
             </div>
+            <label className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-2 text-xs font-medium text-slate-600">
+              Website width
+              <select
+                value={size.layout === 'fluid' ? 'fluid' : 'fixed'}
+                onChange={(event) => applyCanvasSize({ ...size, layout: event.target.value === 'fluid' ? 'fluid' : 'fixed' })}
+                disabled={isCanvasMutationDisabled}
+                aria-label="Website width"
+                data-testid="editor-canvas-layout-select"
+                title={canvasViewportDisabledReason || 'Full width stretches section backgrounds and centers the content. Fixed width keeps the authored canvas size.'}
+                className="min-h-11 max-w-48 rounded-md bg-white px-2 text-sm text-slate-800 outline-none focus-visible:ring-2 focus-visible:ring-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="fluid">Full width</option>
+                <option value="fixed">Fixed design width</option>
+              </select>
+            </label>
             <div className="hidden items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-600 shadow-sm xl:flex">
               <select
                 value={activeCanvasPresetId}
@@ -9037,7 +9236,7 @@ export function CanvasEditor({
                 type="number"
                 min={MIN_CANVAS_DIMENSION}
                 max={MAX_CANVAS_WIDTH}
-                step={10}
+                step="any"
                 value={size.width}
                 onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
                 disabled={isCanvasMutationDisabled}
@@ -9055,7 +9254,7 @@ export function CanvasEditor({
                 type="number"
                 min={MIN_CANVAS_DIMENSION}
                 max={MAX_CANVAS_HEIGHT}
-                step={10}
+                step="any"
                 value={size.height}
                 onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
                 disabled={isCanvasMutationDisabled}
@@ -9125,7 +9324,7 @@ export function CanvasEditor({
                       type="number"
                       min={MIN_CANVAS_DIMENSION}
                       max={MAX_CANVAS_WIDTH}
-                      step={10}
+                      step="any"
                       value={size.width}
                       onChange={(event) => handleCanvasDimensionInput('width', event.target.value)}
                       disabled={isCanvasMutationDisabled}
@@ -9146,7 +9345,7 @@ export function CanvasEditor({
                       type="number"
                       min={MIN_CANVAS_DIMENSION}
                       max={MAX_CANVAS_HEIGHT}
-                      step={10}
+                      step="any"
                       value={size.height}
                       onChange={(event) => handleCanvasDimensionInput('height', event.target.value)}
                       disabled={isCanvasMutationDisabled}
@@ -9649,6 +9848,12 @@ export function CanvasEditor({
 
           </div>
         </header>
+        {failedCustomFonts.length > 0 && (
+          <div role="status" data-testid="editor-font-load-warning" className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            <span>Custom fonts could not load: {failedCustomFonts.join(', ')}. The canvas uses fallback fonts. Check font delivery in Media or retry.</span>
+            <button type="button" className="min-h-8 rounded border border-amber-300 px-3 py-1 font-medium hover:bg-amber-100" disabled={isRetryingCustomFonts} onClick={() => void retryFailedCustomFonts()}>{isRetryingCustomFonts ? 'Retrying font loading…' : 'Retry font loading'}</button>
+          </div>
+        )}
 
         <span
           id={commandPaletteStatusId}
@@ -9852,6 +10057,9 @@ export function CanvasEditor({
                 reusableSections={reusableSections}
                 reusableSectionsLoading={reusableSectionsLoading}
                 reusableSectionsError={reusableSectionsError}
+                interactiveComponents={interactiveComponents}
+                interactiveComponentsLoading={interactiveComponentsLoading}
+                interactiveComponentsError={interactiveComponentsError}
                 canSaveSelection={Boolean(activeSiteId && selectedId)}
                 canDeleteReusableSections={canDeleteReusableSections}
                 isSavingReusableSection={isSavingReusableSection}
@@ -9877,7 +10085,7 @@ export function CanvasEditor({
             data-testid="editor-canvas-viewport"
             data-canvas-wheel-zoom="enabled"
             data-preview-zoom={isPreview ? 'canvas-scoped' : undefined}
-            data-preview-scale-basis={isPreview ? 'expanded-content-bounds' : undefined}
+            data-preview-scale-basis={isPreview ? 'selected-viewport-width-expanded-height' : undefined}
             data-preview-scale-width={isPreview ? renderedCanvasSize.width : undefined}
             data-preview-scale-height={isPreview ? renderedCanvasSize.height : undefined}
             data-preview-scroll-owner={isPreview ? 'editor-canvas-viewport' : undefined}
@@ -10335,10 +10543,10 @@ export function CanvasEditor({
                     data-canvas-scale={activeCanvasScale}
                     data-canvas-zoom-surface="true"
                     data-canvas-zoom-surface-listener="native-capture"
-                    data-preview-content-bounds="expanded"
+                    data-preview-content-bounds="selected-width-expanded-height"
                     data-preview-zoom="canvas-scoped"
                     data-preview-scroll-owner="editor-canvas-viewport"
-                    data-preview-scale-basis="expanded-content-bounds"
+                    data-preview-scale-basis="selected-viewport-width-expanded-height"
                     data-preview-scale-model="fit-width-scroll-y"
                     data-preview-scale-width={renderedCanvasSize.width}
                     data-preview-scale-height={renderedCanvasSize.height}
@@ -10352,6 +10560,7 @@ export function CanvasEditor({
                     }}
                   >
                     <Canvas
+                      siteId={activeSiteId || undefined}
                       elements={displayedElements}
                       onElementsChange={handleElementsChange}
                       selectedId={selectedId}
@@ -10360,17 +10569,7 @@ export function CanvasEditor({
                       onSelectMany={handleCanvasSelectMany}
                       onToggleSelect={handleCanvasToggleSelect}
                       size={renderedCanvasSize}
-                      onSizeChange={(newSize) => {
-                        if (isCanvasMutationDisabled) {
-                          return;
-                        }
-
-                        setSize(newSize);
-                        markChanges();
-                        if (onChange) {
-                          onChange(elements, pageSettings, newSize);
-                        }
-                      }}
+                      onSizeChange={applyCanvasRenderedHeight}
                       isPreview={isPreview}
                       disabled={isCanvasMutationDisabled}
                       viewportScale={activeCanvasScale}
@@ -10450,6 +10649,7 @@ export function CanvasEditor({
                         }}
                       >
                         <Canvas
+                      siteId={activeSiteId || undefined}
                           elements={displayedElements}
                           onElementsChange={handleElementsChange}
                           selectedId={selectedId}
@@ -10458,17 +10658,7 @@ export function CanvasEditor({
                           onSelectMany={handleCanvasSelectMany}
                           onToggleSelect={handleCanvasToggleSelect}
                           size={renderedCanvasSize}
-                          onSizeChange={(newSize) => {
-                            if (isCanvasMutationDisabled) {
-                              return;
-                            }
-
-                            setSize(newSize);
-                            markChanges();
-                            if (onChange) {
-                              onChange(elements, pageSettings, newSize);
-                            }
-                          }}
+                          onSizeChange={applyCanvasRenderedHeight}
                           isPreview={isPreview}
                           disabled={isCanvasMutationDisabled}
                           viewportScale={activeCanvasScale}
@@ -10583,7 +10773,7 @@ export function CanvasEditor({
                 data-auto-fit={isCanvasAutoFit ? 'true' : 'false'}
                 data-canvas-scale={activeCanvasScale}
                 data-preview-zoom={isPreview ? 'canvas-scoped' : undefined}
-                data-preview-scale-basis={isPreview ? 'expanded-content-bounds' : undefined}
+                data-preview-scale-basis={isPreview ? 'selected-viewport-width-expanded-height' : undefined}
                 data-zoom-percent={zoomPercent}
                 data-pan-mode={isCanvasPanMode ? 'true' : 'false'}
                 data-pan-active={isCanvasPanActive ? 'true' : 'false'}
@@ -10987,6 +11177,7 @@ export function CanvasEditor({
 
                 <div
                   className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  hidden={rightPanel === 'layers'}
                   data-testid={selectedIds.length > 1 ? 'editor-inspector-multi-selection' : selectedElement ? 'editor-inspector-selection' : 'editor-inspector-empty'}
                   data-visible-layer-count={visibleCanvasElementIds.length}
                   data-total-layer-count={totalCanvasElementCount}
@@ -11874,7 +12065,16 @@ export function CanvasEditor({
                 </div>
               </div>
 
-              <div className={cn('min-h-0 min-w-0', rightPanel === 'properties' && selectedElement ? 'shrink-0' : 'flex-1 overflow-hidden')}>
+              <div
+                className={cn(
+                  'min-w-0',
+                  rightPanel === 'layers'
+                    ? 'min-h-[32rem] flex-1 shrink-0 overflow-hidden'
+                    : selectedElement ? 'min-h-0 shrink-0' : 'min-h-0 flex-1 overflow-hidden',
+                )}
+                data-testid="editor-inspector-content"
+                data-active-panel={rightPanel}
+              >
                 {rightPanel === 'layers' ? (
                   <LayersPanel
                     elements={displayedElements}
@@ -11898,6 +12098,8 @@ export function CanvasEditor({
                     element={selectedElement}
                     onChange={handleElementUpdate}
                     onDelete={deleteElement}
+                    onEditText={handleEditSelectedText}
+                    onPreviewAnimation={() => setIsPreview(true)}
                     theme={theme}
                     mediaContext={mediaContext}
                     disabled={isCanvasMutationDisabled || isLayerLocked(selectedElement)}
@@ -12149,6 +12351,7 @@ export function CanvasEditor({
           mediaCreateDisabledReason={mediaCreateDisabledReason}
         />
       </div>
+      </RichTextAuthoringProvider>
     </ActiveEditorProvider>
   );
 }

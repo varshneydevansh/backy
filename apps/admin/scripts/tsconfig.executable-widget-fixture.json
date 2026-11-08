@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["./executable-widget-lifecycle-runtime-fixture.tsx"],
+  "compilerOptions": { "noUnusedLocals": false, "noUnusedParameters": false },
+  "references": []
+}

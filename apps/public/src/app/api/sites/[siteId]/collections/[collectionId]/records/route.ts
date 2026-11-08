@@ -20,7 +20,7 @@ import {
 } from '@/lib/backyStore';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { withCollectionFrontendDesign, withCollectionRecordFrontendDesign } from '@/lib/publicCollectionResources';
-import { normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
+import { collectionRecordValidationIssuesFromError, normalizeCollectionRecordMediaValues, validateRepositoryCollectionRecordValues } from '@/lib/collectionRecordValidation';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { syncRepositoryCollectionRecordMediaReferences } from '@/lib/repositoryMediaReferenceSync';
 
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }, {
         requestId,
         request,
-        cache: 'discovery',
+        cache: 'render',
         siteId: site.id,
         cacheRevision,
       });
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
 
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
@@ -253,7 +253,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }, {
       requestId,
       request,
-      cache: 'discovery',
+      cache: 'render',
       siteId: site.id,
     });
   } catch (error) {
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const site = getSiteByIdOrSlug(siteId);
 
-    if (!site) {
+    if (!site || !site.isPublished) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
@@ -399,6 +399,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       201,
     );
   } catch (error) {
+    const issues = collectionRecordValidationIssuesFromError(error);
+    if (issues) return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid.', requestId, issues);
     console.error('Public collection record create API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

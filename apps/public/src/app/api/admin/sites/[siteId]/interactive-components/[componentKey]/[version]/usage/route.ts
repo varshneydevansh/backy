@@ -12,6 +12,7 @@ import {
   listAdminPages,
 } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { readInteractiveComponentInventory, InteractiveComponentInventoryError } from '@/lib/interactiveComponentInventory';
 
 export const runtime = 'nodejs';
 
@@ -175,24 +176,7 @@ const collectUsage = (
   ...posts.flatMap((post) => collectUsageForResource('post', post, componentKey, version)),
 ]);
 
-const listAll = async <TItem>(
-  load: (offset: number, limit: number) => Promise<{ items: TItem[]; pagination?: { hasMore?: boolean; limit?: number } }>,
-): Promise<TItem[]> => {
-  const items: TItem[] = [];
-  const limit = 200;
-  let offset = 0;
 
-  for (let page = 0; page < 50; page += 1) {
-    const result = await load(offset, limit);
-    items.push(...result.items);
-    if (!result.pagination?.hasMore) {
-      break;
-    }
-    offset += result.pagination.limit || limit;
-  }
-
-  return items;
-};
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
@@ -216,14 +200,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const [pages, posts] = await Promise.all([
-        listAll((offset, limit) => repositories.pages.list({
+        readInteractiveComponentInventory(site.id, (offset, limit) => repositories.pages.list({
           siteId: site.id,
           includeUnpublished: true,
           status: 'all',
           limit,
           offset,
         })),
-        listAll((offset, limit) => repositories.posts.list({
+        readInteractiveComponentInventory(site.id, (offset, limit) => repositories.posts.list({
           siteId: site.id,
           includeUnpublished: true,
           status: 'all',
@@ -259,7 +243,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const pages = listAdminPages(site.id, { includeUnpublished: true });
-    const posts = getBlogPosts(site.id, { includeUnpublished: true, limit: 1000, offset: 0 }).posts;
+    const posts = await readInteractiveComponentInventory(site.id, async (offset, limit) => {
+      const result = getBlogPosts(site.id, { includeUnpublished: true, limit, offset });
+      return { items: result.posts, pagination: result.pagination };
+    });
     const usage = collectUsage(pages, posts, normalizedKey, normalizedVersion);
 
     return NextResponse.json({
@@ -281,6 +268,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof InteractiveComponentInventoryError) {
+      return errorResponse(503, error.code, error.message, requestId);
+    }
     console.error('Admin interactive component usage API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

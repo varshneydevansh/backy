@@ -67,7 +67,16 @@ const getExtension = (value: string): string | null => {
 
 const normalizeFontUrl = (value: string | undefined): string => {
   if (!value) return '';
-  return value.split(/[?#]/)[0].trim();
+  const url = value.trim();
+  if (!url || /[\u0000-\u001f\u007f<>"\\]/.test(url)) return '';
+  try {
+    const parsed = new URL(url, 'https://backy.invalid');
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return '';
+    // Extension/identity parsing strips query separately. Delivery needs the full signed URL.
+    return url;
+  } catch {
+    return '';
+  }
 };
 
 const cleanFontNameFromFilename = (name: string): string => {

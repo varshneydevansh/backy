@@ -1,3 +1,4 @@
+import type { BackyAnimationSequence } from './animation-sequence';
 /**
  * Canonical Backy content contract.
  *
@@ -143,6 +144,8 @@ export type BackyElementAnimationTrigger = 'load' | 'scroll' | 'hover';
 export type BackyElementAnimationDirection = 'left' | 'right' | 'up' | 'down';
 
 export interface BackyElementAnimation {
+  /** Optional bounded same-layer timeline; supersedes the legacy single tween. */
+  sequence?: BackyAnimationSequence;
   type: BackyElementAnimationType;
   duration: number;
   delay?: number;
@@ -195,6 +198,8 @@ export interface BackyInteractiveRenderCapabilities {
 }
 
 export interface BackyContentElement extends BackyElementLayout {
+  /** Safe JSON extension fields remain at their authored root path during conversion. */
+  [extension: string]: unknown;
   id: string;
   type: string;
   name?: string;
@@ -343,32 +348,34 @@ const isObject = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 
-const withElementParentScopes = (
-  elements: BackyContentElement[],
-  parentId?: string,
-): BackyContentElement[] => (
-  elements.map((element) => {
-    const resolvedParentId = parentId || element.parentId;
-    const children = withElementParentScopes(
-      Array.isArray(element.children) ? element.children : [],
-      element.id,
-    );
-    const metadata = (isObject(element.metadata) ? element.metadata : {}) as Record<string, BackyJsonValue>;
-    const next: BackyContentElement = {
-      ...element,
-      ...(resolvedParentId ? { parentId: resolvedParentId } : {}),
-      children,
-    };
-
-    if (resolvedParentId) {
-      next.metadata = {
-        ...metadata,
-        parentId: metadata.parentId ?? resolvedParentId,
-      };
+/** Synchronize tree ancestry without converting geometry, props or extension fields.
+ * Complete canvas roots have no external parent; partial canonical trees may
+ * deliberately retain an authored root parent, so clearing is opt-in. */
+export function synchronizeBackyElementParentScopes<T extends {
+  id: string; parentId?: string; metadata?: unknown; children?: T[];
+}>(elements: T[], options: { completeTree?: boolean } = {}, parentId?: string): T[] {
+  return elements.map((element) => {
+    const resolvedParentId = parentId || (!options.completeTree ? element.parentId : undefined);
+    const next = { ...element };
+    if (Array.isArray(element.children)) {
+      next.children = synchronizeBackyElementParentScopes(element.children, options, element.id);
     }
-
+    const metadata = isObject(element.metadata) ? { ...element.metadata } : undefined;
+    if (resolvedParentId) {
+      next.parentId = resolvedParentId;
+      next.metadata = { ...metadata, parentId: resolvedParentId };
+    } else if (options.completeTree) {
+      delete next.parentId;
+      if (metadata && Object.prototype.hasOwnProperty.call(metadata, 'parentId')) {
+        delete metadata.parentId;
+        next.metadata = metadata;
+      }
+    }
     return next;
-  })
+  });
+}
+const withElementParentScopes = (elements: BackyContentElement[], parentId?: string): BackyContentElement[] => (
+  synchronizeBackyElementParentScopes(elements, {}, parentId)
 );
 
 const validateElement = (

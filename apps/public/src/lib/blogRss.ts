@@ -1,5 +1,5 @@
 import type { BackyPost, Site } from '@backy-cms/core';
-import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from '@/lib/seoDiscovery';
+import { getHostedRouteUrl, getSiteCanonicalBaseUrl } from './canonicalRouteUrl';
 
 interface BlogRssTerm {
   id: string;
@@ -21,7 +21,7 @@ interface BlogRssSite {
   settings?: Site['settings'];
 }
 
-interface BlogRssPost {
+export interface BlogRssPost {
   id: string;
   slug: string;
   title: string;
@@ -66,6 +66,29 @@ const dateValue = (value: unknown): string => {
   const date = new Date(source);
   return Number.isNaN(date.getTime()) ? '' : date.toUTCString();
 };
+
+/** Authored original publication date takes precedence over genuine CMS publication. */
+const isoCalendarDate = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d))?$/.test(value)) return null;
+  const calendar = value.slice(0, 10), date = new Date(calendar);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === calendar && Number.isFinite(Date.parse(value)) ? value : null;
+};
+
+export function blogRssPublicationDate(post: Pick<BlogRssPost, 'meta' | 'publishedAt'>): string | null {
+  const meta = post.meta && typeof post.meta === 'object' && !Array.isArray(post.meta) ? post.meta as Record<string, unknown> : {};
+  return isoCalendarDate(meta.originalPublishedAt) || isoCalendarDate(post.publishedAt);
+}
+
+/** No eligibility filtering: handlers must pass only public, index-eligible posts. */
+export function sortBlogRssPosts<T extends BlogRssPost>(posts: readonly T[]): T[] {
+  return posts.map((post, index) => ({ post, index, date: blogRssPublicationDate(post) })).sort((left, right) => {
+    if (left.date && right.date) {
+      const delta = Date.parse(right.date) - Date.parse(left.date);
+      return delta || (left.post.id < right.post.id ? -1 : left.post.id > right.post.id ? 1 : left.index - right.index);
+    }
+    return left.date ? -1 : right.date ? 1 : left.index - right.index;
+  }).map(item => item.post);
+}
 
 const stripHtml = (value: string): string => (
   value
@@ -126,7 +149,7 @@ const rssItem = (
   const link = getHostedRouteUrl(input.origin, input.site.slug, postCanonical(post), input.site.customDomain);
   const author = input.authors.find((candidate) => candidate.id === post.authorId);
   const description = postDescription(post);
-  const published = dateValue(post.publishedAt || post.scheduledAt || post.updatedAt || post.createdAt);
+  const published = dateValue(blogRssPublicationDate(post));
   const categories = [
     ...termNames(post.categoryIds, input.categories),
     ...termNames(post.tagIds, input.tags),
@@ -151,10 +174,11 @@ export const buildBlogRssXml = (input: BlogRssInput): string => {
   const authors = input.authors || [];
   const canonicalBase = getSiteCanonicalBaseUrl(input.origin, input.site);
   const feedPath = input.feedPath || '/blog/rss.xml';
-  const feedUrl = `${canonicalBase}${feedPath.startsWith('/') ? feedPath : `/${feedPath}`}`;
+  const feedUrl = getHostedRouteUrl(input.origin, input.site.slug, feedPath, input.site.customDomain);
+  const posts = sortBlogRssPosts(input.posts);
   const description = textValue(input.site.settings?.seo?.defaultDescription) || textValue(input.site.description) || `${input.site.name} blog feed`;
-  const latestDate = input.posts
-    .map((post) => Date.parse(textValue(post.publishedAt || post.scheduledAt || post.updatedAt || post.createdAt)))
+  const latestDate = posts
+    .map((post) => Date.parse(blogRssPublicationDate(post) || ''))
     .filter((value) => Number.isFinite(value))
     .sort((a, b) => b - a)[0];
 
@@ -168,7 +192,7 @@ export const buildBlogRssXml = (input: BlogRssInput): string => {
     `    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />`,
     latestDate ? `    <lastBuildDate>${escapeXml(new Date(latestDate).toUTCString())}</lastBuildDate>` : '',
     `    <generator>${escapeXml('Backy CMS')}</generator>`,
-    ...input.posts.map((post) => rssItem(post, { site: input.site, origin: input.origin, categories, tags, authors })),
+    ...posts.map((post) => rssItem(post, { site: input.site, origin: input.origin, categories, tags, authors })),
     '  </channel>',
     '</rss>',
     '',

@@ -1,6 +1,7 @@
 import type { StorageAdapter } from '@backy/storage';
 import type { MediaItem } from '@backy-cms/core';
 import sharp from 'sharp';
+import { randomUUID } from 'node:crypto';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import { mediaTransformPath, publicMediaFilePath } from '@/lib/mediaResponsive';
 
@@ -76,17 +77,36 @@ export const generatedTransformBytes = (metadata: unknown): number => {
   }, 0);
 };
 
+export interface GeneratedTransformCleanupOutcome {
+  status: 'complete' | 'pending' | 'blocked';
+  deletedPaths: string[];
+  failedPaths: string[];
+}
+
 export const deleteGeneratedTransformFiles = async (
   metadata: unknown,
   storage?: StorageAdapter,
-) => {
+  scope?: { siteId: string; mediaId: string },
+): Promise<GeneratedTransformCleanupOutcome> => {
   const paths = generatedTransformStoragePaths(metadata);
-  if (paths.length === 0) {
-    return;
-  }
-
-  const adapter = storage || await getMediaStorageAdapter();
-  await Promise.all(paths.map((path) => adapter.delete(path).catch(() => undefined)));
+  if (!paths.length) return { status: 'complete', deletedPaths: [], failedPaths: [] };
+  const prefix = scope ? `sites/${scope.siteId}/generated/media/${scope.mediaId}/` : '';
+  const owned = (path: string) => Boolean(prefix && path.startsWith(prefix)
+    && !/[\\%?#\x00-\x1f]/.test(path)
+    && path.split('/').every(segment => segment && segment !== '.' && segment !== '..'));
+  // Validate the whole manifest before touching storage. Metadata is editable;
+  // it cannot authorize deletion outside this canonical site and media item.
+  if (paths.some(path => !owned(path))) return { status: 'blocked', deletedPaths: [], failedPaths: paths };
+  let adapter: StorageAdapter;
+  try { adapter = storage || await getMediaStorageAdapter(); }
+  catch { return { status: 'pending', deletedPaths: [], failedPaths: paths }; }
+  const outcomes = await Promise.all(paths.map(async path => {
+    try { await adapter.delete(path); return { path, deleted: true }; }
+    catch { return { path, deleted: false }; }
+  }));
+  const deletedPaths = outcomes.filter(item => item.deleted).map(item => item.path);
+  const failedPaths = outcomes.filter(item => !item.deleted).map(item => item.path);
+  return { status: failedPaths.length ? 'pending' : 'complete', deletedPaths, failedPaths };
 };
 
 const normalizeVariantWidths = (input: {
@@ -103,7 +123,7 @@ const normalizeVariantWidths = (input: {
 
 const generatedBatchId = (preparedAt: string) => {
   const millis = Date.parse(preparedAt);
-  return Number.isFinite(millis) ? millis.toString(36) : Date.now().toString(36);
+  return `${Number.isFinite(millis) ? millis.toString(36) : Date.now().toString(36)}-${randomUUID()}`;
 };
 
 export const generateImageTransformManifest = async (input: {
@@ -114,6 +134,8 @@ export const generateImageTransformManifest = async (input: {
   sizes: string;
   preparedAt: string;
   preparedBy: string;
+  /** Persist the complete path/byte journal before the first provider write. */
+  beforeUpload?: (files: Array<{ path: string; bytes: number }>) => Promise<void>;
 }): Promise<GeneratedImageManifest> => {
   const storage = await getMediaStorageAdapter();
   const sourcePath = getMediaStoragePathFromMedia(input.siteId, input.media);
@@ -140,45 +162,56 @@ export const generateImageTransformManifest = async (input: {
 
   const batchId = generatedBatchId(input.preparedAt);
   const variants: GeneratedImageVariant[] = [];
+  const planned: Array<{ width: number; buffer: Buffer; filename: string; storagePath: string }> = [];
+  let plannedBytes = 0;
 
   for (const width of widths) {
-    const variantBuffer = await sharp(original, { animated: false, limitInputPixels: 80_000_000 })
-      .rotate()
-      .resize({
-        width,
-        withoutEnlargement: true,
-      })
-      .webp({
-        quality: input.quality,
-        effort: 4,
-      })
-      .toBuffer();
+    const buffer = await sharp(original, { animated: false, limitInputPixels: 80_000_000 })
+      .rotate().resize({ width, withoutEnlargement: true }).webp({ quality: input.quality, effort: 4 }).toBuffer();
+    plannedBytes += buffer.length;
+    if (plannedBytes > 64 * 1024 * 1024) throw new MediaTransformGenerationError('Responsive variants exceed the bounded generation buffer limit.');
     const filename = `${input.media.id}-${width}w-q${input.quality}.webp`;
-    const storagePath = `sites/${input.siteId}/generated/media/${input.media.id}/${batchId}/${filename}`;
-    const upload = await storage.upload(variantBuffer, {
-      path: storagePath,
-      filename,
-      mimeType: 'image/webp',
-      cacheControl: 'public, max-age=31536000, immutable',
-      metadata: {
-        siteId: input.siteId,
-        sourceMediaId: input.media.id,
-        sourceStoragePath: sourcePath,
-        width: String(width),
-        quality: String(input.quality),
-        generatedAt: input.preparedAt,
-      },
-    });
+    planned.push({ width, buffer, filename, storagePath: `sites/${input.siteId}/generated/media/${input.media.id}/${batchId}/${filename}` });
+  }
+  await input.beforeUpload?.(planned.map(file => ({ path: file.storagePath, bytes: file.buffer.length })));
 
-    variants.push({
-      width,
-      quality: input.quality,
-      url: mediaTransformPath(input.siteId, input.media.id, width, input.quality),
-      storagePath: upload.path,
-      bytes: upload.size,
-      mimeType: 'image/webp',
-      format: 'webp',
-      generatedAt: input.preparedAt,
+  try {
+    for (const { width, buffer: variantBuffer, filename, storagePath } of planned) {
+      const upload = await storage.upload(variantBuffer, {
+        path: storagePath,
+        filename,
+        mimeType: 'image/webp',
+        cacheControl: 'public, max-age=31536000, immutable',
+        metadata: {
+          siteId: input.siteId,
+          sourceMediaId: input.media.id,
+          sourceStoragePath: sourcePath,
+          width: String(width),
+          quality: String(input.quality),
+          generatedAt: input.preparedAt,
+        },
+      });
+      if (upload.path !== storagePath || upload.size !== variantBuffer.length) throw new Error('Storage adapter returned an unverified planned write.');
+
+      variants.push({
+        width,
+        quality: input.quality,
+        url: mediaTransformPath(input.siteId, input.media.id, width, input.quality),
+        storagePath: upload.path,
+        bytes: upload.size,
+        mimeType: 'image/webp',
+        format: 'webp',
+        generatedAt: input.preparedAt,
+      });
+    }
+  } catch {
+    const cleanup = await deleteGeneratedTransformFiles({ generatedTransforms: { variants } }, storage, { siteId: input.siteId, mediaId: input.media.id });
+    throw new MediaTransformGenerationError('Responsive variants could not be prepared.', {
+      storageCleanup: {
+        status: cleanup.status,
+        deletedFiles: cleanup.deletedPaths.length,
+        remainingFiles: cleanup.failedPaths.length,
+      },
     });
   }
 

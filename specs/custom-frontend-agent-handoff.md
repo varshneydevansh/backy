@@ -32,6 +32,7 @@ AI agents should treat this file plus `GET /api/sites/:siteId/agent-handoff` as 
 6. `packages/sdk-js`
    - Prefer SDK helpers when writing agents. The generated types in `packages/sdk-js/src/generated-contract-types.ts` are produced from the public schemas/OpenAPI and should stay aligned with the manifest.
    - For separate frontend projects, start with `createBackyCustomFrontendClient({ env: process.env })` or `createBackyCustomFrontendClientFromEnv(process.env)`. The helper accepts browser-safe `NEXT_PUBLIC_BACKY_API_BASE_URL=https://<backy-public-domain>/api`, `NEXT_PUBLIC_BACKY_SITE_ID`, and `NEXT_PUBLIC_BACKY_SITE_PUBLIC_HOST`, normalizes the SDK base URL, and passes the public host as `domain` for `resolve()`, `render()`, and `renderCached()`.
+   - SDK JSON requests and the starter use `cache: "no-store"` to reread current publication/withdrawal state. `renderCached()` provides explicit server ETag validation, not permission to reuse withdrawn content: retain the previous body only after304, and handle404/410 as unavailable. Backy render-scope responses require origin revalidation (`public, no-cache, must-revalidate`); do not override that policy with a fresh or stale cache window. Separately configured CDN and static frontend caches require their own freshness verification.
 
 7. `examples/custom-frontend-next`
    - Minimal separate website starter for Next.js custom frontends.
@@ -230,6 +231,12 @@ The site-level frontend design contract is the shared bridge between custom fron
 
 Use it for chrome, navigation, footer, fonts, colors, spacing, motion tokens, template provenance, editable maps, and reusable page/blog/form/product/collection templates.
 
+### Reviewing a frontend composition package
+
+`contentCreation.compositionImport` and `endpoints.frontendCompositionImport` advertise the authenticated review/apply workflow. Its OpenAPI operation is `reviewOrApplyAdminFrontendComposition`; SDK methods are `reviewAdminFrontendComposition` and `applyAdminFrontendComposition`. Supply `backy.frontend-composition-import.v1` editable data with routes and optional design/templates, select targets, inspect blocking/unverified findings, then apply with the exact returned reviewVersion. Changing the package, selection, acknowledgement or authoritative site inventory requires review again. Apply creates drafts and does not overwrite existing routes/templates or publish them.
+
+The editor representation is declared data, not automatic extraction of arbitrary React source. Import review executes no frontend code and fetches no assets. Acknowledgement does not certify opaque widgets or computed layout. Open each returned editor URL and verify authoring/save/reopen/preview; connect supported frontend renderers and publish separately. Full guide: `docs/api/frontend-composition-import.md`.
+
 ### Registering a frontend built with React or another framework
 
 The frontend builder should start from `apiAlignment` and `componentApiContract.componentTypeContracts`. Keep executable React components in the frontend project and map their editable data to the advertised Backy element types and prop paths. Persist design state rather than compiled markup: `elements`, `contentDocument`, `canvasSize`, `responsive`, token references, assets, bindings, and editable maps are the reusable editor representation. Element breakpoint overrides use `responsive.mobile` and `responsive.tablet`.
@@ -246,6 +253,10 @@ Reusable-section instance discovery and refresh use authenticated `GET` and `POS
 For executable custom widgets, use the discovered interactive-component registry, bundle, review, version, and sandbox contracts. Register an explicit property/control schema and fallback; uploading arbitrary React source is not equivalent to registering an editable canvas element. The same public handoff exposes product/collection templates and their authenticated creation routes, so a builder need not invent a separate product content store.
 
 The registry's `renderContract.bundleModule` describes the compiled widget interface. Upload a self-contained JavaScript ES module (`.js` or `.mjs`) exporting `mount(context)` and optionally `update(context)`. The context contains `root`, `props`, `controls`, `dataBindings`, `componentKey`, `version`, and `resize`. Mount into `root`; return a cleanup function when necessary. Without `update`, each new host payload cleans up and remounts. Bundle React and other browser dependencies into the module: network imports and raw JSX are unsupported. JSON bundles may be stored as metadata but cannot execute.
+
+Read the additive `renderContract.lifecycle` metadata before writing an iframe receiver. The parent sends `backy.interactive-component.init` with props, controls/schema, bindings and fallback. Accept sandbox replies only from that iframe's current `contentWindow` with exact protocol, component key and version. `ready` means import readiness or a persisted-document restore: send initialization, but keep any existing error. `resize` only changes height. Only `rendered`, emitted after an awaited mount/update succeeds in the active lifecycle generation, clears the error and fallback; do not send another initialization in response. An `error` keeps a readable diagnostic and authored fallback on mount/update failure. These messages are control traffic; `rendered` is not a diagnostic telemetry event.
+
+Cleanup runs before a remount and at most once on removal/navigation through `pagehide` or `unload`. If an async mount finishes after disposal, its returned cleanup still runs and no success is announced. Disposed queued updates cannot resume. A persisted `pageshow` sends readiness so the host can initialize a fresh mount. Approval is checked on each new sandbox load; this does not certify proactive revocation of an already running frame. Older contract responses may omit lifecycle metadata, and extension fields remain supported.
 
 Execution requires enabled custom code, an approved component, the configured server signing key, and verified bytes from its own site/key/version storage path. `runtime.bundleUrl` is never fetched for execution. Bundle upload verifies a supplied HMAC signature or signs server-side, and resets status/review to disabled/draft; submit and approve the new bytes before they execute. Production also requires `BACKY_COMPONENT_SANDBOX_ORIGIN` matching the sandbox runtime origin. Configure exact frontend origins in `BACKY_CORS_ALLOWED_ORIGINS` so their iframes can embed the sandbox. Keep opaque iframe flags and static fallbacks. Executable sandbox responses use `Cache-Control: no-store` so later loads recheck approval and stored-byte integrity. The HTTP CSP also enforces opaque sandbox isolation, including direct navigation or a frontend that omits the iframe attribute. The runtime accepts initialization only from its parent with matching protocol, component key, and version.
 
@@ -286,3 +297,94 @@ BACKY_PROVIDER_ARTIFACT_ADMISSION_MODE=commerce npm run ci:provider-artifact-adm
 ```
 
 Settings admission maps to `/settings` and Settings admin APIs; Commerce admission maps to `/products` and `/orders`. The full audit only becomes the artifact-backed `45 Ready / 0 Partial / 0 Prototype / 0 Missing` view after both families pass. Those four partial rows are external provider evidence gates, not canvas/editor data-model gaps.
+
+## Element-level frontend compatibility
+
+Store an optional `frontendDesign.runtime` declaration through authenticated
+`PATCH /api/admin/sites/:siteId/frontend-design`. The declaration uses
+`backy.frontend-runtime.v1`, identifies `frontendId` and `version`, maps capability
+names to `supported`, `fallback`, or `unsupported`, and lists exact
+`componentVersions`. A declaration describes what a frontend says it implements;
+it never certifies browser behavior.
+
+Generate a report with authenticated `POST
+/api/admin/sites/:siteId/custom-frontend/compatibility`. Supply exactly one of
+`templateId`, `pageId`, or `postId`. The equivalent GET accepts the same target as
+a query parameter. Both require `sites.view` and the normal site authorization.
+Responses are private/no-store. In the admin site workspace, **Frontend design →
+Frontend compatibility** exposes declaration editing, comparison, and Copy for
+AI/Download JSON.
+
+A POST may also include an `observation` inventory with `siteId`, `route`,
+`frontendId`, `frontendVersion`, saved `revision`, `breakpoint` (`desktop`,
+`tablet`, or `mobile`), `complete`, and `elements`. Each element includes its
+stable `id`, `type`, `parentId`, and observed `fields` keyed by paths such as
+`styles.fontFamily` or `animation.to.x`. Identity and revision must match the
+saved content; stale or incomplete evidence remains unverified. Missing elements
+are definitive only when the inventory declares itself complete. Supplied
+inventories are not independently captured browser evidence.
+
+Reports use `backy.frontend-compatibility-report.v1`. Issues contain route,
+element ID, JSON content path, breakpoint, required capability, expected/observed
+values, evidence source, responsible side, and suggested repair. Known sensitive
+field names are redacted; authored values still require normal review before
+sharing a report. The service reads no provider/session secrets for diagnostics.
+The current certification is always `not-live-certified`: verify actual layout,
+fonts, media, interactions, and animations separately.
+
+The SDK exposes `adminFrontendCompatibility({ pageId, observation }, options)`
+and generated declaration/observation/report types. Keep authenticated management
+calls on the server or in the protected admin; never embed an admin key in a
+public website. Public discovery remains available through the site handoff,
+manifest, and OpenAPI.
+
+For component authoring on unpublished sites, use authenticated
+`GET /api/admin/sites/:siteId/interactive-components/discovery`. Public component
+catalogs remain restricted to published sites and active approved entries.
+Catalogs accept `limit` and `offset`; follow pagination, or use SDK
+`allInteractiveComponents()`. Resolve saved widgets using the exact public
+`/interactive-components/:componentKey/:version` endpoint rather than assuming
+that their version appears on the first catalog page.
+
+### Retained template history and responsive layout authoring
+
+Template changes through `/api/admin/sites/:siteId/frontend-design` (including import/capture) retain immutable full snapshots separately from audit logs. Generic site/settings writes reject direct `frontendDesign` changes; use the dedicated endpoint so history and current design commit together. Unrelated site settings merge under the same database row lock and preserve current design.
+
+Authenticated `sites.view` endpoints:
+
+- `GET /api/admin/sites/:siteId/templates/revisions?limit=100&offset=0` returns a retained summary catalog, including removed templates.
+- `GET /api/admin/sites/:siteId/templates/:templateId/revisions?limit=100&offset=0` returns full private snapshots and the current design/template fingerprints. Follow pagination; historical draft content must not be exposed in public discovery.
+
+`POST /api/admin/sites/:siteId/templates/:templateId/revisions/:revisionId/restore` requires `sites.configure` and `{ "expectedDesignFingerprint": "<current 64-character fingerprint>" }`. A stale fingerprint returns 409. Restore replaces only the selected template, appends history, and preserves current tokens, chrome, runtime declarations, other templates and existing authored pages/posts. A conflicting current default template also returns 409. SDK methods: `adminTemplateHistory()` and `restoreAdminTemplateRevision()`.
+
+Database deployments require migration `015_template_revision_history.sql`. Local/demo persistence is for development; it does not establish multi-process database concurrency guarantees.
+
+Canvas children use a shared layout contract. `props.layout` selects `free`, `flow`, `flex` or `grid`; `styles.display` takes precedence over `props.display`/layout unless `props.layout` explicitly selects `free`. Flow children preserve X/Y as free-position fallback; do not apply those coordinates inside flex/grid/block flow. Explicit absolute/fixed position is an escape. Preserve authored CSS dimensions (`auto`, percentages, etc.), item order, flex/grid properties and tablet/mobile overrides. Canvas desktop dimensions remain canonical; optional `canvasSize.responsive.mobile/tablet` carries intentionally authored viewport sizes. Switching editor preview alone must not overwrite desktop dimensions. Compatibility reports use the same layout resolution rules.
+
+### Visitor file submissions
+
+`POST /api/sites/:siteId/forms/:formId/submissions` accepts JSON text submissions or real multipart uploads. For multipart, send a `payload` string containing the existing JSON submission (values, consent/captcha and metadata) and files under declared file field keys or registered aliases. Native multipart text fields are supported when `payload` is omitted. Let the browser/fetch generate the Content-Type boundary.
+
+The bounded transport supports up to five nonempty files and 4 MiB aggregate bytes, leaving envelope room below hosted function payload limits. Larger files need a separately implemented direct upload/quarantine protocol; do not promise them through this endpoint. `submitFormFiles(formId, input, files)` performs the SDK transport and basic client limits.
+
+Saved file field values are arrays of server-generated `backy.form.attachment.v1` objects with `id`, `attachmentId`, `filename`, `mimeType` and `sizeBytes`. Client-supplied reserved attachment references are rejected. No storage path, private URL, or upload credential belongs in visitor values. Uploads still follow form audience, consent, spam, captcha, quota and configured scan policies. A real production scanner and verified separate private bucket are deployment requirements.
+
+Original private bytes require `forms.view` and exact site/form/submission scope:
+`GET /api/admin/sites/:siteId/forms/:formId/submissions/:submissionId/attachments/:attachmentId`.
+The response is a no-store, nosniff attachment. SDK `downloadAdminFormAttachment()` returns a Blob after permission checks succeed. These private files are distinct from public media-library assets.
+
+The handoff also exposes reviewed form pack import (`contentCreation.formTemplatePackImport`), protected comment delivery history/retry and private site recovery endpoints with SDK helper pointers. Use OpenAPI for exact errors/envelopes. Form pack apply creates inactive standalone forms; notification observed status and durable state are separate; recovery never clones or executes operational notification attempts. These management APIs require operator credentials and must not be called with a public frontend key.
+
+Durable Forms notification management is discoverable through `endpoints.formDeliveryAttempts`, `formDeliveryWebhookRetry` and `formDeliveryEmailRetry`, with matching SDK helpers. Treat delivery status and persisted state separately; do not resend pending, uncertain or consumed attempts. Saved page/blog warnings indicate post-commit follow-up work, and operator bulk partial results list confirmed changes rather than authorizing replay of the original selection.
+
+Template instance upgrades are advertised as `endpoints.templateInstances` and described by `templateInstanceUpgrades`. Review and apply SDK helpers require an exact retained revision and explicit page/post/section-definition selection; product design requests use `targetType: product` with exact product/collection IDs and both collection and commerce permissions. Apply requires the exact reviewVersion. Legacy unpinned instances remain blocked, authored changes are three-way merged, and partial per-document results must be inspected without replay. Product design recovery uses private paginated summaries and guarded `record-v1` restoration while preserving current catalog values. See `docs/api/template-instance-upgrades.md`.
+
+### Form template upgrades and recovery
+
+Read `handoff.templateInstanceUpgrades.formRecovery` before exposing form design recovery. Explicit form selections use `targetType=form`, the `template-form-instances-v1` review namespace and `forms.view`/`forms.edit`; incompatible field/binding semantics produce `SCHEMA_INCOMPATIBLE`. Private summary history and guarded restore use `form-v1` tokens, preserve operational and response data, and expose completion warnings without automatic replay. See [reviewed template instance upgrades](../docs/api/template-instance-upgrades.md). Canonical migration026 and actual authenticated/deployed acceptance remain separate from public contract discovery. Collection definitions use the separate schema-aware boundary below.
+
+Collection upgrades require `targetType=collection`, exact definition selection and the `template-collection-instances-v1` review namespace. Read `handoff.templateInstanceUpgrades.collectionRecovery` and its conditional commerce permissions before exposing controls. The `collection-v1` full-definition token is distinct from entry `record-v1` tokens. Private paginated history and guarded compatible presentation restore preserve field semantics, public permissions, routes/status and records. Canonical migration027, actual authenticated acceptance and deployment are separate gates. See [reviewed template instance upgrades](../docs/api/template-instance-upgrades.md).
+
+Public reusable-section list/detail reads expose current content, frontend design and current library metadata. They omit write actors, private retained history and the full template-instance baseline. Public collection definitions and record/product values likewise omit their reserved template-instance baseline; current authored values and design remain readable under the collection public rules. Use authenticated authoring/history APIs for provenance and recovery. Public shape/source checks are separate from deployed privacy verification.
+
+Public page/blog list, query detail and preview reads omit only the managed top-level `meta.frontendTemplateInstance` baseline while preserving current authored metadata, SEO, design and full content. OpenAPI uses separate `PublicPageResource`/`PublicBlogPostResource` and public read envelopes; authenticated management and revision snapshots retain their private provenance. Repository compatibility responses keep the canonical document at `content.contentDocument`; preserve that document and outer authored content fields without flattening them.

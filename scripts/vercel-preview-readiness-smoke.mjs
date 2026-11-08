@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { adminOriginProjectEnvPolicy, outputContainsEnvName } from './vercel-admin-origin-policy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
@@ -53,12 +54,6 @@ const semverAtLeast = (actual, minimum) => {
   }
   return true;
 };
-
-const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const outputContainsEnvName = (output, name) => (
-  new RegExp(`(^|[^A-Z0-9_])${escapeRegExp(name)}([^A-Z0-9_]|$)`, 'u').test(output)
-);
 
 const hasCron = (config) => (
   Array.isArray(config.crons) &&
@@ -128,8 +123,8 @@ assert(
 );
 assert(
   rootPackage.scripts?.['build:vercel:public'] ===
-    'node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public',
-  'Root package exposes a Vercel public build that guards production env and compiles workspace packages before Next',
+    'node scripts/vercel-public-production-env-guard.mjs && npm run build --workspace @backy-cms/core && npm run build --workspace @backy/db && npm run build --workspace @backy/storage && npm run build --workspace @backy/public && npm run test:production-file-trace --workspace @backy/public',
+  'Root package exposes a Vercel public build that guards production env, compiles workspace packages before Next and rejects accidental mutable-file packaging',
 );
 assert(
   rootPackage.scripts?.['build:vercel:admin'] ===
@@ -173,6 +168,7 @@ includesAll(
     'CRON_SECRET=<same-server-only-admin-or-cron-secret>',
     'NEXT_PUBLIC_BACKY_ADMIN_APP_URL=https://admin.example.com',
     'BACKY_CORS_ALLOWED_ORIGINS=https://www.example.com,https://blog.example.com',
+    'BACKY_ADMIN_TRUSTED_ORIGINS=https://admin.example.com',
     'Vercel project env: backy-admin',
     'VITE_BACKY_PUBLIC_API_BASE_URL=https://content.example.com/api',
     'VITE_BACKY_ADMIN_API_BASE_URL=https://content.example.com/api/admin',
@@ -205,6 +201,7 @@ includesAll(
     'CRON_SECRET',
     'NEXT_PUBLIC_BACKY_ADMIN_APP_URL',
     'BACKY_CORS_ALLOWED_ORIGINS',
+    'BACKY_ADMIN_TRUSTED_ORIGINS',
     'BACKY_PUBLIC_API_BASE_URL',
     'BACKY_SITE_ID',
     'BACKY_SITE_PUBLIC_HOST',
@@ -315,7 +312,7 @@ includesAll(
 includesAll(
   publicNextConfig,
   [
-    "transpilePackages: ['@backy-cms/core', '@backy/db', '@backy/storage']",
+    "transpilePackages: ['@backy-cms/core', '@backy-cms/editor', '@backy/db', '@backy/storage']",
   ],
   'Public Next config bundles Backy workspace packages into Vercel functions',
 );
@@ -357,9 +354,10 @@ const projectLinks = [
         ['CRON_SECRET'],
         ['NEXT_PUBLIC_BACKY_ADMIN_APP_URL'],
         ['BACKY_CORS_ALLOWED_ORIGINS'],
+        ...adminOriginProjectEnvPolicy('backy-public').required.map((name) => [name]),
       ],
-      requiredLabel: 'production public runtime env',
-      forbidden: ['VITE_BACKY_ADMIN_API_KEY'],
+      requiredLabel: 'backend runtime env-name metadata',
+      forbidden: ['VITE_BACKY_ADMIN_API_KEY', ...adminOriginProjectEnvPolicy('backy-public').forbidden],
     },
   },
   {
@@ -378,8 +376,9 @@ const projectLinks = [
         ['VITE_BACKY_PUBLIC_API_BASE_URL'],
         ['VITE_BACKY_ADMIN_API_BASE_URL'],
       ],
-      requiredLabel: 'admin shell API URL env',
+      requiredLabel: 'admin shell API URL env-name metadata',
       forbidden: [
+        ...adminOriginProjectEnvPolicy('backy-admin').forbidden,
         'BACKY_DATABASE_URL',
         'DATABASE_URL',
         'CRON_SECRET',
@@ -540,6 +539,7 @@ if (skipCli) {
       }
 
       const envOutput = `${envList.stdout}\n${envList.stderr}`;
+      warn(`${linkedProject.app}: environment-name metadata does not validate values, target assignments, or deployed cookie/CORS behavior.`);
       for (const forbiddenName of linkedProject.env.forbidden) {
         if (outputContainsEnvName(envOutput, forbiddenName)) {
           fail(`${linkedProject.app} must not configure forbidden env var ${forbiddenName}`);

@@ -270,6 +270,16 @@ export const toPublicMediaAsset = (
   media: MediaItem,
   folders: MediaFolder[] = [],
 ): PublicMediaAsset => {
+  // Authentication evidence is retained privately; public scan policy conveys
+  // only the mode and its limits, never the newly recorded operator identity.
+  const scan = media.metadata?.safetyScan;
+  if (scan && typeof scan === 'object' && !Array.isArray(scan)) {
+    const policy = (scan as Record<string, unknown>).ownerUploadPolicy;
+    if (policy && typeof policy === 'object' && !Array.isArray(policy)) {
+      const { actorId: _actorId, ...publicPolicy } = policy as Record<string, unknown>;
+      media = { ...media, metadata: { ...media.metadata, safetyScan: { ...scan, ownerUploadPolicy: publicPolicy } } };
+    }
+  }
   const publicMedia = withResponsiveMediaManifest(siteId, media);
   const references = buildPublicMediaReferences(media);
 

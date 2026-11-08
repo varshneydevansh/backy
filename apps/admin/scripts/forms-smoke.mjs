@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import './form-launch-readiness-smoke.mjs';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -39,6 +40,12 @@ const assertFormsPersistenceCertificationSource = () => {
   const publicFormSubmissionsRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/forms/[formId]/submissions/route.ts', import.meta.url), 'utf8');
   const publicManifestRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/manifest/route.ts', import.meta.url), 'utf8');
   const publicOpenApiRouteSource = fs.readFileSync(new URL('../../public/src/app/api/sites/[siteId]/openapi/route.ts', import.meta.url), 'utf8');
+  // The shared document also contains the separately authenticated admin review request.
+  // Keep the public admission boundary scoped to the public submission schema.
+  const publicSubmissionRequestStart = publicOpenApiRouteSource.indexOf('FormSubmissionRequest: {');
+  const publicSubmissionRequestEnd = publicOpenApiRouteSource.indexOf('FormSubmissionValidationErrorEnvelope:', publicSubmissionRequestStart);
+  assert(publicSubmissionRequestStart >= 0 && publicSubmissionRequestEnd > publicSubmissionRequestStart, 'Public submission request schema must be present before checking its routing boundary');
+  const publicSubmissionRequestSource = publicOpenApiRouteSource.slice(publicSubmissionRequestStart, publicSubmissionRequestEnd);
   const frontendDesignContractSource = fs.readFileSync(new URL('../../public/src/lib/frontendDesignContract.ts', import.meta.url), 'utf8');
   const smokeSource = fs.readFileSync(new URL(import.meta.url), 'utf8');
   assert(source.includes('data-testid="forms-persistence-certification"'), 'Forms page must render the persistence certification handoff');
@@ -162,8 +169,12 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('data-testid="forms-error-state"') && source.includes('Forms workspace needs attention'), 'Forms route must expose a labelled backend error state');
   assert(source.includes('aria-label="Retry loading forms"') && source.includes('Clear form filters'), 'Forms backend error state must expose retry and filter recovery actions');
   assert(
-    source.includes('const canUseFormsRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);') &&
-      source.includes('const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseFormsRoleDefaults;') &&
+    !source.includes('canUseFormsRoleDefaults') &&
+      !source.includes('isAdminPermissionAllowed(') &&
+      source.includes('const isPermissionMatrixPending = isPermissionsLoading;') &&
+      source.includes('isFormsPermissionAllowedForSite(permissionMatrix, currentAdmin?.id, activeSiteId, key, isPermissionsLoading)') &&
+      source.includes("'forms.manage', FORMS_PERMISSION_ROLE_DEFAULTS, activeSiteId)") &&
+      source.includes('setPermissionMatrix(null);\n    setIsPermissionsLoading(true);') &&
       source.includes('const isFormsPermissionAllowed = (key: FormsPermissionKey) => (') &&
       source.includes("const canViewForms = isFormsPermissionAllowed('forms.view');") &&
       source.includes("const canCreateForms = isFormsPermissionAllowed('forms.create');") &&
@@ -173,13 +184,22 @@ const assertFormsPersistenceCertificationSource = () => {
       source.includes("const canDeleteForms = isFormsPermissionAllowed('forms.delete');") &&
       source.includes("const canViewCollections = isFormsPermissionAllowed('collections.view');") &&
       source.includes("const canExportActivity = isFormsPermissionAllowed('activity.export');") &&
-      source.includes('const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId);') &&
+      source.includes('const isFormMutationBusy = Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || isRestoringFormDesign || isSavingFormLayout || Boolean(isDeletingFormId);') &&
       source.includes('const isFormsBusy = isLoading || isFormMutationBusy;') &&
       !source.includes('const canViewForms = !isPermissionMatrixPending') &&
       !source.includes('const isFormsBusy = isLoading || Boolean(isUpdatingId) || Boolean(isRetryingDeliveryId) || isApplyingConsentRetention || Boolean(isCreatingTemplateId) || isCloningForm || isCreatingEmbedBlock || isSavingForm || Boolean(isDeletingFormId) || isPermissionMatrixPending;') &&
       source.includes('data-testid="forms-permission-state"') &&
       source.includes('Form permissions could not be verified'),
-    'Forms route must expose a labelled permission error state and keep role-default workflows usable while permission details hydrate',
+    'Forms route must expose a labelled permission error state and require loaded current-user selected-site authority without role fallback',
+  );
+  assert(
+    source.includes('formLoadAuthority.current.setContext(JSON.stringify([') &&
+      source.includes('await formLoadAuthority.current.run(async (isCurrent) => {') &&
+      source.includes('if (!isCurrent()) return;') &&
+      source.includes('useEffect(() => () => formLoadAuthority.current.invalidate(), [])') &&
+      source.includes('deferredFormLoad.current = true;') &&
+      source.includes('!isFormMutationBusy && !isPermissionMatrixPending && deferredFormLoad.current'),
+    'Forms staged aggregate reads must invalidate old site/user authority and replay mutation-deferred reads',
   );
   assert(source.includes('to="/users"') && source.includes('Review users'), 'Forms permission error state must link to user access management');
   assert(!source.includes('Users/Auth roadmap'), 'Forms route must not send registration/account work to stale Users/Auth roadmap copy');
@@ -203,7 +223,7 @@ const assertFormsPersistenceCertificationSource = () => {
   assert(source.includes('title="No form audit events yet"'), 'Forms audit panel must keep the empty activity title visible');
   assert(source.includes('Form edits, submission review, consent retention, and embed-block changes will appear here.'), 'Forms audit empty state must explain which actions populate activity');
   assert(source.includes('title="No delivery events yet"'), 'Forms delivery panel must keep the empty delivery title visible');
-  assert(source.includes('Webhook and email delivery attempts, retries, and provider responses for this form will appear here.'), 'Forms delivery empty state must explain which events populate delivery history');
+  assert(source.includes('Durable webhook and email attempts appear here. Older audit-only events remain in Activity; pending or uncertain attempts cannot be replayed.'), 'Forms delivery empty state must explain which events populate delivery history');
   assert(
     source.includes('data-testid="forms-delivery-handoff-copy-button"') &&
       source.includes("schemaVersion: 'backy.form-delivery-handoff.v1'") &&
@@ -636,7 +656,7 @@ const assertFormsPersistenceCertificationSource = () => {
       publicFormSubmissionsRouteSource.includes('const submissionValues = normalizeFormSubmissionValues(form, frontendNormalizedValues)') &&
       publicOpenApiRouteSource.includes('canonical field keys or frontendFieldKeyMap aliases') &&
       publicOpenApiRouteSource.includes('alias lookup also normalizes casing, spaces, hyphens, and punctuation') &&
-      !publicOpenApiRouteSource.includes('contactShareOverride'),
+      !publicSubmissionRequestSource.includes('contactShareOverride'),
     'Public form submissions must accept frontend field key map aliases before validation while contact sharing stays admin-configured',
   );
   assert(adminContentApiSource.includes('export async function cloneForm') && adminContentApiSource.includes('/forms/${formId}/clone'), 'Admin content API must expose the form clone endpoint helper');

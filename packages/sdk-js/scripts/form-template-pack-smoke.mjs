@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls = [];
+const client = createBackyClient({ baseUrl:'https://backy.invalid', siteId:'site/default', fetch:async(url,init)=>{
+  const body=JSON.parse(init.body);calls.push({url:new URL(url),init,body});
+  if(body.reviewVersion==='stale')return Response.json({success:false,requestId:'fixture',error:{code:'FORM_TEMPLATE_REVIEW_STALE',message:'Review again'}},{status:409});
+  return Response.json({success:true,requestId:'fixture',data:body.action==='review'?{reviewVersion:'form-pack-v1:'+'a'.repeat(64),canApply:true}:{publication:'inactive-standalone',forms:[],completionWarnings:['FORM_TEMPLATE_AUDIT_PENDING']}},{status:body.action==='review'?200:201});
+}});
+const input={pack:{schemaVersion:'backy.form-template-pack.v1',builtInTemplates:[{id:'one',unknown:{retain:[false,0]}}]},selection:['builtin:one']};
+const review=await client.reviewAdminFormTemplatePack(input,{adminSession:'fixture',requestId:'request-proof',credentials:'include'});
+assert.deepEqual(calls[0].body,{...input,action:'review'});
+assert.equal(calls[0].url.pathname,'/api/admin/sites/site%2Fdefault/forms/template-pack/import');
+assert.equal(calls[0].init.credentials,'include');assert.equal(calls[0].init.headers.get('x-request-id'),'request-proof');
+assert(calls[0].init.headers.get('authorization')?.includes('fixture')||calls[0].init.headers.get('x-backy-admin-session')==='fixture');
+const apply=await client.applyAdminFormTemplatePack({...input,reviewVersion:review.data.reviewVersion},{siteId:'override'});
+assert.equal(calls[1].url.pathname,'/api/admin/sites/override/forms/template-pack/import');
+assert.equal(calls[1].body.action,'apply');assert.equal(apply.data.publication,'inactive-standalone');assert.deepEqual(apply.data.completionWarnings,['FORM_TEMPLATE_AUDIT_PENDING']);
+await assert.rejects(client.applyAdminFormTemplatePack({...input,reviewVersion:'stale'}),error=>error instanceof BackyApiError&&error.status===409&&error.code==='FORM_TEMPLATE_REVIEW_STALE');
+assert.equal(calls.length,3,'Stale applies must not replay automatically');
+console.log('Form template pack SDK transport PASS: scoped review/apply, retained extensions, session/request/credentials, inactive outcomes and stale409 without replay. Synthetic transport; handler validation is separate.');

@@ -100,7 +100,7 @@ const assertBlogCreateSourceContract = () => {
       source.includes('setCanvasElements(nextElements);') &&
       source.includes('setCanvasSeedKey(`blog-starter-${nextTemplateId}-${Date.now()}`);') &&
       source.includes('findFrontendBlogTemplateForStarterTemplate(frontendBlogTemplates, selectedBlogStarterTemplate)') &&
-      source.includes('options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate } = {}') &&
+      source.includes('options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate; preserveEditorialFields?: boolean } = {}') &&
       source.includes('starterTemplateId: nextTemplateId') &&
       source.includes('const routeStarterTemplate = options.starterTemplateId || selectedBlogStarterTemplate') &&
       source.includes('starterTemplate: routeStarterTemplate') &&
@@ -777,7 +777,23 @@ const captureScreenshot = async (client, screenshotPath, options = {}) => {
   return screenshotPath;
 };
 
+// These smokes exercise layout controls explicitly; new blog posts open in Write.
+const activateArticleLayout = async (client) => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const selected = await evaluate(client, `(() => {
+      const button = document.querySelector('[data-testid="blog-mode-layout"]');
+      if (!(button instanceof HTMLButtonElement)) return false;
+      if (button.getAttribute('aria-pressed') !== 'true') button.click();
+      return true;
+    })()`);
+    if (selected) { await sleep(50); return; }
+    await sleep(200);
+  }
+  throw new Error('Blog Layout editing mode did not become available');
+};
+
 const assertBlogCreateVisualState = async (client, label, screenshotPath, { focus = false } = {}) => {
+  await activateArticleLayout(client);
   await evaluate(client, `(() => {
     window.scrollTo(0, 0);
     return true;
@@ -1124,6 +1140,7 @@ const assertBackyCanvasAudioTranscriptStarter = async (client) => {
     await sleep(250);
   }
 
+  await activateArticleLayout(client);
   await selectLayerById(client, 'blog-audio-player');
 
   const propertyState = await evaluate(client, `(() => {

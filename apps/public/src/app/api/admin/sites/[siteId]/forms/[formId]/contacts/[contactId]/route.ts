@@ -269,6 +269,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       contact: updated,
     });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This retained contact is fenced by local visitor erasure and cannot be repopulated.',requestId);
     console.error('Admin form contact API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
@@ -374,6 +375,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       contact: deletedContact,
     });
   } catch (error) {
+    if((error as any)?.code==='VISITOR_PRIVACY_FENCED')return errorResponse(409,'VISITOR_PRIVACY_FENCED','This retained contact is fenced by local visitor erasure and cannot be repopulated.',requestId);
     console.error('Admin form contact delete API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -1,9 +1,355 @@
+export { BACKY_RUNTIME_RENDER_SCHEMA, BACKY_RUNTIME_CONTENT_SCHEMA, BACKY_RUNTIME_EDITABLE_MAP_REF } from './runtime-render';
+export type { BackyRuntimeContentDocument, BackyRuntimeRenderContent, BackyRuntimeRenderPayload } from './runtime-render';
+export * from './private-file-storage';
+import type { BackySiteMailboxManagementEnvelope, BackySiteMailboxManagementInspectionEnvelope, BackySiteMailboxManagementCreateEnvelope, BackySiteMailboxManagementAttemptsEnvelope, BackySiteMailboxCreateRequest, BackySiteMailboxAliasCreateRequest } from './site-mailbox-management';
+export type { BackySiteMailboxManagementEnvelope, BackySiteMailboxManagementInspectionEnvelope, BackySiteMailboxManagementAttempt, BackySiteMailboxManagementCreateEnvelope, BackySiteMailboxManagementAttemptsEnvelope, BackySiteMailboxCreateRequest, BackySiteMailboxAliasCreateRequest } from './site-mailbox-management';
+export * from './buyer-downloads';
+import type { BackyNewsletterCampaignInput, BackyNewsletterCampaignListData, BackyNewsletterCampaignData, BackyNewsletterProcessingData } from './newsletter-campaigns';
+export * from './newsletter-campaigns';
+import type { BackySiteMailboxSendRequest, BackySiteMailboxSendEnvelope, BackySiteMailboxSendAttemptsEnvelope, BackySiteMailboxThreadEnvelope } from './site-mailbox';
+export type { BackySiteMailboxOutgoingAttachment, BackySiteMailboxSendRequest, BackySiteMailboxSendAttempt, BackySiteMailboxSendEnvelope, BackySiteMailboxSendAttemptsEnvelope, BackySiteMailboxThreadEnvelope } from './site-mailbox';
+import type { GeneratedBackyOpenApiInteractiveComponentLifecycleContract, GeneratedBackyOpenApiInteractiveComponentManifestContract } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiInteractiveComponentLifecycleContract } from "./generated-contract-types";
+export type BackyInteractiveComponentLifecycleContract = GeneratedBackyOpenApiInteractiveComponentLifecycleContract;
+import type { GeneratedBackyOpenApiModeratorCommentReplyRequest } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiModeratorCommentReplyRequest } from "./generated-contract-types";
+export type BackyModeratorCommentReplyInput = GeneratedBackyOpenApiModeratorCommentReplyRequest;
+export type { GeneratedBackyOpenApiPublicDocumentContent, GeneratedBackyOpenApiPublicPageResource, GeneratedBackyOpenApiPublicPageEnvelope, GeneratedBackyOpenApiPublicPageListEnvelope, GeneratedBackyOpenApiPublicBlogPostResource, GeneratedBackyOpenApiPublicBlogPostEnvelope, GeneratedBackyOpenApiPublicBlogPostListEnvelope } from './generated-contract-types';
+import type { GeneratedBackyOpenApiCollectionDesignVersionsEnvelope, GeneratedBackyOpenApiCollectionDesignRestoreEnvelope } from './generated-contract-types';
+export type { GeneratedBackyOpenApiCollectionDesignVersionsEnvelope, GeneratedBackyOpenApiCollectionDesignRestoreEnvelope } from './generated-contract-types';
+import type { GeneratedBackyOpenApiDeliveryReconciliationRequest, GeneratedBackyOpenApiCommentDeliveryReconciliationEnvelope, GeneratedBackyOpenApiAdminFormDeliveryReconciliationEnvelope } from './generated-contract-types';
+export type { GeneratedBackyOpenApiDeliveryProviderEvidence, GeneratedBackyOpenApiDeliveryReconciliationRequest, GeneratedBackyOpenApiDeliveryReconciliation, GeneratedBackyOpenApiCommentDeliveryReconciliationEnvelope, GeneratedBackyOpenApiAdminFormDeliveryReconciliationEnvelope } from './generated-contract-types';
+export type BackyDeliveryReconciliationInput = GeneratedBackyOpenApiDeliveryReconciliationRequest;
+import type { GeneratedBackyOpenApiFormDesignVersionsEnvelope, GeneratedBackyOpenApiFormDesignRestoreEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiFormDesignVersionsEnvelope, GeneratedBackyOpenApiFormDesignRestoreEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiTemplateInstanceEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiProductDesignVersionsEnvelope, GeneratedBackyOpenApiProductDesignRestoreEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiProductDesignVersionsEnvelope, GeneratedBackyOpenApiProductDesignRestoreEnvelope } from "./generated-contract-types";
+export type BackyTemplateInstanceResponse = GeneratedBackyOpenApiTemplateInstanceEnvelope;
+export type BackyTemplateInstanceSelectionInput =
+  | { targetType?: never; selection: { type: "page" | "post" | "section"; id: string }[] }
+  | { targetType: "product"; selection: { type: "product"; id: string; collectionId: string }[] }
+  | { targetType: "form"; selection: { type: "form"; id: string }[] }
+  | { targetType: "collection"; selection: { type: "collection"; id: string }[] };
+export type { GeneratedBackyOpenApiTemplateInstanceEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminFormDeliveryHistoryEnvelope, GeneratedBackyOpenApiAdminFormDelivery } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminPageSaveEnvelope, GeneratedBackyOpenApiAdminBlogPostSaveEnvelope } from './generated-contract-types';
+import type { GeneratedBackyOpenApiCommentDeliveryAttemptsEnvelope } from './generated-contract-types';
+import type { FormTemplatePackImportRequest } from '@backy-cms/core';
+import type { GeneratedBackyOpenApiFormTemplatePackReviewEnvelope, GeneratedBackyOpenApiFormTemplatePackApplyEnvelope } from './generated-contract-types';
+export type { FormTemplatePackImportRequest, FormTemplatePack } from '@backy-cms/core';
+import type { SiteBackupPackage } from "@backy-cms/core";
+export type { SiteBackupPackage } from "@backy-cms/core";
+import type { GeneratedBackyOpenApiSiteBackupPreview, GeneratedBackyOpenApiSiteBackupExportEnvelope, GeneratedBackyOpenApiSiteBackupPreviewEnvelope, GeneratedBackyOpenApiSiteBackupApplyEnvelope, GeneratedBackyOpenApiSiteBackupJobsEnvelope, GeneratedBackyOpenApiSiteBackupRetryEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiSiteBackupPreview, GeneratedBackyOpenApiSiteBackupExportEnvelope, GeneratedBackyOpenApiSiteBackupPreviewEnvelope, GeneratedBackyOpenApiSiteBackupApplyEnvelope, GeneratedBackyOpenApiSiteBackupJobsEnvelope, GeneratedBackyOpenApiSiteBackupRetryEnvelope } from "./generated-contract-types";
+import type { FrontendCompositionImportRequest } from "@backy-cms/core";
+export type { FrontendCompositionImport, FrontendCompositionImportRequest, FrontendCompositionReview, FrontendCompositionApplyResult } from "@backy-cms/core";
+import type { GeneratedBackyOpenApiFrontendCompositionReviewEnvelope, GeneratedBackyOpenApiFrontendCompositionApplyEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiFrontendCompositionReviewEnvelope, GeneratedBackyOpenApiFrontendCompositionApplyEnvelope } from "./generated-contract-types";
+export type BackyFrontendCompositionReviewResponse = GeneratedBackyOpenApiFrontendCompositionReviewEnvelope;
+export type BackyFrontendCompositionApplyResponse = GeneratedBackyOpenApiFrontendCompositionApplyEnvelope;
+import type { GeneratedBackyOpenApiCommentBlocklistDeleteEnvelope, GeneratedBackyOpenApiCommentMutationEnvelope, GeneratedBackyOpenApiCommentSubmissionEnvelope, GeneratedBackyOpenApiCommentReportEnvelope, GeneratedBackyOpenApiCommentBulkUpdateEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiCommentMutationEnvelope, GeneratedBackyOpenApiCommentSubmissionEnvelope, GeneratedBackyOpenApiCommentModerationRequest, GeneratedBackyOpenApiCommentCompletionWarnings } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiCommentDeleteEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiCommentDeleteEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminMediaStorageRecoveryListEnvelope, GeneratedBackyOpenApiAdminMediaStorageRecoveryRetryEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminMediaStorageRecoveryJob, GeneratedBackyOpenApiAdminMediaStorageRecoveryListEnvelope, GeneratedBackyOpenApiAdminMediaStorageRecoveryRetryEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminLifecycleSiteEnvelope, GeneratedBackyOpenApiAdminSiteLifecycleDeleteEnvelope, GeneratedBackyOpenApiAdminSiteLifecycleDuplicateEnvelope, GeneratedBackyOpenApiAdminSiteLifecycleReadinessEnvelope, GeneratedBackyOpenApiAdminCustomFrontendStarterEnvelope, GeneratedBackyOpenApiAdminCustomFrontendConnectionEnvelope, GeneratedBackyOpenApiAdminCustomFrontendConnectionRequest } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminLifecycleSite, GeneratedBackyOpenApiAdminLifecycleSiteEnvelope, GeneratedBackyOpenApiAdminSiteLifecyclePatchRequest, GeneratedBackyOpenApiAdminSiteLifecycleDeleteEnvelope, GeneratedBackyOpenApiAdminSiteLifecycleDuplicateRequest, GeneratedBackyOpenApiAdminSiteLifecycleDuplicateEnvelope, GeneratedBackyOpenApiAdminSiteReadinessCheck, GeneratedBackyOpenApiAdminSitePageReadiness, GeneratedBackyOpenApiAdminSitePostReadiness, GeneratedBackyOpenApiAdminSiteLifecycleReadiness, GeneratedBackyOpenApiAdminSiteLifecycleReadinessEnvelope, GeneratedBackyOpenApiAdminCustomFrontendStarterFile, GeneratedBackyOpenApiAdminCustomFrontendStarterEnvelope, GeneratedBackyOpenApiAdminCustomFrontendConnectionRequest, GeneratedBackyOpenApiAdminCustomFrontendConnectionCheck, GeneratedBackyOpenApiAdminCustomFrontendConnectionEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminCommerceOrderTrackingCompletionWarning } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminCommerceOrderStatusHandoffEnvelope, GeneratedBackyOpenApiAdminCommerceReconciliationEnvelope, GeneratedBackyOpenApiCommerceOrderQuoteEnvelope, GeneratedBackyOpenApiCommerceOrderTrackingEnvelope, GeneratedBackyOpenApiCommerceOrderProviderRefundEnvelope, GeneratedBackyOpenApiCommerceOrderFulfillmentEnvelope, GeneratedBackyOpenApiCommerceOrderShippingLabelEnvelope, GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminCommerceOrderQuoteRequest, GeneratedBackyOpenApiAdminCommerceOrderTrackingRequest, GeneratedBackyOpenApiAdminCommerceOrderProviderRefundRequest, GeneratedBackyOpenApiAdminCommerceOrderFulfillmentRequest, GeneratedBackyOpenApiAdminCommerceOrderShippingLabelRequest, GeneratedBackyOpenApiAdminCommerceOrderShippingLabelVoidRequest, GeneratedBackyOpenApiAdminCommerceOrderStatusHandoffEnvelope, GeneratedBackyOpenApiAdminCommerceReconciliationEvent, GeneratedBackyOpenApiAdminCommerceReconciliationUpdate, GeneratedBackyOpenApiAdminCommerceReconciliationRequest, GeneratedBackyOpenApiAdminCommerceReconciliationEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope, GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope, GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminCommerceProductProviderSyncRequest, GeneratedBackyOpenApiAdminCommerceProductSubscriptionActionRequest } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminFormContactCustomerPromotionEnvelope } from "./generated-contract-types";
+export type { GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope, GeneratedBackyOpenApiAdminFormDeletePendingEnvelope, GeneratedBackyOpenApiFormAttachmentCleanupEnvelope } from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope, GeneratedBackyOpenApiAdminFormDeletePendingEnvelope } from "./generated-contract-types";
+export type {
+  GeneratedBackyOpenApiAdminFormContactShare,
+  GeneratedBackyOpenApiAdminFormConsentSettings,
+  GeneratedBackyOpenApiAdminFormSpamSettings,
+  GeneratedBackyOpenApiAdminFormCollectionTarget,
+  GeneratedBackyOpenApiAdminFormMutationRequest,
+  GeneratedBackyOpenApiAdminForm,
+  GeneratedBackyOpenApiAdminFormsEnvelope,
+  GeneratedBackyOpenApiAdminFormEnvelope,
+  GeneratedBackyOpenApiAdminFormCloneRequest,
+  GeneratedBackyOpenApiAdminFormCloneEnvelope,
+  GeneratedBackyOpenApiAdminFormEmbedRequest,
+  GeneratedBackyOpenApiAdminFormEmbedEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmission,
+  GeneratedBackyOpenApiAdminFormSubmissionsEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmissionEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmissionReviewRequest,
+  GeneratedBackyOpenApiAdminFormDeliveryRetryRequest,
+  GeneratedBackyOpenApiAdminFormDelivery,
+  GeneratedBackyOpenApiAdminFormDeliveryEnvelope,
+  GeneratedBackyOpenApiAdminFormConsentRetentionRequest,
+  GeneratedBackyOpenApiAdminFormConsentRetentionResult,
+  GeneratedBackyOpenApiAdminFormConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormsConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormContact,
+  GeneratedBackyOpenApiAdminFormContactRequest,
+  GeneratedBackyOpenApiAdminFormContactsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactEnvelope,
+  GeneratedBackyOpenApiAdminFormContactDeleteEnvelope,
+  GeneratedBackyOpenApiAdminFormContactImportError,
+  GeneratedBackyOpenApiAdminFormContactImportEnvelope,
+  GeneratedBackyOpenApiAdminFormContactUserPromotionRequest,
+  GeneratedBackyOpenApiAdminFormPromotedUser,
+  GeneratedBackyOpenApiAdminFormInvite,
+  GeneratedBackyOpenApiAdminFormContactUserPromotionEnvelope,
+  GeneratedBackyOpenApiAdminFormContactCustomerPromotionRequest,
+  GeneratedBackyOpenApiAdminFormContactCustomerPromotionEnvelope,
+  GeneratedBackyOpenApiAdminFormContactSyncRequest,
+  GeneratedBackyOpenApiAdminFormContactSyncDelivery,
+  GeneratedBackyOpenApiAdminFormContactSyncEnvelope,
+  GeneratedBackyOpenApiAdminFormContactConsentRetentionRequest,
+  GeneratedBackyOpenApiAdminFormContactConsentEvidence,
+  GeneratedBackyOpenApiAdminFormContactConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormContactListFilters,
+  GeneratedBackyOpenApiAdminFormContactListRequest,
+  GeneratedBackyOpenApiAdminFormContactListDeleteRequest,
+  GeneratedBackyOpenApiAdminFormContactList,
+  GeneratedBackyOpenApiAdminFormContactListsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactListMutationEnvelope,
+  GeneratedBackyOpenApiAdminFormsAnalytics,
+  GeneratedBackyOpenApiAdminFormsAnalyticsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactSegmentsEnvelope,
+} from "./generated-contract-types";
+import type {
+  GeneratedBackyOpenApiAdminFormMutationRequest,
+  GeneratedBackyOpenApiAdminForm,
+  GeneratedBackyOpenApiAdminFormsEnvelope,
+  GeneratedBackyOpenApiAdminFormEnvelope,
+  GeneratedBackyOpenApiAdminFormCloneEnvelope,
+  GeneratedBackyOpenApiAdminFormEmbedEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmission,
+  GeneratedBackyOpenApiAdminFormSubmissionsEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmissionEnvelope,
+  GeneratedBackyOpenApiAdminFormSubmissionReviewRequest,
+  GeneratedBackyOpenApiAdminFormDeliveryRetryRequest,
+  GeneratedBackyOpenApiAdminFormDeliveryEnvelope,
+  GeneratedBackyOpenApiAdminFormConsentRetentionRequest,
+  GeneratedBackyOpenApiAdminFormConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormsConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormContact,
+  GeneratedBackyOpenApiAdminFormContactRequest,
+  GeneratedBackyOpenApiAdminFormContactsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactEnvelope,
+  GeneratedBackyOpenApiAdminFormContactDeleteEnvelope,
+  GeneratedBackyOpenApiAdminFormContactImportEnvelope,
+  GeneratedBackyOpenApiAdminFormContactUserPromotionRequest,
+  GeneratedBackyOpenApiAdminFormContactUserPromotionEnvelope,
+  GeneratedBackyOpenApiAdminFormContactCustomerPromotionRequest,
+  GeneratedBackyOpenApiAdminFormContactSyncRequest,
+  GeneratedBackyOpenApiAdminFormContactSyncEnvelope,
+  GeneratedBackyOpenApiAdminFormContactConsentRetentionRequest,
+  GeneratedBackyOpenApiAdminFormContactConsentRetentionEnvelope,
+  GeneratedBackyOpenApiAdminFormContactListsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactListMutationEnvelope,
+  GeneratedBackyOpenApiAdminFormsAnalyticsEnvelope,
+  GeneratedBackyOpenApiAdminFormContactSegmentsEnvelope,
+} from "./generated-contract-types";
+export type {
+  GeneratedBackyOpenApiAdminMediaTransformsEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionReviewedPreviewTarget,
+  GeneratedBackyOpenApiAdminReusableSectionReviewedPreviewScope,
+  GeneratedBackyOpenApiAdminReusableSectionReviewedPreview,
+  GeneratedBackyOpenApiAdminMediaStorageCleanup,
+} from "./generated-contract-types";
+import type { GeneratedBackyOpenApiAdminMediaStorageCleanup } from "./generated-contract-types";
+export type {
+  GeneratedBackyOpenApiAdminCollectionFieldInput,
+  GeneratedBackyOpenApiAdminCollectionField,
+  GeneratedBackyOpenApiAdminCollectionCreateRequest,
+  GeneratedBackyOpenApiAdminCollectionPatchRequest,
+  GeneratedBackyOpenApiAdminCollection,
+  GeneratedBackyOpenApiAdminCollectionPagination,
+  GeneratedBackyOpenApiAdminCollectionListData,
+  GeneratedBackyOpenApiAdminCollectionData,
+  GeneratedBackyOpenApiAdminCollectionDeleteData,
+  GeneratedBackyOpenApiAdminCollectionRecordCreateRequest,
+  GeneratedBackyOpenApiAdminCollectionRecordPatchRequest,
+  GeneratedBackyOpenApiAdminCollectionRecord,
+  GeneratedBackyOpenApiAdminCollectionRecordListData,
+  GeneratedBackyOpenApiAdminCollectionRecordData,
+  GeneratedBackyOpenApiAdminCollectionRecordDeleteData,
+  GeneratedBackyOpenApiAdminCollectionRecordBulkRequest,
+  GeneratedBackyOpenApiAdminCollectionRecordBulkData,
+  GeneratedBackyOpenApiAdminCollectionCsvImportError,
+  GeneratedBackyOpenApiAdminCollectionCsvImportSummary,
+  GeneratedBackyOpenApiAdminCollectionCsvImportData,
+  GeneratedBackyOpenApiAdminCollectionBackupRecord,
+  GeneratedBackyOpenApiAdminCollectionBackupEntry,
+  GeneratedBackyOpenApiAdminCollectionsBackupData,
+  GeneratedBackyOpenApiAdminCollectionImportRecord,
+  GeneratedBackyOpenApiAdminCollectionImportEntry,
+  GeneratedBackyOpenApiAdminCollectionsImportRequest,
+  GeneratedBackyOpenApiAdminCollectionsImportSummary,
+  GeneratedBackyOpenApiAdminCollectionsImportData,
+  GeneratedBackyOpenApiAdminCollectionBindingPresetInput,
+  GeneratedBackyOpenApiAdminCollectionBindingPreset,
+  GeneratedBackyOpenApiAdminCollectionBindingPresetsPatchRequest,
+  GeneratedBackyOpenApiAdminCollectionBindingPresetsData,
+  GeneratedBackyOpenApiAdminCollectionListEnvelope,
+  GeneratedBackyOpenApiAdminCollectionEnvelope,
+  GeneratedBackyOpenApiAdminCollectionDeleteEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordListEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordDeleteEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordBulkEnvelope,
+  GeneratedBackyOpenApiAdminCollectionCsvImportEnvelope,
+  GeneratedBackyOpenApiAdminCollectionsBackupEnvelope,
+  GeneratedBackyOpenApiAdminCollectionsImportEnvelope,
+  GeneratedBackyOpenApiAdminCollectionBindingPresetsEnvelope,
+} from "./generated-contract-types";
+import type {
+  GeneratedBackyOpenApiAdminCollectionCreateRequest,
+  GeneratedBackyOpenApiAdminCollectionRecordCreateRequest,
+  GeneratedBackyOpenApiAdminCollectionsImportRequest,
+  GeneratedBackyOpenApiAdminCollectionListEnvelope,
+  GeneratedBackyOpenApiAdminCollectionEnvelope,
+  GeneratedBackyOpenApiAdminCollectionDeleteEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordListEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordDeleteEnvelope,
+  GeneratedBackyOpenApiAdminCollectionRecordBulkEnvelope,
+  GeneratedBackyOpenApiAdminCollectionCsvImportEnvelope,
+  GeneratedBackyOpenApiAdminCollectionsBackupEnvelope,
+  GeneratedBackyOpenApiAdminCollectionsImportEnvelope,
+  GeneratedBackyOpenApiAdminCollectionBindingPresetsEnvelope,
+} from "./generated-contract-types";
+export type {
+  GeneratedBackyOpenApiAdminReusableSectionImportEntry,
+  GeneratedBackyOpenApiAdminReusableSectionContent,
+  GeneratedBackyOpenApiAdminReusableSectionResource,
+  GeneratedBackyOpenApiAdminReusableSectionCreateRequest,
+  GeneratedBackyOpenApiAdminReusableSectionPatchRequest,
+  GeneratedBackyOpenApiAdminReusableSectionListEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionDeleteEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionVersion,
+  GeneratedBackyOpenApiAdminReusableSectionVersionsEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionRestoreRequest,
+  GeneratedBackyOpenApiAdminReusableSectionRestoreEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionExportEntry,
+  GeneratedBackyOpenApiAdminReusableSectionExportEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionImportRequest,
+  GeneratedBackyOpenApiAdminReusableSectionImportEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionInstance,
+  GeneratedBackyOpenApiAdminReusableSectionInstanceTarget,
+  GeneratedBackyOpenApiAdminReusableSectionInstancesEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionRefreshRequest,
+  GeneratedBackyOpenApiAdminReusableSectionRefreshEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionLibrary,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataRequest,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataUpdateEnvelope,
+  GeneratedBackyOpenApiFrontendDomCaptureEvidence,
+  GeneratedBackyOpenApiFrontendElementDomEvidence,
+  GeneratedBackyOpenApiAdminNavigationEnvelope,
+  GeneratedBackyOpenApiAdminNavigationUpdateRequest,
+  GeneratedBackyOpenApiAdminNavigationItem,
+  GeneratedBackyOpenApiAdminNavigationConfig,
+  GeneratedBackyOpenApiAdminNavigationLayout,
+  GeneratedBackyOpenApiAdminSeoEnvelope,
+  GeneratedBackyOpenApiAdminSeoUpdateRequest,
+  GeneratedBackyOpenApiAdminSeoSettings,
+  GeneratedBackyOpenApiAdminSeoPreview,
+  GeneratedBackyOpenApiAdminRedirectsEnvelope,
+  GeneratedBackyOpenApiAdminRedirectRulesRequest,
+  GeneratedBackyOpenApiAdminRedirectRule,
+  GeneratedBackyOpenApiAdminRedirectConflict,
+  GeneratedBackyOpenApiAdminFrontendDesignActionRequest,
+  GeneratedBackyOpenApiAdminFrontendDesignEnvelope,
+  GeneratedBackyOpenApiAdminFrontendDesignInput,
+  GeneratedBackyOpenApiAdminTemplateRegistry,
+  GeneratedBackyOpenApiAdminTemplateRegistryEntry,
+  GeneratedBackyOpenApiAdminTemplateRegistryEnvelope,
+  GeneratedBackyOpenApiAdminTemplateRegistrySummary,
+  GeneratedBackyOpenApiAdminBlogCategoryResource,
+  GeneratedBackyOpenApiAdminBlogCategoryCreate,
+  GeneratedBackyOpenApiAdminBlogCategoryPatch,
+  GeneratedBackyOpenApiAdminBlogCategoryListEnvelope,
+  GeneratedBackyOpenApiAdminBlogCategoryEnvelope,
+  GeneratedBackyOpenApiAdminBlogCategoryDeleteEnvelope,
+  GeneratedBackyOpenApiAdminBlogTagResource,
+  GeneratedBackyOpenApiAdminBlogTagCreate,
+  GeneratedBackyOpenApiAdminBlogTagPatch,
+  GeneratedBackyOpenApiAdminBlogTagListEnvelope,
+  GeneratedBackyOpenApiAdminBlogTagEnvelope,
+  GeneratedBackyOpenApiAdminBlogTagDeleteEnvelope,
+  GeneratedBackyOpenApiAdminBlogAuthorResource,
+  GeneratedBackyOpenApiAdminBlogAuthorListEnvelope,
+} from "./generated-contract-types";
+
+import type {
+  GeneratedBackyOpenApiAdminReusableSectionPatchRequest,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataRequest,
+  GeneratedBackyOpenApiAdminReusableSectionRefreshRequest,
+  GeneratedBackyOpenApiAdminReusableSectionRestoreRequest,
+  GeneratedBackyOpenApiAdminReusableSectionCreateRequest,
+  GeneratedBackyOpenApiAdminReusableSectionDeleteEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionExportEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionImportEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionImportRequest,
+  GeneratedBackyOpenApiAdminReusableSectionInstancesEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionListEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionMetadataUpdateEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionRefreshEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionRestoreEnvelope,
+  GeneratedBackyOpenApiAdminReusableSectionVersionsEnvelope,
+  GeneratedBackyOpenApiAdminNavigationEnvelope,
+  GeneratedBackyOpenApiAdminNavigationUpdateRequest,
+  GeneratedBackyOpenApiAdminSeoEnvelope,
+  GeneratedBackyOpenApiAdminSeoUpdateRequest,
+  GeneratedBackyOpenApiAdminRedirectsEnvelope,
+  GeneratedBackyOpenApiAdminRedirectRulesRequest,
+  GeneratedBackyOpenApiAdminFrontendDesignActionRequest,
+  GeneratedBackyOpenApiAdminFrontendDesignEnvelope,
+  GeneratedBackyOpenApiAdminTemplateRegistryEnvelope,
+  GeneratedBackyOpenApiAdminVisitorMember,
+  GeneratedBackyOpenApiAdminVisitorListEnvelope,
+  GeneratedBackyOpenApiAdminVisitorMemberEnvelope,
+  GeneratedBackyOpenApiAdminVisitorMutationEnvelope,
+  GeneratedBackyOpenApiAdminVisitorUpdateRequest,
+  GeneratedBackyOpenApiAdminVisitorRemoveAccessRequest,
+  GeneratedBackyOpenApiAdminVisitorRetention,
+  GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope,
+  GeneratedBackyOpenApiAdminOperatorSiteScope,
+  GeneratedBackyOpenApiAdminOperatorSiteAccess,
+  GeneratedBackyOpenApiAdminOperatorSiteGrantPatch,
+  GeneratedBackyOpenApiAdminOperatorSiteGrantEnvelope,
+  GeneratedBackyOpenApiVisitorMember,
+  GeneratedBackyOpenApiVisitorRegisterRequest,
+  GeneratedBackyOpenApiVisitorLoginRequest,
+  GeneratedBackyOpenApiVisitorRecoveryRequest,
+  GeneratedBackyOpenApiVisitorResetPasswordRequest,
+  GeneratedBackyOpenApiVisitorProfileUpdateRequest,
+  GeneratedBackyOpenApiVisitorSessionEnvelope,
+  GeneratedBackyOpenApiVisitorIssuedSessionEnvelope,
+  GeneratedBackyOpenApiVisitorRegistrationPendingEnvelope,
+  GeneratedBackyOpenApiVisitorRecoveryEnvelope,
+  GeneratedBackyOpenApiVisitorLogoutEnvelope,
+  GeneratedBackyOpenApiVisitorPasswordResetEnvelope,
+  GeneratedBackyOpenApiVisitorErrorEnvelope,
+  GeneratedBackyOpenApiAdminMediaDeleteRequest,
+} from "./generated-contract-types";
+
 import type {
   BackyContentDocument as CoreBackyContentDocument,
   BackyContentElement,
 } from "@backy-cms/core/content-contract";
 import type {
   GeneratedBackyFrontendManifestCustomFrontendAgentHandoff,
+  GeneratedBackyOpenApiFrontendRuntimeDeclaration,
+  GeneratedBackyOpenApiFrontendObservation,
+  GeneratedBackyOpenApiFrontendCompatibilityEnvelope,
+  GeneratedBackyOpenApiTemplateHistoryEnvelope,
+  GeneratedBackyOpenApiTemplateRestoreEnvelope,
   GeneratedBackyOpenApiAdminSettings,
   GeneratedBackyOpenApiAdminSettingsActionEnvelope,
   GeneratedBackyOpenApiAdminSettingsActionRequest,
@@ -30,13 +376,22 @@ import type {
   GeneratedBackyOpenApiCommerceOrderStatusAccess,
   GeneratedBackyOpenApiCommerceOrderStatusHandoff,
   GeneratedBackyOpenApiCommerceOrderTracking,
-  GeneratedBackyOpenApiCommerceProductProviderSync,
   GeneratedBackyOpenApiCommerceProductSubscriptionAction,
   GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle,
   GeneratedBackyOpenApiPageUpdateRequest,
 } from "./generated-contract-types";
 
 export type {
+  GeneratedBackyOpenApiTemplateRevision,
+  GeneratedBackyOpenApiTemplateRevisionSummary,
+  GeneratedBackyOpenApiTemplateHistoryEnvelope,
+  GeneratedBackyOpenApiTemplateRestoreEnvelope,
+  GeneratedBackyOpenApiFormAttachment,
+  GeneratedBackyOpenApiFrontendRuntimeDeclaration,
+  GeneratedBackyOpenApiFrontendObservation,
+  GeneratedBackyOpenApiFrontendCompatibilityEnvelope,
+  GeneratedBackyOpenApiFrontendCompatibilityReport,
+  GeneratedBackyOpenApiFrontendCompatibilityIssue,
   GeneratedBackyContentStatus,
   GeneratedBackyContentElement,
   GeneratedBackyDataBinding,
@@ -215,6 +570,8 @@ export type {
   GeneratedBackyOpenApiInteractiveComponentRegistry,
   GeneratedBackyOpenApiInteractiveComponentRegistryEnvelope,
   GeneratedBackyOpenApiInteractiveComponentRegistryEntry,
+  GeneratedBackyOpenApiBackyRichDataFigureNode,
+  GeneratedBackyOpenApiBackyRichInteractiveComponentNode,
   GeneratedBackyOpenApiInteractiveComponentRegistryPagination,
   GeneratedBackyOpenApiInteractiveComponentRuntime,
   GeneratedBackyOpenApiInteractiveComponentSecurity,
@@ -276,6 +633,52 @@ export type {
   GeneratedBackyThemeTokens,
 } from "./generated-contract-types";
 export { generatedBackyContractTypeSources } from "./generated-contract-types";
+import type {
+  GeneratedBackyOpenApiAdminSiteMailboxesEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxFoldersEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxMessagesEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxReadRequest,
+  GeneratedBackyOpenApiAdminSiteMailboxReadEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxAttachmentsEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxAttachmentDownloadRequest,
+} from "./generated-contract-types";
+export type {
+  GeneratedBackyOpenApiAdminSiteMailboxPagination,
+  GeneratedBackyOpenApiAdminSiteMailboxFolder,
+  GeneratedBackyOpenApiAdminSiteMailboxMessage,
+  GeneratedBackyOpenApiAdminSiteMailboxesEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxFoldersEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxMessagesEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxReadRequest,
+  GeneratedBackyOpenApiAdminSiteMailboxReadEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxAttachment,
+  GeneratedBackyOpenApiAdminSiteMailboxAttachmentsEnvelope,
+  GeneratedBackyOpenApiAdminSiteMailboxAttachmentDownloadRequest,
+} from "./generated-contract-types";
+
+/** Browser Owner cookie on the approved admin origin/rewrite; no key or session-header authentication. */
+export interface BackyOwnerCookieRequestOptions {
+  siteId?: string;
+  requestId?: string;
+}
+export type BackyVisitorPrivacyImpact = import('./generated-contract-types').GeneratedBackyOpenApiAdminVisitorPrivacyImpact;
+export type BackyVisitorPrivacyImpactEnvelope = import('./generated-contract-types').GeneratedBackyOpenApiAdminVisitorPrivacyImpactEnvelope;
+export type {GeneratedBackyOpenApiAdminVisitorPrivacyImpact,GeneratedBackyOpenApiAdminVisitorPrivacyImpactEnvelope,GeneratedBackyOpenApiAdminVisitorPrivacyDeliveryCounts} from './generated-contract-types';
+export interface BackySiteMailboxPaginationQuery {
+  page?: number;
+  perPage?: number;
+}
+export interface BackySiteMailboxMessagesQuery extends BackySiteMailboxPaginationQuery {
+  folder: string;
+}
+/** Private bytes only. Saving is an explicit caller action; no public or object URL is created. */
+export interface BackySiteMailboxAttachmentDownload {
+  bytes: Uint8Array;
+  sizeBytes: number;
+  filename: string;
+  contentType: 'application/octet-stream';
+  requestId: string;
+}
 
 export interface BackyClientOptions {
   baseUrl?: string;
@@ -286,6 +689,41 @@ export interface BackyClientOptions {
   requestIdFactory?: () => string;
   defaultHeaders?: HeadersInit;
   credentials?: RequestCredentials;
+}
+
+
+export type BackyVisitorMember = GeneratedBackyOpenApiVisitorMember;
+export type BackyVisitorRegisterRequest = GeneratedBackyOpenApiVisitorRegisterRequest | { email: string; password: string; returnUrl: string; displayName?: string; authFlow: 'pkce' };
+export type BackyVisitorLoginRequest = GeneratedBackyOpenApiVisitorLoginRequest;
+export type BackyVisitorRecoveryRequest = GeneratedBackyOpenApiVisitorRecoveryRequest & { authFlow?: 'pkce' };
+export type BackyVisitorErasureChoices = { comments: 'redact' | 'retain'; submissions: 'redact' | 'retain'; exclusiveContacts: 'delete' | 'retain' };
+export type BackyVisitorErasureReport = { siteId: string; memberId: string; choices: BackyVisitorErasureChoices; counts: Record<'comments' | 'submissions' | 'exclusiveContacts' | 'ambiguousContacts' | 'retainedAttachments' | 'commentDeliveryAttempts' | 'formDeliveryAttempts' | 'newsletterSnapshots', number>; retainedCategories: string[]; boundaries: { profileIdentifiers: 'redact'; admission: 'remove-and-fence'; providerChanged: false; emailMatchedOwnership: false; downstreamErasure: 'unverified'; ambiguousContacts: 'retain-and-fence' } };
+export type BackyVisitorErasurePreview = BackyVisitorErasureReport & { schema: 'backy.visitor-erasure-preview.v1'; previewId: string; expiresAt: string };
+export type BackyVisitorErasureReceipt = BackyVisitorErasureReport & { schema: 'backy.visitor-erasure-receipt.v1'; receiptId: string; completedAt: string; localErasurePerformed: true };
+export type BackyVisitorCallbackRequest = { code: string; state: string; returnUrl: string };
+export type BackyVisitorResetPasswordRequest = GeneratedBackyOpenApiVisitorResetPasswordRequest | (BackyVisitorCallbackRequest & { password: string });
+export type { GeneratedBackyOpenApiVisitorEmailChangeRequest, GeneratedBackyOpenApiVisitorConfirmEmailChangeRequest, GeneratedBackyOpenApiVisitorEmailChangePendingEnvelope, GeneratedBackyOpenApiVisitorEmailChangedEnvelope } from './generated-contract-types';
+import type { GeneratedBackyOpenApiVisitorEmailChangeRequest, GeneratedBackyOpenApiVisitorConfirmEmailChangeRequest, GeneratedBackyOpenApiVisitorEmailChangePendingEnvelope, GeneratedBackyOpenApiVisitorEmailChangedEnvelope } from './generated-contract-types';
+export type BackyVisitorEmailChangeRequest = GeneratedBackyOpenApiVisitorEmailChangeRequest;
+export type BackyVisitorConfirmEmailChangeRequest = GeneratedBackyOpenApiVisitorConfirmEmailChangeRequest;
+export type BackyVisitorProfileUpdateRequest = GeneratedBackyOpenApiVisitorProfileUpdateRequest;
+export type BackyVisitorSessionEnvelope = GeneratedBackyOpenApiVisitorSessionEnvelope;
+export type BackyVisitorIssuedSessionEnvelope = GeneratedBackyOpenApiVisitorIssuedSessionEnvelope;
+export type BackyVisitorRegistrationPendingEnvelope = GeneratedBackyOpenApiVisitorRegistrationPendingEnvelope;
+export type BackyVisitorRecoveryEnvelope = GeneratedBackyOpenApiVisitorRecoveryEnvelope;
+export type BackyVisitorLogoutEnvelope = GeneratedBackyOpenApiVisitorLogoutEnvelope;
+export type BackyVisitorPasswordResetEnvelope = GeneratedBackyOpenApiVisitorPasswordResetEnvelope;
+export type BackyVisitorErrorEnvelope = GeneratedBackyOpenApiVisitorErrorEnvelope;
+
+/** Only website visitor credentials. Operator default headers are deliberately excluded. */
+export interface BackyVisitorRequestOptions {
+  origin?: string;
+  sessionToken?: string;
+  credentials?: RequestCredentials;
+  requestId?: string;
+}
+export interface BackyAdminMediaDeleteOptions extends BackyLiveManagementRequestOptions {
+  input?: GeneratedBackyOpenApiAdminMediaDeleteRequest;
 }
 
 export interface BackyEnvelope<TData> {
@@ -302,6 +740,7 @@ export interface BackyErrorEnvelope {
     code: string;
     message: string;
     details?: unknown;
+    jobId?: string;
   };
   data?: unknown;
   validation?: BackyFormSubmissionValidationDetail[];
@@ -712,6 +1151,7 @@ export interface BackyFrontendEditableMapEntry {
 }
 
 export interface BackyFrontendDesignContract {
+  runtime?: GeneratedBackyOpenApiFrontendRuntimeDeclaration;
   schemaVersion: "backy.frontend-design.v1" | string;
   status: "unconfigured" | "captured" | "synced" | "stale" | string;
   source: BackyFrontendDesignSource;
@@ -802,34 +1242,13 @@ export type BackyAdminSitesResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
-export type BackyAdminSiteResponse = BackyEnvelope<
-  {
-    site: BackyAdminSiteResource;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminSiteResponse = GeneratedBackyOpenApiAdminLifecycleSiteEnvelope;
 
-export type BackyAdminSiteDeleteResponse = BackyEnvelope<
-  {
-    deleted: boolean;
-    siteId: string;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminSiteDeleteResponse = GeneratedBackyOpenApiAdminSiteLifecycleDeleteEnvelope;
 
-export type BackyAdminSiteReadinessResponse = BackyEnvelope<
-  {
-    readiness: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminSiteReadinessResponse = GeneratedBackyOpenApiAdminSiteLifecycleReadinessEnvelope;
 
-export type BackyAdminSiteDuplicateResponse = BackyEnvelope<
-  {
-    site: BackyAdminSiteResource;
-    pagesCopied: number;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminSiteDuplicateResponse = GeneratedBackyOpenApiAdminSiteLifecycleDuplicateEnvelope;
 
 export interface BackyFrontendDesignResponse {
   schemaVersion: "backy.frontend-design-response.v1" | string;
@@ -958,28 +1377,9 @@ export interface BackyTemplateRegistry extends BackyTemplateRegistrySummary {
   byType: Record<string, BackyTemplateRegistryEntry[]>;
 }
 
-export type BackyAdminFrontendDesignResponse = BackyEnvelope<
-  {
-    site: {
-      id: string;
-      slug: string;
-      name: string;
-      customDomain?: string | null;
-      [key: string]: unknown;
-    };
-    frontendDesign: BackyFrontendDesignContract;
-    endpoints: {
-      admin: string;
-      templates: string;
-      publicManifest: string;
-      [key: string]: string;
-    };
-    templateRegistry: BackyTemplateRegistrySummary;
-    nextSteps: string[];
-    cacheInvalidation?: Record<string, unknown>;
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminFrontendDesignResponse = GeneratedBackyOpenApiAdminFrontendDesignEnvelope;
+
+export type BackyAdminFrontendDesignActionInput = GeneratedBackyOpenApiAdminFrontendDesignActionRequest;
 
 export interface BackyAdminTemplateRegistryOptions
   extends BackyLiveManagementRequestOptions {
@@ -987,25 +1387,7 @@ export interface BackyAdminTemplateRegistryOptions
   search?: string;
 }
 
-export type BackyAdminTemplateRegistryResponse = BackyEnvelope<
-  {
-    site: {
-      id: string;
-      slug: string;
-      name: string;
-      [key: string]: unknown;
-    };
-    registry: BackyTemplateRegistry;
-    templates: BackyTemplateRegistryEntry[];
-    byType: Record<string, BackyTemplateRegistryEntry[]>;
-    endpoints: {
-      frontendDesign: string;
-      templates: string;
-      [key: string]: string;
-    };
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminTemplateRegistryResponse = GeneratedBackyOpenApiAdminTemplateRegistryEnvelope;
 
 export interface BackyAdminCollectionBindingPreset {
   id: string;
@@ -1034,23 +1416,22 @@ export interface BackyAdminCollectionBindingPresetInput
   fieldKey: string;
 }
 
-export type BackyAdminCollectionBindingPresetsResponse = BackyEnvelope<
-  {
-    site: {
-      id: string;
-      slug: string;
-      name: string;
-      [key: string]: unknown;
-    };
-    presets: BackyAdminCollectionBindingPreset[];
-  } & Record<string, unknown>
->;
+export type BackyAdminCollectionBindingPresetsResponse = GeneratedBackyOpenApiAdminCollectionBindingPresetsEnvelope;
 
 export interface BackyAdminCollectionBindingPresetsUpdateInput {
   presets: BackyAdminCollectionBindingPresetInput[];
   requestId?: string;
   [key: string]: unknown;
 }
+
+export type BackyFrontendCompatibilityTarget =
+  | { templateId: string; pageId?: never; postId?: never }
+  | { pageId: string; templateId?: never; postId?: never }
+  | { postId: string; templateId?: never; pageId?: never };
+
+export type BackyFrontendCompatibilityInput = BackyFrontendCompatibilityTarget & {
+  observation?: GeneratedBackyOpenApiFrontendObservation;
+};
 
 export type BackyAdminFrontendDesignUpdateInput = {
   requestId?: string;
@@ -1416,6 +1797,8 @@ export interface BackyCollectionSchema {
 export interface BackyCollectionRecord<
   TValues extends Record<string, unknown> = Record<string, unknown>,
 > {
+  /** Authenticated normal authoring response token; pass unchanged as expectedVersion. */
+  version?: string;
   id: string;
   slug: string;
   status?: string;
@@ -1503,30 +1886,16 @@ export interface BackyAdminCollectionCreateInput {
 
 export interface BackyAdminCollectionUpdateInput
   extends Partial<Omit<BackyAdminCollectionCreateInput, "name">> {
+  /** Current collection-v1 definition token; stale edits require reload. */
+  expectedVersion?: string;
   name?: string;
 }
 
-export type BackyAdminCollectionsResponse = BackyEnvelope<
-  {
-    collections: BackyCollectionSchema[];
-    pagination?: BackyPagination;
-  } & Record<string, unknown>
->;
+export type BackyAdminCollectionsResponse = GeneratedBackyOpenApiAdminCollectionListEnvelope;
 
-export type BackyAdminCollectionResponse = BackyEnvelope<
-  {
-    collection: BackyCollectionSchema;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminCollectionResponse = GeneratedBackyOpenApiAdminCollectionEnvelope;
 
-export type BackyAdminCollectionDeleteResponse = BackyEnvelope<
-  {
-    deleted: boolean;
-    collectionId: string;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminCollectionDeleteResponse = GeneratedBackyOpenApiAdminCollectionDeleteEnvelope;
 
 export interface BackyAdminCollectionsBackupOptions
   extends BackyLiveManagementRequestOptions {
@@ -1579,9 +1948,22 @@ export interface BackyAdminCollectionsBackup<
   [key: string]: unknown;
 }
 
+/** Preserve caller-specific record values while retaining generated wire envelope fields. */
+type BackyAdminCollectionTypedData<TEnvelope extends { data: unknown }, TFields> =
+  Omit<TEnvelope, "data"> & { data: Omit<TEnvelope["data"], keyof TFields> & TFields };
+
+// Homomorphic mapping retains explicit wire fields alongside an extension index
+// signature; Omit would collapse those fields to unknown. Record overrides keep
+// the existing generic SDK record shape rather than imposing new required keys.
+type BackyAdminCollectionPreservedTypedData<TEnvelope extends { data: unknown }, TFields> = {
+  [K in keyof TEnvelope]: K extends "data" ? {
+    [F in keyof TEnvelope["data"]]: F extends keyof TFields ? TFields[F] : TEnvelope["data"][F]
+  } & TFields : TEnvelope[K]
+};
+
 export type BackyAdminCollectionsBackupResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<BackyAdminCollectionsBackup<TValues>>;
+> = Omit<GeneratedBackyOpenApiAdminCollectionsBackupEnvelope, "data"> & { data: BackyAdminCollectionsBackup<TValues> };
 
 export interface BackyAdminCollectionsBackupImportOptions
   extends BackyLiveManagementRequestOptions {
@@ -1600,14 +1982,7 @@ export interface BackyAdminCollectionsBackupImportSummary {
 
 export type BackyAdminCollectionsBackupImportResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    import: BackyAdminCollectionsBackupImportSummary;
-    collections: BackyCollectionSchema[];
-    records: Array<BackyCollectionRecord<TValues>>;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+> = BackyAdminCollectionPreservedTypedData<GeneratedBackyOpenApiAdminCollectionsImportEnvelope, { records: Array<BackyCollectionRecord<TValues>> }>;
 
 export interface BackyAdminCollectionRecordListOptions
   extends BackyLiveManagementRequestOptions {
@@ -1638,35 +2013,20 @@ export interface BackyAdminCollectionRecordUpdateInput<
   TValues extends Record<string, unknown> = Record<string, unknown>,
 > extends Partial<Omit<BackyAdminCollectionRecordCreateInput<TValues>, "values">> {
   values?: Partial<TValues>;
+  /** Reload on COLLECTION_RECORD_CONFLICT; server also guards legacy requests. */
+  expectedUpdatedAt?: string;
+  expectedVersion?: string;
 }
 
 export type BackyAdminCollectionRecordsResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    collection: BackyCollectionSchema;
-    records: Array<BackyCollectionRecord<TValues>>;
-    pagination?: BackyPagination;
-  } & Record<string, unknown>
->;
+> = BackyAdminCollectionTypedData<GeneratedBackyOpenApiAdminCollectionRecordListEnvelope, { records: Array<BackyCollectionRecord<TValues>> }>;
 
 export type BackyAdminCollectionRecordResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    collection?: BackyCollectionSchema;
-    record: BackyCollectionRecord<TValues>;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+> = BackyAdminCollectionTypedData<GeneratedBackyOpenApiAdminCollectionRecordEnvelope, { record: BackyCollectionRecord<TValues> }>;
 
-export type BackyAdminCollectionRecordDeleteResponse = BackyEnvelope<
-  {
-    deleted: boolean;
-    recordId: string;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminCollectionRecordDeleteResponse = GeneratedBackyOpenApiAdminCollectionRecordDeleteEnvelope;
 
 export interface BackyAdminCollectionRecordsCsvOptions
   extends BackyAdminCollectionRecordListOptions {}
@@ -1694,14 +2054,7 @@ export interface BackyAdminCollectionRecordImportSummary {
 
 export type BackyAdminCollectionRecordImportResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    collection: BackyCollectionSchema;
-    records: Array<BackyCollectionRecord<TValues>>;
-    import: BackyAdminCollectionRecordImportSummary;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+> = BackyAdminCollectionTypedData<GeneratedBackyOpenApiAdminCollectionCsvImportEnvelope, { records: Array<BackyCollectionRecord<TValues>> }>;
 
 export interface BackyAdminCollectionRecordBulkInput {
   action: "delete" | "updateStatus";
@@ -1713,16 +2066,7 @@ export interface BackyAdminCollectionRecordBulkInput {
 
 export type BackyAdminCollectionRecordBulkResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    action: "delete" | "updateStatus" | string;
-    deleted: number;
-    updated: number;
-    skipped: number;
-    records: Array<BackyCollectionRecord<TValues>>;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+> = BackyAdminCollectionPreservedTypedData<GeneratedBackyOpenApiAdminCollectionRecordBulkEnvelope, { records: Array<BackyCollectionRecord<TValues>> }>;
 
 export const BACKY_COMMERCE_PRODUCTS_COLLECTION = "products";
 export const BACKY_COMMERCE_ORDERS_COLLECTION = "orders";
@@ -2588,25 +2932,15 @@ export type BackyCommerceOrderAnalyticsProviderCertification =
 export type BackyCommerceOrderAnalytics =
   GeneratedBackyOpenApiCommerceOrderAnalytics & Record<string, unknown>;
 
-export type BackyCommerceOrderAnalyticsResponse = BackyEnvelope<
-  {
-    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
-    collection?: {
-      id: string;
-      slug?: string;
-      name?: string;
-      [key: string]: unknown;
-    };
-    analytics: BackyCommerceOrderAnalytics;
-    providerCertification?: BackyCommerceOrderAnalyticsProviderCertification;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderAnalyticsResponse = GeneratedBackyOpenApiCommerceOrderAnalyticsEnvelope;
 
 export type BackyCommerceOrderStatusHandoff =
   GeneratedBackyOpenApiCommerceOrderStatusHandoff & Record<string, unknown>;
 
 export type BackyCommerceOrderStatusAccess =
   GeneratedBackyOpenApiCommerceOrderStatusAccess & Record<string, unknown>;
+
+export type BackyAdminCommerceOrderStatusHandoffResponse = GeneratedBackyOpenApiAdminCommerceOrderStatusHandoffEnvelope;
 
 export type BackyCommerceOrderStatusHandoffResponse = BackyEnvelope<
   {
@@ -2707,29 +3041,18 @@ export interface BackyCommerceProductProviderSyncInput {
   [key: string]: unknown;
 }
 
-export type BackyCommerceProductProviderSyncResponse = BackyEnvelope<
-  {
-    sync: GeneratedBackyOpenApiCommerceProductProviderSync | null;
-    product: BackyCollectionRecord;
-    cacheInvalidation?: Record<string, unknown>;
-    providerCertification?: BackyCommerceProviderCertification;
-    storefrontHandoff?: BackyCommerceProductStorefrontHandoff;
-  } & Record<string, unknown>
->;
+export type BackyCommerceProductProviderSyncResponse = GeneratedBackyOpenApiCommerceProductProviderSyncEnvelope;
 
 export interface BackyCommerceOrderOperationInput {
   requestId?: string;
   [key: string]: unknown;
 }
 
-export type BackyCommerceOrderQuoteInput = BackyCommerceOrderOperationInput;
-export type BackyCommerceOrderTrackingInput = BackyCommerceOrderOperationInput;
-export type BackyCommerceOrderProviderRefundInput =
-  BackyCommerceOrderOperationInput;
-export type BackyCommerceOrderFulfillmentInput =
-  BackyCommerceOrderOperationInput;
-export type BackyCommerceOrderShippingLabelInput =
-  BackyCommerceOrderOperationInput;
+export type BackyCommerceOrderQuoteInput = BackyCommerceOrderOperationInput & import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderQuoteRequest;
+export type BackyCommerceOrderTrackingInput = BackyCommerceOrderOperationInput & import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderTrackingRequest;
+export type BackyCommerceOrderProviderRefundInput = BackyCommerceOrderOperationInput & import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderProviderRefundRequest;
+export type BackyCommerceOrderFulfillmentInput = BackyCommerceOrderOperationInput & import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderFulfillmentRequest;
+export type BackyCommerceOrderShippingLabelInput = BackyCommerceOrderOperationInput & import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderShippingLabelRequest;
 
 export type BackyCommerceOrderQuote =
   GeneratedBackyOpenApiCommerceOrderQuote & Record<string, unknown>;
@@ -2746,68 +3069,30 @@ export type BackyCommerceOrderFulfillment =
 export type BackyCommerceOrderShippingLabel =
   GeneratedBackyOpenApiCommerceOrderShippingLabel & Record<string, unknown>;
 
-export type BackyCommerceOrderQuoteResponse = BackyEnvelope<
-  {
-    record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
-    quote: BackyCommerceOrderQuote;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderQuoteResponse = GeneratedBackyOpenApiCommerceOrderQuoteEnvelope;
 
-export type BackyCommerceOrderTrackingResponse = BackyEnvelope<
-  {
-    record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
-    tracking: BackyCommerceOrderTracking | null;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderTrackingResponse = GeneratedBackyOpenApiCommerceOrderTrackingEnvelope;
 
-export type BackyCommerceOrderProviderRefundResponse = BackyEnvelope<
-  {
-    record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
-    refund: BackyCommerceOrderProviderRefund | null;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderProviderRefundResponse = GeneratedBackyOpenApiCommerceOrderProviderRefundEnvelope;
 
-export type BackyCommerceOrderFulfillmentResponse = BackyEnvelope<
-  {
-    record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
-    fulfillment: BackyCommerceOrderFulfillment | null;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderFulfillmentResponse = GeneratedBackyOpenApiCommerceOrderFulfillmentEnvelope;
 
-export type BackyCommerceOrderShippingLabelResponse = BackyEnvelope<
-  {
-    record: BackyCollectionRecord;
-    order?: BackyCollectionRecord;
-    label: BackyCommerceOrderShippingLabel | null;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceOrderShippingLabelResponse = GeneratedBackyOpenApiCommerceOrderShippingLabelEnvelope;
 
 export type BackyCommerceProductSubscriptionsLifecycle =
   GeneratedBackyOpenApiCommerceProductSubscriptionLifecycle &
     Record<string, unknown>;
 
-export type BackyCommerceProductSubscriptionsResponse = BackyEnvelope<
-  {
-    lifecycle: BackyCommerceProductSubscriptionsLifecycle;
-    collection?: {
-      id: string;
-      slug?: string;
-      name?: string;
-      [key: string]: unknown;
-    };
-  } & Record<string, unknown>
->;
+export type BackyCommerceProductSubscriptionsResponse = GeneratedBackyOpenApiCommerceProductSubscriptionsEnvelope;
 
 export interface BackyCommerceProductSubscriptionActionInput {
+  subscriptionReference?: string;
+  providerCustomerId?: string;
+  customerId?: string;
+  shopperReference?: string;
+  recurringDetailReference?: string;
+  providerSubscriptionId?: string;
+  mollieSubscriptionId?: string;
   action: "pause" | "resume" | "cancel";
   reason?: string;
   provider?: string;
@@ -2819,14 +3104,7 @@ export type BackyCommerceProductSubscriptionAction =
   GeneratedBackyOpenApiCommerceProductSubscriptionAction &
     Record<string, unknown>;
 
-export type BackyCommerceProductSubscriptionActionResponse = BackyEnvelope<
-  {
-    action: BackyCommerceProductSubscriptionAction;
-    record: BackyCollectionRecord;
-    order: BackyCollectionRecord;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyCommerceProductSubscriptionActionResponse = GeneratedBackyOpenApiCommerceProductSubscriptionActionEnvelope;
 
 export interface BackyCommerceReconciliationInput {
   dryRun?: boolean;
@@ -2850,22 +3128,7 @@ export interface BackyCommercePlatformReconciliationOptions
   siteId?: string;
 }
 
-export type BackyCommerceReconciliationResponse = BackyEnvelope<
-  {
-    schemaVersion: "backy.commerce-reconciliation.v1";
-    runMode: "manual" | "scheduled" | string;
-    dryRun: boolean;
-    processedAt: string;
-    limit: number;
-    eventCount: number;
-    eligibleUpdateCount: number;
-    updatedCount: number;
-    unmatchedCount: number;
-    updates: Array<Record<string, unknown>>;
-    unmatchedEvents: Array<Record<string, unknown>>;
-    [key: string]: unknown;
-  }
->;
+export type BackyCommerceReconciliationResponse = GeneratedBackyOpenApiAdminCommerceReconciliationEnvelope;
 
 export interface BackyCommerceCronReadiness {
   schemaVersion: "backy.commerce-cron-readiness.v1";
@@ -3224,6 +3487,8 @@ export interface BackyInteractiveComponentsContract {
     postMessageProtocol: string;
     fallbackRequired: boolean;
     unknownComponentBehavior: string;
+    lifecycle?: BackyInteractiveComponentLifecycleContract;
+    bundleModule?: GeneratedBackyOpenApiInteractiveComponentManifestContract["renderContract"]["bundleModule"];
     [key: string]: unknown;
   };
   dataBindingScopes: string[];
@@ -3253,7 +3518,11 @@ export interface BackyInteractiveComponentRegistryEntry {
   description?: string;
   allowedDataScopes: string[];
   requiredFields: string[];
+  defaultProps?: Record<string, unknown>;
+  propsSchema?: Record<string, unknown>;
   controls: BackyInteractiveControl[];
+  dataBindings?: Array<Record<string, unknown>>;
+  renderCapabilities?: Record<string, unknown>;
   fallback: {
     required: boolean;
     supported: string[];
@@ -3317,6 +3586,18 @@ export interface BackyInteractiveComponentRegistry {
   [key: string]: unknown;
 }
 
+/** Catalog pages expose every approved active version. Follow pagination.hasMore; identities are exact. */
+export interface BackyInteractiveComponentCatalogOptions {
+  limit?: number;
+  offset?: number;
+}
+export type BackyInteractiveComponentCatalogCachedOptions = BackyConditionalOptions & BackyInteractiveComponentCatalogOptions;
+export type BackyAdminInteractiveComponentDiscoveryOptions = BackyLiveManagementRequestOptions & BackyInteractiveComponentCatalogOptions;
+/** Exact public lookup never substitutes a different version; unavailable/private versions return 404. */
+export interface BackyExactInteractiveComponentRegistry extends BackyInteractiveComponentRegistry {
+  components: [BackyInteractiveComponentRegistryEntry];
+}
+
 export type BackyAdminInteractiveComponentStatus =
   | "active"
   | "disabled"
@@ -3363,6 +3644,8 @@ export interface BackyAdminInteractiveComponentListOptions
   reviewStatus?: BackyAdminInteractiveComponentReviewStatus | string;
   type?: BackyAdminInteractiveComponentType | string;
   search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export type BackyAdminInteractiveComponentsResponse = BackyEnvelope<
@@ -3575,33 +3858,8 @@ export interface BackyAdminInteractiveComponentMigrationTarget {
   [key: string]: unknown;
 }
 
-export type BackyAdminInteractiveComponentMigrationResponse = BackyEnvelope<
-  {
-    dryRun: boolean;
-    source: {
-      componentKey: string;
-      version: string;
-      [key: string]: unknown;
-    };
-    target: {
-      componentKey: string;
-      version: string;
-      [key: string]: unknown;
-    };
-    migratedTargets: BackyAdminInteractiveComponentMigrationTarget[];
-    summary: {
-      targets: number;
-      elements: number;
-      scanned: {
-        pages: number;
-        posts: number;
-        [key: string]: unknown;
-      };
-      [key: string]: unknown;
-    };
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminInteractiveComponentMigrationResponse =
+  GeneratedBackyOpenApiAdminInteractiveComponentMigrationEnvelope;
 
 export interface BackyAdminInteractiveComponentRollbackInput {
   rollbackBy?: string;
@@ -8652,6 +8910,7 @@ export interface BackyBlogFeedDiscovery {
   [key: string]: unknown;
 }
 
+/** Public current section content/design; private history, template baseline and write actors are omitted. */
 export interface BackyReusableSection {
   id: string;
   siteId?: string;
@@ -8695,13 +8954,20 @@ export interface BackyAdminReusableSectionListOptions
   offset?: number;
 }
 
+export type BackyAdminReusableSectionPatchRequest = GeneratedBackyOpenApiAdminReusableSectionPatchRequest & { requestId?: string };
+export type BackyAdminReusableSectionMetadataRequest = GeneratedBackyOpenApiAdminReusableSectionMetadataRequest & { requestId?: string };
+export type BackyAdminReusableSectionRefreshRequest = GeneratedBackyOpenApiAdminReusableSectionRefreshRequest & { requestId?: string };
+export type BackyAdminReusableSectionRestoreRequest = GeneratedBackyOpenApiAdminReusableSectionRestoreRequest & { requestId?: string };
+export type BackyAdminReusableSectionCreateRequest = GeneratedBackyOpenApiAdminReusableSectionCreateRequest & { requestId?: string };
+export type BackyAdminReusableSectionImportRequest = GeneratedBackyOpenApiAdminReusableSectionImportRequest & { requestId?: string };
+
 export interface BackyAdminReusableSectionCreateInput {
   name: string;
   slug?: string;
   description?: string | null;
   category?: string;
   status?: "active" | "archived" | string;
-  tags?: string[];
+  tags?: string[] | string;
   content: BackyReusableSection["content"] | BackyEditableContent;
   metadata?: Record<string, unknown>;
   sourceElementId?: string | null;
@@ -8729,47 +8995,15 @@ export interface BackyAdminReusableSectionRestoreInput {
   [key: string]: unknown;
 }
 
-export type BackyAdminReusableSectionsResponse = BackyEnvelope<
-  {
-    sections: BackyReusableSection[];
-    pagination?: BackyPagination;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionsResponse = GeneratedBackyOpenApiAdminReusableSectionListEnvelope;
 
-export type BackyAdminReusableSectionResponse = BackyEnvelope<
-  {
-    section: BackyReusableSection;
-    version?: number;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionResponse = GeneratedBackyOpenApiAdminReusableSectionEnvelope;
 
-export type BackyAdminReusableSectionDeleteResponse = BackyEnvelope<
-  {
-    deleted: boolean;
-    sectionId: string;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionDeleteResponse = GeneratedBackyOpenApiAdminReusableSectionDeleteEnvelope;
 
-export type BackyAdminReusableSectionVersionsResponse = BackyEnvelope<
-  {
-    sectionId: string;
-    versions: Array<Record<string, unknown>>;
-    currentVersion?: number;
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminReusableSectionVersionsResponse = GeneratedBackyOpenApiAdminReusableSectionVersionsEnvelope;
 
-export type BackyAdminReusableSectionRestoreResponse = BackyEnvelope<
-  {
-    restored: boolean;
-    restoredFromVersion: number;
-    version?: number;
-    section: BackyReusableSection;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionRestoreResponse = GeneratedBackyOpenApiAdminReusableSectionRestoreEnvelope;
 
 export interface BackyAdminReusableSectionExportOptions
   extends BackyLiveManagementRequestOptions {
@@ -8796,19 +9030,14 @@ export interface BackyAdminReusableSectionExportEntry {
   description?: string | null;
   category?: string;
   status?: BackyReusableSection["status"];
-  tags?: string[];
+  tags?: string[] | string;
   content: BackyReusableSection["content"];
   metadata?: Record<string, unknown>;
   sourceElementId?: string | null;
   [key: string]: unknown;
 }
 
-export type BackyAdminReusableSectionExportResponse = BackyEnvelope<
-  {
-    export: BackyAdminReusableSectionExportSummary;
-    sections: BackyAdminReusableSectionExportEntry[];
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionExportResponse = GeneratedBackyOpenApiAdminReusableSectionExportEnvelope;
 
 export interface BackyAdminReusableSectionImportInput {
   sections: BackyAdminReusableSectionExportEntry[];
@@ -8829,13 +9058,7 @@ export interface BackyAdminReusableSectionImportSummary {
   [key: string]: unknown;
 }
 
-export type BackyAdminReusableSectionImportResponse = BackyEnvelope<
-  {
-    import: BackyAdminReusableSectionImportSummary;
-    sections: BackyReusableSection[];
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionImportResponse = GeneratedBackyOpenApiAdminReusableSectionImportEnvelope;
 
 export interface BackyAdminReusableSectionInstance {
   elementId: string;
@@ -8864,50 +9087,12 @@ export interface BackyAdminReusableSectionInstancesOptions
   targetId?: string;
 }
 
-export type BackyAdminReusableSectionInstancesResponse = BackyEnvelope<
-  {
-    sectionId: string;
-    sourceUpdatedAt?: string;
-    targets: BackyAdminReusableSectionInstanceTarget[];
-    totals: {
-      targets: number;
-      instances: number;
-      stale: number;
-      [key: string]: unknown;
-    };
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionInstancesResponse = GeneratedBackyOpenApiAdminReusableSectionInstancesEnvelope;
 
-export interface BackyAdminReusableSectionInstancesRefreshInput {
-  targetType?: "page" | "post" | "all" | string;
-  targetId?: string;
-  dryRun?: boolean;
-  updatedBy?: string;
-  requestId?: string;
-  [key: string]: unknown;
-}
+/** Apply requires the exact manifest returned by dryRun:true. */
+export type BackyAdminReusableSectionInstancesRefreshInput = BackyAdminReusableSectionRefreshRequest;
 
-export type BackyAdminReusableSectionInstancesRefreshResponse = BackyEnvelope<
-  {
-    dryRun: boolean;
-    sectionId: string;
-    sourceUpdatedAt?: string;
-    refreshedTargets: Array<{
-      type: "page" | "post" | string;
-      id: string;
-      title: string;
-      slug: string;
-      refreshed: number;
-      [key: string]: unknown;
-    }>;
-    totals: {
-      targets: number;
-      instances: number;
-      [key: string]: unknown;
-    };
-    cacheInvalidation?: Record<string, unknown> | null;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionInstancesRefreshResponse = GeneratedBackyOpenApiAdminReusableSectionRefreshEnvelope;
 
 export interface BackyAdminReusableSectionLibraryMetadata {
   displayName?: string;
@@ -8922,14 +9107,7 @@ export interface BackyAdminReusableSectionLibraryMetadata {
   [key: string]: unknown;
 }
 
-export type BackyAdminReusableSectionMetadataResponse = BackyEnvelope<
-  {
-    sectionId: string;
-    metadata: Record<string, unknown>;
-    library: BackyAdminReusableSectionLibraryMetadata;
-    version: number;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionMetadataResponse = GeneratedBackyOpenApiAdminReusableSectionMetadataEnvelope;
 
 export interface BackyAdminReusableSectionMetadataUpdateInput {
   expectedVersion?: number;
@@ -8949,15 +9127,7 @@ export interface BackyAdminReusableSectionMetadataUpdateInput {
   [key: string]: unknown;
 }
 
-export type BackyAdminReusableSectionMetadataUpdateResponse = BackyEnvelope<
-  {
-    section: BackyReusableSection;
-    metadata: Record<string, unknown>;
-    library: BackyAdminReusableSectionLibraryMetadata;
-    version: number;
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminReusableSectionMetadataUpdateResponse = GeneratedBackyOpenApiAdminReusableSectionMetadataUpdateEnvelope;
 
 export interface BackyFormDefinition {
   id: string;
@@ -9109,6 +9279,13 @@ export type BackyAdminNewsletterSubscriberInput = (
   contactStatus?: "new" | "contacted" | "qualified" | "archived" | string;
 };
 
+export type BackyNewsletterSubscriberReceiptResponse = BackyEnvelope<{
+  schemaVersion: "backy.newsletter-subscriber-receipt.v1";
+  received: true;
+  operation: "subscribe" | "unsubscribe";
+  deliveryBoundary: string;
+}>;
+
 export type BackyNewsletterSubscriberResponse = BackyEnvelope<
   {
     schemaVersion?: "backy.newsletter-subscribe.v1" | "backy.newsletter-subscribers.v1";
@@ -9187,6 +9364,12 @@ export type BackyNewsletterIssueDraftResponse = BackyEnvelope<
   } & Record<string, unknown>
 >;
 
+/** Private authenticated records, including original submission and consent provenance. */
+export type BackyAdminForm = GeneratedBackyOpenApiAdminForm;
+export type BackyAdminOriginalFormSubmission = GeneratedBackyOpenApiAdminFormSubmission;
+export type BackyAdminFormContact = GeneratedBackyOpenApiAdminFormContact;
+export type BackyAdminFormConfigurationInput = GeneratedBackyOpenApiAdminFormMutationRequest;
+
 export interface BackyAdminFormListOptions
   extends BackyListOptions,
     BackyLiveManagementRequestOptions {
@@ -9235,22 +9418,11 @@ export type BackyAdminFormMutationInput = Partial<BackyFormDefinition> & {
   [key: string]: unknown;
 };
 
-export type BackyAdminFormsResponse = BackyEnvelope<
-  {
-    forms: BackyFormDefinition[];
-    total?: number;
-    pagination?: BackyPagination;
-    persistenceCertification?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormsResponse = GeneratedBackyOpenApiAdminFormsEnvelope;
 
-export type BackyAdminFormResponse = BackyEnvelope<
-  { form: BackyFormDefinition } & Record<string, unknown>
->;
+export type BackyAdminFormResponse = GeneratedBackyOpenApiAdminFormEnvelope;
 
-export type BackyAdminFormDeleteResponse = BackyEnvelope<
-  { deleted: boolean } & Record<string, unknown>
->;
+export type BackyAdminFormDeleteResponse = GeneratedBackyOpenApiAdminFormDeleteCompletedEnvelope | GeneratedBackyOpenApiAdminFormDeletePendingEnvelope;
 
 export type BackyAdminFormCloneInput = {
   name?: string;
@@ -9260,12 +9432,7 @@ export type BackyAdminFormCloneInput = {
   [key: string]: unknown;
 };
 
-export type BackyAdminFormCloneResponse = BackyEnvelope<
-  {
-    form: BackyFormDefinition;
-    sourceFormId?: string;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormCloneResponse = GeneratedBackyOpenApiAdminFormCloneEnvelope;
 
 export type BackyAdminFormEmbedBlockInput = {
   name?: string;
@@ -9276,84 +9443,27 @@ export type BackyAdminFormEmbedBlockInput = {
   [key: string]: unknown;
 };
 
-export type BackyAdminFormEmbedBlockResponse = BackyEnvelope<
-  {
-    section: BackyReusableSection;
-    embed?: {
-      definitionUrl?: string;
-      submitUrl?: string;
-      [key: string]: unknown;
-    };
-    cacheInvalidation?: Record<string, unknown>;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormEmbedBlockResponse = GeneratedBackyOpenApiAdminFormEmbedEnvelope;
 
-export type BackyAdminFormSubmissionsResponse = BackyEnvelope<
-  {
-    form?: BackyFormDefinition;
-    submissions: { data?: BackyFormSubmission[]; [key: string]: unknown };
-    pagination?: BackyPagination;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormSubmissionsResponse = GeneratedBackyOpenApiAdminFormSubmissionsEnvelope;
 
-export type BackyAdminFormSubmissionResponse = BackyEnvelope<
-  { submission: BackyFormSubmission } & Record<string, unknown>
->;
+export type BackyAdminFormSubmissionResponse = GeneratedBackyOpenApiAdminFormSubmissionEnvelope;
 
 export type BackyAdminFormSubmissionStatus =
   | "pending"
   | "approved"
   | "rejected"
-  | "spam"
-  | string;
+  | "spam";
 
-export interface BackyAdminFormSubmissionReviewInput {
-  status: BackyAdminFormSubmissionStatus;
-  reviewedBy?: string | null;
-  adminNotes?: string | null;
-  contactShareOverride?: {
-    enabled?: boolean;
-    nameField?: string;
-    emailField?: string;
-    phoneField?: string;
-    notesField?: string;
-    dedupeByEmail?: boolean;
-    [key: string]: unknown;
-  };
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormSubmissionReviewInput = GeneratedBackyOpenApiAdminFormSubmissionReviewRequest;
 
-export interface BackyAdminFormDeliveryRetryInput {
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormDeliveryRetryInput = GeneratedBackyOpenApiAdminFormDeliveryRetryRequest;
 
-export interface BackyAdminFormDeliveryRetryResult {
-  attempted: boolean;
-  target?: string;
-  status: "queued" | "succeeded" | "failed" | string;
-  statusCode?: number;
-  provider?: string;
-  metadata?: Record<string, unknown>;
-  error?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormDeliveryRetryResult = GeneratedBackyOpenApiAdminFormDelivery;
 
-export type BackyAdminFormDeliveryRetryResponse = BackyEnvelope<
-  {
-    delivery: BackyAdminFormDeliveryRetryResult;
-    submission: BackyFormSubmission;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormDeliveryRetryResponse = GeneratedBackyOpenApiAdminFormDeliveryEnvelope;
 
-export interface BackyAdminFormConsentRetentionInput {
-  dryRun?: boolean;
-  now?: string;
-  actor?: string;
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormConsentRetentionInput = GeneratedBackyOpenApiAdminFormConsentRetentionRequest;
 
 export interface BackyAdminFormConsentRetentionResult {
   formId: string;
@@ -9372,66 +9482,17 @@ export interface BackyAdminFormConsentRetentionResult {
   [key: string]: unknown;
 }
 
-export type BackyAdminFormConsentRetentionResponse = BackyEnvelope<
-  BackyAdminFormConsentRetentionResult
->;
+export type BackyAdminFormConsentRetentionResponse = GeneratedBackyOpenApiAdminFormConsentRetentionEnvelope;
 
-export type BackyAdminFormsConsentRetentionResponse = BackyEnvelope<
-  {
-    dryRun: boolean;
-    policy: {
-      now: string;
-      [key: string]: unknown;
-    };
-    scannedForms: number;
-    formsWithConsent: number;
-    scannedSubmissions: number;
-    due: number;
-    anonymized: number;
-    results: BackyAdminFormConsentRetentionResult[];
-  } & Record<string, unknown>
->;
+export type BackyAdminFormsConsentRetentionResponse = GeneratedBackyOpenApiAdminFormsConsentRetentionEnvelope;
 
-export type BackyAdminFormContactsResponse = BackyEnvelope<
-  {
-    form?: BackyFormDefinition;
-    formId?: string;
-    contacts: BackyContact[];
-    count?: number;
-    pagination?: BackyPagination;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactsResponse = GeneratedBackyOpenApiAdminFormContactsEnvelope;
 
-export type BackyAdminFormContactResponse = BackyEnvelope<
-  { contact: BackyContact } & Record<string, unknown>
->;
+export type BackyAdminFormContactResponse = GeneratedBackyOpenApiAdminFormContactEnvelope;
 
-export type BackyAdminFormContactDeleteResponse = BackyEnvelope<
-  { deleted: boolean; contact?: BackyContact } & Record<string, unknown>
->;
+export type BackyAdminFormContactDeleteResponse = GeneratedBackyOpenApiAdminFormContactDeleteEnvelope;
 
-export interface BackyAdminFormContactInput {
-  name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  notes?: string | null;
-  status?: "new" | "contacted" | "qualified" | "archived" | string;
-  pageId?: string | null;
-  postId?: string | null;
-  requestId?: string | null;
-  sourceValues?: Record<string, unknown>;
-  newsletterSubscriptionStatus?: BackyNewsletterSubscriptionStatus | "pending" | "bounced" | "complained" | null;
-  newsletterSubscribedAt?: string | null;
-  newsletterUnsubscribedAt?: string | null;
-  newsletterTopics?: string | null;
-  newsletterSource?: string | null;
-  newsletterConsent?: boolean | null;
-  newsletterConsentText?: string | null;
-  upsertByEmail?: boolean;
-  sourceSubmissionId?: string | null;
-  sourceIpHash?: string | null;
-  [key: string]: unknown;
-}
+export type BackyAdminFormContactInput = GeneratedBackyOpenApiAdminFormContactRequest;
 
 export interface BackyAdminFormContactImportOptions
   extends BackyLiveManagementRequestOptions {
@@ -9456,59 +9517,23 @@ export interface BackyAdminFormContactImportSummary {
   [key: string]: unknown;
 }
 
-export type BackyAdminFormContactImportResponse = BackyEnvelope<
-  {
-    formId: string;
-    contacts: BackyContact[];
-    import: BackyAdminFormContactImportSummary;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactImportResponse = GeneratedBackyOpenApiAdminFormContactImportEnvelope;
 
-export interface BackyAdminFormContactUserPromotionInput {
-  role?: "viewer" | "editor" | string;
-  status?: "invited" | "active" | string;
-  createInvite?: boolean;
-  expiresInMinutes?: number;
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormContactUserPromotionInput = GeneratedBackyOpenApiAdminFormContactUserPromotionRequest;
 
-export type BackyAdminFormContactUserPromotionResponse = BackyEnvelope<
-  {
-    contact: BackyContact;
-    user: BackyAdminUser;
-    existingUser: boolean;
-    invite?: BackyAdminInviteToken | null;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactUserPromotionResponse = GeneratedBackyOpenApiAdminFormContactUserPromotionEnvelope;
 
-export interface BackyAdminFormContactCustomerPromotionInput {
-  customerStatus?: "lead" | "customer" | "vip" | "inactive" | string;
-  notes?: string;
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormContactCustomerPromotionInput = GeneratedBackyOpenApiAdminFormContactCustomerPromotionRequest;
 
 export type BackyAdminFormContactCustomerPromotionResponse<
   TValues extends Record<string, unknown> = Record<string, unknown>,
-> = BackyEnvelope<
-  {
-    contact: BackyContact;
-    collection: BackyCollectionSchema;
+> = Omit<GeneratedBackyOpenApiAdminFormContactCustomerPromotionEnvelope, "data"> & {
+  data: Omit<GeneratedBackyOpenApiAdminFormContactCustomerPromotionEnvelope["data"], "record"> & {
     record: BackyCollectionRecord<TValues>;
-    existingRecord: boolean;
-    createdCollection?: boolean;
-  } & Record<string, unknown>
->;
+  };
+};
 
-export interface BackyAdminFormContactSyncInput {
-  contactIds: string[];
-  targetUrl: string;
-  includeSourceValues?: boolean;
-  reason?: string | null;
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormContactSyncInput = GeneratedBackyOpenApiAdminFormContactSyncRequest;
 
 export interface BackyAdminFormContactSyncDelivery {
   target: string;
@@ -9520,22 +9545,9 @@ export interface BackyAdminFormContactSyncDelivery {
   [key: string]: unknown;
 }
 
-export type BackyAdminFormContactSyncResponse = BackyEnvelope<
-  {
-    formId: string;
-    delivery: BackyAdminFormContactSyncDelivery;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactSyncResponse = GeneratedBackyOpenApiAdminFormContactSyncEnvelope;
 
-export interface BackyAdminFormContactConsentRetentionInput {
-  contactIds?: string[];
-  dryRun?: boolean;
-  retentionDays?: number;
-  now?: string;
-  actor?: string;
-  requestId?: string;
-  [key: string]: unknown;
-}
+export type BackyAdminFormContactConsentRetentionInput = GeneratedBackyOpenApiAdminFormContactConsentRetentionRequest;
 
 export interface BackyAdminFormContactConsentEvidence {
   id: string;
@@ -9557,57 +9569,15 @@ export interface BackyAdminFormContactConsentEvidence {
   [key: string]: unknown;
 }
 
-export type BackyAdminFormContactConsentRetentionResponse = BackyEnvelope<
-  {
-    formId: string;
-    dryRun: boolean;
-    policy: {
-      deleteAfterDays: number;
-      now: string;
-      [key: string]: unknown;
-    };
-    consentFieldKeys: string[];
-    scanned: number;
-    due: number;
-    anonymized: number;
-    contacts: BackyAdminFormContactConsentEvidence[];
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactConsentRetentionResponse = GeneratedBackyOpenApiAdminFormContactConsentRetentionEnvelope;
 
-export type BackyAdminFormsAnalyticsResponse = BackyEnvelope<
-  {
-    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
-    analytics: Record<string, unknown>;
-    generatedAt?: string;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormsAnalyticsResponse = GeneratedBackyOpenApiAdminFormsAnalyticsEnvelope;
 
-export type BackyAdminFormContactSegmentsResponse = BackyEnvelope<
-  {
-    site?: { id: string; slug?: string; name?: string; [key: string]: unknown };
-    formId?: string | null;
-    analytics: Record<string, unknown>;
-    generatedAt?: string;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactSegmentsResponse = GeneratedBackyOpenApiAdminFormContactSegmentsEnvelope;
 
-export type BackyAdminFormContactListsResponse = BackyEnvelope<
-  {
-    lists: Array<Record<string, unknown>>;
-    count?: number;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactListsResponse = GeneratedBackyOpenApiAdminFormContactListsEnvelope;
 
-export type BackyAdminFormContactListMutationResponse = BackyEnvelope<
-  {
-    list?: Record<string, unknown>;
-    lists?: Array<Record<string, unknown>>;
-    created?: boolean;
-    updated?: boolean;
-    deleted?: boolean;
-    listId?: string;
-  } & Record<string, unknown>
->;
+export type BackyAdminFormContactListMutationResponse = GeneratedBackyOpenApiAdminFormContactListMutationEnvelope;
 
 export interface BackyComment {
   id: string;
@@ -9653,12 +9623,16 @@ export interface BackyCommentDeliveryRetryInput {
 }
 
 export interface BackyCommentDeliveryRetryAttempt {
-  attempted: boolean;
-  channel?: "webhook" | "email" | string;
-  target?: string;
-  status: "queued" | "succeeded" | "failed" | string;
+  attempted: true;
+  channel: "webhook" | "email";
+  target: string;
+  status: "succeeded" | "failed" | "uncertain";
+  attemptId: string;
+  durableState: "pending" | "succeeded" | "failed" | "uncertain";
+  completionWarnings?: string[];
   statusCode?: number;
   provider?: string;
+  providerEvidence?: import("./generated-contract-types").GeneratedBackyOpenApiDeliveryProviderEvidence | null;
   metadata?: Record<string, unknown>;
   error?: string;
   [key: string]: unknown;
@@ -9669,6 +9643,7 @@ export type BackyCommentDeliveryRetryResponse = BackyEnvelope<
     delivery: BackyCommentDeliveryRetryAttempt;
     retryOf: string;
     comment: BackyComment;
+    completionWarnings: string[];
   } & Record<string, unknown>
 >;
 
@@ -9682,6 +9657,9 @@ export interface BackyMediaListOptions extends BackyListOptions {
   scope?: string;
   pageId?: string;
   postId?: string;
+  /** Exact stored association; global availability alone is excluded. Use only one linked selector. */
+  linkedPageId?: string;
+  linkedPostId?: string;
   blogId?: string;
   global?: boolean;
   siteId?: string;
@@ -9690,6 +9668,8 @@ export interface BackyMediaListOptions extends BackyListOptions {
 export interface BackyAdminMediaListOptions
   extends BackyMediaListOptions,
     BackyLiveManagementRequestOptions {
+  /** Default true. False omits browsing quota only; mutation checks remain authoritative. */
+  includeQuota?: boolean;
   visibility?: "public" | "private" | "all" | string;
 }
 
@@ -9701,9 +9681,22 @@ export interface BackyMediaQuota {
   [key: string]: unknown;
 }
 
+/** Configuration permits an upload attempt; provider health and verdict are unverified. */
+export interface BackyMediaUploadReadiness {
+  scanPolicy?: { mode: "owner-static"; malwareScanned: false };
+  schemaVersion: "backy.media-upload-readiness.v1";
+  state: "admissible" | "blocked";
+  evidence: "configuration-only";
+  blockingReasons: Array<{
+    code: "MEDIA_STORAGE_NOT_CONFIGURED" | "MEDIA_SCANNER_REQUIRED" | "MEDIA_SCANNER_UNSUPPORTED" | "MEDIA_SCANNER_ENDPOINT_REQUIRED" | "MEDIA_UPLOAD_CONFIGURATION_INVALID";
+    message: string;
+  }>;
+}
+
 export type BackyAdminMediaListResponse = BackyEnvelope<
   {
     media: BackyMediaAsset[];
+    uploadReadiness: BackyMediaUploadReadiness;
     quota?: BackyMediaQuota;
     pagination?: BackyPagination;
   } & Record<string, unknown>
@@ -9715,6 +9708,7 @@ export type BackyAdminMediaResponse = BackyEnvelope<
     quota?: BackyMediaQuota;
     cacheInvalidation?: Record<string, unknown>;
     replacement?: Record<string, unknown>;
+    completionWarnings?: string[];
   } & Record<string, unknown>
 >;
 
@@ -9894,7 +9888,9 @@ export type BackyAdminMediaTransformsResponse = BackyEnvelope<
     media: BackyMediaAsset;
     responsive: Record<string, unknown>;
     quota?: BackyMediaQuota;
-    cacheInvalidation?: Record<string, unknown>;
+    cacheInvalidation?: Record<string, unknown> | null;
+    storageCleanup?: GeneratedBackyOpenApiAdminMediaStorageCleanup;
+    completionWarnings?: string[];
     [key: string]: unknown;
   }
 >;
@@ -10778,6 +10774,7 @@ export interface BackyCommentInput {
   turnstileToken?: string;
   hcaptchaToken?: string;
   recaptchaToken?: string;
+  /** auto-approve is official publication intent only after server comments.manage admission; it never grants identity. */
   moderationMode?: "manual" | "auto-approve";
   [key: string]: unknown;
 }
@@ -11025,12 +11022,10 @@ export type BackySiteCommentsResponse = BackyEnvelope<{
   pagination?: BackyPagination;
 }>;
 
-export type BackyCommentBulkUpdateResponse = BackyEnvelope<{
-  siteId?: string;
-  updated: BackyComment[];
-  updatedCount?: number;
-  missingIds?: string[];
-}>;
+export type BackyCommentBulkUpdateResponse = GeneratedBackyOpenApiCommentBulkUpdateEnvelope;
+export type BackyCommentMutationResponse = GeneratedBackyOpenApiCommentMutationEnvelope;
+export type BackyCommentSubmissionResponse = GeneratedBackyOpenApiCommentSubmissionEnvelope;
+export type BackyCommentReportResponse = GeneratedBackyOpenApiCommentReportEnvelope;
 
 export type BackyCommentBlocklistResponse = BackyEnvelope<{
   siteId?: string;
@@ -11039,21 +11034,13 @@ export type BackyCommentBlocklistResponse = BackyEnvelope<{
   pagination?: BackyPagination;
 }>;
 
-export type BackyCommentBlocklistDeleteResponse = BackyEnvelope<{
-  siteId?: string;
-  deleted: BackyCommentBlocklistEntry[];
-  deletedCount?: number;
-  missingIds?: string[];
-}>;
+export type BackyCommentBlocklistDeleteResponse = GeneratedBackyOpenApiCommentBlocklistDeleteEnvelope;
 
 export type BackySiteCommentResponse = BackyEnvelope<{
   comment: BackyComment;
 }>;
 
-export type BackyCommentDeleteResponse = BackyEnvelope<{
-  deleted: BackyComment[];
-  deletedCount: number;
-}>;
+export type BackyCommentDeleteResponse = GeneratedBackyOpenApiCommentDeleteEnvelope;
 
 export interface BackyCommentAnalyticsOptions
   extends BackyLiveManagementRequestOptions {
@@ -11965,6 +11952,7 @@ export interface BackyManifestFormsManagementPolicy {
     reviewSubmission: string;
     retryWebhook: string;
     retryEmail: string;
+    deliveryReconciliation?: string;
     formConsentRetention: string;
     contacts: string;
     contact: string;
@@ -11994,6 +11982,7 @@ export interface BackyManifestFormsManagementPolicy {
     reviewSubmission: "POST";
     retryWebhook: "POST";
     retryEmail: "POST";
+    reconcileDelivery?: "POST";
     formConsentRetention: "POST";
     contacts: "GET";
     createContact: "POST";
@@ -12041,6 +12030,7 @@ export interface BackyManifestFormsManagementPolicy {
     reviewSubmission: "reviewFormSubmission";
     retryWebhook: "retryFormSubmissionWebhook";
     retryEmail: "retryFormSubmissionEmail";
+    reconcileDelivery?: "reconcileFormDelivery";
     formConsentRetention: "applyAdminFormConsentRetention";
     formsConsentRetention: "applyAdminFormsConsentRetention";
     contacts: "formContacts";
@@ -13056,16 +13046,9 @@ export interface BackyAdminNavigationResponseData {
   [key: string]: unknown;
 }
 
-export type BackyAdminNavigationResponse =
-  BackyEnvelope<BackyAdminNavigationResponseData>;
+export type BackyAdminNavigationResponse = GeneratedBackyOpenApiAdminNavigationEnvelope;
 
-export type BackyAdminNavigationUpdateInput = Record<string, unknown> & {
-  requestId?: string;
-  navigation?: Partial<BackySiteNavigationConfig>;
-  primary?: BackyNavigationItem[];
-  footer?: BackyNavigationItem[];
-  layout?: Record<string, unknown>;
-};
+export type BackyAdminNavigationUpdateInput = GeneratedBackyOpenApiAdminNavigationUpdateRequest & { requestId?: string };
 
 export type BackyAdminSeoChangeFrequency = "daily" | "weekly" | "monthly";
 
@@ -13130,20 +13113,9 @@ export interface BackyAdminSeoPreview {
   [key: string]: unknown;
 }
 
-export type BackyAdminSeoResponse = BackyEnvelope<
-  {
-    site: BackySiteSummary;
-    seo: BackyAdminSeoSettings;
-    preview: BackyAdminSeoPreview;
-    cacheInvalidation?: Record<string, unknown>;
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminSeoResponse = GeneratedBackyOpenApiAdminSeoEnvelope;
 
-export type BackyAdminSeoUpdateInput = Partial<BackyAdminSeoSettings> & {
-  requestId?: string;
-  seo?: Partial<BackyAdminSeoSettings>;
-};
+export type BackyAdminSeoUpdateInput = GeneratedBackyOpenApiAdminSeoUpdateRequest & { requestId?: string };
 
 export type BackyAdminRedirectStatusCode = 301 | 302 | 307 | 308 | 410;
 
@@ -13176,31 +13148,9 @@ export interface BackyAdminRedirectConflict {
   [key: string]: unknown;
 }
 
-export type BackyAdminRedirectsResponse = BackyEnvelope<
-  {
-    site: BackySiteSummary;
-    redirects: {
-      rules: BackyAdminRedirectRule[];
-      conflicts: BackyAdminRedirectConflict[];
-      persisted: boolean;
-      [key: string]: unknown;
-    };
-    cacheInvalidation?: Record<string, unknown>;
-    [key: string]: unknown;
-  }
->;
+export type BackyAdminRedirectsResponse = GeneratedBackyOpenApiAdminRedirectsEnvelope;
 
-export type BackyAdminRedirectsUpdateInput =
-  | BackyAdminRedirectRule[]
-  | (Record<string, unknown> & {
-      requestId?: string;
-      redirectRules?: BackyAdminRedirectRule[];
-      rules?: BackyAdminRedirectRule[];
-      redirects?: {
-        rules?: BackyAdminRedirectRule[];
-        [key: string]: unknown;
-      };
-    });
+export type BackyAdminRedirectsUpdateInput = BackyAdminRedirectRule[] | (GeneratedBackyOpenApiAdminRedirectRulesRequest & { requestId?: string });
 
 export type BackyAdminUserRole = "owner" | "admin" | "editor" | "viewer";
 export type BackyAdminUserStatus =
@@ -13347,6 +13297,10 @@ export type BackyAdminUserBulkResponse = BackyEnvelope<
     deleted: number;
     userIds: string[];
     users: BackyAdminUser[];
+    outcome: "complete" | "partial";
+    completionWarnings: ("OPERATOR_BULK_APPLY_INCOMPLETE" | "OPERATOR_BULK_AUDIT_PENDING")[];
+    failedTargets: { userId: string; code: "LAST_ADMIN_AUTHORITY" | "OPERATOR_AUTHORITY_BUSY" | "OPERATOR_AUTHORITY_UNAVAILABLE" | "OPERATOR_WRITE_FAILED" | "OPERATOR_NOT_ATTEMPTED" }[];
+    reloadRequired: boolean;
     [key: string]: unknown;
   }
 >;
@@ -13397,6 +13351,18 @@ export interface BackyAdminUserPermissionMatrix {
   [key: string]: unknown;
 }
 
+export type BackyAdminOperatorSiteScope = GeneratedBackyOpenApiAdminOperatorSiteScope;
+export type BackyAdminOperatorSiteAccess = GeneratedBackyOpenApiAdminOperatorSiteAccess;
+export type BackyAdminVisitorMember = GeneratedBackyOpenApiAdminVisitorMember;
+export type BackyAdminVisitorListEnvelope = GeneratedBackyOpenApiAdminVisitorListEnvelope;
+export type BackyAdminVisitorMemberEnvelope = GeneratedBackyOpenApiAdminVisitorMemberEnvelope;
+export type BackyAdminVisitorMutationEnvelope = GeneratedBackyOpenApiAdminVisitorMutationEnvelope;
+export type BackyAdminVisitorUpdateRequest = GeneratedBackyOpenApiAdminVisitorUpdateRequest;
+export type BackyAdminVisitorRemoveAccessRequest = GeneratedBackyOpenApiAdminVisitorRemoveAccessRequest;
+export type BackyAdminVisitorRetention = GeneratedBackyOpenApiAdminVisitorRetention;
+export type BackyAdminOperatorSiteGrantPatch = GeneratedBackyOpenApiAdminOperatorSiteGrantPatch & { requestId?: string };
+export type BackyAdminOperatorSiteGrantEnvelope = GeneratedBackyOpenApiAdminOperatorSiteGrantEnvelope;
+
 export type BackyAdminUserPermissionsResponse = BackyEnvelope<
   {
     user?: Pick<
@@ -13404,6 +13370,7 @@ export type BackyAdminUserPermissionsResponse = BackyEnvelope<
       "id" | "fullName" | "email" | "role" | "status"
     >;
     permissions: BackyAdminUserPermissionMatrix;
+    siteAccess?: Pick<BackyAdminOperatorSiteAccess, "scope" | "status">;
     [key: string]: unknown;
   }
 >;
@@ -14193,6 +14160,7 @@ export class BackyApiError extends Error {
   readonly requestId?: string;
   readonly code: string;
   readonly details?: unknown;
+  readonly jobId?: string;
   readonly validation?: BackyFormSubmissionValidationDetail[];
   readonly spamFlags?: string[];
   readonly submissionStatus?: string;
@@ -14204,9 +14172,21 @@ export class BackyApiError extends Error {
     this.requestId = envelope.requestId;
     this.code = envelope.error.code;
     this.details = envelope.error.details;
+    this.jobId = typeof envelope.error.jobId === "string" ? envelope.error.jobId : undefined;
     this.validation = envelope.validation;
     this.spamFlags = envelope.spamFlags;
     this.submissionStatus = envelope.status;
+  }
+}
+
+/** Contact sync attempted delivery but the endpoint returned its failed delivery result with HTTP 502. */
+export class BackyFormContactSyncDeliveryError extends Error {
+  readonly status = 502;
+  readonly response: BackyAdminFormContactSyncResponse;
+  constructor(response: BackyAdminFormContactSyncResponse) {
+    super(response.data.delivery.error || "Contact sync delivery failed.");
+    this.name = "BackyFormContactSyncDeliveryError";
+    this.response = response;
   }
 }
 
@@ -14226,7 +14206,9 @@ export class BackyClient {
     );
     this.siteId = options.siteId;
     this.sitePublicHost = normalizeBackyString(options.sitePublicHost) || undefined;
-    this.fetchImpl = options.fetch ?? globalThis.fetch;
+    // Native browser fetch requires its owning Window receiver. Calling an
+    // unbound function through this client otherwise throws Illegal invocation.
+    this.fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
     this.requestIdFactory =
       options.requestIdFactory ??
       (() =>
@@ -14366,6 +14348,21 @@ export class BackyClient {
     );
   }
 
+  adminCustomFrontendStarter(siteId = this.requireSiteId(), options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminCustomFrontendStarterResponse> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(siteId)}/custom-frontend/starter`, {requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+
+  checkAdminCustomFrontendConnection(input: BackyAdminCustomFrontendConnectionInput, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminCustomFrontendConnectionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/custom-frontend/connection`, {method:"POST",body,requestId:options.requestId ?? requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+
+  adminMediaStorageRecovery(siteId = this.requireSiteId(), input: {limit?:number;offset?:number;pendingOnly?:boolean} = {}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminMediaStorageRecoveryResponse> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(siteId)}/media/storage-recovery`, {query:input,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  retryAdminMediaStorageRecovery(jobId: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminMediaStorageRecoveryRetryResponse> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/storage-recovery/${encodeURIComponent(jobId)}`, {method:"POST",requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
   adminSettings(
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminSettingsResponse> {
@@ -14539,6 +14536,128 @@ export class BackyClient {
     );
   }
 
+  /** Count-only read-only privacy review. Owner cookie on the approved admin rewrite, never a key/provider credential. */
+  previewAdminVisitorErasure(memberId: string, choices: BackyVisitorErasureChoices, options: BackyOwnerCookieRequestOptions = {}): Promise<BackyEnvelope<BackyVisitorErasurePreview>> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/members/${encodeURIComponent(memberId)}/privacy-erasure/preview`, { method: 'POST', body: { choices }, requestId: options.requestId });
+  }
+  confirmAdminVisitorErasure(memberId: string, input: { previewId: string; confirmLocalErasure: true }, options: BackyOwnerCookieRequestOptions = {}): Promise<BackyEnvelope<BackyVisitorErasureReceipt>> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/members/${encodeURIComponent(memberId)}/privacy-erasure/confirm`, { method: 'POST', body: { previewId: input.previewId, confirmLocalErasure: input.confirmLocalErasure }, requestId: options.requestId });
+  }
+  adminVisitorPrivacyImpact(memberId: string, options: BackyOwnerCookieRequestOptions = {}): Promise<BackyVisitorPrivacyImpactEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/members/${encodeURIComponent(memberId)}/privacy-impact`, { requestId: options.requestId });
+  }
+
+  /** Private Owner inventory. Provider resource IDs/tokens are never returned. */
+  adminSiteMailboxManagement(options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxManagementEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailbox-management`, { requestId: options.requestId });
+  }
+  inspectAdminSiteMailboxManagement(managementBindingId: string, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxManagementInspectionEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailbox-management/${encodeURIComponent(managementBindingId)}/inspect`, { method: 'POST', body: {}, requestId: options.requestId });
+  }
+  /** Transient creation password only. Never automatically retry pending or uncertain creation. */
+  createAdminSiteMailbox(managementBindingId: string, input: BackySiteMailboxCreateRequest, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxManagementCreateEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailbox-management/${encodeURIComponent(managementBindingId)}/mailboxes`, { method: 'POST', body: { idempotencyKey: input.idempotencyKey, localPart: input.localPart, password: input.password }, requestId: options.requestId });
+  }
+  createAdminSiteMailboxAlias(managementBindingId: string, input: BackySiteMailboxAliasCreateRequest, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxManagementCreateEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailbox-management/${encodeURIComponent(managementBindingId)}/aliases`, { method: 'POST', body: { idempotencyKey: input.idempotencyKey, localPart: input.localPart, targetBindingId: input.targetBindingId }, requestId: options.requestId });
+  }
+  adminSiteMailboxManagementAttempts(managementBindingId: string, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxManagementAttemptsEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailbox-management/${encodeURIComponent(managementBindingId)}/attempts`, { requestId: options.requestId });
+  }
+
+  /** Explicit send only; never retry uncertain or pending outcomes automatically. */
+  sendAdminSiteMailboxMessage(bindingId: string, input: BackySiteMailboxSendRequest, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxSendEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/send`, { method: 'POST', body: input, requestId: options.requestId });
+  }
+
+  adminSiteMailboxSendAttempts(bindingId: string, query: BackySiteMailboxPaginationQuery = {}, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxSendAttemptsEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/send-attempts`, { query: { page: query.page, perPage: query.perPage }, requestId: options.requestId });
+  }
+
+  /** One folder and candidate page, exact direct header relationships only. */
+  adminSiteMailboxThread(bindingId: string, uid: number, query: BackySiteMailboxMessagesQuery, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxThreadEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/messages/${encodeURIComponent(String(uid))}/thread`, { query: { folder: query.folder, page: query.page, perPage: query.perPage }, requestId: options.requestId });
+  }
+
+  adminSiteMailboxes(options: BackyOwnerCookieRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminSiteMailboxesEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes`, { requestId: options.requestId });
+  }
+
+  adminSiteMailboxFolders(bindingId: string, query: BackySiteMailboxPaginationQuery = {}, options: BackyOwnerCookieRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminSiteMailboxFoldersEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/folders`, { query: { page: query.page, perPage: query.perPage }, requestId: options.requestId });
+  }
+
+  /** Metadata only; inventory does not read text, attachments, or mark Seen. */
+  adminSiteMailboxMessages(bindingId: string, query: BackySiteMailboxMessagesQuery, options: BackyOwnerCookieRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminSiteMailboxMessagesEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/messages`, { query: { folder: query.folder, page: query.page, perPage: query.perPage }, requestId: options.requestId });
+  }
+
+  /** Explicit provider mutation: reads plain text and marks Seen. Never automatically retried. */
+  readAdminSiteMailboxMessage(bindingId: string, uid: number, input: GeneratedBackyOpenApiAdminSiteMailboxReadRequest, options: BackyOwnerCookieRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminSiteMailboxReadEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/messages/${encodeURIComponent(String(uid))}/read`, { method: 'POST', body: { folder: input.folder }, requestId: options.requestId });
+  }
+
+  /** Metadata for the exact message/folder; no bodies, content IDs or provider URLs. */
+  adminSiteMailboxAttachments(bindingId: string, uid: number, query: { folder: string }, options: BackyOwnerCookieRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminSiteMailboxAttachmentsEnvelope> {
+    return this.ownerCookieRequest(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/messages/${encodeURIComponent(String(uid))}/attachments`, { query: { folder: query.folder }, requestId: options.requestId });
+  }
+
+  /** Explicit private download. Cookie-only POST; bounded bytes, download-only headers, no automatic retry or preview. */
+  async downloadAdminSiteMailboxAttachment(bindingId: string, uid: number, attachmentId: string, input: GeneratedBackyOpenApiAdminSiteMailboxAttachmentDownloadRequest, options: BackyOwnerCookieRequestOptions = {}): Promise<BackySiteMailboxAttachmentDownload> {
+    const url = new URL(`${this.baseUrl}/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/settings/mailboxes/${encodeURIComponent(bindingId)}/messages/${encodeURIComponent(String(uid))}/attachments/${encodeURIComponent(attachmentId)}/download`);
+    const headers = new Headers();
+    headers.set('x-request-id', options.requestId ?? this.requestIdFactory());
+    headers.set('content-type', 'application/json');
+    const response = await this.fetchImpl(url, { method: 'POST', headers, body: JSON.stringify({ folder: input.folder }), credentials: 'include', cache: 'no-store', redirect: 'error' });
+    if (!response.ok) {
+      const payload: unknown = await response.json().catch(() => null);
+      if (isBackyErrorEnvelope(payload)) throw new BackyApiError(response.status, payload);
+      throw new Error(`Backy mailbox attachment download failed with HTTP ${response.status}.`);
+    }
+    const invalid = () => { void response.body?.cancel().catch(() => {}); throw new Error('Backy mailbox attachment returned invalid download headers or bytes.'); };
+    const maximum = 3 * 1024 * 1024;
+    const length = response.headers.get('content-length');
+    const disposition = response.headers.get('content-disposition');
+    const requestId = response.headers.get('x-request-id');
+    if (response.status !== 200 || response.headers.get('content-type') !== 'application/octet-stream' || response.headers.get('cache-control') !== 'private, no-store' || response.headers.get('x-content-type-options') !== 'nosniff' || response.headers.get('referrer-policy') !== 'no-referrer' || response.headers.get('content-security-policy') !== "sandbox; default-src 'none'" || !requestId || requestId.length > 200 || /[\p{Cc}]/u.test(requestId) || !length || !/^(0|[1-9][0-9]*)$/.test(length) || Number(length) > maximum || !disposition || !response.body && length !== '0') return invalid();
+    const names = /^attachment; filename="([^"\\\r\n]+)"; filename\*=UTF-8''([^;\r\n]+)$/.exec(disposition);
+    if (!names || names[1].length > 180 || !/^[\x20-\x7e]+$/.test(names[1]) || /[\/\\]/.test(names[1])) return invalid();
+    let filename: string;
+    try { filename = names[2] ? decodeURIComponent(names[2]) : names[1]; } catch { return invalid(); }
+    if (!filename || filename === '.' || filename === '..' || /[\p{Cc}\p{Cs}\/\\\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(filename) || new TextEncoder().encode(filename).byteLength > 180) return invalid();
+    if (!response.body) return { bytes: new Uint8Array(), sizeBytes: 0, filename, contentType: 'application/octet-stream', requestId };
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let sizeBytes = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => { while (true) { const { value, done } = await reader.read(); if (done) break; sizeBytes += value.byteLength; if (sizeBytes > maximum || sizeBytes > Number(length)) throw new Error('Backy mailbox attachment exceeds the declared byte bound.'); chunks.push(value); } })(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Backy mailbox attachment download timed out.')), 15_000); }),
+      ]);
+      if (sizeBytes !== Number(length)) throw new Error('Backy mailbox attachment length mismatch.');
+      const bytes = new Uint8Array(sizeBytes); let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      return { bytes, sizeBytes, filename, contentType: 'application/octet-stream', requestId };
+    } finally { clearTimeout(timer); void reader.cancel().catch(() => {}); }
+  }
+
+  private async ownerCookieRequest<T>(path: string, options: { method?: string; query?: Record<string, string | number | undefined>; body?: unknown; requestId?: string }): Promise<T> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    for (const [name, value] of Object.entries(options.query ?? {})) if (value !== undefined) url.searchParams.set(name, String(value));
+    // Fresh headers isolate Owner-cookie calls from operator/service-key defaults.
+    // Headers.set retains the same request-ID validation as the standard SDK.
+    const headers = new Headers();
+    headers.set('x-request-id', options.requestId ?? this.requestIdFactory());
+    if (options.body !== undefined) headers.set('content-type', 'application/json');
+    const response = await this.fetchImpl(url, { method: options.method ?? 'GET', headers, credentials: 'include', cache: 'no-store', redirect: 'error', ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }) });
+    const json: unknown = await response.json().catch(() => null);
+    if (isBackyErrorEnvelope(json)) throw new BackyApiError(response.status, json);
+    if (!response.ok) throw new Error(`Backy Owner-cookie request failed with HTTP ${response.status}.`);
+    if (!isBackyEnvelope<unknown>(json)) throw new Error('Backy Owner-cookie API returned an invalid envelope.');
+    return json as T;
+  }
+
   updateAdminSiteSettings(
     input: BackySiteSettingsUpdateInput,
     options: BackyLiveManagementRequestOptions = {},
@@ -14556,6 +14675,77 @@ export class BackyClient {
     );
   }
 
+  /** Review without writes; retain blocking and unverified findings for the owner. */
+  reviewAdminFrontendComposition(
+    input: Omit<FrontendCompositionImportRequest, "action" | "reviewVersion">,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyFrontendCompositionReviewResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design/composition-import`,
+      { method: "POST", body: { ...input, action: "review" }, requestId: options.requestId,
+        headers: liveManagementHeaders(options), credentials: options.credentials },
+    );
+  }
+
+  /** Apply the exact reviewed selection as drafts. A stale review is never automatically replayed. */
+  applyAdminFrontendComposition(
+    input: Omit<FrontendCompositionImportRequest, "action" | "reviewVersion"> & { reviewVersion: string },
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyFrontendCompositionApplyResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design/composition-import`,
+      { method: "POST", body: { ...input, action: "apply" }, requestId: options.requestId,
+        headers: liveManagementHeaders(options), credentials: options.credentials },
+    );
+  }
+
+  /** Review a selected form pack without writes. Reference reads require scoped permissions. */
+  reviewAdminFormTemplatePack(
+    input: Omit<FormTemplatePackImportRequest, "action" | "reviewVersion" | "names" | "references" | "acknowledgeUnverified"> & Partial<Pick<FormTemplatePackImportRequest, "names" | "references" | "acknowledgeUnverified">>,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<GeneratedBackyOpenApiFormTemplatePackReviewEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/template-pack/import`,
+      { method: "POST", body: { ...input, action: "review" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Exact reviewed import creates inactive standalone forms; stale reviews are never replayed. */
+  applyAdminFormTemplatePack(
+    input: Omit<FormTemplatePackImportRequest, "action" | "reviewVersion" | "names" | "references" | "acknowledgeUnverified"> & Partial<Pick<FormTemplatePackImportRequest, "names" | "references" | "acknowledgeUnverified">> & { reviewVersion: string },
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<GeneratedBackyOpenApiFormTemplatePackApplyEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/template-pack/import`,
+      { method: "POST", body: { ...input, action: "apply" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Private complete bounded archive. Requires owner/admin sites.configure. */
+  exportAdminSiteBackup(options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiSiteBackupExportEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/backup`,
+      { requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** No-write preview for a NEW draft site; also requires sites.create. */
+  previewAdminSiteBackup(input: { archive: SiteBackupPackage; name: string; slug: string }, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiSiteBackupPreviewEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/backup/restore`,
+      { method: "POST", body: { ...input, action: "preview" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Exact reviewed restore. Uncertain failures expose jobId; never automatically replay apply. */
+  applyAdminSiteBackup(input: { archive: SiteBackupPackage; name: string; slug: string; reviewedPreview: GeneratedBackyOpenApiSiteBackupPreview; confirmPrivateData: true; confirmSafetyResets: true }, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiSiteBackupApplyEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/backup/restore`,
+      { method: "POST", body: { ...input, action: "apply" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  listAdminSiteBackupJobs(options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiSiteBackupJobsEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/backup/restore-jobs`,
+      { requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Server controls cleanup paths and protects committed target files. */
+  retryAdminSiteBackupJob(jobId: string, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiSiteBackupRetryEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/backup/restore-jobs/${encodeURIComponent(jobId)}/retry`,
+      { method: "POST", body: {}, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
   adminFrontendDesign(
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminFrontendDesignResponse> {
@@ -14567,6 +14757,46 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+  }
+
+  /** Compare saved authoring requirements and optional observations; never certifies live behavior. */
+  adminFrontendCompatibility(
+    input: BackyFrontendCompatibilityInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<GeneratedBackyOpenApiFrontendCompatibilityEnvelope> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/custom-frontend/compatibility`,
+      {
+        method: "POST",
+        body: input,
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
+  /** Full snapshots require authenticated site access; omitted templateId returns a summary catalog. */
+  adminTemplateHistory(
+    templateId?: string,
+    options: BackyLiveManagementRequestOptions & { limit?: number; offset?: number } = {},
+  ): Promise<GeneratedBackyOpenApiTemplateHistoryEnvelope> {
+    const site = encodeURIComponent(options.siteId ?? this.requireSiteId());
+    const target = templateId ? `${encodeURIComponent(templateId)}/` : '';
+    return this.request(`/api/admin/sites/${site}/templates/${target}revisions`, {
+      query: { limit: options.limit, offset: options.offset },
+      requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials,
+    });
+  }
+
+  restoreAdminTemplateRevision(
+    templateId: string, revisionId: string, expectedDesignFingerprint: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<GeneratedBackyOpenApiTemplateRestoreEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/templates/${encodeURIComponent(templateId)}/revisions/${encodeURIComponent(revisionId)}/restore`, {
+      method: 'POST', body: { expectedDesignFingerprint },
+      requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials,
+    });
   }
 
   updateAdminFrontendDesign(
@@ -14582,6 +14812,21 @@ export class BackyClient {
         requestId: options.requestId ?? requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
+      },
+    );
+  }
+
+  /** Execute a documented design import/capture action; supplied URLs remain declarations. */
+  runAdminFrontendDesignAction(
+    input: BackyAdminFrontendDesignActionInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminFrontendDesignResponse> {
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/frontend-design`,
+      {
+        method: "POST", body: input,
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options), credentials: options.credentials,
       },
     );
   }
@@ -14705,12 +14950,24 @@ export class BackyClient {
           reviewStatus: rest.reviewStatus,
           type: rest.type,
           search: rest.search,
+          limit: rest.limit,
+          offset: rest.offset,
         },
         requestId,
         headers,
         credentials,
       },
     );
+  }
+
+  /** Authenticated authoring catalog works on draft sites and still requires the site's pages.view permission. */
+  adminInteractiveComponentRegistry(
+    options: BackyAdminInteractiveComponentDiscoveryOptions = {},
+  ): Promise<BackyEnvelope<BackyInteractiveComponentRegistry>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components/discovery`, {
+      query: { limit: options.limit, offset: options.offset },
+      requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials,
+    });
   }
 
   createAdminInteractiveComponent(
@@ -15075,6 +15332,51 @@ export class BackyClient {
     });
   }
 
+  /** Read-only impact review of exact retained template revision; legacy unpinned instances remain blocked. */
+  reviewAdminTemplateInstances(templateId: string, input: { targetRevisionId: string } & BackyTemplateInstanceSelectionInput, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiTemplateInstanceEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/templates/${encodeURIComponent(templateId)}/instances`, { method: "POST", body: { ...input, action: "review" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  /** Explicit guarded per-document upgrade. Inspect partial outcomes; never replay the selection automatically. */
+  applyAdminTemplateInstances(templateId: string, input: { targetRevisionId: string; reviewVersion: string } & BackyTemplateInstanceSelectionInput, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiTemplateInstanceEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/templates/${encodeURIComponent(templateId)}/instances`, { method: "POST", body: { ...input, action: "apply" }, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Private form design summaries; no snapshots or submission values. */
+  listAdminFormDesignVersions(formId: string, input: { offset?: number; limit?: number } = {}, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiFormDesignVersionsEnvelope> {
+    const query = new URLSearchParams();
+    if (input.offset !== undefined) query.set('offset', String(input.offset));
+    if (input.limit !== undefined) query.set('limit', String(input.limit));
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/design-versions${query.size ? `?${query}` : ''}`, { method: "GET", requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  /** Restores compatible presentation into the current form using form-v1 admission. No automatic retry. */
+  restoreAdminFormDesignVersion(formId: string, revisionId: string, input: { expectedVersion: string }, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiFormDesignRestoreEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/design-versions/${encodeURIComponent(revisionId)}/restore`, { method: "POST", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Private collection design summaries; no snapshots or record values. */
+  listAdminCollectionDesignVersions(collectionId: string, input: { offset?: number; limit?: number } = {}, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiCollectionDesignVersionsEnvelope> {
+    const query = new URLSearchParams();
+    if (input.offset !== undefined) query.set('offset', String(input.offset));
+    if (input.limit !== undefined) query.set('limit', String(input.limit));
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/design-versions${query.size ? `?${query}` : ''}`, { method: "GET", requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  /** Restores compatible presentation into the current collection definition using collection-v1 admission. No automatic retry. */
+  restoreAdminCollectionDesignVersion(collectionId: string, revisionId: string, input: { expectedVersion: string }, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiCollectionDesignRestoreEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/collections/${encodeURIComponent(collectionId)}/design-versions/${encodeURIComponent(revisionId)}/restore`, { method: "POST", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Private product design summaries; current catalog values and historical snapshots are excluded. */
+  listAdminProductDesignVersions(productId: string, input: { offset?: number; limit?: number } = {}, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiProductDesignVersionsEnvelope> {
+    const query = new URLSearchParams();
+    if (input.offset !== undefined) query.set('offset', String(input.offset));
+    if (input.limit !== undefined) query.set('limit', String(input.limit));
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/design-versions${query.size ? `?${query}` : ''}`, { method: "GET", requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  /** Restores the reviewed design into current catalog state using full-record admission. No automatic retry. */
+  restoreAdminProductDesignVersion(productId: string, revisionId: string, input: { expectedVersion: string }, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiProductDesignRestoreEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/products/${encodeURIComponent(productId)}/design-versions/${encodeURIComponent(revisionId)}/restore`, { method: "POST", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
   bulkAdminUsers(
     input: BackyAdminUserBulkInput,
     options: BackyLiveManagementRequestOptions = {},
@@ -15082,6 +15384,53 @@ export class BackyClient {
     const { requestId, ...body } = input;
     return this.request("/api/admin/users/bulk", {
       method: "POST",
+      body,
+      requestId: options.requestId ?? requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  /** Private existing visitor memberships; requires sites.configure, never enrollment or CMS provisioning. */
+  listAdminVisitorMembers(input: { limit?: number; offset?: number; status?: "active" | "suspended" | "removed"; search?: string } = {}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminVisitorListEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors`, { query: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  getAdminVisitorMember(memberId: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminVisitorMemberEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/${encodeURIComponent(memberId)}`, { requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  updateAdminVisitorMember(memberId: string, input: BackyAdminVisitorUpdateRequest, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminVisitorMutationEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/${encodeURIComponent(memberId)}`, { method: "PATCH", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  revokeAdminVisitorMemberSessions(memberId: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminVisitorMutationEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/${encodeURIComponent(memberId)}/revoke-sessions`, { method: "POST", body: {}, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+  /** Confirmed access removal retains identity/content; it does not erase data or delete provider accounts. */
+  removeAdminVisitorMemberAccess(memberId: string, input: BackyAdminVisitorRemoveAccessRequest, options: BackyLiveManagementRequestOptions = {}): Promise<BackyAdminVisitorMutationEnvelope> {
+    if (input.confirmRetention !== true) throw new Error("Review retained identity and content before removing visitor access.");
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/visitors/${encodeURIComponent(memberId)}`, { method: "DELETE", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Owner-session-only; missing policies report legacy workspace compatibility. */
+  adminUserSiteGrants(
+    userId: string,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminOperatorSiteGrantEnvelope> {
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}/site-grants`, {
+      requestId: options.requestId,
+      headers: liveManagementHeaders(options),
+      credentials: options.credentials,
+    });
+  }
+
+  /** On409 reload the current policy before choosing a new expectedRevision. */
+  updateAdminUserSiteGrants(
+    userId: string,
+    input: BackyAdminOperatorSiteGrantPatch,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyAdminOperatorSiteGrantEnvelope> {
+    const { requestId, ...body } = input;
+    return this.request(`/api/admin/users/${encodeURIComponent(userId)}/site-grants`, {
+      method: "PATCH",
       body,
       requestId: options.requestId ?? requestId,
       headers: liveManagementHeaders(options),
@@ -15476,24 +15825,62 @@ export class BackyClient {
 
   interactiveComponents(
     siteId = this.requireSiteId(),
+    options: BackyInteractiveComponentCatalogOptions = {},
   ): Promise<BackyEnvelope<BackyInteractiveComponentRegistry>> {
     return this.request(
       `/api/sites/${encodeURIComponent(siteId)}/interactive-components`,
+      { query: { limit: options.limit, offset: options.offset }, credentials: "omit" },
     );
   }
 
   interactiveComponentsCached(
-    options: BackyConditionalOptions = {},
+    options: BackyInteractiveComponentCatalogCachedOptions = {},
   ): Promise<
     BackyConditionalResult<BackyEnvelope<BackyInteractiveComponentRegistry>>
   > {
     return this.requestConditionalJson(
       `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/interactive-components`,
       {
+        query: { limit: options.limit, offset: options.offset },
+        credentials: "omit",
         ifNoneMatch: options.etag,
         requestId: options.requestId,
       },
     );
+  }
+
+  /** Fetch exactly this active approved version from a published site; no catalog scan or latest fallback. */
+  interactiveComponent(
+    componentKey: string,
+    version: string,
+    siteId = this.requireSiteId(),
+  ): Promise<BackyEnvelope<BackyExactInteractiveComponentRegistry>> {
+    return this.request(`/api/sites/${encodeURIComponent(siteId)}/interactive-components/${encodeURIComponent(componentKey)}/${encodeURIComponent(version)}`, { credentials: "omit" });
+  }
+
+  /** Complete catalog convenience read rejects stale or malformed pagination instead of silently truncating. */
+  async allInteractiveComponents(siteId = this.requireSiteId()): Promise<BackyEnvelope<BackyInteractiveComponentRegistry>> {
+    let first: BackyEnvelope<BackyInteractiveComponentRegistry> | undefined;
+    const components: BackyInteractiveComponentRegistryEntry[] = [];
+    const identities = new Set<string>();
+    let total: number | undefined;
+    let canonicalSiteId: string | undefined;
+    while (true) {
+      const page = await this.interactiveComponents(siteId, { limit: 100, offset: components.length });
+      first ??= page;
+      const pagination = page.data.pagination;
+      canonicalSiteId ??= page.data.siteId;
+      if (!canonicalSiteId || page.data.siteId !== canonicalSiteId || !Array.isArray(page.data.components) || !pagination || typeof pagination.total !== "number" || !Number.isSafeInteger(pagination.total)
+        || pagination.total < 0 || pagination.offset !== components.length || (total !== undefined && total !== pagination.total)) throw new Error("Interactive component catalog changed while loading. Retry discovery.");
+      total = pagination.total;
+      for (const component of page.data.components) {
+        const identity = JSON.stringify([component.componentKey, component.version]);
+        if (identities.has(identity)) throw new Error("Interactive component catalog changed while loading. Retry discovery.");
+        identities.add(identity); components.push(component);
+      }
+      if (components.length > total || pagination.hasMore !== (components.length < total) || (pagination.hasMore && page.data.components.length === 0)) throw new Error("Invalid interactive component catalog pagination.");
+      if (!pagination.hasMore) return { ...first, data: { ...first.data, components, pagination: { total, limit: total, offset: 0, hasMore: false } } };
+    }
   }
 
   recordInteractiveRuntimeEvent(
@@ -15781,7 +16168,7 @@ export class BackyClient {
     pageId: string,
     input: BackyAdminPageUpdateInput,
     options: BackyLiveManagementRequestOptions = {},
-  ): Promise<BackyAdminPageResponse> {
+  ): Promise<GeneratedBackyOpenApiAdminPageSaveEnvelope> {
     const { requestId: inputRequestId, ...body } = input;
     const requestId =
       typeof inputRequestId === "string" ? inputRequestId : undefined;
@@ -16278,7 +16665,7 @@ export class BackyClient {
     postId: string,
     input: BackyAdminBlogPostUpdateInput,
     options: BackyLiveManagementRequestOptions = {},
-  ): Promise<BackyAdminBlogPostResponse> {
+  ): Promise<GeneratedBackyOpenApiAdminBlogPostSaveEnvelope> {
     const { requestId: inputRequestId, ...body } = input;
     const requestId =
       typeof inputRequestId === "string" ? inputRequestId : undefined;
@@ -16589,12 +16976,13 @@ export class BackyClient {
 
   deleteAdminMedia(
     mediaId: string,
-    options: BackyLiveManagementRequestOptions = {},
+    options: BackyAdminMediaDeleteOptions = {},
   ): Promise<BackyAdminMediaDeleteResponse> {
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/media/${encodeURIComponent(mediaId)}`,
       {
         method: "DELETE",
+        ...(options.input ? { body: options.input } : {}),
         requestId: options.requestId,
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
@@ -16985,7 +17373,7 @@ export class BackyClient {
   }
 
   createAdminCollection(
-    input: BackyAdminCollectionCreateInput,
+    input: BackyAdminCollectionCreateInput | GeneratedBackyOpenApiAdminCollectionCreateRequest,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminCollectionResponse> {
     const { requestId, ...body } = input;
@@ -17075,7 +17463,7 @@ export class BackyClient {
   importAdminCollectionsBackup<
     TValues extends Record<string, unknown> = Record<string, unknown>,
   >(
-    backup: BackyAdminCollectionsBackup<TValues> | { collections?: unknown[] },
+    backup: BackyAdminCollectionsBackup<TValues> | { collections?: unknown[] } | GeneratedBackyOpenApiAdminCollectionsImportRequest,
     options: BackyAdminCollectionsBackupImportOptions = {},
   ): Promise<BackyAdminCollectionsBackupImportResponse<TValues>> {
     const { requestId, siteId, headers, credentials, rest } =
@@ -17130,7 +17518,7 @@ export class BackyClient {
     TValues extends Record<string, unknown> = Record<string, unknown>,
   >(
     collectionId: string,
-    input: BackyAdminCollectionRecordCreateInput<TValues>,
+    input: BackyAdminCollectionRecordCreateInput<TValues> | GeneratedBackyOpenApiAdminCollectionRecordCreateRequest,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminCollectionRecordResponse<TValues>> {
     const { requestId, ...body } = input;
@@ -17375,7 +17763,7 @@ export class BackyClient {
   }
 
   createAdminReusableSection(
-    input: BackyAdminReusableSectionCreateInput,
+    input: BackyAdminReusableSectionCreateInput | BackyAdminReusableSectionCreateRequest,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminReusableSectionResponse> {
     const { requestId, ...body } = input;
@@ -17407,7 +17795,7 @@ export class BackyClient {
 
   updateAdminReusableSection(
     sectionId: string,
-    input: BackyAdminReusableSectionUpdateInput,
+    input: BackyAdminReusableSectionUpdateInput | BackyAdminReusableSectionPatchRequest,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminReusableSectionResponse> {
     const { requestId: inputRequestId, ...body } = input;
@@ -17457,7 +17845,7 @@ export class BackyClient {
   restoreAdminReusableSectionVersion(
     sectionId: string,
     version: number | string,
-    input: BackyAdminReusableSectionRestoreInput = {},
+    input: BackyAdminReusableSectionRestoreInput | BackyAdminReusableSectionRestoreRequest = {},
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminReusableSectionRestoreResponse> {
     const { requestId, ...body } = input;
@@ -17496,7 +17884,7 @@ export class BackyClient {
   }
 
   importAdminReusableSections(
-    input: BackyAdminReusableSectionImportInput,
+    input: BackyAdminReusableSectionImportInput | BackyAdminReusableSectionImportRequest,
     options: BackyAdminReusableSectionImportOptions = {},
   ): Promise<BackyAdminReusableSectionImportResponse> {
     const { requestId: inputRequestId, ...body } = input;
@@ -17539,7 +17927,7 @@ export class BackyClient {
 
   refreshAdminReusableSectionInstances(
     sectionId: string,
-    input: BackyAdminReusableSectionInstancesRefreshInput = {},
+    input: BackyAdminReusableSectionInstancesRefreshInput,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminReusableSectionInstancesRefreshResponse> {
     const { requestId, ...body } = input;
@@ -17571,7 +17959,7 @@ export class BackyClient {
 
   updateAdminReusableSectionMetadata(
     sectionId: string,
-    input: BackyAdminReusableSectionMetadataUpdateInput,
+    input: BackyAdminReusableSectionMetadataUpdateInput | BackyAdminReusableSectionMetadataRequest,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminReusableSectionMetadataUpdateResponse> {
     const { requestId, ...body } = input;
@@ -17949,7 +18337,7 @@ export class BackyClient {
   commerceOrderStatusHandoff(
     orderId: string,
     options: BackyLiveManagementRequestOptions = {},
-  ): Promise<BackyCommerceOrderStatusHandoffResponse> {
+  ): Promise<BackyAdminCommerceOrderStatusHandoffResponse> {
     return this.request(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/commerce/orders/${encodeURIComponent(orderId)}/status-handoff`,
       {
@@ -18562,7 +18950,7 @@ export class BackyClient {
         headers: liveManagementHeaders(options),
         credentials: options.credentials,
       },
-    );
+    ) as Promise<BackyAdminFormDeleteResponse>;
   }
 
   cloneAdminForm(
@@ -18708,6 +19096,7 @@ export class BackyClient {
   ): Promise<
     BackyEnvelope<{
       submission: BackyFormSubmission;
+      completionWarnings?: ("FORM_NOTIFICATION_PENDING" | "FORM_DELIVERY_ACTIVITY_PENDING" | "FORM_DELIVERY_OUTCOME_PENDING")[];
       contact?: BackyContact;
       collectionRecord?: BackyCollectionRecord | null;
       collectionRecordErrors?: Array<Record<string, unknown>>;
@@ -18723,10 +19112,63 @@ export class BackyClient {
     );
   }
 
+  /** Upload actual visitor files; attachment references are generated by Backy after validation/scanning. */
+  submitFormFiles(formId: string, input: BackyFormSubmissionInput, files: Record<string, File | File[]>): ReturnType<BackyClient['submitForm']> {
+    const entries = Object.entries(files).flatMap(([field, value]) => (Array.isArray(value) ? value : [value]).map(file => ({ field, file })));
+    if (entries.some(({ field }) => !field.trim() || field === 'payload')) throw new Error('Files must use declared form file field keys.');
+    if (!entries.length || entries.length > 5 || entries.some(({ file }) => !file.size) || entries.reduce((size, { file }) => size + file.size, 0) > 4 * 1024 * 1024) throw new Error('Use 1–5 nonempty files, up to 4 MiB in total.');
+    const body = new FormData();
+    body.set('payload', JSON.stringify(input));
+    for (const { field, file } of entries) body.append(field, file, file.name);
+    return this.request(`/api/sites/${encodeURIComponent(this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions`, { method: 'POST', body, requestId: input.requestId });
+  }
+
+  /** Returns private original bytes only after the exact scoped admin download succeeds. */
+  async downloadAdminFormAttachment(formId: string, submissionId: string, attachmentId: string, options: BackyLiveManagementRequestOptions = {}): Promise<Blob> {
+    const path = `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}/attachments/${encodeURIComponent(attachmentId)}`;
+    const response = await this.fetchRaw(path, { requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      if (isBackyErrorEnvelope(payload)) throw new BackyApiError(response.status, payload);
+      throw new Error(`Backy attachment download failed with HTTP ${response.status}.`);
+    }
+    return response.blob();
+  }
+
+  newsletterCampaigns(input: {limit?:number;offset?:number} = {}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignListData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns`, {query:input,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  newsletterCampaign(id: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}`, {requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  createNewsletterCampaign(input: BackyNewsletterCampaignInput, idempotencyKey: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    const headers = new Headers(liveManagementHeaders(options));
+    headers.set('Idempotency-Key', idempotencyKey);
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns`, {method:'POST',body:input,requestId:options.requestId,headers,credentials:options.credentials});
+  }
+  updateNewsletterCampaign(id: string, input: BackyNewsletterCampaignInput & {version:number}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}`, {method:'PATCH',body:input,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  sendNewsletterCampaign(id: string, version: number, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}/send`, {method:'POST',body:{version},requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  scheduleNewsletterCampaign(id: string, input: {version:number;scheduledAt:string}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}/schedule`, {method:'POST',body:input,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  cancelNewsletterCampaign(id: string, version: number, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}/cancel`, {method:'POST',body:{version},requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  processNewsletterCampaign(id: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterProcessingData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}/process`, {method:'POST',body:{},requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+  recordNewsletterCampaignFeedback(id: string, input: {deliveryId:string;state:'delivered'|'bounced'|'complained';evidence:string}, options: BackyLiveManagementRequestOptions = {}): Promise<BackyEnvelope<BackyNewsletterCampaignData>> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/campaigns/${encodeURIComponent(id)}/feedback`, {method:'POST',body:input,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+
   subscribeNewsletter(
     input: BackyNewsletterSubscribeInput,
     options: BackyNewsletterRequestOptions = {},
-  ): Promise<BackyNewsletterSubscriberResponse> {
+  ): Promise<BackyNewsletterSubscriberReceiptResponse> {
     const { requestId, ...body } = input;
     return this.request(
       `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
@@ -18742,7 +19184,7 @@ export class BackyClient {
   unsubscribeNewsletter(
     input: BackyNewsletterUnsubscribeInput,
     options: BackyNewsletterRequestOptions = {},
-  ): Promise<BackyNewsletterSubscriberResponse> {
+  ): Promise<BackyNewsletterSubscriberReceiptResponse> {
     const { requestId, ...body } = input;
     return this.request(
       `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/newsletter/subscribers`,
@@ -18833,7 +19275,7 @@ export class BackyClient {
   updateFormSubmission(
     formId: string,
     submissionId: string,
-    updates: Record<string, unknown>,
+    updates: BackyAdminFormSubmissionReviewInput,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminFormSubmissionResponse> {
     const { requestId, ...body } = updates;
@@ -18866,6 +19308,16 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+  }
+
+  /** Private authoritative attempt history; requires forms.view. Pending/uncertain/consumed attempts must not be replayed. */
+  listFormDeliveryAttempts(formId: string, input: { limit?: number; offset?: number; submissionId?: string } = {}, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminFormDeliveryHistoryEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/delivery-attempts`, { query: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
+  }
+
+  /** Active owner session only. Compare-and-swap investigation without resend or outcome replacement. */
+  reconcileFormDelivery(formId: string, submissionId: string, attemptId: string, input: BackyDeliveryReconciliationInput, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiAdminFormDeliveryReconciliationEnvelope> {
+    return this.request(`/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/submissions/${encodeURIComponent(submissionId)}/delivery-attempts/${encodeURIComponent(attemptId)}/reconciliation`, { method: "POST", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
   }
 
   retryFormSubmissionWebhook(
@@ -19012,7 +19464,7 @@ export class BackyClient {
   updateFormContact(
     formId: string,
     contactId: string,
-    updates: Record<string, unknown>,
+    updates: BackyAdminFormContactInput,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminFormContactResponse> {
     const { requestId, ...body } = updates;
@@ -19068,13 +19520,13 @@ export class BackyClient {
     );
   }
 
-  syncFormContacts(
+  async syncFormContacts(
     formId: string,
     input: BackyAdminFormContactSyncInput,
     options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyAdminFormContactSyncResponse> {
     const { requestId, ...body } = input;
-    return this.request(
+    const { response, json } = await this.fetchJson(
       `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/forms/${encodeURIComponent(formId)}/contacts/sync`,
       {
         method: "POST",
@@ -19084,6 +19536,15 @@ export class BackyClient {
         credentials: options.credentials,
       },
     );
+    if (response.status === 502 && isBackyEnvelope<BackyAdminFormContactSyncResponse["data"]>(json) && json.data?.delivery?.status === "failed") {
+      throw new BackyFormContactSyncDeliveryError(json);
+    }
+    if (!response.ok || isBackyErrorEnvelope(json)) {
+      if (isBackyErrorEnvelope(json)) throw new BackyApiError(response.status, json);
+      throw new Error(`Backy contact sync failed with HTTP ${response.status}.`);
+    }
+    if (!isBackyEnvelope<BackyAdminFormContactSyncResponse["data"]>(json)) throw new Error("Backy contact sync returned an invalid envelope.");
+    return json;
   }
 
   applyFormContactConsentRetention(
@@ -19141,16 +19602,38 @@ export class BackyClient {
     );
   }
 
+  /** Private moderator management; saved warnings never authorize automatic replay. */
+  createAdminCommentReply(
+    parentCommentId: string,
+    input: BackyModeratorCommentReplyInput,
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentSubmissionResponse> {
+    const { requestId, ...body } = input;
+    return this.request(
+      `/api/admin/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(parentCommentId)}/replies`,
+      {
+        method: "POST",
+        body,
+        requestId: options.requestId ?? requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
+      },
+    );
+  }
+
   submitPageComment(
     pageId: string,
     input: BackyCommentInput,
-  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentSubmissionResponse> {
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`,
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/pages/${encodeURIComponent(pageId)}/comments`,
       {
         method: "POST",
         body: normalizeCommentInput(input),
-        requestId: input.requestId,
+        requestId: options.requestId ?? input.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -19202,13 +19685,16 @@ export class BackyClient {
   submitBlogComment(
     postId: string,
     input: BackyCommentInput,
-  ): Promise<BackyEnvelope<{ comment: BackyComment }>> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentSubmissionResponse> {
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`,
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/blog/${encodeURIComponent(postId)}/comments`,
       {
         method: "POST",
         body: normalizeCommentInput(input),
-        requestId: input.requestId,
+        requestId: options.requestId ?? input.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -19252,13 +19738,16 @@ export class BackyClient {
 
   updateComments(
     input: BackyCommentBulkUpdateInput,
+    options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyCommentBulkUpdateResponse> {
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments`,
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments`,
       {
         method: "PATCH",
         body: input,
-        requestId: input.requestId,
+        requestId: options.requestId ?? input.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -19269,12 +19758,13 @@ export class BackyClient {
       BackyCommentBulkUpdateInput,
       "commentIds" | "ids" | "action" | "clearReports" | "status"
     > = {},
+    options: BackyLiveManagementRequestOptions = {},
   ): Promise<BackyCommentBulkUpdateResponse> {
     return this.updateComments({
       ...input,
       commentIds,
       action: "clearReports",
-    });
+    }, options);
   }
 
   commentBlocklist(
@@ -19333,23 +19823,33 @@ export class BackyClient {
   updateComment(
     commentId: string,
     updates: Record<string, unknown>,
-  ): Promise<BackySiteCommentResponse> {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentMutationResponse> {
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
       {
         method: "PATCH",
         body: updates,
+        requestId: options.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
 
-  deleteComment(commentId: string): Promise<BackyCommentDeleteResponse> {
-    return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`,
-      {
-        method: "DELETE",
-      },
-    );
+  deleteComment(commentId: string, options: BackyLiveManagementRequestOptions = {}): Promise<BackyCommentDeleteResponse> {
+    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(commentId)}`, {method:"DELETE",requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+
+  /** Private durable history. Pending/uncertain and consumed sources are not retryable. */
+  listCommentDeliveryAttempts(query: {limit?:number;offset?:number;commentId?:string} = {}, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiCommentDeliveryAttemptsEnvelope> {
+    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/delivery-attempts`,
+      {query,requestId:options.requestId,headers:liveManagementHeaders(options),credentials:options.credentials});
+  }
+
+  /** Active owner session only. Retains pending/uncertain outcome; never sends or certifies delivery. */
+  reconcileCommentDelivery(commentId: string, attemptId: string, input: BackyDeliveryReconciliationInput, options: BackyLiveManagementRequestOptions = {}): Promise<GeneratedBackyOpenApiCommentDeliveryReconciliationEnvelope> {
+    return this.request(`/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/delivery-attempts/${encodeURIComponent(attemptId)}/reconciliation`, { method: "POST", body: input, requestId: options.requestId, headers: liveManagementHeaders(options), credentials: options.credentials });
   }
 
   retryCommentDelivery(
@@ -19391,16 +19891,17 @@ export class BackyClient {
   reportComment(
     commentId: string,
     input: BackyCommentReportInputSource,
-  ): Promise<
-    BackyEnvelope<{ comment: BackyComment; report: Record<string, unknown> }>
-  > {
+    options: BackyLiveManagementRequestOptions = {},
+  ): Promise<BackyCommentReportResponse> {
     const body = buildBackyCommentReportInput(input);
     return this.request(
-      `/api/sites/${encodeURIComponent(this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`,
+      `/api/sites/${encodeURIComponent(options.siteId ?? this.requireSiteId())}/comments/${encodeURIComponent(commentId)}/report`,
       {
         method: "POST",
         body,
-        requestId: body.requestId,
+        requestId: options.requestId ?? body.requestId,
+        headers: liveManagementHeaders(options),
+        credentials: options.credentials,
       },
     );
   }
@@ -19481,6 +19982,68 @@ export class BackyClient {
       ...options,
       kind: "commerce-product",
     });
+  }
+
+  /** Explicit site enrollment; PKCE confirmation uses visitorCallback with the server-held verifier. */
+  visitorRegister(input: BackyVisitorRegisterRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorIssuedSessionEnvelope | BackyVisitorRegistrationPendingEnvelope> {
+    return this.visitorRequest('register', input, options);
+  }
+  visitorLogin(input: BackyVisitorLoginRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorIssuedSessionEnvelope> {
+    return this.visitorRequest('login', input, options);
+  }
+  visitorSession(options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorSessionEnvelope> {
+    return this.visitorRequest('session', undefined, options);
+  }
+  visitorLogout(options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorLogoutEnvelope> {
+    return this.visitorRequest('logout', undefined, options);
+  }
+  visitorCallback(input: BackyVisitorCallbackRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorIssuedSessionEnvelope> {
+    return this.visitorRequest('callback', input, options);
+  }
+  visitorRecovery(input: BackyVisitorRecoveryRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorRecoveryEnvelope> {
+    return this.visitorRequest('recovery', input, options);
+  }
+  visitorResetPassword(input: BackyVisitorResetPasswordRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorPasswordResetEnvelope> {
+    return this.visitorRequest('reset-password', input, options);
+  }
+  /** Current website session and fresh password;202 still requires confirmation and ordinary sign-in. */
+  visitorEmailChange(input: BackyVisitorEmailChangeRequest, options: BackyVisitorRequestOptions = {}): Promise<GeneratedBackyOpenApiVisitorEmailChangePendingEnvelope> {
+    return this.visitorRequest('email-change', { newEmail: input.newEmail, currentPassword: input.currentPassword, returnUrl: input.returnUrl }, options);
+  }
+  /** Fresh confirmed provider email/password, existing membership only; never enrolls or issues a session. */
+  visitorConfirmEmailChange(input: BackyVisitorConfirmEmailChangeRequest, options: BackyVisitorRequestOptions = {}): Promise<GeneratedBackyOpenApiVisitorEmailChangedEnvelope> {
+    return this.visitorRequest('confirm-email-change', { email: input.email, password: input.password }, options);
+  }
+  /** Only the active visitor's display name; email and membership permissions stay separate. */
+  visitorUpdateProfile(input: BackyVisitorProfileUpdateRequest, options: BackyVisitorRequestOptions = {}): Promise<BackyVisitorSessionEnvelope> {
+    return this.visitorRequest('profile', input, options);
+  }
+  private async visitorRequest<T>(operation: string, input: unknown, options: BackyVisitorRequestOptions): Promise<T> {
+    const headers = new Headers({ 'content-type': 'application/json' });
+    if (options.origin) {
+      const parsed = new URL(options.origin);
+      if (parsed.origin !== options.origin || parsed.username || parsed.password || !['http:', 'https:'].includes(parsed.protocol)) throw new Error('Use an exact website origin for visitor requests.');
+      headers.set('origin', options.origin);
+    }
+    if (options.sessionToken) {
+      if (!/^bkv_[A-Za-z0-9_-]{43}$/.test(options.sessionToken)) throw new Error('Use an opaque website visitor session; operator/provider credentials are not accepted.');
+      headers.set('x-backy-visitor-session', options.sessionToken);
+    }
+    if (options.requestId) headers.set('x-request-id', options.requestId);
+    const path = `/api/sites/${encodeURIComponent(this.requireSiteId())}/visitor-auth/${operation}`;
+    const response = await this.fetchImpl(`${this.baseUrl}${path}`, { method: operation === 'session' ? 'GET' : operation === 'profile' ? 'PATCH' : 'POST', headers, credentials: options.credentials ?? 'same-origin', cache: 'no-store', redirect: 'error', ...(input === undefined ? {} : { body: JSON.stringify(input) }) });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok || isBackyErrorEnvelope(payload)) {
+      if (isBackyErrorEnvelope(payload)) throw new BackyApiError(response.status, payload);
+      throw new Error(`Website account request failed with HTTP ${response.status}.`);
+    }
+    if (!payload || typeof payload !== 'object' || !('success' in payload) || payload.success !== true || !('data' in payload)) throw new Error('Invalid website account response.');
+    if (operation === 'email-change' || operation === 'confirm-email-change') {
+      const data = payload.data;
+      const flag = operation === 'email-change' ? 'confirmationRequired' : 'emailChanged';
+      if (response.status !== (operation === 'email-change' ? 202 : 200) || !data || typeof data !== 'object' || !(flag in data) || data[flag as keyof typeof data] !== true || !('signInRequired' in data) || data.signInRequired !== true || !('message' in data) || typeof data.message !== 'string') throw new Error('Invalid website email-change response.');
+    }
+    return payload as T;
   }
 
   private requireSiteId(): string {
@@ -19731,6 +20294,7 @@ export class BackyClient {
     });
     headers.set("x-request-id", options.requestId ?? this.requestIdFactory());
     const isFormDataBody = isBackyFormData(options.body);
+    if (isFormDataBody) headers.delete('content-type');
     if (
       options.body !== undefined &&
       !isFormDataBody &&
@@ -19819,6 +20383,7 @@ export class BackyClient {
       headers.set("if-none-match", options.ifNoneMatch);
     }
     const isFormDataBody = isBackyFormData(options.body);
+    if (isFormDataBody) headers.delete('content-type');
     if (
       options.body !== undefined &&
       !isFormDataBody &&
@@ -19833,6 +20398,9 @@ export class BackyClient {
       headers,
       ...(credentials ? { credentials } : {}),
       body: backyRequestBody(options.body),
+      // Backy remains the authority for publication and withdrawal. Conditional
+      // helpers still send explicit ETags, but must reach the server to validate.
+      cache: "no-store",
     });
 
     if (response.status === 304) {
@@ -19959,3 +20527,19 @@ function extractResponseMeta(response: Response): BackyResponseMeta {
       response.headers.get("x-backy-transform-quality") || undefined,
   };
 }
+
+export type BackyAdminCommerceOrderQuoteInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderQuoteRequest;
+export type BackyAdminCommerceOrderTrackingInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderTrackingRequest;
+export type BackyAdminCommerceOrderProviderRefundInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderProviderRefundRequest;
+export type BackyAdminCommerceOrderFulfillmentInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderFulfillmentRequest;
+export type BackyAdminCommerceOrderShippingLabelInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderShippingLabelRequest;
+export type BackyAdminCommerceOrderShippingLabelVoidInput = import("./generated-contract-types").GeneratedBackyOpenApiAdminCommerceOrderShippingLabelVoidRequest;
+
+export type BackyAdminCustomFrontendStarterResponse = GeneratedBackyOpenApiAdminCustomFrontendStarterEnvelope;
+export type BackyAdminCustomFrontendConnectionResponse = GeneratedBackyOpenApiAdminCustomFrontendConnectionEnvelope;
+export type BackyAdminCustomFrontendConnectionInput = GeneratedBackyOpenApiAdminCustomFrontendConnectionRequest;
+
+export type BackyAdminMediaStorageRecoveryResponse = GeneratedBackyOpenApiAdminMediaStorageRecoveryListEnvelope;
+export type BackyAdminMediaStorageRecoveryRetryResponse = GeneratedBackyOpenApiAdminMediaStorageRecoveryRetryEnvelope;
+
+export { createBackyMediaUploadSessionsClient } from './media-upload-sessions';

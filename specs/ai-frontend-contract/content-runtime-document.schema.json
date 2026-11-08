@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://backy.dev/schemas/ai-frontend-contract/content-runtime-document.schema.json",
+  "title": "Backy response-only runtime content document",
+  "description": "Not valid for saving. Equal known editable maps may reference the full response map. All other canonical fields are retained.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {
+      "const": "backy.content.runtime.v1"
+    },
+    "id": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/id"
+    },
+    "kind": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/kind"
+    },
+    "title": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/title"
+    },
+    "slug": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/slug"
+    },
+    "locale": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/locale"
+    },
+    "status": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/status"
+    },
+    "version": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/version"
+    },
+    "elements": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/elements"
+    },
+    "themeTokenRefs": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/themeTokenRefs"
+    },
+    "assets": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/assets"
+    },
+    "interactions": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/interactions"
+    },
+    "seo": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/seo"
+    },
+    "dataBindings": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/dataBindings"
+    },
+    "editableMap": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/editableMap"
+    },
+    "metadata": {
+      "$ref": "content-payload.schema.json#/$defs/contentDocument/properties/metadata"
+    },
+    "editableMapRef": {
+      "const": "#/data/editableMap"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "kind",
+    "version",
+    "elements"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "editableMap"
+      ],
+      "not": {
+        "required": [
+          "editableMapRef"
+        ]
+      }
+    },
+    {
+      "required": [
+        "editableMapRef"
+      ],
+      "not": {
+        "required": [
+          "editableMap"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { createBackyClient, BackyApiError } from '../dist/index.js';
+const calls=[];let status=200;
+const client=createBackyClient({baseUrl:'https://backy.example',siteId:'site/a',fetch:async(input,init)=>{calls.push({url:new URL(input),init});return Response.json(status===200?{success:true,requestId:'member-management-fixture',data:{siteId:'site/a',member:{id:'member/a',siteId:'site/a',status:'active'},revokedSessions:1,revokedRecoveryChallenges:1,retention:{erasure:false}}}:{success:false,requestId:'member-management-failure',error:{code:'VISITOR_MEMBER_REMOVED',message:'Removed membership cannot reactivate.'}},{status});}});
+const options={adminSession:'isolated-operator-session',credentials:'include',requestId:'member-management-fixture'};
+await client.listAdminVisitorMembers({limit:50,offset:100,status:'removed',search:'reader name'},options);
+await client.getAdminVisitorMember('member/a',options);
+await client.updateAdminVisitorMember('member/a',{displayName:'Updated visitor',status:'suspended'},options);
+await client.revokeAdminVisitorMemberSessions('member/a',options);
+await client.removeAdminVisitorMemberAccess('member/a',{confirmRetention:true},options);
+assert.equal(calls.length,5);
+for(const call of calls){assert(call.url.pathname.startsWith('/api/admin/sites/site%2Fa/visitors'));assert.equal(call.init.headers.get('x-backy-admin-session'),options.adminSession);assert.equal(call.init.headers.get('x-backy-visitor-session'),null);assert.equal(call.init.headers.get('x-request-id'),options.requestId);assert.equal(call.init.credentials,'include');}
+assert.equal(calls[0].url.searchParams.get('offset'),'100');assert.equal(calls[0].url.searchParams.get('status'),'removed');assert.equal(calls[0].url.searchParams.get('search'),'reader name');
+assert.equal(calls[1].url.pathname,'/api/admin/sites/site%2Fa/visitors/member%2Fa');
+assert.equal(calls[2].init.method,'PATCH');assert.deepEqual(JSON.parse(calls[2].init.body),{displayName:'Updated visitor',status:'suspended'});
+assert(calls[3].url.pathname.endsWith('/member%2Fa/revoke-sessions'));assert.equal(calls[3].init.method,'POST');assert.deepEqual(JSON.parse(calls[3].init.body),{});
+assert.equal(calls[4].init.method,'DELETE');assert.deepEqual(JSON.parse(calls[4].init.body),{confirmRetention:true});
+assert.throws(()=>client.removeAdminVisitorMemberAccess('member/a',{confirmRetention:false},options),/Review retained/);assert.equal(calls.length,5);
+status=409;await assert.rejects(client.updateAdminVisitorMember('member/a',{status:'active'},options),error=>error instanceof BackyApiError&&error.code==='VISITOR_MEMBER_REMOVED'&&error.status===409);assert.equal(calls.length,6,'No automatic retry may reactivate a removed member.');
+console.log('SDK visitor management passed: five encoded operator-only routes, complete pagination parameters, exact profile/revoke/confirmed-remove transport and typed409 without retries. Fetch fixtures; no live credentials.');

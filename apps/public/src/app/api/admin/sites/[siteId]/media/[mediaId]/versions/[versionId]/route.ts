@@ -1,3 +1,6 @@
+import { withMediaStorageMutation } from '@/lib/mediaStorageMutation';
+import { mediaStorageRetirementFiles, mediaStorageVersionRetirementFiles, mediaStorageRecoveryErrorResponse, withJournaledMediaStorageMutation } from '@/lib/mediaStorageRecovery';
+import { readCompleteMediaInventory } from '@/lib/mediaInventory';
 /**
  * Admin media retained-version endpoint.
  *
@@ -109,7 +112,7 @@ const textFromBody = (
     : null;
 };
 
-const retainedMetadataVersionId = (version: MediaVersion): string | null =>
+const retainedMetadataVersionId = (version: MediaVersion | RetainedVersion): string | null =>
   isRecord(version.metadata) &&
   typeof version.metadata.retainedMetadataVersionId === "string"
     ? version.metadata.retainedMetadataVersionId
@@ -126,7 +129,6 @@ const removeVersionFromMetadata = (
   );
 
   return {
-    ...(metadata || {}),
     replacementVersions: nextVersions,
     replacementCount: nextVersions.length,
   };
@@ -147,7 +149,6 @@ const prependVersionInMetadata = (
   );
 
   return {
-    ...(metadata || {}),
     replacementVersions: nextVersions,
     replacementCount: nextVersions.length,
   };
@@ -287,36 +288,8 @@ const buildCurrentVersion = (
   restoredFromVersionId: input.restoredFromVersionId,
 });
 
-const deleteStoredVersionFile = async (
-  siteId: string,
-  version: RetainedVersion | MediaVersion,
-) => {
-  const storagePath = versionStoragePath(siteId, version);
-  if (!storagePath) {
-    return;
-  }
-
-  try {
-    const storage = await getMediaStorageAdapter();
-    await storage.delete(storagePath);
-  } catch {
-    // Missing retained files should not block catalog cleanup.
-  }
-};
-
-const listRepositoryVersions = async (
-  repositories: BackyRepositories,
-  siteId: string,
-  mediaId: string,
-) =>
-  (
-    await repositories.media.listVersions({
-      siteId,
-      mediaId,
-      limit: 200,
-      offset: 0,
-    })
-  ).items;
+const listRepositoryVersions = (repositories: BackyRepositories, siteId: string, mediaId: string) =>
+  readCompleteMediaInventory(siteId, pagination => repositories.media.listVersions({ siteId, mediaId, ...pagination }));
 
 const mediaVersionAssetWebhookSnapshot = (
   media: MediaItem,
@@ -422,530 +395,64 @@ const deliverMediaVersionWebhook = async (params: {
   });
 };
 
-export async function POST(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get("x-request-id") || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, {
-    permission: "media.edit",
-  });
-  if (access instanceof NextResponse) {
-    return access;
-  }
-
+async function mutateVersion(request: NextRequest, { params }: RouteParams, action: 'restore' | 'delete') {
+  const requestId = request.headers.get('x-request-id') || makeRequestId();
+  const access = await requireAdminAccess(request, requestId, { permission: action === 'restore' ? 'media.edit' : 'media.delete' });
+  if (access instanceof NextResponse) return access;
   try {
     const { siteId, mediaId, versionId } = await params;
-    const body = await parseJsonBody(request);
-    const restoredAt = new Date().toISOString();
-    const restoredBy = textFromBody(body, "restoredBy") || "admin";
-    const reason =
-      textFromBody(body, "reason") || "Restored retained media version";
-
-    if (!shouldUseDemoStoreFallback()) {
-      const repositories = await getRequiredDatabaseRepositories();
-      const site =
-        (await repositories.sites.getById(siteId)) ||
-        (await repositories.sites.getBySlug(siteId));
-
-      if (!site) {
-        return errorResponse(
-          404,
-          "SITE_NOT_FOUND",
-          "Site not found",
-          requestId,
-        );
-      }
-
-      const media = await repositories.media.getById(site.id, mediaId);
-      if (!media) {
-        return errorResponse(
-          404,
-          "MEDIA_NOT_FOUND",
-          "Media item not found",
-          requestId,
-        );
-      }
-
-      const versions = await listRepositoryVersions(
-        repositories,
-        site.id,
-        mediaId,
-      );
-      const version = versions.find((item) => item.id === versionId);
-      if (!version) {
-        return errorResponse(
-          404,
-          "MEDIA_VERSION_NOT_FOUND",
-          "Media version not found",
-          requestId,
-        );
-      }
-
-      const restoredVersion = restorableVersionFromRecord(
-        site.id,
-        media,
-        version,
-      );
-      if (!restoredVersion) {
-        return errorResponse(
-          409,
-          "MEDIA_VERSION_NOT_RESTORABLE",
-          "Media version is missing required file metadata",
-          requestId,
-        );
-      }
-
-      const retainedCurrentVersion = buildCurrentVersion(site.id, media, {
-        restoredAt,
-        restoredBy,
-        reason,
-        restoredFromVersionId: version.id,
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const site = repositories ? (await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId)) : getSiteByIdOrSlug(siteId);
+    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    return await withMediaStorageMutation(repositories?.media || null, site.id, requestId, async () => {
+      const media = repositories ? await repositories.media.getById(site.id, mediaId) : getMediaById(site.id, mediaId);
+      if (!media) return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+      const versions = repositories ? await listRepositoryVersions(repositories, site.id, mediaId) : replacementVersionsFromMetadata(media.metadata);
+      const version = versions.find(item => item.id === versionId);
+      if (!version) return errorResponse(404, 'MEDIA_VERSION_NOT_FOUND', 'Media version not found', requestId);
+      const body = action === 'restore' ? await parseJsonBody(request) : {};
+      const restoredAt = new Date().toISOString(), restoredBy = access.session?.user.id || 'api-key';
+      const reason = textFromBody(body, 'reason') || 'Restored retained media version';
+      const restored = action === 'restore' ? restorableVersionFromRecord(site.id, media as MediaItem, version) : null;
+      if (action === 'restore' && !restored) return errorResponse(409, 'MEDIA_VERSION_NOT_RESTORABLE', 'Media version is missing required file metadata', requestId);
+      // Record every potentially retired path before changing logical references. The complete
+      // surviving inventory protects originals/history still referenced by this or another asset.
+      const files = action === 'restore' ? mediaStorageRetirementFiles(site.id, media as MediaItem) : mediaStorageVersionRetirementFiles(site.id, version);
+      return withJournaledMediaStorageMutation({ siteId: site.id, mediaId, operation: action === 'restore' ? 'version-restore' : 'version-delete', requestId, files }, repositories, async () => {
+        let retainedVersion: RetainedVersion | MediaVersion | null = null;
+        let metadata: MediaItem["metadata"] = removeVersionFromMetadata(media.metadata, [versionId, retainedMetadataVersionId(version) || '']);
+        let updated: MediaItem | null;
+        const completionWarnings: string[] = [];
+        if (action === 'restore' && restored) {
+          const current = buildCurrentVersion(site.id, media as MediaItem, { restoredAt, restoredBy, reason, restoredFromVersionId: versionId });
+          metadata = prependVersionInMetadata(media.metadata, current, [versionId, retainedMetadataVersionId(version) || '']);
+          metadata.generatedTransforms = null;
+          const replacement = { filename: restored.filename, originalName: restored.originalName, mimeType: restored.mimeType, type: restored.type, url: restored.url, thumbnailUrl: restored.thumbnailUrl, metadata: { ...metadata, storagePath: restored.storagePath, storageProvider: restored.storageProvider, binaryFingerprint: restored.binaryFingerprint || null, thumbnailUrl: restored.thumbnailUrl, lastRestoredAt: restoredAt, lastRestoredBy: restoredBy, restoredFromVersionId: versionId } };
+          updated = repositories ? (await repositories.media.update(site.id, mediaId, { ...replacement, size: restored.sizeBytes })).item : updateMediaItem(site.id, mediaId, { ...replacement, sizeBytes: restored.sizeBytes }) as MediaItem | null;
+          if (!updated) return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+          // The metadata history already retains current bytes. Extra version indexing can retry
+          // without invalidating the committed restore or deleting a still-live file.
+          retainedVersion = current;
+          if (repositories) try {
+            retainedVersion = (await repositories.media.createVersion({ siteId: site.id, mediaId, filename: media.filename, originalName: media.originalName, mimeType: media.mimeType, sizeBytes: media.sizeBytes, type: media.type, url: media.url, thumbnailUrl: media.thumbnailUrl, storagePath: storagePathFromMedia(site.id, media as MediaItem), storageProvider: storageProviderFromMetadata(media.metadata), replacedAt: restoredAt, replacedBy: restoredBy, reason, metadata: { source: 'media.version.restore', restoredFromVersionId: versionId, retainedMetadataVersionId: typeof current.id === 'string' ? current.id : null, binaryFingerprint: current.binaryFingerprint } })).item;
+          } catch { completionWarnings.push('MEDIA_VERSION_INDEX_PENDING'); }
+        } else {
+          updated = repositories ? (await repositories.media.update(site.id, mediaId, { metadata })).item : updateMediaItem(site.id, mediaId, { metadata }) as MediaItem | null;
+          if (!updated) return errorResponse(404, 'MEDIA_NOT_FOUND', 'Media item not found', requestId);
+        }
+        // Remove the dedicated retained-version reference after the main metadata commit.
+        if (repositories) try { await repositories.media.deleteVersion({ siteId: site.id, mediaId, versionId }); } catch { completionWarnings.push('MEDIA_VERSION_INDEX_PENDING'); }
+        try { await recordAdminAudit({ repositories, siteId: site.id, actorId: access.session?.user.id, entity: 'media', entityId: mediaId, action: action === 'restore' ? 'media.version.restore' : 'media.version.delete', before: media, after: updated, metadata: { versionId, reason, source: repositories ? 'database' : 'metadata' }, requestId }); } catch { completionWarnings.push('MEDIA_AUDIT_PENDING'); }
+        let cacheInvalidation: Awaited<ReturnType<typeof recordSiteCacheInvalidation>> | undefined;
+        if (repositories) try { cacheInvalidation = await recordSiteCacheInvalidation(repositories, { siteId: site.id, scope: 'media', entity: 'media', entityId: mediaId, reason: action === 'restore' ? 'media-version-restored' : 'media-version-deleted', requestId }); } catch { completionWarnings.push('MEDIA_CACHE_INVALIDATION_PENDING'); }
+        try { await deliverMediaVersionWebhook({ repositories, site: site as Site, action: action === 'restore' ? 'media.version.restored' : 'media.version.deleted', before: media as MediaItem, after: updated, version, ...(retainedVersion ? { retainedVersion } : {}), requestId, actor: access.session?.user.id, source: repositories ? 'database' : 'metadata' }); } catch { completionWarnings.push('MEDIA_WEBHOOK_DELIVERY_PENDING'); }
+        return NextResponse.json({ success: true, requestId, data: { ...(action === 'restore' ? { restored: true, restoredVersion: version, retainedVersion } : { deleted: true, version }), mediaId, versionId, source: repositories ? 'database' : 'metadata', media: updated, completionWarnings: [...new Set(completionWarnings)], cacheInvalidation } });
       });
-
-      await deleteGeneratedTransformFiles(media.metadata).catch(
-        () => undefined,
-      );
-      const retainedCurrentRecord = await repositories.media.createVersion({
-        siteId: site.id,
-        mediaId,
-        filename: media.filename,
-        originalName: media.originalName,
-        mimeType: media.mimeType,
-        sizeBytes: media.sizeBytes,
-        type: media.type,
-        url: media.url,
-        thumbnailUrl: media.thumbnailUrl,
-        storagePath: storagePathFromMedia(site.id, media),
-        storageProvider: storageProviderFromMetadata(media.metadata),
-        replacedAt: restoredAt,
-        replacedBy: restoredBy,
-        reason,
-        metadata: {
-          source: "media.version.restore",
-          restoredFromVersionId: version.id,
-          retainedMetadataVersionId:
-            typeof retainedCurrentVersion.id === "string"
-              ? retainedCurrentVersion.id
-              : null,
-          binaryFingerprint: retainedCurrentVersion.binaryFingerprint,
-        },
-      });
-      await repositories.media.deleteVersion({
-        siteId: site.id,
-        mediaId,
-        versionId,
-      });
-      const metadata = prependVersionInMetadata(
-        media.metadata,
-        retainedCurrentVersion,
-        [versionId, retainedMetadataVersionId(version) || ""],
-      );
-      delete metadata.generatedTransforms;
-      const updatedMedia = await repositories.media.update(site.id, mediaId, {
-        filename: restoredVersion.filename,
-        originalName: restoredVersion.originalName,
-        mimeType: restoredVersion.mimeType,
-        size: restoredVersion.sizeBytes,
-        type: restoredVersion.type,
-        url: restoredVersion.url,
-        thumbnailUrl: restoredVersion.thumbnailUrl,
-        metadata: {
-          ...metadata,
-          storagePath: restoredVersion.storagePath,
-          storageProvider: restoredVersion.storageProvider,
-          binaryFingerprint: restoredVersion.binaryFingerprint || null,
-          thumbnailUrl: restoredVersion.thumbnailUrl,
-          lastRestoredAt: restoredAt,
-          lastRestoredBy: restoredBy,
-          restoredFromVersionId: version.id,
-        },
-      });
-
-      await recordAdminAudit({
-        repositories,
-        siteId: site.id,
-        entity: "media",
-        entityId: media.id,
-        action: "media.version.restore",
-        before: media,
-        after: updatedMedia.item,
-        metadata: {
-          restoredFilename: restoredVersion.originalName,
-          retainedFilename: media.originalName || media.filename,
-          restoredVersionId: version.id,
-          retainedVersionId: retainedCurrentRecord.item.id,
-          reason,
-          source: "database",
-        },
-        requestId,
-      });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
-        repositories,
-        {
-          siteId: site.id,
-          scope: "media",
-          entity: "media",
-          entityId: media.id,
-          reason: "media-version-restored",
-          requestId,
-        },
-      );
-      await deliverMediaVersionWebhook({
-        repositories,
-        site,
-        action: "media.version.restored",
-        before: media,
-        after: updatedMedia.item,
-        version,
-        retainedVersion: retainedCurrentRecord.item,
-        requestId,
-        actor: access.session?.user.id,
-        source: "database",
-      });
-
-      return NextResponse.json({
-        success: true,
-        requestId,
-        data: {
-          restored: true,
-          mediaId,
-          versionId,
-          source: "database",
-          media: updatedMedia.item,
-          restoredVersion: version,
-          retainedVersion: retainedCurrentRecord.item,
-          cacheInvalidation,
-        },
-      });
-    }
-
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
-    }
-
-    const media = getMediaById(site.id, mediaId);
-    if (!media) {
-      return errorResponse(
-        404,
-        "MEDIA_NOT_FOUND",
-        "Media item not found",
-        requestId,
-      );
-    }
-
-    const versions = replacementVersionsFromMetadata(media.metadata);
-    const version = versions.find((item) => item.id === versionId);
-    if (!version) {
-      return errorResponse(
-        404,
-        "MEDIA_VERSION_NOT_FOUND",
-        "Media version not found",
-        requestId,
-      );
-    }
-
-    const restoredVersion = restorableVersionFromRecord(
-      site.id,
-      media,
-      version,
-    );
-    if (!restoredVersion) {
-      return errorResponse(
-        409,
-        "MEDIA_VERSION_NOT_RESTORABLE",
-        "Media version is missing required file metadata",
-        requestId,
-      );
-    }
-
-    const retainedCurrentVersion = buildCurrentVersion(site.id, media, {
-      restoredAt,
-      restoredBy,
-      reason,
-      restoredFromVersionId: versionId,
-    });
-    await deleteGeneratedTransformFiles(media.metadata).catch(() => undefined);
-    const metadata = prependVersionInMetadata(
-      media.metadata,
-      retainedCurrentVersion,
-      [versionId],
-    );
-    delete metadata.generatedTransforms;
-    const updated = updateMediaItem(site.id, mediaId, {
-      filename: restoredVersion.filename,
-      originalName: restoredVersion.originalName,
-      mimeType: restoredVersion.mimeType,
-      sizeBytes: restoredVersion.sizeBytes,
-      type: restoredVersion.type,
-      url: restoredVersion.url,
-      thumbnailUrl: restoredVersion.thumbnailUrl,
-      metadata: {
-        ...metadata,
-        storagePath: restoredVersion.storagePath,
-        storageProvider: restoredVersion.storageProvider,
-        binaryFingerprint: restoredVersion.binaryFingerprint || null,
-        thumbnailUrl: restoredVersion.thumbnailUrl,
-        lastRestoredAt: restoredAt,
-        lastRestoredBy: restoredBy,
-        restoredFromVersionId: versionId,
-      },
-    });
-
-    await recordAdminAudit({
-      siteId: site.id,
-      entity: "media",
-      entityId: media.id,
-      action: "media.version.restore",
-      before: media,
-      after: updated,
-      metadata: {
-        restoredFilename: restoredVersion.originalName,
-        retainedFilename: media.originalName || media.filename,
-        restoredVersionId: versionId,
-        retainedVersionId:
-          typeof retainedCurrentVersion.id === "string"
-            ? retainedCurrentVersion.id
-            : null,
-        reason,
-        source: "metadata",
-      },
-      requestId,
-    });
-    await deliverMediaVersionWebhook({
-      site: site as unknown as Site,
-      action: "media.version.restored",
-      before: media,
-      after: updated,
-      version,
-      retainedVersion: retainedCurrentVersion,
-      requestId,
-      actor: access.session?.user.id,
-      source: "metadata",
-    });
-
-    return NextResponse.json({
-      success: true,
-      requestId,
-      data: {
-        restored: true,
-        mediaId,
-        versionId,
-        source: "metadata",
-        media: updated,
-        restoredVersion: version,
-        retainedVersion: retainedCurrentVersion,
-      },
     });
   } catch (error) {
-    console.error("Admin media retained-version restore API error:", error);
-    return errorResponse(
-      500,
-      "INTERNAL_SERVER_ERROR",
-      "Internal server error",
-      requestId,
-    );
+    const response = mediaStorageRecoveryErrorResponse(error, requestId); if (response) return response;
+    return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
 }
-
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
-  const requestId = request.headers.get("x-request-id") || makeRequestId();
-  const access = await requireAdminAccess(request, requestId, {
-    permission: "media.delete",
-  });
-  if (access instanceof NextResponse) {
-    return access;
-  }
-
-  try {
-    const { siteId, mediaId, versionId } = await params;
-
-    if (!shouldUseDemoStoreFallback()) {
-      const repositories = await getRequiredDatabaseRepositories();
-      const site =
-        (await repositories.sites.getById(siteId)) ||
-        (await repositories.sites.getBySlug(siteId));
-
-      if (!site) {
-        return errorResponse(
-          404,
-          "SITE_NOT_FOUND",
-          "Site not found",
-          requestId,
-        );
-      }
-
-      const media = await repositories.media.getById(site.id, mediaId);
-      if (!media) {
-        return errorResponse(
-          404,
-          "MEDIA_NOT_FOUND",
-          "Media item not found",
-          requestId,
-        );
-      }
-
-      const versions = await listRepositoryVersions(
-        repositories,
-        site.id,
-        mediaId,
-      );
-      const version = versions.find((item) => item.id === versionId);
-      if (!version) {
-        return errorResponse(
-          404,
-          "MEDIA_VERSION_NOT_FOUND",
-          "Media version not found",
-          requestId,
-        );
-      }
-
-      await deleteStoredVersionFile(site.id, version);
-      await repositories.media.deleteVersion({
-        siteId: site.id,
-        mediaId,
-        versionId,
-      });
-      const updatedMedia = await repositories.media.update(site.id, mediaId, {
-        metadata: removeVersionFromMetadata(media.metadata, [
-          versionId,
-          retainedMetadataVersionId(version) || "",
-        ]),
-      });
-
-      await recordAdminAudit({
-        repositories,
-        siteId: site.id,
-        entity: "media",
-        entityId: media.id,
-        action: "media.version.delete",
-        before: version,
-        after: updatedMedia.item,
-        metadata: {
-          filename: version.originalName || version.filename,
-          sizeBytes: version.sizeBytes,
-          storagePath: versionStoragePath(site.id, version),
-          source: "database",
-        },
-        requestId,
-      });
-      const cacheInvalidation = await recordSiteCacheInvalidation(
-        repositories,
-        {
-          siteId: site.id,
-          scope: "media",
-          entity: "media",
-          entityId: media.id,
-          reason: "media-version-deleted",
-          requestId,
-        },
-      );
-      await deliverMediaVersionWebhook({
-        repositories,
-        site,
-        action: "media.version.deleted",
-        before: media,
-        after: updatedMedia.item,
-        version,
-        requestId,
-        actor: access.session?.user.id,
-        source: "database",
-      });
-
-      return NextResponse.json({
-        success: true,
-        requestId,
-        data: {
-          deleted: true,
-          mediaId,
-          versionId,
-          source: "database",
-          version,
-          media: updatedMedia.item,
-          cacheInvalidation,
-        },
-      });
-    }
-
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
-    }
-
-    const media = getMediaById(site.id, mediaId);
-    if (!media) {
-      return errorResponse(
-        404,
-        "MEDIA_NOT_FOUND",
-        "Media item not found",
-        requestId,
-      );
-    }
-
-    const versions = replacementVersionsFromMetadata(media.metadata);
-    const version = versions.find((item) => item.id === versionId);
-    if (!version) {
-      return errorResponse(
-        404,
-        "MEDIA_VERSION_NOT_FOUND",
-        "Media version not found",
-        requestId,
-      );
-    }
-
-    await deleteStoredVersionFile(site.id, version);
-    const updated = updateMediaItem(site.id, mediaId, {
-      metadata: removeVersionFromMetadata(media.metadata, [versionId]),
-    });
-
-    await recordAdminAudit({
-      siteId: site.id,
-      entity: "media",
-      entityId: media.id,
-      action: "media.version.delete",
-      before: version,
-      after: updated,
-      metadata: {
-        filename:
-          typeof version.originalName === "string"
-            ? version.originalName
-            : typeof version.filename === "string"
-              ? version.filename
-              : "Retained version",
-        sizeBytes: Number(version.sizeBytes) || 0,
-        storagePath: versionStoragePath(site.id, version),
-        source: "metadata",
-      },
-      requestId,
-    });
-    await deliverMediaVersionWebhook({
-      site: site as unknown as Site,
-      action: "media.version.deleted",
-      before: media,
-      after: updated,
-      version,
-      requestId,
-      actor: access.session?.user.id,
-      source: "metadata",
-    });
-
-    return NextResponse.json({
-      success: true,
-      requestId,
-      data: {
-        deleted: true,
-        mediaId,
-        versionId,
-        source: "metadata",
-        version,
-        media: updated,
-      },
-    });
-  } catch (error) {
-    console.error("Admin media retained-version delete API error:", error);
-    return errorResponse(
-      500,
-      "INTERNAL_SERVER_ERROR",
-      "Internal server error",
-      requestId,
-    );
-  }
-}
+export async function POST(request: NextRequest, context: RouteParams) { return mutateVersion(request, context, 'restore'); }
+export async function DELETE(request: NextRequest, context: RouteParams) { return mutateVersion(request, context, 'delete'); }

@@ -703,10 +703,10 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-preview-zoom={isPreview ?') &&
       source.includes('data-preview-scale-basis={isPreview ?') &&
       source.includes('data-preview-scroll-owner={isPreview ?') &&
-      source.includes('data-preview-content-bounds="expanded"') &&
+      source.includes('data-preview-content-bounds="selected-width-expanded-height"') &&
       source.includes('data-preview-zoom="canvas-scoped"') &&
-      source.includes('data-preview-scale-basis="expanded-content-bounds"'),
-    'Editor preview mode must keep zoom canvas-scoped, use expanded content bounds for scale, and expose scroll/scale policy metadata.',
+      source.includes('data-preview-scale-basis="selected-viewport-width-expanded-height"'),
+    'Editor preview mode must keep zoom canvas-scoped, fit selected viewport width with expanded content height, and expose scroll/scale policy metadata.',
   );
   assert(source.includes('data-testid="editor-zoom-controls"') && source.includes('data-overlay-hit-through="true"') && source.includes('data-zoom-keyshortcuts="zoom-in:Cmd/Ctrl+=;zoom-out:Cmd/Ctrl+-;fit:Cmd/Ctrl+0"'), 'Editor zoom controls must expose shortcut metadata and keep the floating shell hit-through for canvas selection');
   assert(source.includes('data-testid="editor-zoom-out"') && source.includes('aria-keyshortcuts="Control+- Meta+-"') && source.includes('data-testid="editor-zoom-in"') && source.includes('aria-keyshortcuts="Control+= Meta+="') && source.includes('data-testid="editor-zoom-fit"') && source.includes('aria-keyshortcuts="Control+0 Meta+0"'), 'Editor zoom buttons must expose keyboard shortcut metadata');
@@ -1025,7 +1025,7 @@ const assertCanvasEditorShortcutSource = () => {
       source.includes('data-keyboard-zoom-scope="editor-window"') &&
       source.includes('data-keyboard-zoom-capture-targets="window-document-root-body-shell-viewport"') &&
       source.includes('if (isZoomInShortcut || isZoomOutShortcut || isFitCanvasShortcut)') &&
-      source.includes('Preview zoom is canvas-scoped and uses the expanded rendered content bounds.') &&
+      source.includes('Preview zoom is canvas-scoped and fits the selected viewport width while scrolling the full content height.') &&
       smokeSource.includes('dispatchCanvasWheelZoom') &&
       smokeSource.includes('dispatchCdpCanvasWheelZoom') &&
       smokeSource.includes('dispatchEditorShellWheelZoom') &&
@@ -1133,6 +1133,13 @@ const assertCanvasEditorShortcutSource = () => {
   );
   assert(source.includes('data-testid="editor-inspector-selection-state-actions"') && source.includes('data-testid="editor-inspector-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-toggle-selection-lock"'), 'Editor multi-selection inspector must expose local selected-layer visibility and lock toggles');
   assert(source.includes('data-testid="editor-inspector-single-selection-state-actions"') && source.includes('data-testid="editor-inspector-single-toggle-selection-visibility"') && source.includes('data-testid="editor-inspector-single-toggle-selection-lock"'), 'Editor single-selection inspector must expose local selected-layer visibility and lock toggles');
+  assert(
+    source.includes("hidden={rightPanel === 'layers'}") &&
+      source.includes("'min-h-[32rem] flex-1 shrink-0 overflow-hidden'") &&
+      source.includes('data-testid="editor-inspector-content"') &&
+      source.includes('data-active-panel={rightPanel}'),
+    'Layers must reserve a scrollable tree viewport independently of the Properties selection card, including mobile override summaries and long expanded handoffs',
+  );
   assert(source.includes("selectedIds.length > 1 ? 'selected layers' : 'selected layer'"), 'Editor selected-layer toolbar actions must label multi-selection states');
   assert(source.includes('const canCopySelected = selectedEntries.length > 0 && selectedEntriesShareParent') && source.includes('const canCutSelected = selectedEntriesShareParent') && source.includes('const canDuplicateSelected = canCutSelected'), 'Editor clipboard toolbar actions must derive availability from the selected sibling layer scope');
   assert(source.includes('data-testid="editor-copy-selection"') && source.includes('data-testid="editor-cut-selection"') && source.includes('data-testid="editor-duplicate-selection"') && source.includes('`Copy ${selectedLayerActionLabel}'), 'Editor toolbar clipboard actions must expose stable ids and multi-selection labels');
@@ -1559,7 +1566,9 @@ const assertPropertyPanelColorControlsSource = () => {
       animationBuilderSource.includes('data-testid="editor-animation-action-status"') &&
       animationBuilderSource.includes('data-animation-type={config.type}') &&
       animationBuilderSource.includes('data-animation-trigger={config.trigger}') &&
-      animationBuilderSource.includes("data-animation-playing={isPlaying ? 'true' : 'false'}") &&
+      animationBuilderSource.includes('data-animation-preview="full-canvas"') &&
+      animationBuilderSource.includes('onClick={onPreview}') &&
+      !animationBuilderSource.includes('editor-animation-preview-box') &&
       animationBuilderSource.includes('data-action-state={animationBuilderAction.actionState}') &&
       animationBuilderSource.includes('data-action-status={animationBuilderAction.actionStatus}') &&
       animationBuilderSource.includes('aria-describedby={animationActionStatusId}') &&
@@ -1626,7 +1635,7 @@ const assertCanvasSelectionInfoSource = () => {
   assert(editorSource.includes('const handleCanvasSelectMany') && editorSource.includes('onSelectMany={handleCanvasSelectMany}'), 'Editor shell must wire canvas marquee bulk selection into selectedIds state');
   assert(source.includes("isPreview ? 'overflow-auto' : 'overflow-visible'") && source.includes('data-preview-scroll-policy={isPreview ?'), 'Editor preview canvas must remain scrollable when authored content extends beyond the selected viewport.');
   assert(editorSource.includes('const collectCanvasContentBounds = (') && editorSource.includes('const expandCanvasSizeToContent = (') && editorSource.includes('height: Math.max(canvasSize.height, Math.ceil(bounds.maxY + CANVAS_CONTENT_PADDING))'), 'Editor shell must calculate a content-aware canvas frame for authored elements beyond the selected viewport.');
-  assert(editorSource.includes('data-preview-content-bounds="expanded"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must expand to authored content bounds without rewriting the saved canvas size.');
+  assert(editorSource.includes('data-preview-content-bounds="selected-width-expanded-height"') && editorSource.includes('size={renderedCanvasSize}'), 'Editor preview surface must retain selected viewport width and expand content height without rewriting saved canvas size.');
   assert(editorSource.includes("data-preview-scale-model={isPreview ? 'fit-width-scroll-y'") && editorSource.includes('const nextScale = Math.min(1, widthScale);'), 'Editor preview must fit width while preserving vertical scroll for long pages.');
   assert(smokeSource.includes('BACKY_EDITOR_PREVIEW_SCROLL_SMOKE') && smokeSource.includes('testEditorPreviewScrollBounds'), 'Editor preview scrolling must have rendered smoke coverage.');
   assert(editorSource.includes('data-editor-content-bounds="expanded"') && editorSource.includes('width: renderedCanvasSize.width') && editorSource.includes('height: renderedCanvasSize.height'), 'Editor edit surface must also expand to authored content bounds so resized root sections do not clip later layers.');
@@ -1681,7 +1690,10 @@ const assertInteractiveRegistryVersionPinningSource = () => {
   assert(source.includes('interactiveComponentOptionValue'), 'Interactive registry selector must use a unique option value helper');
   assert(source.includes('encodeURIComponent(component.componentKey)') && source.includes('encodeURIComponent(component.version)'), 'Interactive registry selector must encode both component key and version');
   assert(source.includes('component.componentKey === element.props.componentKey') && source.includes('component.version === element.props.version'), 'Interactive registry selection must match the pinned component version');
-  assert(source.includes('version: component.version'), 'Interactive registry selection must persist the selected component version');
+  const registeredModel = fs.readFileSync(new URL('../src/components/editor/registeredComponentModel.ts', import.meta.url), 'utf8');
+  assert(source.includes("from './registeredComponentModel'") && source.includes('...registeredComponentProps(component, element.props)'), 'Interactive registry selection must apply the shared registered model to current authored props');
+  assert(registeredModel.includes('componentKey: component.componentKey, version: component.version') && registeredModel.includes('current.componentKey === component.componentKey && current.version === component.version'), 'Registered model must preserve exact selected key/version and distinguish same-version edits');
+  assert(registeredModel.includes('propsSchema: clone(') && registeredModel.includes('dataBindings: clone(') && registeredModel.includes('fallback,') && registeredModel.includes('renderCapabilities:'), 'Registered version selection must retain schema, binding, fallback and runtime metadata');
   assert(source.includes('/api/sites/{siteId}/interactive-components/{componentKey}/{version}/sandbox'), 'Interactive sandbox URL help must point authors to the Backy-owned runtime route');
   assert(source.includes("import { buildEditorActionStatus } from './editorActionStatus';"), 'Interactive registry inspector must use the shared editor action status helper');
   assert(source.includes("const interactiveActionStatusId = 'editor-interactive-action-status';"), 'Interactive registry inspector must expose a stable action status id');
@@ -1777,7 +1789,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes('data-testid="editor-component-category-rail"') &&
       source.includes("const ESSENTIALS_CATEGORY_ID = 'essentials'") &&
       source.includes("const SECTIONS_CATEGORY_ID = 'sections'") &&
-      source.includes("const SECTION_STARTER_ITEM_KEYS = ['hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];") &&
+      source.includes("const SECTION_STARTER_ITEM_KEYS = ['site-header-section', 'hero-section', 'feature-grid-section', 'latest-posts-section', 'section'];") &&
       source.includes('const sectionStarterItems = useMemo(() => {') &&
       source.includes('data-testid="editor-component-section-starter"') &&
       source.includes('data-testid="editor-component-section-starter-browse"') &&
@@ -1830,14 +1842,14 @@ const assertComponentLibraryEmptyStateSource = () => {
       source.includes("data-category-layout={shellMode === 'expanded' ? 'expanded-all-categories' : 'primary-plus-collapsed-secondary'}") &&
       source.includes('data-testid="editor-component-list"') &&
       source.includes("data-component-list-density={viewMode === 'tiles' ? 'visual-tiles' : 'compact'}") &&
-      source.includes('data-component-preview-reserved-space="rail-footer"') &&
+      source.includes('data-component-preview-reserved-space="none"') &&
       source.includes('const componentPreviewVisible = Boolean(previewItem) && !draggingItemKey;') &&
       source.includes("'pb-3',") &&
       source.includes("data-component-preview-visible={componentPreviewVisible ? 'true' : 'false'}") &&
       source.includes('data-component-preview-hidden-while-dragging="true"') &&
       source.includes('{componentPreviewVisible && previewItem && (') &&
-      source.includes('pointer-events-none shrink-0 max-h-[min(12rem,38vh)]') &&
-      source.includes('data-component-preview-placement="rail-footer"') &&
+      source.includes('componentPreviewPosition') && source.includes('createPortal(<div style={position}') && source.includes('data-component-preview-stable-list="true"') &&
+      source.includes('data-component-preview-placement="beside-rail"') &&
       !source.includes('absolute inset-x-0 bottom-0 z-20 max-h-[min(12rem,38vh)]') &&
       source.includes("data-component-category-layout={viewMode === 'tiles' ? shellMode === 'expanded' ? 'wide-tile-grid' : 'tile-grid' : 'row-list'}") &&
       source.includes('data-testid={`editor-component-preview-tile-${itemDomKey}`}') &&
@@ -1865,7 +1877,7 @@ const assertComponentLibraryEmptyStateSource = () => {
       smokeSource.includes('lastAddHitTarget') &&
       smokeSource.includes('needsReusableSectionFixture') &&
       source.includes('const handleKeyboardAdd = (event: KeyboardEvent<HTMLDivElement>) =>') &&
-      source.includes("'inline-flex min-h-8 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors"),
+      source.includes("'inline-flex min-h-11 min-w-0 items-center justify-between gap-1 rounded-md border px-2 py-2 text-xs font-medium transition-colors"),
     'Editor component library category filters must stay compact, primary-first, secondary-collapsed, keyboard-addable, visible, scroll-reachable, memoized with result counts, and action-status observable',
   );
   assert(
@@ -1900,7 +1912,7 @@ const assertComponentLibraryEmptyStateSource = () => {
     'Programmatic createCanvasElement calls must preserve merged catalog props, styles, binding slots, and responsive defaults before explicit overrides',
   );
   assert(
-    catalogSource.includes('props: mergeUnknownRecord(cloneDefaultProps(item.defaultProps || {}), overrideProps) || {}') &&
+    catalogSource.includes('props: mergeUnknownRecord({ ...(item.id ? { componentPresetId: item.id } : {}), ...cloneDefaultProps(item.defaultProps || {}) }, overrideProps) || {}') &&
       catalogSource.includes('styles: mergeCssProperties(cloneDefaultStyles(item.defaultStyles), overrideStyles)') &&
       catalogSource.includes('responsive: mergeResponsiveDefaults(item.defaultResponsive, overrideResponsive)') &&
       catalogSource.includes('bindingSlots: overrideBindingSlots') &&
@@ -15122,10 +15134,10 @@ const testEditorPreviewScrollBounds = async (client) => {
   assert(initial?.ok, `Preview scroll smoke could not read preview nodes: ${JSON.stringify(initial)}`);
   assert(
     initial.previewZoom === 'canvas-scoped' &&
-      initial.scaleBasis === 'expanded-content-bounds' &&
+      initial.scaleBasis === 'selected-viewport-width-expanded-height' &&
       initial.scaleModel === 'fit-width-scroll-y' &&
       initial.scrollOwner === 'editor-canvas-viewport' &&
-      initial.surfaceContentBounds === 'expanded' &&
+      initial.surfaceContentBounds === 'selected-width-expanded-height' &&
       initial.surfaceScaleModel === 'fit-width-scroll-y' &&
       initial.canvasScrollPolicy === 'canvas-overflow-auto',
     `Preview scroll metadata is incomplete: ${JSON.stringify(initial)}`,
@@ -16998,16 +17010,11 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
       }
       : null;
     const previewClipped = Boolean(libraryRect && previewRect && (
-      previewRect.top < libraryRect.top - 1 ||
-      previewRect.right > libraryRect.right + 1 ||
-      previewRect.bottom > libraryRect.bottom + 1 ||
-      previewRect.left < libraryRect.left - 1
+      previewRect.top < -1 || previewRect.left < -1 ||
+      previewRect.right > window.innerWidth + 1 || previewRect.bottom > window.innerHeight + 1
     ));
-    const previewVisibleInRailFlow = Boolean(libraryRect && listRect && previewRect &&
-      previewRect.top >= listRect.bottom - 1 &&
-      previewRect.bottom <= libraryRect.bottom + 1 &&
-      previewRect.left >= libraryRect.left - 1 &&
-      previewRect.right <= libraryRect.right + 1);
+    const previewBesideRail = Boolean(libraryRect && previewRect &&
+      (previewRect.left >= libraryRect.right || previewRect.right <= libraryRect.left));
     const summary = document.querySelector('[data-testid="editor-component-library-summary"]');
     const actionStatus = document.querySelector('[data-testid="editor-component-library-action-status"]');
     const shellModeToggle = document.querySelector('[data-testid="editor-component-shell-mode-toggle"]');
@@ -17301,7 +17308,7 @@ const readComponentLibraryState = async (client, label, targetReusableSectionId 
         listRect: rectData(listRect),
         previewRect: rectData(previewRect),
         previewClipped,
-        previewVisibleInRailFlow,
+        previewBesideRail,
       },
       previewText: preview?.textContent || '',
       storedFavorites: (() => {
@@ -17897,7 +17904,7 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
       initial.viewMode === 'tiles' &&
       initial.viewModeStorageKey === 'backy.editor.componentLibrary.viewMode' &&
       initial.listDensity === 'visual-tiles' &&
-      initial.listPreviewReservedSpace === 'rail-footer' &&
+      initial.listPreviewReservedSpace === 'none' &&
       initial.summary.category === 'essentials' &&
       initial.summary.shellMode === 'compact' &&
       initial.summary.viewMode === 'tiles' &&
@@ -18239,12 +18246,14 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   await clickControlByTestId(client, 'editor-component-category-all');
   await sleep(150);
 
+  const beforePreview = await readComponentLibraryState(client, 'before hover preview');
   await hoverControlBySelector(client, '[data-component-library-item="divider"]');
   const dividerPreview = await readComponentLibraryState(client, 'divider preview');
   assert(dividerPreview.previewKey === 'divider', `Hovering divider did not show divider preview: ${JSON.stringify(dividerPreview)}`);
   assert(
-    dividerPreview.previewPlacement === 'rail-footer' &&
-      dividerPreview.previewGeometry.previewVisibleInRailFlow &&
+    dividerPreview.previewPlacement === 'beside-rail' &&
+      dividerPreview.previewGeometry.previewBesideRail &&
+      dividerPreview.previewGeometry.listRect.height === beforePreview.previewGeometry.listRect.height &&
       !dividerPreview.previewGeometry.previewClipped &&
       /Divider/.test(dividerPreview.previewText) &&
       /300 x 2/.test(dividerPreview.previewText),
@@ -18255,8 +18264,9 @@ const testComponentLibraryControls = async (client, targetReusableSectionId = ''
   const imagePreview = await readComponentLibraryState(client, 'image preview');
   assert(imagePreview.previewKey === 'image', `Hovering image did not update component preview: ${JSON.stringify(imagePreview)}`);
   assert(
-    imagePreview.previewPlacement === 'rail-footer' &&
-      imagePreview.previewGeometry.previewVisibleInRailFlow &&
+    imagePreview.previewPlacement === 'beside-rail' &&
+      imagePreview.previewGeometry.previewBesideRail &&
+      imagePreview.previewGeometry.listRect.height === beforePreview.previewGeometry.listRect.height &&
       !imagePreview.previewGeometry.previewClipped &&
       /Image/.test(imagePreview.previewText) &&
       /300 x 200/.test(imagePreview.previewText),
@@ -19217,7 +19227,7 @@ const testAnimationControls = async (client, pageId, elementId = 'smoke-heading'
       builderStatus: builder instanceof HTMLElement ? builder.getAttribute('data-action-status') || '' : '',
       builderType: builder instanceof HTMLElement ? builder.getAttribute('data-animation-type') || '' : '',
       builderTrigger: builder instanceof HTMLElement ? builder.getAttribute('data-animation-trigger') || '' : '',
-      builderPlaying: builder instanceof HTMLElement ? builder.getAttribute('data-animation-playing') || '' : '',
+      builderPreview: builder instanceof HTMLElement ? builder.getAttribute('data-animation-preview') || '' : '',
       statusText: status?.textContent || '',
       typeState: attr('editor-animation-type', 'data-action-state'),
       typeStatus: attr('editor-animation-type', 'data-action-status'),
@@ -19242,7 +19252,7 @@ const testAnimationControls = async (client, pageId, elementId = 'smoke-heading'
       /Slide In animation uses on scroll into view/i.test(actionMetadata.builderStatus) &&
       actionMetadata.builderType === expected.type &&
       actionMetadata.builderTrigger === expected.trigger &&
-      actionMetadata.builderPlaying === 'false' &&
+      actionMetadata.builderPreview === 'full-canvas' &&
       /Custom JSON is valid/i.test(actionMetadata.statusText) &&
       actionMetadata.typeState === 'selected' &&
       /Animation type Slide In selected/i.test(actionMetadata.typeStatus) &&
@@ -19262,25 +19272,14 @@ const testAnimationControls = async (client, pageId, elementId = 'smoke-heading'
   );
 
   await clickControlByTestId(client, 'editor-animation-preview');
-  let preview = null;
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    preview = await evaluate(client, `(() => {
-      const box = document.querySelector('[data-testid="editor-animation-preview-box"]');
-      if (!(box instanceof HTMLElement)) return { ok: false, reason: 'missing-preview-box' };
-      const style = window.getComputedStyle(box);
-      return {
-        ok: true,
-        opacity: style.opacity,
-        transform: style.transform,
-      };
-    })()`);
-    if (preview?.ok && Number(preview.opacity) >= 0.9) {
-      break;
-    }
-    await sleep(100);
-  }
-
-  assert(preview?.ok && Number(preview.opacity) >= 0.9, `Animation preview did not play: ${JSON.stringify(preview)}`);
+  const preview = await evaluate(client, `(() => {
+    const canvas = document.querySelector('[data-testid="editor-canvas"]');
+    const layer = [...document.querySelectorAll('[data-element-id]')].find(node => node.getAttribute('data-element-id') === ${JSON.stringify(elementId)});
+    const viewport = document.querySelector('[data-testid="editor-canvas-viewport"]');
+    return { actualCanvas: canvas?.getAttribute('data-preview-animation-runtime'), layerAnimation: JSON.parse(layer?.getAttribute('data-animation') || 'null'), scroller: viewport?.getAttribute('data-preview-scroll-owner'), text: layer?.textContent, genericSample: Boolean(document.querySelector('[data-testid="editor-animation-preview-box"]')) };
+  })()`);
+  assert(preview.actualCanvas === 'shared-gsap' && preview.scroller === 'editor-canvas-viewport' && !preview.genericSample && preview.layerAnimation?.type === expected.type && preview.layerAnimation?.scrollTrigger?.scrub === true, `Actual selected-layout motion preview unavailable: ${JSON.stringify(preview)}`);
+  await clickControlByTestId(client, 'editor-preview-toggle');
 
   await clickSave(client);
   const savedStatus = await waitForEditorMutationReady(client, 'after animation smoke save');

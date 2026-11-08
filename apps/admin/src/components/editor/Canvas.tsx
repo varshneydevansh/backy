@@ -14,6 +14,9 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import type { CSSProperties } from 'react';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { acquireAnimationHydration } from '../../../../public/src/lib/animationHydration';
 import { cn } from '@/lib/utils';
 import type { CanvasElement, CanvasSize, ComponentLibraryItem } from '@/types/editor';
 import {
@@ -22,10 +25,28 @@ import {
 } from '@/components/editor/editorCatalog';
 import {
   BACKY_CODE_HIGHLIGHT_THEMES,
+  isBackyDataFigureKey,
+  loadBackyPublicDataFigureRecords,
+  resolveBackyVideoSource,
   normalizeBackyCodeHighlightTheme,
   normalizeBackyCodeLanguage,
   tokenizeBackyCodeLine,
+  resolveBackyChildLayout,
+  isBackyFlowChild,
+  buildBackyCanvasElementGeometry,
+  buildBackyCanvasContentStyles,
+  buildBackyCanvasContentProps,
+  buildBackyFlowContainerStyle,
+  orderBackyFlowChildrenForRender,
+  reorderBackyFlowChildren,
+  backyFlowInsertionTarget,
+  resizeBackyFlowItem,
 } from '@backy-cms/core';
+import type { BackyDataFigureConfig, BackyDataFigureLoader, BackyChildLayout, BackyFlowRect } from '@backy-cms/core';
+import { DataFigure } from '@backy-cms/editor/data-figure';
+import { getAdminApiBase } from '@/lib/adminContentApi';
+import { loadBlogDataFigureCollections } from '@/lib/blogAuthoringDataFigure';
+import type { BackyDataFigureCollection } from '@backy-cms/core';
 import { RichTextBlock } from './blocks/RichTextBlock';
 import { ACTIVE_EDITOR_CONTENT_SYNC_EVENT, useActiveEditor } from './ActiveEditorContext';
 import {
@@ -1018,7 +1039,7 @@ const canAcceptNestedDrop = (elementType: CanvasElement['type']): boolean => {
 };
 
 const isTextEditableElement = (type: CanvasElement['type']): boolean => {
-  return type === 'text' || type === 'heading' || type === 'paragraph' || type === 'quote' || type === 'list';
+  return type === 'text' || type === 'heading' || type === 'paragraph' || type === 'quote' || type === 'list' || type === 'collapsible';
 };
 const normalizeEmbedUrl = (raw: unknown, allowedHostsInput?: unknown): string => {
   const source = sanitizeText(raw);
@@ -1605,6 +1626,8 @@ const normalizeCanvasElementType = (value: string): CanvasElement['type'] => {
 // ============================================
 
 interface CanvasProps {
+  /** Selected site for public-only collection figures. */
+  siteId?: string;
   /** Canvas elements to render */
   elements: CanvasElement[];
   /** Callback when elements change */
@@ -1666,6 +1689,7 @@ interface CanvasProps {
 const EDITOR_ACTIVATION_EVENT = 'backy-open-text-editor';
 
 type DragInteraction = {
+  flow?: { parentId: string; boxes: BackyFlowRect[]; axis: 'x' | 'y'; reverse: boolean };
   elementId: string;
   elementIds: string[];
   snapshots: DragSnapshot[];
@@ -1720,6 +1744,7 @@ const getCanvasDropKind = (dataTransfer: DataTransfer): CanvasDropKind => {
 };
 
 type ResizeInteraction = {
+  flow?: { width: number; height: number };
   elementId: string;
   elementIds: string[];
   snapshots: DragSnapshot[];
@@ -1867,6 +1892,7 @@ const hasTransformInteractionChanged = (
  * - Canvas resizing
  */
 export function Canvas({
+  siteId,
   elements,
   onElementsChange,
   selectedId,
@@ -1885,6 +1911,16 @@ export function Canvas({
   onMediaFilesDrop,
   onExternalMediaUrlDrop,
 }: CanvasProps) {
+  const [dataFigureCollections, setDataFigureCollections] = useState<BackyDataFigureCollection[]>([]);
+  useEffect(() => {
+    setDataFigureCollections([]);
+    if (!siteId) return;
+    const controller = new AbortController();
+    void loadBlogDataFigureCollections(getAdminApiBase().replace(/\/api\/admin$/, '/api'), siteId, controller.signal)
+      .then((choices) => { if (!controller.signal.aborted) setDataFigureCollections(choices); })
+      .catch(() => { /* The figure shows source failures; inline data remains available. */ });
+    return () => controller.abort();
+  }, [siteId]);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
@@ -1902,6 +1938,29 @@ export function Canvas({
   const safeViewportScale = Number.isFinite(viewportScale) && viewportScale > 0
     ? viewportScale
     : 1;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!isPreview || !canvas) return;
+    gsap.registerPlugin(ScrollTrigger);
+    // The editor scrolls its outer viewport, outside the scaled canvas surface.
+    const scroller = canvas.closest<HTMLElement>('[data-testid="editor-canvas-viewport"]')
+      || canvas.closest<HTMLElement>('[data-backy-animation-preview-scroller]') || undefined;
+    const release = acquireAnimationHydration({ root: canvas, engine: gsap, scroller });
+    let frame = 0;
+    const refresh = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        for (const trigger of ScrollTrigger.getAll()) {
+          if (trigger.trigger && canvas.contains(trigger.trigger)) trigger.refresh();
+        }
+      });
+    };
+    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(refresh);
+    resize?.observe(canvas); if (scroller) resize?.observe(scroller);
+    refresh();
+    return () => { cancelAnimationFrame(frame); resize?.disconnect(); release(); };
+  }, [isPreview, safeViewportScale]);
+
   const safeGridSize = normalizeGridSize(gridSize);
   const getMeasuredCanvasScale = useCallback((axis: CanvasAxis) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -2027,7 +2086,8 @@ export function Canvas({
     let attempts = 0;
     const maxAttempts = 18;
     const focusEditable = () => {
-      const host = canvasRef.current?.querySelector<HTMLElement>(
+      const workspace = Array.from(document.querySelectorAll<HTMLElement>('[data-backy-canvas-text-workspace]')).find((candidate) => candidate.dataset.elementId === elementId);
+      const host = workspace?.querySelector<HTMLElement>('[data-backy-text-editor]') || canvasRef.current?.querySelector<HTMLElement>(
         `[data-element-id="${elementId}"] [data-backy-text-editor][data-backy-text-editor-editable="true"]`
       );
 
@@ -2145,6 +2205,26 @@ export function Canvas({
 
     return nextHeight;
   }, [onSizeChange, safeGridSize, size, snapEnabled]);
+
+  const measureIntrinsicCanvasHeight = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || disabled || isPreview || !onSizeChange) return;
+    const origin = canvas.getBoundingClientRect();
+    const actualScale = origin.width / Math.max(size.width, 1) || 1;
+    const bottom = [...canvas.querySelectorAll<HTMLElement>('[data-backy-intrinsic-height="true"]')]
+      .reduce((maximum, node) => Math.max(maximum, (node.getBoundingClientRect().bottom - origin.top) / actualScale), 0);
+    // Percentage heights depend on the canvas and must not feed back into it.
+    if (bottom > size.height) maybeAutoExtendCanvas(bottom);
+  }, [disabled, isPreview, maybeAutoExtendCanvas, onSizeChange, size.height, size.width]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || disabled || isPreview || !onSizeChange) return;
+    measureIntrinsicCanvasHeight();
+    const observer = new ResizeObserver(measureIntrinsicCanvasHeight);
+    canvas.querySelectorAll<HTMLElement>('[data-backy-intrinsic-height="true"]').forEach(node => observer.observe(node));
+    return () => observer.disconnect();
+  }, [disabled, elements, isPreview, measureIntrinsicCanvasHeight, onSizeChange]);
 
   const startMarqueeSelection = useCallback((
     event: React.PointerEvent<Element> | React.MouseEvent<Element>,
@@ -2329,7 +2409,24 @@ export function Canvas({
 
       exitTextEditingForTransform();
 
+      const entry = findElementEntry(elementsRef.current, elementId);
+      const parent = entry?.parentId ? findElementById(elementsRef.current, entry.parentId) : undefined;
+      const parentLayout = parent ? resolveBackyChildLayout(parent) : 'free';
+      const flow = parent && isBackyFlowChild(clickedElement, parentLayout) ? {
+        parentId: parent.id,
+        boxes: (parent.children || []).filter(child => child.id !== elementId && !isCanvasElementHidden(child) && isBackyFlowChild(child, parentLayout))
+          .map((child, index) => ({ child, index })).sort((a, b) => (Number(a.child.styles?.order ?? a.child.props.order) || 0) - (Number(b.child.styles?.order ?? b.child.props.order) || 0) || a.index - b.index)
+          .flatMap(({ child }) => {
+            const host = [...(canvasRef.current?.querySelectorAll<HTMLElement>('[data-element-id]') || [])].find(node => node.getAttribute('data-element-id') === child.id);
+            if (!host) return [];
+            const rect = host.getBoundingClientRect();
+            return [{ id: child.id, left: rect.left, top: rect.top, width: rect.width, height: rect.height }];
+          }),
+        axis: (parentLayout === 'grid' || String(parent.styles?.flexDirection ?? parent.props.flexDirection ?? 'column').startsWith('row') ? 'x' : 'y') as 'x' | 'y',
+        reverse: String(parent.styles?.flexDirection ?? parent.props.flexDirection ?? '').endsWith('reverse'),
+      } : undefined;
       const nextDragState: DragInteraction = {
+        flow,
         elementId,
         elementIds: dragSnapshots.map((snapshot) => snapshot.id),
         snapshots: dragSnapshots,
@@ -2388,7 +2485,14 @@ export function Canvas({
         return;
       }
 
+      const entry = findElementEntry(elementsRef.current, elementId);
+      const parent = entry?.parentId ? findElementById(elementsRef.current, entry.parentId) : undefined;
+      const flowHost = parent && isBackyFlowChild(element, resolveBackyChildLayout(parent))
+        ? [...(canvasRef.current?.querySelectorAll<HTMLElement>('[data-element-id]') || [])].find(node => node.getAttribute('data-element-id') === elementId) : undefined;
+      const flowRect = flowHost?.getBoundingClientRect();
+
       const nextResizeState: ResizeInteraction = {
+        flow: flowRect ? { width: toCanvasDelta(flowRect.width), height: toCanvasDelta(flowRect.height, 'y') } : undefined,
         elementId,
         elementIds: resizeSnapshots.map((snapshot) => snapshot.id),
         snapshots: resizeSnapshots,
@@ -2413,7 +2517,7 @@ export function Canvas({
         e.currentTarget.setPointerCapture?.(e.pointerId);
       }
     },
-    [disabled, elements, exitTextEditingForTransform, isPreview, selectedIds, size.height, size.width]
+    [disabled, elements, exitTextEditingForTransform, isPreview, selectedIds, size.height, size.width, toCanvasDelta]
   );
 
   const applyGlobalElementMove = useCallback((event: CanvasInteractionInput) => {
@@ -2460,6 +2564,13 @@ export function Canvas({
       setAlignmentGuides([]);
       const deltaX = toCanvasDelta(event.clientX - activeResizeState.startX);
       const deltaY = toCanvasDelta(event.clientY - activeResizeState.startY, 'y');
+      if (activeResizeState.flow) {
+        if (deltaX === 0 && deltaY === 0) return;
+        const result = updateElementById(elementsRef.current, activeResizeState.elementId, element => resizeBackyFlowItem(element, activeResizeState.flow!, activeResizeState.handle, deltaX, deltaY, { preserveAspectRatio: event.shiftKey, fromCenter: event.altKey }));
+        elementsRef.current = result.elements;
+        onElementsChange(result.elements, { transient: true, selectedId: activeResizeState.elementId });
+        return;
+      }
       const resizeCanAutoExtendCanvas = activeResizeState.snapshots.every((snapshot) => snapshot.parentId === null);
       const affectsBottomEdge = activeResizeState.handle.includes('s') || event.altKey;
       const resizeBoundsHeight = resizeCanAutoExtendCanvas && affectsBottomEdge
@@ -2549,6 +2660,24 @@ export function Canvas({
     }
 
     if (!matchesInteractionInput(event, activeDragState)) {
+      return;
+    }
+
+    if (activeDragState.flow) {
+      if (Math.hypot(event.clientX - activeDragState.startX, event.clientY - activeDragState.startY) < 3) return;
+      const { parentId, boxes, axis, reverse } = activeDragState.flow;
+      const beforeId = backyFlowInsertionTarget(boxes, { x: event.clientX, y: event.clientY }, axis, reverse);
+      let changed = false;
+      const result = updateElementById(elementsRef.current, parentId, parent => {
+        const children = reorderBackyFlowChildren(parent.children || [], activeDragState.elementId, beforeId);
+        changed = children !== parent.children;
+        return children === parent.children ? parent : { ...parent, children };
+      });
+      if (changed && result.updated) {
+        elementsRef.current = result.elements;
+        onElementsChange(result.elements, { transient: true, selectedId: activeDragState.elementId });
+      }
+      setAlignmentGuides([]);
       return;
     }
 
@@ -2902,6 +3031,12 @@ export function Canvas({
     return nestedTarget.getAttribute('data-element-id');
   }, []);
 
+  const handleFitContentHeight = useCallback((elementId: string, height: number) => {
+    if (disabled || isPreview || !Number.isFinite(height) || height <= 0) return;
+    const next = updateElementById(elementsRef.current, elementId, (element) => ({ ...element, height: Math.ceil(height) }));
+    if (next.updated) onElementsChange(next.elements);
+  }, [disabled, isPreview, onElementsChange]);
+
   const handleElementPropsUpdate = useCallback(
     (elementId: string, updates: { [key: string]: unknown }) => {
       if (disabled || isPreview) {
@@ -3116,6 +3251,7 @@ export function Canvas({
         minWidth: size.width,
         minHeight: size.height,
       }}
+      data-preview-animation-runtime={isPreview ? 'shared-gsap' : undefined}
       data-preview-scroll-policy={isPreview ? 'canvas-overflow-auto' : undefined}
       data-canvas-auto-extend="root-transform-bottom"
       data-canvas-auto-extend-max-height={CANVAS_MAX_AUTO_HEIGHT}
@@ -3245,6 +3381,8 @@ export function Canvas({
       {elements.map((element) => (
           <CanvasElementComponent
             key={element.id}
+            siteId={siteId}
+            dataFigureCollections={dataFigureCollections}
             element={element}
             parentId={null}
             isSelected={element.id === selectedId || selectedIds.includes(element.id)}
@@ -3275,10 +3413,12 @@ export function Canvas({
             onToggleSelectElement={onToggleSelect}
             onUpdate={(updates) => handleElementPropsUpdate(element.id, updates)}
             onUpdateElement={handleElementPropsUpdate}
+            onFitContentHeight={handleFitContentHeight}
             onDrop={(event) => handleCanvasElementDrop(event, element.id)}
             isEditing={editingId === element.id}
+            editingId={editingId}
             onStopEditing={() => setEditingId(null)}
-            onDoubleClick={() => handleDoubleClick(element.id)}
+            onDoubleClick={(targetId) => handleDoubleClick(targetId || element.id)}
         />
       ))}
 
@@ -3326,7 +3466,7 @@ export function Canvas({
 // CANVAS ELEMENT COMPONENT
 // ============================================
 
-const buildAdminInteractiveSandboxPayload = (
+export const buildAdminInteractiveSandboxPayload = (
   element: CanvasElement,
   componentKey: string,
   version: string,
@@ -3348,6 +3488,7 @@ const buildAdminInteractiveSandboxPayload = (
     props,
     controls: props.controls,
     fallback,
+    dataBindings: Array.isArray(element.dataBindings) ? element.dataBindings : props.dataBindings && typeof props.dataBindings === 'object' ? props.dataBindings : {},
   };
 };
 
@@ -3424,9 +3565,14 @@ function AdminInteractiveSandboxPreview({
 
       const type = sanitizeText(event.data.type);
       if (type === 'backy.interactive-component.ready') {
+        postInitPayload();
+      }
+
+      // Import readiness and props edits do not prove the preview recovered.
+      if (type === 'backy.interactive-component.rendered'
+        && eventComponentKey === componentKey && eventVersion === version) {
         setStatus('ready');
         setMessage('Sandbox preview ready.');
-        postInitPayload();
       }
 
       if (type === 'backy.interactive-component.error') {
@@ -3473,8 +3619,11 @@ function AdminInteractiveSandboxPreview({
 }
 
 interface CanvasElementComponentProps {
+  siteId?: string;
+  dataFigureCollections?: BackyDataFigureCollection[];
   element: CanvasElement;
   parentId: string | null;
+  parentLayout?: BackyChildLayout;
   isSelected: boolean;
   selectedId: string | null;
   selectedIds: string[];
@@ -3487,16 +3636,21 @@ interface CanvasElementComponentProps {
   onSelectElement: (elementId: string) => void;
   onToggleSelectElement?: (elementId: string) => void;
   onUpdate: (updates: { [key: string]: unknown }) => void;
+  onFitContentHeight?: (elementId: string, height: number) => void;
   onUpdateElement: (elementId: string, updates: { [key: string]: unknown }) => void;
   onDrop?: (e: React.DragEvent, forcedParentId?: string) => void;
   isEditing: boolean;
+  editingId: string | null;
   onDoubleClick: (elementId?: string) => void;
   onStopEditing?: () => void;
 }
 
-function CanvasElementComponent({
+export function CanvasElementComponent({
+  siteId,
+  dataFigureCollections = [],
   element,
   parentId,
+  parentLayout = 'free',
   isSelected,
   selectedId,
   selectedIds,
@@ -3510,18 +3664,31 @@ function CanvasElementComponent({
   onToggleSelectElement,
   onUpdate,
   onUpdateElement,
+  onFitContentHeight,
   onDrop,
   isEditing,
+  editingId,
   onDoubleClick,
   onStopEditing,
   }: CanvasElementComponentProps) {
-  const p = element.props as Record<string, any>;
-  const sharedStyle = buildSharedElementStyle(element);
-  const childElements = element.children || [];
+  const p = buildBackyCanvasContentProps(element, parentLayout) as Record<string, any>;
+  const loadFigureRecords = useCallback<BackyDataFigureLoader>((collectionId, { signal, requestedFields }) => {
+    if (!siteId) return Promise.reject(new Error('This data source is unavailable.'));
+    return loadBackyPublicDataFigureRecords({
+      apiBaseUrl: getAdminApiBase().replace(/\/api\/admin$/, '/api'),
+      siteId,
+      collectionId,
+      signal,
+      requestedFields,
+    });
+  }, [siteId]);
+  const sharedStyle = buildSharedElementStyle({ ...element, props: p, styles: buildBackyCanvasContentStyles(element, parentLayout) as CSSProperties });
+  const childLayout = resolveBackyChildLayout(element);
+  const childElements = orderBackyFlowChildrenForRender(element.children || [], childLayout);
   const resolvedSelectedId = selectedId ?? null;
   const isHidden = isCanvasElementHidden(element);
   const isLocked = isCanvasElementLocked(element);
-  const isEditingEnabled = isEditing && !isPreview && !disabled;
+  const isEditingEnabled = isEditing && !isPreview && !disabled && !isLocked;
   const canReceiveNestedDrop = !disabled && !isLocked && canAcceptNestedDrop(element.type);
   const [isNestedDropActive, setIsNestedDropActive] = useState(false);
   const [formPreviewSubmitState, setFormPreviewSubmitState] = useState<FormPreviewSubmitState>({
@@ -3534,14 +3701,17 @@ function CanvasElementComponent({
       {childElements.map((child) => (
         <CanvasElementComponent
           key={child.id}
+          siteId={siteId}
+          dataFigureCollections={dataFigureCollections}
           element={child}
           parentId={element.id}
+          parentLayout={childLayout}
           isSelected={child.id === resolvedSelectedId || selectedIds.includes(child.id)}
           selectedId={resolvedSelectedId}
           selectedIds={selectedIds}
           draggingId={draggingId}
           isPreview={isPreview}
-          disabled={disabled}
+          disabled={disabled || isLocked}
           onDragStart={onDragStart}
           onResizeStart={onResizeStart}
           onClick={(event) => {
@@ -3556,9 +3726,11 @@ function CanvasElementComponent({
           onToggleSelectElement={onToggleSelectElement}
           onUpdate={(updates) => onUpdateElement(child.id, updates)}
           onUpdateElement={onUpdateElement}
+          onFitContentHeight={onFitContentHeight}
           onDrop={(event, forcedParentId) => onDrop?.(event, forcedParentId)}
-          isEditing={false}
-          onDoubleClick={() => onDoubleClick(child.id)}
+          isEditing={editingId === child.id}
+          editingId={editingId}
+          onDoubleClick={(targetId) => onDoubleClick(targetId || child.id)}
           onStopEditing={onStopEditing}
         />
       ))}
@@ -3702,6 +3874,12 @@ function CanvasElementComponent({
             }}
           >
             <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+              loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+              dataFigureCollections={dataFigureCollections}
               key={`text-${element.id}`}
               elementId={element.id}
               content={p.content}
@@ -3722,6 +3900,40 @@ function CanvasElementComponent({
           </div>
         );
 
+      case 'collapsible':
+        return (
+          <details
+            open={!isPreview || p.defaultOpen === true}
+            data-backy-collapsible={element.id}
+            style={{ ...sharedStyle, width: '100%', minHeight: '100%', boxSizing: 'border-box' }}
+          >
+            <summary
+              onClick={(event) => { if (!isPreview) event.preventDefault(); }}
+              style={{ cursor: isPreview ? 'pointer' : 'default', fontWeight: 600, minHeight: 28 }}
+            >{typeof p.title === 'string' ? p.title : 'Details'}</summary>
+            <div
+              style={{ paddingTop: 12 }}
+              onDoubleClick={() => onDoubleClick()}
+              onMouseDown={(event) => { if (isEditingEnabled) event.stopPropagation(); }}
+            >
+              <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+                loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+                dataFigureCollections={dataFigureCollections}
+                elementId={element.id}
+                content={p.content}
+                onChange={(content) => onUpdate({ content })}
+                isEditable={isEditingEnabled}
+                placeholder="Add detail content..."
+                style={{ ...sharedStyle, background: 'transparent', padding: 0, border: 0 }}
+              />
+            </div>
+          </details>
+        );
+
       case 'heading':
       return (
         <div
@@ -3732,6 +3944,12 @@ function CanvasElementComponent({
           }}
         >
             <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+              loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+              dataFigureCollections={dataFigureCollections}
             key={`heading-${element.id}`}
             elementId={element.id}
             content={p.content}
@@ -3879,6 +4097,7 @@ function CanvasElementComponent({
               flexDirection: isVertical ? 'column' : 'row',
               gap: toCssLength(p.gap ?? 18),
               padding: toCssLength(p.padding ?? 0),
+              ...buildBackyFlowContainerStyle(element) as CSSProperties,
             }}
           >
             {childElements.length > 0 ? renderChildren() : (
@@ -3939,6 +4158,7 @@ function CanvasElementComponent({
               borderRadius: sharedStyle.borderRadius ?? toCssLength(p.borderRadius ?? 0),
               border: sharedStyle.border ?? 'none',
               position: 'relative',
+              ...buildBackyFlowContainerStyle(element) as CSSProperties,
             }}
           >
             {renderChildren()}
@@ -3961,7 +4181,11 @@ function CanvasElementComponent({
         );
 
       case 'video': {
-        const videoSrc = resolveElementMediaSource(p as Record<string, unknown>, 'src');
+        const source = resolveBackyVideoSource(resolveElementMediaSource(p as Record<string, unknown>, 'src'), {
+          controls: getBooleanWithFallback(p.controls, true), autoplay: isPreview && getBooleanWithFallback(p.autoplay ?? p.autoPlay, false),
+          muted: getBoolean(p.muted), loop: getBoolean(p.loop), playsInline: getBooleanWithFallback(p.playsInline, true),
+        });
+        const videoSrc = source.src;
         const posterSrc = resolveMediaSource(p.poster);
 
         if (!videoSrc) {
@@ -3981,10 +4205,11 @@ function CanvasElementComponent({
                 fontSize: 14,
               }}
             >
-              🎬 Set video URL in properties
+              {source.kind === 'empty' || source.kind === 'invalid' ? source.message : 'Set video URL in properties'}
             </div>
           );
         }
+        if (source.kind !== 'native') return <iframe src={source.src} title={sanitizeText(p.title) || 'Video player'} loading="lazy" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen data-backy-video-provider={source.kind} style={{ ...sharedStyle, width: '100%', height: '100%', border: 0, pointerEvents: isPreview ? 'auto' : 'none' }} />;
       return (
         <video
           src={videoSrc}
@@ -4225,6 +4450,18 @@ function CanvasElementComponent({
 
       case 'interactiveFigure':
       case 'codeComponent': {
+        if (element.type === 'interactiveFigure' && isBackyDataFigureKey(p.componentKey)
+          && (Array.isArray(p.records) || p.source)) {
+          return (
+            <div style={{ ...sharedStyle, width: '100%', height: '100%', overflow: 'auto' }}>
+              <DataFigure
+                className={isPreview ? undefined : 'pointer-events-none'}
+                config={p as BackyDataFigureConfig}
+                loadRecords={siteId ? loadFigureRecords : undefined}
+              />
+            </div>
+          );
+        }
         const rawFallback = p.fallback;
         const fallback = isRecord(rawFallback) ? rawFallback : {};
         const title = sanitizeText(fallback.title) || sanitizeText(p.title) || sanitizeText(p.componentKey) || (element.type === 'codeComponent' ? 'Code component' : 'Interactive figure');
@@ -4812,6 +5049,12 @@ function CanvasElementComponent({
             }}
           >
             <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+              loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+              dataFigureCollections={dataFigureCollections}
               key={`list-${element.id}`}
               elementId={element.id}
               content={listValue}
@@ -4865,6 +5108,12 @@ function CanvasElementComponent({
             }}
           >
             <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+              loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+              dataFigureCollections={dataFigureCollections}
               key={`quote-${element.id}`}
               elementId={element.id}
               content={p.content}
@@ -5543,6 +5792,12 @@ function CanvasElementComponent({
           }}
         >
             <RichTextBlock
+              interactivePreview={isPreview}
+              authoredWidth={element.width}
+              onRequestClose={onStopEditing}
+              onFitContentHeight={onFitContentHeight ? (height) => onFitContentHeight(element.id, height) : undefined}
+              loadDataFigureRecords={siteId ? loadFigureRecords : undefined}
+              dataFigureCollections={dataFigureCollections}
               key={`paragraph-${element.id}`}
               elementId={element.id}
               content={p.content}
@@ -5756,11 +6011,12 @@ function CanvasElementComponent({
       ? ACTIVE_SELECTED_LAYER_EDIT_Z_INDEX
       : SELECTED_LAYER_EDIT_Z_INDEX
     : element.zIndex || 1;
+  const geometry = buildBackyCanvasElementGeometry(element, parentLayout);
 
   return (
       <div
       className={cn(
-        'absolute touch-none',
+        'touch-none',
         !isPreview && !disabled && !isEditing && 'cursor-move select-none',
         !isPreview && !disabled && !isSelected && 'hover:ring-1 hover:ring-sky-300 hover:ring-offset-1 hover:ring-offset-white',
         isSelected && !isPreview && !disabled && 'ring-2 ring-sky-500 ring-offset-1 ring-offset-white',
@@ -5770,7 +6026,12 @@ function CanvasElementComponent({
         (isLocked || disabled) && !isPreview && 'cursor-default'
       )}
       data-element-id={element.id}
+      data-animation={isPreview && element.animation ? JSON.stringify(element.animation) : undefined}
+      data-backy-animation-type={isPreview ? element.animation?.type : undefined}
+      tabIndex={isPreview && element.animation?.trigger === 'hover' ? 0 : undefined}
       data-parent-id={parentId ?? undefined}
+      data-backy-parent-layout={parentLayout}
+      data-backy-intrinsic-height={geometry.height === undefined || typeof geometry.height === 'string' && /^(auto|min-content|max-content|fit-content)(\(|$)/.test(geometry.height) ? 'true' : undefined}
       data-nested-drop-target={canReceiveNestedDrop ? 'true' : undefined}
       data-nested-drop-active={isNestedDropActive ? 'true' : 'false'}
       data-selected-ids={isSelected ? selectedIds.join(',') : undefined}
@@ -5783,11 +6044,9 @@ function CanvasElementComponent({
       style={{
         ...sharedStyle,
         boxSizing: 'border-box',
-        position: 'absolute',
-        left: element.x,
-        top: element.y,
-        width: element.width,
-        height: element.height,
+        ...geometry as CSSProperties,
+        // Padding/display belong to the container surface, not both wrappers.
+        ...(childLayout !== 'free' ? { padding: undefined, display: undefined } : {}),
         zIndex: editorZIndex,
         transform: element.rotation ? `rotate(${element.rotation}deg)` : undefined,
         opacity: isHidden && !isPreview ? 0.25 : sharedStyle.opacity ?? 1,
@@ -5807,7 +6066,10 @@ function CanvasElementComponent({
         onDragStart(event, element.id);
       }}
       onClick={onClick}
-      onDoubleClick={() => onDoubleClick()}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        if (!isLocked && !disabled) onDoubleClick();
+      }}
     >
       {renderContent()}
 
@@ -5830,7 +6092,7 @@ function CanvasElementComponent({
           <div
             className="pointer-events-auto absolute -top-8 left-0 z-[90] flex cursor-move touch-none select-none items-center gap-2 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white shadow-sm"
             data-role="canvas-move-handle"
-            title="Drag selected element"
+            title={isBackyFlowChild(element, parentLayout) ? 'Drag to reorder within the parent layout' : 'Drag selected element'}
             onPointerDown={(event) => onDragStart(event, element.id)}
             onMouseDown={(event) => onDragStart(event, element.id)}
           >
@@ -5844,7 +6106,7 @@ function CanvasElementComponent({
             {isLocked && <span className="rounded bg-white/20 px-1 uppercase">locked</span>}
             {isHidden && <span className="rounded bg-white/20 px-1 uppercase">hidden</span>}
             <span className="h-3 w-px bg-white/40" />
-            <span>{element.x}, {element.y}</span>
+            <span>{isBackyFlowChild(element, parentLayout) ? 'Flow order' : geometry.width !== element.width || geometry.height !== element.height ? 'Layout sizing' : `${element.x}, ${element.y}`}</span>
           </div>
           {!isLocked && (
             <>
@@ -5966,6 +6228,17 @@ function SelectionInfo({ elements, selectedId, selectedIds }: SelectionInfoProps
   const label = selectedMetrics.length > 1
     ? `${selectedMetrics.length} layers`
     : primaryMetric.type;
+  const layoutSelections = selectedMetrics.flatMap(metric => {
+    const entry = findElementEntry(elements, metric.id);
+    if (!entry) return [];
+    const parent = entry.parentId ? findElementById(elements, entry.parentId) : null;
+    const parentLayout = parent ? resolveBackyChildLayout(parent) : 'free';
+    const geometry = buildBackyCanvasElementGeometry(entry.element, parentLayout);
+    return isBackyFlowChild(entry.element, parentLayout) || geometry.width !== entry.element.width || geometry.height !== entry.element.height
+      ? [{ id: metric.id, width: geometry.width, height: geometry.height }] : [];
+  });
+  const layoutSizing = layoutSelections.find(item => item.id === primaryMetric.id);
+  const formatLayoutSize = (value: string | number | undefined) => typeof value === 'number' ? `${value}px` : value || 'auto';
 
   return (
     <div
@@ -5973,9 +6246,19 @@ function SelectionInfo({ elements, selectedId, selectedIds }: SelectionInfoProps
       data-testid="editor-selection-info"
       data-selection-mode={selectedMetrics.length > 1 ? 'multi' : 'single'}
       data-selection-count={selectedMetrics.length}
+      data-selection-geometry={layoutSelections.length ? 'layout-sizing' : 'authored'}
     >
       <div className="flex items-center gap-3">
         <span className="rounded bg-sky-50 px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700">{label}</span>
+        {layoutSelections.length ? (
+          <>
+            <span className="text-slate-500" title="Layout units are shown. Saved free-position coordinates are retained.">Flow sizing</span>
+            {selectedMetrics.length === 1 && layoutSizing ? <>
+              <span className="text-slate-500">Layout W</span><span className="font-medium text-slate-800">{formatLayoutSize(layoutSizing.width)}</span>
+              <span className="text-slate-500">H</span><span className="font-medium text-slate-800">{formatLayoutSize(layoutSizing.height)}</span>
+            </> : <span className="text-slate-500">Positions and sizes follow parent layout</span>}
+          </>
+        ) : <>
         <span className="text-slate-500">X</span>
         <span className="font-medium text-slate-800">{Math.round(minX)}</span>
         <span className="text-slate-500">Y</span>
@@ -5985,6 +6268,7 @@ function SelectionInfo({ elements, selectedId, selectedIds }: SelectionInfoProps
         <span className="font-medium text-slate-800">{Math.round(maxX - minX)}</span>
         <span className="text-slate-500">H</span>
         <span className="font-medium text-slate-800">{Math.round(maxY - minY)}</span>
+        </>}
       </div>
     </div>
   );

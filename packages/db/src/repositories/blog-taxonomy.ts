@@ -1,5 +1,6 @@
 import {
     type BackyBlogAuthor,
+    type BackyBlogArchiveTerm,
     type BackyBlogCategory,
     type BackyBlogCategoryCreateInput,
     type BackyBlogCategoryUpdateInput,
@@ -9,7 +10,7 @@ import {
     type BackyBlogTaxonomyRepository,
     type BackyRepositoryMutationResult,
 } from '@backy-cms/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { blogCategories, blogPosts, blogTags, profiles } from '../schema';
 import type { DatabaseInstance } from '../adapters';
 
@@ -43,7 +44,8 @@ type ReturningQuery = {
 
 type CategoryRow = typeof blogCategories.$inferSelect;
 type TagRow = typeof blogTags.$inferSelect;
-type PostRow = typeof blogPosts.$inferSelect;
+// Taxonomy counts/author assignment never read the post body or canvas state.
+type PostRow = Pick<typeof blogPosts.$inferSelect, 'siteId' | 'status' | 'meta' | 'authorId'>;
 type ProfileRow = typeof profiles.$inferSelect;
 
 const asDb = (db: DatabaseInstance): QueryDatabase => db as unknown as QueryDatabase;
@@ -74,7 +76,12 @@ const postCategoryIds = (post: PostRow) => toStringArray(getPostMeta(post).categ
 const postTagIds = (post: PostRow) => toStringArray(getPostMeta(post).tagIds);
 
 const activeSitePosts = async (database: QueryDatabase, siteId: string): Promise<PostRow[]> => {
-    const rows = await database.select().from(blogPosts).where(eq(blogPosts.siteId, siteId)) as PostRow[];
+    const rows = await database.select({
+        siteId: blogPosts.siteId,
+        status: blogPosts.status,
+        meta: blogPosts.meta,
+        authorId: blogPosts.authorId,
+    }).from(blogPosts).where(eq(blogPosts.siteId, siteId)) as PostRow[];
     return rows.filter((post) => post.siteId === siteId && post.status !== 'archived');
 };
 
@@ -123,6 +130,18 @@ export function createBlogTaxonomyRepository(db: DatabaseInstance): BackyBlogTax
     const database = asDb(db);
 
     return {
+        async listArchiveTerms(siteId: string) {
+            const read = async (table: typeof blogCategories | typeof blogTags): Promise<BackyBlogArchiveTerm[]> => {
+                const rows = await database.select({ id: table.id, siteId: table.siteId,
+                    name: sql<string>`case when length(${table.name}) <= 500 then ${table.name} else null end`,
+                    slug: sql<string>`case when length(${table.slug}) <= 200 then ${table.slug} else null end`,
+                }).from(table).where(eq(table.siteId, siteId)).orderBy(table.name, table.id).limit(10001) as BackyBlogArchiveTerm[];
+                if (rows.length > 10000) throw new Error('Archive taxonomy exceeds its lookup limit.');
+                return rows;
+            };
+            const [categories, tags] = await Promise.all([read(blogCategories), read(blogTags)]);
+            return { categories, tags };
+        },
         async listCategories(siteId: string): Promise<BackyBlogCategory[]> {
             const [rows, posts] = await Promise.all([
                 database.select().from(blogCategories).where(eq(blogCategories.siteId, siteId)) as PromiseLike<CategoryRow[]>,

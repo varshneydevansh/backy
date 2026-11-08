@@ -3,6 +3,7 @@ import type { Contact, FormDefinition, NewsletterSubscriptionStatus as CoreNewsl
 export const NEWSLETTER_FORM_SCHEMA_VERSION = 'backy.newsletter-form.v1';
 export const NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION = 'backy.newsletter-subscribers.v1';
 export const NEWSLETTER_SUBSCRIBE_SCHEMA_VERSION = 'backy.newsletter-subscribe.v1';
+export const NEWSLETTER_SUBSCRIBER_RECEIPT_SCHEMA_VERSION = 'backy.newsletter-subscriber-receipt.v1';
 
 export type NewsletterSubscriptionStatus = Extract<CoreNewsletterSubscriptionStatus, 'subscribed' | 'unsubscribed'>;
 export type NewsletterOperationalStatus = CoreNewsletterSubscriptionStatus;

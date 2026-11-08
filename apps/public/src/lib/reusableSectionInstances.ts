@@ -6,6 +6,7 @@ export type ReusableSectionSource = {
   name: string;
   updatedAt: string;
   content: unknown;
+  siteId?: string;
 };
 
 export type ReusableSectionInstance = {
@@ -46,9 +47,10 @@ const contentElements = (content: unknown): JsonRecord[] => {
     : [];
 };
 
-const sourceRootElement = (section: ReusableSectionSource): JsonRecord | null => (
-  contentElements(section.content)[0] || null
-);
+export class ReusableSectionSourceRootError extends Error {
+  readonly code = 'REUSABLE_SECTION_SOURCE_ROOT_MISSING';
+  constructor() { super('A linked source root no longer exists in this section. Review the affected instance and reinsert or detach it before refreshing.'); }
+}
 
 const reusableSectionMeta = (element: JsonRecord): JsonRecord | null => {
   const props = isRecord(element.props) ? element.props : {};
@@ -59,6 +61,7 @@ const reusableSectionMeta = (element: JsonRecord): JsonRecord | null => {
 const isSyncedInstanceForSection = (element: JsonRecord, section: ReusableSectionSource): boolean => {
   const meta = reusableSectionMeta(element);
   if (!meta || meta.mode === 'detached') return false;
+  if (meta.siteId !== undefined && meta.siteId !== section.siteId) return false;
   return meta.sectionId === section.id || meta.sectionId === section.slug || meta.slug === section.slug;
 };
 
@@ -99,11 +102,13 @@ const cloneSourceNode = (
     ? {
         ...sourceProps,
         reusableSection: {
+          ...reusableSectionMeta(target),
           mode: 'synced',
           sectionId: section.id,
           slug: section.slug,
           name: section.name,
           sourceUpdatedAt: section.updatedAt,
+          ...(section.siteId ? { siteId: section.siteId } : {}),
         },
       }
     : sourceProps;
@@ -141,7 +146,6 @@ const refreshElements = (
   section: ReusableSectionSource,
   input: {
     pathPrefix?: string;
-    sourceRoot: JsonRecord;
   },
 ): {
   elements: JsonRecord[];
@@ -151,8 +155,14 @@ const refreshElements = (
   const nextElements = elements.map((element, index) => {
     const path = input.pathPrefix ? `${input.pathPrefix}.children.${index}` : `${index}`;
     if (isSyncedInstanceForSection(element, section)) {
+      const roots = contentElements(section.content), meta = reusableSectionMeta(element);
+      const sourceRoot = typeof meta?.sourceElementId === 'string'
+        ? roots.find(root => root.id === meta.sourceElementId)
+        : Number.isInteger(meta?.rootIndex) && Number(meta?.rootIndex) >= 0
+          ? roots[Number(meta?.rootIndex)] : roots[0];
+      if (!sourceRoot) throw new ReusableSectionSourceRootError();
       refreshed += 1;
-      return cloneSourceNode(input.sourceRoot, element, section, {
+      return cloneSourceNode(sourceRoot, element, section, {
         isRoot: true,
         path,
       });
@@ -182,13 +192,12 @@ export const refreshReusableSectionInstancesInContent = (
   content: unknown,
   section: ReusableSectionSource,
 ): ReusableSectionContentRefresh => {
-  const sourceRoot = sourceRootElement(section);
   const elements = contentElements(content);
-  if (!sourceRoot || elements.length === 0) {
+  if (contentElements(section.content).length === 0 || elements.length === 0) {
     return { content, refreshed: 0 };
   }
 
-  const result = refreshElements(elements, section, { sourceRoot });
+  const result = refreshElements(elements, section, {});
   return {
     content: result.refreshed > 0 ? withUpdatedContentElements(content, result.elements) : content,
     refreshed: result.refreshed,

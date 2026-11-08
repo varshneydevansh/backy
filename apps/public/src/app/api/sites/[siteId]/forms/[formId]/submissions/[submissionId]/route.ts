@@ -115,7 +115,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const submission = getSubmissionById(submissionId);
-    if (!submission || submission.formId !== form.id) {
+    if (!submission || submission.formId !== form.id || submission.siteId !== site.id) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 
@@ -191,7 +191,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const submission = getSubmissionById(submissionId);
-    if (!submission || submission.formId !== form.id) {
+    if (!submission || submission.formId !== form.id || submission.siteId !== site.id) {
       return errorResponse(404, 'SUBMISSION_NOT_FOUND', 'Submission not found', requestId);
     }
 

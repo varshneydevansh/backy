@@ -1,3 +1,4 @@
+import { postgresResultRows } from '../adapters/postgres-result';
 import {
     type BackyListResult,
     type BackyRepositoryMutationResult,
@@ -195,8 +196,35 @@ const toCredential = (row: UserCredentialRow, user: Pick<BackyUser, 'email'>): B
     updatedAt: toIso(row.updatedAt),
 });
 
-export function createUserRepository(db: DatabaseInstance): BackyUserRepository {
+export function createUserRepository(db: DatabaseInstance, adapterType: string = 'postgres'): BackyUserRepository {
     const database = asDb(db);
+    const authorityError = (code: string, status: number, message: string) => Object.assign(new Error(message), { code, status });
+    // Every repository role/status removal and deletion shares this admission.
+    // A native complete SQL count avoids the list API's per-request cap.
+    const withAuthorityAdmission = async <T>(userId: string, next: Pick<BackyUserUpdateInput, 'role' | 'status'> | null, run: (writer: QueryDatabase, current: UserRow | undefined) => Promise<T>): Promise<T> => {
+        const transactional = db as unknown as { transaction: <R>(run: (writer: QueryDatabase) => Promise<R>) => Promise<R> };
+        if (adapterType !== 'postgres' || typeof transactional.transaction !== 'function') throw authorityError('OPERATOR_AUTHORITY_UNAVAILABLE', 503, 'Operator authority changes require the supported PostgreSQL admission runtime.');
+        try {
+            return await transactional.transaction(async writer => {
+                if (typeof writer.execute !== 'function') throw authorityError('OPERATOR_AUTHORITY_UNAVAILABLE', 503, 'Operator authority admission is unavailable.');
+                await writer.execute(sql`SET LOCAL lock_timeout = '1500ms'`);
+                await writer.execute(sql`LOCK TABLE public.profiles IN SHARE ROW EXCLUSIVE MODE`);
+                const [current] = await writer.select().from(profiles).where(eq(profiles.id, userId)) as UserRow[];
+                const active = current && (current.role === 'owner' || current.role === 'admin') && normalizeStatus(current) === 'active';
+                const remains = next && current && ((next.role ?? current.role) === 'owner' || (next.role ?? current.role) === 'admin') && (next.status ?? normalizeStatus(current)) === 'active';
+                if (active && !remains) {
+                    const [count] = postgresResultRows<{ count: number }>(await writer.execute(sql`SELECT count(*)::int AS count FROM public.profiles WHERE role IN ('owner','admin') AND (status = 'active' OR (status NOT IN ('active','inactive','invited','suspended') AND is_active = true))`));
+                    if (!count || !Number.isSafeInteger(count.count) || count.count < 1) throw authorityError('OPERATOR_AUTHORITY_UNAVAILABLE', 503, 'Complete operator authority inventory could not be verified.');
+                    if (count.count <= 1) throw authorityError('LAST_ADMIN_AUTHORITY', 409, 'At least one active owner or admin must remain.');
+                }
+                return run(writer, current);
+            });
+        } catch (error) {
+            const code = error && typeof error === 'object' && 'code' in error ? error.code : error && typeof error === 'object' && 'cause' in error && error.cause && typeof error.cause === 'object' && 'code' in error.cause ? error.cause.code : undefined;
+            if (code === '55P03' || code === '40P01' || code === '40001') throw authorityError('OPERATOR_AUTHORITY_BUSY', 503, 'Operator authority is being changed. Reload before retrying.');
+            throw error;
+        }
+    };
 
     return {
         async list(input: BackyUserListInput = {}): Promise<BackyListResult<BackyUser>> {
@@ -304,19 +332,22 @@ export function createUserRepository(db: DatabaseInstance): BackyUserRepository 
             }
             if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl;
 
-            const [row] = await database.update(profiles).set(updates).where(eq(profiles.id, userId)).returning() as UserRow[];
-            return { item: toUser(row) };
+            const save = async (writer: QueryDatabase) => {
+                const [row] = await writer.update(profiles).set(updates).where(eq(profiles.id, userId)).returning() as UserRow[];
+                return { item: toUser(row) };
+            };
+            return input.role !== undefined || input.status !== undefined
+                ? withAuthorityAdmission(userId, input, writer => save(writer))
+                : save(database);
         },
 
         async delete(userId: string): Promise<boolean> {
-            const existing = await this.getById(userId);
-            if (!existing) {
-                return false;
-            }
-
-            await database.update(activityLogs).set({ userId: null }).where(eq(activityLogs.userId, userId)).returning();
-            await database.delete(profiles).where(eq(profiles.id, userId));
-            return true;
+            return withAuthorityAdmission(userId, null, async (writer, current) => {
+                if (!current) return false;
+                await writer.update(activityLogs).set({ userId: null }).where(eq(activityLogs.userId, userId)).returning();
+                await writer.delete(profiles).where(eq(profiles.id, userId));
+                return true;
+            });
         },
     };
 }

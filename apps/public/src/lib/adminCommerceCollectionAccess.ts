@@ -16,11 +16,17 @@ const normalizeSlug = (value: string) => value.trim().toLowerCase();
 
 export const isCommerceCollectionSlug = (slug: string) => COMMERCE_COLLECTION_SLUGS.has(normalizeSlug(slug));
 
+/** Compose resource-specific permissions into a single final admission. */
+export const commerceCollectionPermissions = (slug: string, operations: readonly CommerceCollectionOperation[]): string[] => (
+  isCommerceCollectionSlug(slug) ? [...new Set(operations.map(operation => commercePermissionByOperation[operation]))] : []
+);
+
 export const requireCommerceCollectionAccess = async (
   request: NextRequest,
   requestId: string,
   collectionSlug: string,
   operation: CommerceCollectionOperation,
+  options: { recordUsage?: boolean } = {},
 ): Promise<NextResponse | null> => {
   if (!isCommerceCollectionSlug(collectionSlug)) {
     return null;
@@ -28,6 +34,7 @@ export const requireCommerceCollectionAccess = async (
 
   const access = await requireAdminAccess(request, requestId, {
     permission: commercePermissionByOperation[operation],
+    ...options,
   });
 
   return access instanceof NextResponse ? access : null;

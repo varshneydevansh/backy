@@ -1,3 +1,8 @@
+import { editorMediaMutationErrorResponse } from "@/lib/editorMediaMutationError";
+import { CollectionRecordAdmissionUnavailableError, withRepositoryCollectionRecordAdmission } from "@/lib/collectionRecordAdmission";
+import { BackyCollectionRecordValidationError } from "@backy-cms/core";
+import { collectionRecordVersion, collectionRecordWithVersion } from "@/lib/collectionRecordVersion";
+import { CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 /**
  * Admin CMS collection record detail endpoint.
  *
@@ -7,8 +12,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { assertBackyCollectionRecordUpdateExpectation, BackyCollectionRecordConflictError } from "@backy-cms/core";
 import type {
   BackyCollection,
+  BackyCollectionRecord,
   BackyJsonObject,
   BackyJsonValue,
   PublishStatus,
@@ -20,6 +27,7 @@ import {
   getCollectionRecordByIdOrSlug,
   getSiteByIdOrSlug,
   updateAdminCollectionRecord,
+  normalizeCollectionRecordValues,
   validateCollectionRecordValues,
   type StoreCollection,
 } from "@/lib/backyStore";
@@ -35,10 +43,6 @@ import {
   getRequiredDatabaseRepositories,
   shouldUseDemoStoreFallback,
 } from "@/lib/repositoryRuntime";
-import {
-  removeRepositoryCollectionRecordMediaReferences,
-  syncRepositoryCollectionRecordMediaReferences,
-} from "@/lib/repositoryMediaReferenceSync";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 import {
   applyDemoOrderInventoryRestore,
@@ -151,7 +155,7 @@ const updateAuditMetadata = (
   body: Record<string, unknown>,
 ): BackyJsonObject => ({
   ...collectionRecordAuditMetadata(collection, record),
-  changedFields: Object.keys(body),
+  changedFields: Object.keys(body).filter(key => key !== "expectedUpdatedAt" && key !== "expectedVersion"),
 });
 
 const deliverCollectionRecordWebhook = async (params: {
@@ -282,7 +286,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         requestId,
-        data: { collection, record },
+        data: { collection, record: collectionRecordWithVersion(record) },
       });
     }
 
@@ -331,9 +335,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: { collection, record },
+      data: { collection, record: collectionRecordWithVersion(record) },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection record detail API error:", error);
     return errorResponse(
       500,
@@ -370,7 +375,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const collection =
+      let collection =
         (await repositories.collections.getById(site.id, collectionId)) ||
         (await repositories.collections.getBySlug(site.id, collectionId));
       if (!collection) {
@@ -411,9 +416,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
+      const admissionSlug = collection.slug;
+      const admitted = await withRepositoryCollectionRecordAdmission(repositories.collections, site.id, collection.id, async (repository, collection, context) => {
+        if (collection.slug !== admissionSlug) return errorResponse(409, 'COLLECTION_RECORD_CONFLICT', 'This collection changed while the record was being saved. Reload it before retrying.', requestId, { reloadRequired: true });
       const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
         await parseJsonBody(request),
       );
+      if (body.values !== undefined && (!body.values || typeof body.values !== 'object' || Array.isArray(body.values))) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'Record values must be a JSON object.', requestId);
+      }
+      if (body.expectedVersion !== undefined && (typeof body.expectedVersion !== 'string' || !/^record-v1:[a-f0-9]{64}$/.test(body.expectedVersion))) return errorResponse(400, 'VALIDATION_ERROR', 'expectedVersion must be a record version token returned by Backy.', requestId);
+      if (body.expectedUpdatedAt !== undefined && (typeof body.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(body.expectedUpdatedAt)))) {
+        return errorResponse(400, 'VALIDATION_ERROR', 'expectedUpdatedAt must be an ISO timestamp.', requestId);
+      }
+      assertBackyCollectionRecordUpdateExpectation(site.id, collection.id, record.id, { expectedUpdatedAt: body.expectedUpdatedAt, expectedVersion: body.expectedVersion }, record, collectionRecordVersion(record));
       const submittedValues = toRecord(body.values);
       const values =
         body.values === undefined
@@ -441,7 +457,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       if (nextSlug && nextSlug !== record.slug) {
-        const conflict = await repositories.collections.getRecordBySlug(
+        const conflict = await repository.getRecordBySlug(
           site.id,
           collection.id,
           nextSlug,
@@ -457,8 +473,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const validationErrors = await validateRepositoryCollectionRecordValues({
-        repository: repositories.collections,
-        mediaRepository: repositories.media,
+        repository,
+        mediaRepository: context.media,
         siteId: site.id,
         collection,
         values,
@@ -476,14 +492,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       let updated = (
-        await repositories.collections.updateRecord(
+        await repository.updateRecord(
           site.id,
           collection.id,
           record.id,
           {
-            ...(body.values === undefined
-              ? {}
-              : { values: toJsonRecord(values) }),
+            expectedRecord: record,
+            ...(typeof body.expectedVersion === "string" ? { expectedVersion: body.expectedVersion } : {}),
+            ...(typeof body.expectedUpdatedAt === "string" ? { expectedUpdatedAt: body.expectedUpdatedAt } : {}),
+            values: toJsonRecord(normalizeCollectionRecordValues(collection as unknown as StoreCollection, submittedValues, record.values)),
             ...(parseStatus(body.status)
               ? { status: parseStatus(body.status) }
               : {}),
@@ -494,19 +511,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
         )
       ).item;
+        return { updated, collection, body };
+      });
+      if (admitted instanceof NextResponse) return admitted;
+      collection = admitted.collection;
+      let updated = admitted.updated;
+      const body = admitted.body;
       updated = await applyRepositoryOrderInventoryRestore({
         repositories,
         siteId: site.id,
         collection,
         before: record,
         after: updated,
-      });
-      await syncRepositoryCollectionRecordMediaReferences({
-        mediaRepository: repositories.media,
-        siteId: site.id,
-        collectionId: collection.id,
-        recordId: updated.id,
-        values: updated.values,
       });
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
@@ -537,7 +553,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         action: "collectionRecord.updated",
         before: record,
         after: updated,
-        changedFields: Object.keys(body),
+        changedFields: Object.keys(body).filter(key => key !== "expectedUpdatedAt" && key !== "expectedVersion"),
         requestId,
         actor: access.session?.user.id,
       });
@@ -545,7 +561,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         requestId,
-        data: { record: updated, cacheInvalidation },
+        data: { record: collectionRecordWithVersion(updated), cacheInvalidation },
       });
     }
 
@@ -594,6 +610,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const body = normalizeCollectionRecordInputFromDirectFrontendDesignEnvelope(
       await parseJsonBody(request),
     );
+    if (body.values !== undefined && (!body.values || typeof body.values !== 'object' || Array.isArray(body.values))) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'Record values must be a JSON object.', requestId);
+    }
+    if (body.expectedVersion !== undefined && (typeof body.expectedVersion !== 'string' || !/^record-v1:[a-f0-9]{64}$/.test(body.expectedVersion))) return errorResponse(400, 'VALIDATION_ERROR', 'expectedVersion must be a record version token returned by Backy.', requestId);
+    if (body.expectedUpdatedAt !== undefined && (typeof body.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(body.expectedUpdatedAt)))) {
+      return errorResponse(400, 'VALIDATION_ERROR', 'expectedUpdatedAt must be an ISO timestamp.', requestId);
+    }
+    assertBackyCollectionRecordUpdateExpectation(site.id, collection.id, record.id, { expectedUpdatedAt: body.expectedUpdatedAt, expectedVersion: body.expectedVersion }, record as unknown as BackyCollectionRecord, collectionRecordVersion(record as unknown as BackyCollectionRecord));
     const values =
       body.values === undefined
         ? {}
@@ -653,6 +677,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       record.id,
       {
         ...body,
+        expectedRecord: record,
         ...(body.values === undefined ? {} : { values }),
         ...(nextSlug ? { slug: nextSlug } : {}),
       },
@@ -688,7 +713,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       action: "collectionRecord.updated",
       before: record,
       after: updated,
-      changedFields: Object.keys(body),
+      changedFields: Object.keys(body).filter(key => key !== "expectedUpdatedAt" && key !== "expectedVersion"),
       requestId,
       actor: access.session?.user.id,
     });
@@ -696,9 +721,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: { record: updated },
+      data: { record: collectionRecordWithVersion(updated) },
     });
   } catch (error) {
+    if (error instanceof CollectionRecordAdmissionUnavailableError) return errorResponse(503, 'COLLECTION_WRITE_UNAVAILABLE', error.message, requestId);
+    if (error instanceof BackyCollectionRecordValidationError || (error && typeof error === 'object' && 'code' in error && error.code === 'COLLECTION_RECORD_VALIDATION')) return errorResponse(400, 'VALIDATION_ERROR', 'Collection record values are invalid.', requestId, 'details' in error ? error.details : undefined);
+    if (error instanceof BackyCollectionRecordConflictError || (error && typeof error === 'object' && 'code' in error && error.code === 'COLLECTION_RECORD_CONFLICT')) {
+      return errorResponse(409, 'COLLECTION_RECORD_CONFLICT', 'This collection record changed while you were editing. Reload the latest record before saving again.', requestId, { reloadRequired: true });
+    }
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin collection record update API error:", error);
     return errorResponse(
       500,
@@ -789,12 +822,6 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           requestId,
         );
       }
-      await removeRepositoryCollectionRecordMediaReferences({
-        mediaRepository: repositories.media,
-        siteId: site.id,
-        collectionId: collection.id,
-        recordId: record.id,
-      });
       const cacheInvalidation = await recordSiteCacheInvalidation(
         repositories,
         {
@@ -919,6 +946,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
+    const mediaFailure = editorMediaMutationErrorResponse(error, requestId);
+    if (mediaFailure) return mediaFailure;
     console.error("Admin collection record delete API error:", error);
     return errorResponse(
       500,

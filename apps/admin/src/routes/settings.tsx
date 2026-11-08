@@ -40,10 +40,12 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Notice } from '@/components/ui/Notice';
+import { HostingerMailConnection } from '@/components/settings/HostingerMailConnection';
+import { SiteMailboxWorkspace } from '@/components/settings/SiteMailboxWorkspace';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { SegmentedTabs, type SegmentedTabItem } from '@/components/ui/SegmentedTabs';
 import { useAuthStore } from '@/stores/authStore';
-import { adminPermissionReason, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
+import { adminPermissionReason, adminPermissionRule, isAdminPermissionAllowed } from '@/lib/adminPermissionUi';
 import { getLocalBackendOrigin as getLocalDevBackendOrigin } from '@/lib/localBackendOrigin';
 import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import type { AdminSession } from '@/lib/adminAuthApi';
@@ -53,6 +55,8 @@ import {
   getSettings,
   getUserPermissions,
   issueSettingsAdminApiKey,
+  ADMIN_SITE_SERVICE_PERMISSIONS,
+  type AdminServiceKeyScope,
   listSites,
   listAdminAuditLogs,
   regenerateSettingsApiKeys,
@@ -2274,6 +2278,14 @@ function SettingsPage() {
   const mediaConfigurePermissionTitle = canConfigureMedia ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'media.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const activityExportPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'activity.export', SETTINGS_PERMISSION_ROLE_DEFAULTS);
   const siteSettingsConfigurePermissionTitle = canConfigureSiteSettings ? undefined : adminPermissionReason(permissionMatrix, currentUser, 'sites.configure', SETTINGS_PERMISSION_ROLE_DEFAULTS);
+  const mailboxSite = siteSettingsSites.find(site => site.id === selectedSiteSettingsSiteId);
+  const mailboxSiteMatchesRoute = !search.siteId || Boolean(mailboxSite && siteMatchesIdentifier(mailboxSite, search.siteId));
+  const canViewSiteMailbox = Boolean(currentUser?.role === 'owner' && currentSession && Date.parse(currentSession.expiresAt) > Date.now()
+    && !isPermissionsLoading && !permissionError && mailboxSite && mailboxSiteMatchesRoute
+    && adminPermissionRule(permissionMatrix, 'settings.view', mailboxSite.id)?.allowed
+    && adminPermissionRule(permissionMatrix, 'sites.view', mailboxSite.id)?.allowed);
+  const mailboxContext = JSON.stringify([currentUser?.id, currentUser?.role, currentSession?.issuedAt, currentSession?.expiresAt,
+    permissionMatrix, isPermissionsLoading, permissionError, search.siteId, selectedSiteSettingsSiteId]);
   const canConfigureInfrastructure = canConfigureSettings || canConfigureMedia;
   const isMediaOnlyInfrastructureEditor = !canConfigureSettings && canConfigureMedia;
   const infrastructurePermissionTitle = canConfigureInfrastructure
@@ -2582,7 +2594,7 @@ function SettingsPage() {
     }
   };
 
-  const handleIssueAdminApiKey = async (label: string): Promise<IssuedAdminApiKey | null> => {
+  const handleIssueAdminApiKey = async (label: string, scope: AdminServiceKeyScope, confirmWorkspace: boolean): Promise<IssuedAdminApiKey | null> => {
     setNotice(null);
     if (!canManageApiKeys) {
       setNotice(manageKeysPermissionTitle || 'Your account cannot issue admin API keys.');
@@ -2590,7 +2602,7 @@ function SettingsPage() {
     }
 
     try {
-      const result = await issueSettingsAdminApiKey(label);
+      const result = await issueSettingsAdminApiKey(label, scope, confirmWorkspace);
       applyBackendSettings(result.settings);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -3694,7 +3706,7 @@ function SettingsPage() {
       generatedAt: new Date().toISOString(),
       schemaVersion: 'backy.completion-status.v1',
       status: blockedGates.length === 0 ? 'certification-ready' : 'external-gates-required',
-      summary: 'Backy has the core local backend/editor/API surface implemented for the current audit; Forms and SDK database gates are certified, and the remaining Partial rows need live provider certification evidence.',
+      summary: 'Legacy release-audit counts cover a bounded 45-surface provider checklist. They do not certify current builder completion, deployed behavior or the connected website. Follow docs/audits/backy-builder-readiness-2026-10-04.md for open authoring, frontend, identity and verification requirements; provider artifact acceptance cannot close those requirements.',
       audit: BACKY_COMPLETION_AUDIT,
       surfaces: BACKY_COMPLETION_SURFACES,
       surfaceRunbooks,
@@ -4564,7 +4576,7 @@ function SettingsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold">Backy completion status</h3>
+                    <h3 className="text-sm font-semibold">Legacy release audit</h3>
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
                       {settingsBackyCompletionStatus.audit.ready} Ready / {settingsBackyCompletionStatus.audit.partial} Partial
                     </span>
@@ -4574,14 +4586,14 @@ function SettingsPage() {
                       data-ready-count={settingsBackyCompletionStatus.artifactAcceptedAudit.ready}
                       data-partial-count={settingsBackyCompletionStatus.artifactAcceptedAudit.partial}
                     >
-                      Artifacts accepted: {settingsBackyCompletionStatus.artifactAcceptedAudit.ready} Ready / {settingsBackyCompletionStatus.artifactAcceptedAudit.partial} Partial
+                      If artifacts pass: {settingsBackyCompletionStatus.artifactAcceptedAudit.ready} Ready / {settingsBackyCompletionStatus.artifactAcceptedAudit.partial} Partial
                     </span>
                     <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                       {settingsBackyCompletionStatus.status}
                     </span>
                   </div>
                   <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
-                    This is the same non-secret completion handoff exposed to custom admin clients through the public manifest and OpenAPI. The default diagnostic view stays at 41/4 until artifacts are supplied; the artifact-backed release doctor view is 45/0 without exposing database URLs, provider keys, order records, or form submissions.
+                    These counts belong to the earlier 45-surface release checklist. The artifact view is a projection, not proof that artifacts were accepted or that Backy is complete. The current builder readiness audit still tracks open editor, frontend integration, visitor access and verification workflows.
                   </p>
                 </div>
                 <Button
@@ -4600,8 +4612,8 @@ function SettingsPage() {
               <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
                 {[
                   { label: 'Schema', value: settingsBackyCompletionStatus.schemaVersion },
-                  { label: 'Audit', value: `${settingsBackyCompletionStatus.audit.readyPercent}% ready` },
-                  { label: 'Artifact closure', value: `${settingsBackyCompletionStatus.artifactAcceptedAudit.readyPercent}% ready` },
+                  { label: 'Legacy checklist', value: `${settingsBackyCompletionStatus.audit.readyPercent}% ready` },
+                  { label: 'Projected checklist after artifacts', value: `${settingsBackyCompletionStatus.artifactAcceptedAudit.readyPercent}% ready` },
                   { label: 'Partial surfaces', value: `${settingsBackyCompletionStatus.surfaces.length}` },
                   { label: 'Local preflight', value: settingsBackyCompletionStatus.localPreflight },
                   { label: 'Public contract', value: 'data.contract.completionStatus' },
@@ -5030,6 +5042,7 @@ function SettingsPage() {
         )}
         {activeTab === 'security' && (
           <SecuritySettings
+            sites={siteSettingsSites}
             publicApiKey={publicApiKey}
             adminApiKey={adminApiKey}
             authSettings={authSettings}
@@ -5054,6 +5067,13 @@ function SettingsPage() {
           />
         )}
         </fieldset>
+        {activeTab === 'general' && <SiteMailboxWorkspace
+          siteId={mailboxSiteMatchesRoute ? mailboxSite?.id || '' : ''}
+          canView={canViewSiteMailbox}
+          contextKey={mailboxContext}
+          disabledReason={isPermissionsLoading ? 'Loading mailbox permissions…' : !mailboxSite || !mailboxSiteMatchesRoute
+            ? 'Select an accessible site to open its mailbox workspace.' : 'An owner session with sites.view and settings.view is required to browse this site’s mailboxes.'}
+        />}
         {activeTab === 'general' && (
           <SiteScopedSettingsPanel
             sites={siteSettingsSites}
@@ -8038,7 +8058,7 @@ const buildInfrastructureEnvContract = ({
   {
     provider: 'notifications',
     key: 'BACKY_EMAIL_FROM',
-    aliases: ['BACKY_NOTIFICATION_EMAIL_FROM', 'BACKY_SMTP_FROM', 'BACKY_RESEND_FROM'],
+    aliases: ['BACKY_NOTIFICATION_EMAIL_FROM', 'BACKY_SMTP_FROM', 'BACKY_RESEND_FROM', 'BACKY_HOSTINGER_MAIL_FROM'],
     label: 'Notification sender',
     description: 'Sender identity used by Backy notification emails.',
     configured: Boolean(runtimeNotifications?.from),
@@ -8054,6 +8074,25 @@ const buildInfrastructureEnvContract = ({
     ),
     valueHint: runtimeNotifications?.from,
     example: 'Backy <notifications@example.com>',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_HOSTINGER_MAIL_API_TOKEN',
+    label: 'Hostinger Mail API token',
+    description: 'Server-only token scoped to the sender mailbox in Hostinger. Configuration alone does not verify access or recipient delivery.',
+    configured: Boolean(runtimeNotifications?.hostingerApiTokenConfigured),
+    required: runtimeNotifications?.emailProvider === 'hostinger',
+    secret: true,
+    example: '<hostinger-mail-api-token>',
+  },
+  {
+    provider: 'notifications',
+    key: 'BACKY_HOSTINGER_MAILBOX_ID',
+    label: 'Hostinger sender mailbox',
+    description: 'Optional mailbox resource ID; Backy otherwise resolves the exact sender address through the scoped token.',
+    configured: runtimeNotifications?.emailProvider === 'hostinger' && Boolean(runtimeNotifications?.configured),
+    required: false,
+    example: '<mailbox-resource-id>',
   },
   {
     provider: 'notifications',
@@ -9325,7 +9364,7 @@ function InfrastructureSettings({
       {
         label: 'Notifications',
         ready: Boolean(runtimeNotifications?.productionReady || runtimeNotifications?.configured),
-        status: runtimeNotifications?.productionReady ? 'Production ready' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env',
+        status: runtimeNotifications?.productionReady ? 'Provider configured' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env',
         detail: runtimeNotifications
           ? `${runtimeNotifications.emailProvider || 'email'} delivery${runtimeNotifications.from ? ` from ${runtimeNotifications.from}` : ''}`
           : 'Notification runtime diagnostics have not loaded.',
@@ -9594,8 +9633,8 @@ function InfrastructureSettings({
         />
         <RuntimeCard
           title="Notification runtime"
-          description="Detected transactional email delivery capability."
-          status={runtimeNotifications?.productionReady ? 'Production ready' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env'}
+          description="Server configuration for transactional email. Verify mailbox access and recipient delivery separately."
+          status={runtimeNotifications?.productionReady ? 'Provider configured' : runtimeNotifications?.configured ? 'Local/dev ready' : 'Needs env'}
           configured={Boolean(runtimeNotifications?.configured)}
           details={[
             { label: 'Email provider', value: runtimeNotifications?.emailProvider },
@@ -9604,6 +9643,7 @@ function InfrastructureSettings({
             { label: 'API key', value: runtimeNotifications?.apiKeyConfigured },
           ]}
         />
+        <HostingerMailConnection disabled={disabled || mediaOnly} />
         <RuntimeCard
           title="Commerce runtime"
           description="Detected payment-provider webhook, catalog sync, subscription lifecycle, refund, and shipping-label execution capability."
@@ -11938,6 +11978,7 @@ function NotificationSettings({
 // ============================================
 
 function SecuritySettings({
+  sites,
   publicApiKey,
   adminApiKey,
   authSettings,
@@ -11960,12 +12001,13 @@ function SecuritySettings({
   activityExportPermissionTitle,
   onRefreshAudit,
 }: {
+  sites: Site[];
   publicApiKey: string;
   adminApiKey: string;
   authSettings?: SiteSettingsInput['auth'];
   onAuthSettingsChange: Dispatch<SetStateAction<SiteSettingsInput['auth']>>;
   onRegenerateKeys: (scope: 'all' | 'public' | 'admin') => Promise<void> | void;
-  onIssueAdminApiKey: (label: string) => Promise<IssuedAdminApiKey | null>;
+  onIssueAdminApiKey: (label: string, scope: AdminServiceKeyScope, confirmWorkspace: boolean) => Promise<IssuedAdminApiKey | null>;
   onRevokeAdminApiKey: (keyId: string) => Promise<void> | void;
   currentSession: AdminSession | null;
   onRotateCurrentSession: () => Promise<void> | void;
@@ -11984,6 +12026,11 @@ function SecuritySettings({
 }) {
   const [copiedKey, setCopiedKey] = useState<'public' | 'admin' | null>(null);
   const [serviceKeyLabel, setServiceKeyLabel] = useState('');
+  const [serviceKeyMode, setServiceKeyMode] = useState<'selected-sites' | 'workspace'>('selected-sites');
+  const [serviceKeySiteIds, setServiceKeySiteIds] = useState<string[]>([]);
+  const [serviceKeyPermissions, setServiceKeyPermissions] = useState<string[]>([]);
+  const [serviceKeyExpiry, setServiceKeyExpiry] = useState('');
+  const [confirmWorkspaceKey, setConfirmWorkspaceKey] = useState(false);
   const [serviceKeySubmitted, setServiceKeySubmitted] = useState(false);
   const [issuedServiceKey, setIssuedServiceKey] = useState<IssuedAdminApiKey | null>(null);
   const [copiedIssuedServiceKey, setCopiedIssuedServiceKey] = useState(false);
@@ -12047,7 +12094,7 @@ function SecuritySettings({
   const rotationHistory = authSettings?.apiKeyRotationHistory || [];
   const revocationHistory = authSettings?.apiKeyRevocationHistory || [];
   const serviceKeys = authSettings?.apiKeyServiceKeys || [];
-  const activeServiceKeys = serviceKeys.filter((entry) => !entry.revokedAt && entry.status !== 'revoked');
+  const activeServiceKeys = serviceKeys.filter((entry) => !entry.revokedAt && entry.status !== 'revoked' && entry.scopeStatus !== 'invalid' && entry.scopeStatus !== 'expired');
   const currentSessionId = currentSession?.token ? currentSession.token.slice(-12) : null;
   const serviceKeyLabelInlineError = serviceKeySubmitted && serviceKeyLabel.trim().length === 0
     ? 'Add a label before issuing a key.'
@@ -12092,11 +12139,25 @@ function SecuritySettings({
       setServiceKeyNotice('Add a label before issuing a key.');
       return;
     }
+    if (serviceKeyMode === 'selected-sites' && (!serviceKeySiteIds.length || !serviceKeyPermissions.length)) {
+      setServiceKeyNotice('Select at least one site and one module permission.'); return;
+    }
+    if (serviceKeyMode === 'workspace' && !confirmWorkspaceKey) {
+      setServiceKeyNotice('Confirm workspace-wide access before issuing this key.'); return;
+    }
+    if (serviceKeyExpiry && (!Number.isFinite(Date.parse(serviceKeyExpiry)) || Date.parse(serviceKeyExpiry) <= Date.now())) {
+      setServiceKeyNotice('Choose a future expiry or leave it blank.'); return;
+    }
 
     setIssuingServiceKey(true);
     setServiceKeyNotice(null);
     try {
-      const issued = await onIssueAdminApiKey(label);
+      const issued = await onIssueAdminApiKey(label, {
+        version: 1, mode: serviceKeyMode, revision: 1,
+        siteIds: serviceKeyMode === 'selected-sites' ? serviceKeySiteIds : [],
+        permissions: serviceKeyMode === 'selected-sites' ? serviceKeyPermissions : [],
+        expiresAt: serviceKeyExpiry ? new Date(serviceKeyExpiry).toISOString() : null,
+      }, confirmWorkspaceKey);
       if (issued) {
         setIssuedServiceKey(issued);
         setServiceKeyLabel('');
@@ -12407,7 +12468,7 @@ function SecuritySettings({
             {activeServiceKeys.length} active
           </span>
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mt-4 grid gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">New key label</span>
             <input
@@ -12428,22 +12489,46 @@ function SecuritySettings({
               </span>
             )}
           </label>
-          <div className="flex items-end">
-            <Button
-              variant="outline"
-              onClick={() => void issueServiceKey()}
-              disabled={Boolean(issueServiceKeyDisabledReason)}
-              title={issueServiceKeyDisabledReason || undefined}
-              aria-label="Issue admin service key"
-              aria-describedby={securityActionStatusId}
-              data-testid="settings-admin-service-key-issue"
-              data-action-state={issueServiceKeyDisabledReason ? 'blocked' : 'ready'}
-              data-disabled-reason={issueServiceKeyDisabledReason || undefined}
-            >
-              {issuingServiceKey ? 'Issuing...' : 'Issue key'}
-            </Button>
-          </div>
         </div>
+        <fieldset disabled={!canManageApiKeys || issuingServiceKey} className="mt-4 grid gap-4 border-t border-border pt-4" data-testid="settings-admin-service-key-scope">
+          <legend className="text-sm font-medium">Key access</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm"><span>Access scope</span>
+              <select className={cn(inputClassName, 'min-h-11')} value={serviceKeyMode} onChange={event => { setServiceKeyMode(event.target.value as 'workspace' | 'selected-sites'); setConfirmWorkspaceKey(false); }}>
+                <option value="selected-sites">Selected sites and module permissions</option>
+                <option value="workspace">Workspace-wide non-owner access</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm"><span>Expires at (optional, local time)</span>
+              <input className={cn(inputClassName, 'min-h-11')} type="datetime-local" value={serviceKeyExpiry} onChange={event => setServiceKeyExpiry(event.target.value)} />
+            </label>
+          </div>
+          {serviceKeyMode === 'selected-sites' ? <>
+            <fieldset className="grid gap-1"><legend className="text-sm font-medium">Allowed sites</legend>
+              {sites.length ? sites.map(site => <label key={site.id} className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={serviceKeySiteIds.includes(site.id)} onChange={event => setServiceKeySiteIds(current => event.target.checked ? [...current, site.id] : current.filter(id => id !== site.id))} />
+                <span>{site.name} <span className="text-xs text-muted-foreground">{site.id}</span></span>
+              </label>) : <p className="text-sm text-muted-foreground">No sites are available. Create a site or reload Settings before issuing a scoped key.</p>}
+            </fieldset>
+            <fieldset><legend className="text-sm font-medium">Allowed module permissions</legend>
+              <div className="grid gap-x-4 sm:grid-cols-2 lg:grid-cols-3">{ADMIN_SITE_SERVICE_PERMISSIONS.map(permission => <label key={permission} className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={serviceKeyPermissions.includes(permission)} onChange={event => setServiceKeyPermissions(current => event.target.checked ? [...current, permission] : current.filter(key => key !== permission))} />
+                <span>{permission.split('.').join(' · ')}</span>
+              </label>)}</div>
+            </fieldset>
+            <p className="text-xs text-muted-foreground">Only the selected sites and capabilities are authorized. Workspace settings, users, teams and unknown routes are blocked.</p>
+          </> : <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={confirmWorkspaceKey} onChange={event => setConfirmWorkspaceKey(event.target.checked)} />
+            <span>I deliberately authorize access to every site and workspace API that does not require an owner session.</span>
+          </label>}
+        </fieldset>
+        <Button className="mt-4 min-h-11" variant="outline" onClick={() => void issueServiceKey()}
+          disabled={Boolean(issueServiceKeyDisabledReason)} title={issueServiceKeyDisabledReason || undefined}
+          aria-label="Issue admin service key" aria-describedby={securityActionStatusId}
+          data-testid="settings-admin-service-key-issue" data-action-state={issueServiceKeyDisabledReason ? 'blocked' : 'ready'}
+          data-disabled-reason={issueServiceKeyDisabledReason || undefined}>
+          {issuingServiceKey ? 'Issuing...' : 'Issue key'}
+        </Button>
         {issuedServiceKey ? (
           <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3 text-sm" data-testid="settings-admin-service-key-issued">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -12498,9 +12583,9 @@ function SecuritySettings({
                       <p className="font-medium text-foreground">{entry.label}</p>
                       <span className={cn(
                         'rounded-full px-2 py-0.5 text-xs font-medium',
-                        revoked ? 'bg-muted text-muted-foreground' : 'bg-success/10 text-success',
+                        revoked || entry.scopeStatus === 'invalid' || entry.scopeStatus === 'expired' ? 'bg-muted text-muted-foreground' : 'bg-success/10 text-success',
                       )}>
-                        {revoked ? 'Revoked' : 'Active'}
+                        {revoked ? 'Revoked' : entry.scopeStatus === 'invalid' ? 'Invalid policy' : entry.scopeStatus === 'expired' ? 'Expired' : 'Active'}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -12510,10 +12595,12 @@ function SecuritySettings({
                       {entry.keyPrefix || 'sk_srv_...'} / {entry.keyFingerprint || 'fingerprint unavailable'}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Scope {entry.permissionScope === 'non-owner-admin' || !entry.permissionScope
-                        ? 'non-owner admin APIs'
-                        : entry.permissionScope}
+                      Scope {entry.scopeStatus === 'invalid' ? 'invalid policy; access denied' : entry.scopeStatus === 'expired' ? 'expired; access denied' : entry.scope?.mode === 'selected-sites'
+                        ? `selected sites: ${entry.scope.siteIds.join(', ')} · permissions: ${entry.scope.permissions.join(', ')}`
+                        : entry.scope?.legacy || !entry.scope ? 'legacy workspace-wide non-owner access'
+                          : entry.scope?.mode === 'workspace' ? 'explicit workspace-wide non-owner access' : 'invalid policy; access denied'}
                     </p>
+                    {entry.scope?.expiresAt ? <p className="mt-1 text-xs text-muted-foreground">{Date.parse(entry.scope.expiresAt) <= Date.now() ? 'Expired' : 'Expires'} {formatAuditTime(entry.scope.expiresAt)}</p> : null}
                     <p className="mt-1 text-xs text-muted-foreground">
                       Last used {entry.lastUsedAt ? formatAuditTime(entry.lastUsedAt) : 'never'}
                     </p>

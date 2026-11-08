@@ -6,6 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { runOrderCompletionTask, type OrderCompletionWarning } from "@/lib/orderCompletion";
+import { BackyCollectionRecordConflictError } from "@backy-cms/core";
 import type {
   BackyCollection,
   BackyJsonObject,
@@ -213,8 +215,8 @@ const deliverOrderTrackingWebhook = async (params: {
   tracking: TrackingPayload;
   requestId: string;
   actor?: string | null;
-}) =>
-  deliverSiteWebhooks({
+}) => {
+  const outcomes = await deliverSiteWebhooks({
     repositories: params.repositories,
     site: params.site,
     kind: "site-updated",
@@ -240,6 +242,11 @@ const deliverOrderTrackingWebhook = async (params: {
       trackingNumber: params.tracking.trackingNumber,
     },
   });
+  if (outcomes.some((outcome) => outcome.status === 'failed')) {
+    throw new Error('Tracking webhook delivery needs follow-up.');
+  }
+  return outcomes;
+};
 
 const appendNote = (current: unknown, note: string): string => {
   const currentNotes = textValue(current);
@@ -838,10 +845,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           record.id,
           {
             values: toJsonRecord(values),
+            expectedRecord: record,
           },
         )
       ).item;
-      const cacheInvalidation = await recordSiteCacheInvalidation(
+      const completionWarnings: OrderCompletionWarning[] = [];
+      const cacheInvalidation = await runOrderCompletionTask(completionWarnings, "CACHE_INVALIDATION_PENDING", "Tracking was saved, but cache refresh needs follow-up.", () => recordSiteCacheInvalidation(
         repositories,
         {
           siteId: site.id,
@@ -851,8 +860,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           reason: "order-tracking-refreshed",
           requestId,
         },
-      );
-      await recordAdminAudit({
+      ));
+      await runOrderCompletionTask(completionWarnings, "AUDIT_PENDING", "Tracking was saved, but the audit entry needs follow-up.", () => recordAdminAudit({
         repositories,
         siteId: site.id,
         entity: "collectionRecord",
@@ -862,8 +871,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         after: collectionRecordAuditMetadata(collection, updated),
         metadata: trackingAuditMetadata(collection, updated, result.tracking),
         requestId,
-      });
-      await deliverOrderTrackingWebhook({
+      }));
+      await runOrderCompletionTask(completionWarnings, "WEBHOOK_DELIVERY_PENDING", "Tracking was saved, but webhook delivery needs follow-up.", () => deliverOrderTrackingWebhook({
         repositories,
         site,
         collection,
@@ -872,7 +881,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         tracking: result.tracking,
         requestId,
         actor: access.session?.user.id,
-      });
+      }));
 
       return privateTrackingResponse(
         {
@@ -883,6 +892,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             order: updated,
             tracking: result.tracking,
             cacheInvalidation,
+            completionWarnings,
           },
         },
         requestId,
@@ -963,7 +973,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       site.id,
       collection.id,
       record.id,
-      { values },
+      { values, expectedRecord: record },
     );
     if (!updated)
       return errorResponse(
@@ -973,7 +983,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         requestId,
       );
 
-    await recordAdminAudit({
+    const completionWarnings: OrderCompletionWarning[] = [];
+    await runOrderCompletionTask(completionWarnings, "AUDIT_PENDING", "Tracking was saved, but the audit entry needs follow-up.", () => recordAdminAudit({
       siteId: site.id,
       entity: "collectionRecord",
       entityId: updated.id,
@@ -982,8 +993,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       after: collectionRecordAuditMetadata(collection, updated),
       metadata: trackingAuditMetadata(collection, updated, result.tracking),
       requestId,
-    });
-    await deliverOrderTrackingWebhook({
+    }));
+    await runOrderCompletionTask(completionWarnings, "WEBHOOK_DELIVERY_PENDING", "Tracking was saved, but webhook delivery needs follow-up.", () => deliverOrderTrackingWebhook({
       site: site as unknown as Site,
       collection,
       before: record,
@@ -991,18 +1002,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       tracking: result.tracking,
       requestId,
       actor: access.session?.user.id,
-    });
+    }));
 
     return privateTrackingResponse(
       {
         success: true,
         requestId,
-        data: { record: updated, order: updated, tracking: result.tracking },
+        data: { record: updated, order: updated, tracking: result.tracking, completionWarnings },
       },
       requestId,
       site.id,
     );
   } catch (error) {
+    if (error instanceof BackyCollectionRecordConflictError) return errorResponse(409, "ORDER_RECORD_CONFLICT", "The order changed while tracking was being refreshed. Reload the order before trying again.", requestId, { reloadRequired: true });
     console.error("Admin order tracking refresh API error:", error);
     return errorResponse(
       500,

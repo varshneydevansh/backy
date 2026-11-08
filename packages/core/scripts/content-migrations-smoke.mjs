@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
+import vm from 'node:vm';
+
 import {
   buildBackyElementIndex,
   canvasContentPayloadToBackyContentDocument,
   canvasElementsToBackyContentDocument,
   normalizeBackyContentElements,
+  normalizeBackyContentElement,
   validateBackyContentDocument,
 } from '../dist/index.mjs';
 
@@ -410,3 +413,72 @@ assert(index.byId.hero_image?.accessibility?.alt === 'Hero image', 'Expected alt
 assert(index.byId.figure_rounds?.fallback?.title === 'Self-correction at work', 'Expected indexed interactive fallback metadata');
 
 console.log('Backy content migrations smoke passed');
+
+// Unknown component/document extensions keep their authored JSON paths.
+const extensionElement = {
+  id: 'extension-parent', type: 'section', x: '12', visible: 'false', props: {},
+  frontendContract: { schemaVersion: 'frontend.component.v3', revision: 7, slots: ['title', 'body'], flags: { animated: true } },
+  extensionNull: null, extensionFalse: false, extensionZero: 0, extensionEmpty: '', extensionList: [null, false, 0, '', { revision: 2 }],
+  themeTokenRefs: { surface: 'colors.surface' }, metadata: { legacy: { olderExtension: 'already stored here' } },
+  children: [{
+    id: 'extension-chart', type: 'interactiveFigure', componentKey: 'fixture.chart', version: '3.2.1', children: [], props: { series: [1, 2] },
+    frontendBindings: { schemaVersion: 'frontend.bindings.v2', slot: { path: 'series', value: [0, 1] } },
+    chartSchema: { version: 5, curves: [{ name: 'alpha', interpolation: 'monotone' }] },
+  }],
+};
+const extensionsDocument = canvasContentPayloadToBackyContentDocument({ id: 'extensions-document', kind: 'page', rawContent: { elements: [extensionElement], frontendContract: { version: 4, route: '/extension' } } });
+assert(extensionsDocument.elements[0].frontendContract.schemaVersion === 'frontend.component.v3', 'Root frontend component contract must remain at its authored path');
+assert(extensionsDocument.elements[0].children[0].chartSchema.curves[0].interpolation === 'monotone', 'Nested component extensions must stay intact');
+assert(extensionsDocument.elements[0].x === 12 && extensionsDocument.elements[0].visible === false, 'Declared fields must retain normalization authority');
+assert(extensionsDocument.elements[0].metadata.legacy.olderExtension === 'already stored here', 'Existing legacy metadata must not be automatically relocated');
+assert(!Object.hasOwn(extensionsDocument.elements[0].metadata.legacy, 'frontendContract'), 'New root extensions must not be moved into legacy metadata');
+assert(extensionsDocument.frontendContract.version === 4, 'Document root extensions must remain at their authored path');
+const legacyAdapter = JSON.parse(JSON.stringify({ elements: extensionsDocument.elements, canvasSize: { width: 1200, height: 800 }, contentDocument: extensionsDocument }));
+const reopenedExtensions = canvasContentPayloadToBackyContentDocument({ id: extensionsDocument.id, kind: 'page', rawContent: legacyAdapter, fallbackDocument: extensionsDocument });
+for (const key of ['frontendContract', 'extensionNull', 'extensionFalse', 'extensionZero', 'extensionEmpty', 'extensionList', 'themeTokenRefs']) {
+  assert(JSON.stringify(reopenedExtensions.elements[0][key]) === JSON.stringify(extensionsDocument.elements[0][key]), `Canonical→legacy→canonical must preserve ${key}`);
+}
+assert(JSON.stringify(reopenedExtensions.elements[0].children[0].frontendBindings) === JSON.stringify(extensionsDocument.elements[0].children[0].frontendBindings), 'Nested versioned bindings must survive reopening');
+assert(reopenedExtensions.frontendContract.version === 4, 'Embedded canonical document root extensions must survive the legacy adapter');
+const minimalReopen = canvasContentPayloadToBackyContentDocument({ id: extensionsDocument.id, kind: 'page', rawContent: { elements: reopenedExtensions.elements }, fallbackDocument: extensionsDocument });
+assert(minimalReopen.frontendContract.version === 4, 'Minimal canvas updates must preserve fallback root extensions');
+const canonicalReopen = canvasContentPayloadToBackyContentDocument({ id: extensionsDocument.id, kind: 'page', rawContent: reopenedExtensions });
+assert(canonicalReopen.elements[0].frontendContract.revision === 7, 'Canonical input must preserve extension fields without changing declared semantics');
+
+let getterCalls = 0;
+const unsafeExtension = JSON.parse('{"ok":1,"__proto__":{"polluted":true},"constructor":{"danger":true},"prototype":{"danger":true}}');
+Object.defineProperty(unsafeExtension, 'computed', { enumerable: true, get() { getterCalls++; throw new Error('Getter must not execute'); } });
+unsafeExtension.functionValue = () => 'not JSON'; unsafeExtension.bigint = 1n; unsafeExtension.invalidNumber = Infinity; unsafeExtension.date = new Date('2026-01-01'); unsafeExtension.symbol = Symbol('not JSON');
+unsafeExtension.self = unsafeExtension;
+const accessorArray = [1, 2, () => 'not JSON', NaN, undefined];
+Object.defineProperty(accessorArray, '1', { enumerable: true, get() { getterCalls++; throw new Error('Array getter must not execute'); } });
+const unsafeElement = { id: 'safe-extension', type: 'heading', props: {}, children: [], extension: unsafeExtension, extensionArray: accessorArray };
+Object.defineProperty(unsafeElement, 'computedExtension', { enumerable: true, get() { getterCalls++; throw new Error('Root getter must not execute'); } });
+const safeExtensionElement = normalizeBackyContentElement(unsafeElement);
+assert(getterCalls === 0, 'Normalizing extension fields must not execute root/nested/array getters');
+assert(safeExtensionElement.extension.ok === 1, 'Safe neighbors of rejected extension fields must survive');
+for (const key of ['__proto__', 'constructor', 'prototype', 'computed', 'functionValue', 'bigint', 'invalidNumber', 'date', 'symbol', 'self']) assert(!Object.hasOwn(safeExtensionElement.extension, key), `Unsafe/non-JSON extension ${key} must be excluded`);
+assert(JSON.stringify(safeExtensionElement.extensionArray) === '[1,null,null,null,null]', 'Rejected array entries must preserve JSON entry positions');
+assert(!Object.hasOwn(safeExtensionElement, 'computedExtension'), 'Accessor extensions must be excluded');
+assert(Object.getPrototypeOf(safeExtensionElement.extension) === Object.prototype && {}.polluted === undefined, 'Extensions must not adopt hostile prototypes');
+const inheritedExtension = Object.create({ hidden: 'inherited' }); inheritedExtension.visible = 'own';
+assert(!Object.hasOwn(normalizeBackyContentElement({ id: 'prototype-extension', type: 'text', props: {}, children: [], inheritedExtension }), 'inheritedExtension'), 'Custom-prototype extension objects are outside the JSON extension contract');
+const nullPrototype = Object.create(null); nullPrototype.own = 'retained';
+assert(normalizeBackyContentElement({ id: 'null-prototype', type: 'text', props: {}, children: [], extension: nullPrototype }).extension.own === 'retained', 'Plain null-prototype JSON objects remain supported');
+const anotherRealmJson = vm.runInNewContext('({ schemaVersion: "extension.v2", nested: { value: [0, false, null] } })');
+assert(normalizeBackyContentElement({ id: 'another-realm', type: 'text', props: {}, children: [], extension: anotherRealmJson }).extension.nested.value[1] === false, 'Plain JSON from another realm must not be mistaken for a custom prototype instance');
+
+const hostileCanonical = { ...extensionsDocument, arbitraryRoot: unsafeExtension, elements: [{ ...extensionsDocument.elements[0], hostileRoot: unsafeExtension }] };
+Object.defineProperty(hostileCanonical, 'computedRoot', { enumerable: true, get() { getterCalls++; throw new Error('Canonical getter must not execute'); } });
+const safeCanonical = canvasContentPayloadToBackyContentDocument({ id: extensionsDocument.id, kind: 'page', rawContent: hostileCanonical });
+assert(getterCalls === 0 && !Object.hasOwn(safeCanonical, 'computedRoot'), 'Canonical input extensions must also exclude accessors');
+assert(safeCanonical.arbitraryRoot.ok === 1 && !Object.hasOwn(safeCanonical.arbitraryRoot, 'self'), 'Canonical document extensions must strip cycles without losing valid neighboring values');
+assert(safeCanonical.elements[0].hostileRoot.ok === 1, 'Canonical element extension safety must preserve valid fields');
+
+let deepExtension = { leaf: 'retained' };
+for (let depth = 0; depth < 1500; depth++) deepExtension = { next: deepExtension };
+const deepNormalized = normalizeBackyContentElement({ id: 'deep-extension', type: 'text', props: {}, children: [], extension: deepExtension });
+let deepCursor = deepNormalized.extension;
+for (let depth = 0; depth < 1500; depth++) deepCursor = deepCursor.next;
+assert(deepCursor.leaf === 'retained', 'Valid deep JSON extensions must not be silently capped or truncated');
+console.log('Backy extension preservation and unsafe-value migration checks passed');

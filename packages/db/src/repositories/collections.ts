@@ -1,5 +1,22 @@
 import {
+    assertCollectionDesignOnlyUpdate,
+    snapshotCollectionTemplateDesign,
+    serializeBackyCollectionVersion,
+    type BackyCollectionDesignRevision,
+    snapshotProductTemplateDesign,
+    type BackyProductDesignRevision,
+    assertBackyCollectionImportExpectation,
+    collectionRecordUniqueIssues,
+    assertBackyCollectionRecordInventoryUnique,
+    BackyCollectionRecordValidationError,
+    assertBackyCollectionRecordUpdateExpectation,
+    serializeBackyCollectionRecordVersion,
+    BackyCollectionImportConflictError,
     type BackyCollection,
+    type BackyCollectionSearchMetadata,
+    type BackyCollectionRecordSearchMetadata,
+    type BackyCollectionRecordSearchInput,
+    type BackyCollectionRecordAdmissionContext,
     type BackyCollectionCreateInput,
     type BackyCollectionField,
     type BackyCollectionPermissions,
@@ -15,15 +32,26 @@ import {
     type BackyListResult,
     type BackyRepositoryMutationResult,
     type PublishStatus,
+    COLLECTION_SEARCH_VALUE_LIMIT,
 } from '@backy-cms/core';
-import { and, asc, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
+import { and, asc, desc, eq, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import {
+    collectionDesignRevisions,
+    productDesignRevisions,
     contentCollectionRecords,
     contentCollections,
+    sites,
 } from '../schema';
 import type { DatabaseInstance } from '../adapters';
+import { createSettingsRepository } from './settings';
+import { createMediaRepository } from './media';
+import { createSiteRepository } from './site-page-post';
+import { createDatabaseRepositories } from './factory';
+import { withSiteMediaMutationTransaction } from './media-mutation-admission';
 
 type QueryDatabase = {
+    transaction: <T>(run: (writer: QueryDatabase) => Promise<T>) => Promise<T>;
     select: (...args: unknown[]) => {
         from: (table: unknown) => QueryBuilder;
     };
@@ -41,6 +69,7 @@ type QueryDatabase = {
 };
 
 type QueryBuilder = {
+    for: (mode: 'update' | 'key share') => QueryBuilder;
     where: (condition: unknown) => QueryBuilder;
     orderBy: (...columns: unknown[]) => QueryBuilder;
     limit: (limit: number) => QueryBuilder;
@@ -69,6 +98,10 @@ const asDb = (db: DatabaseInstance): QueryDatabase => db as unknown as QueryData
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const isUuidIdentifier = (value: string): boolean => (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
 );
 
 const toIso = (value: Date | string | null | undefined): string => {
@@ -288,10 +321,145 @@ const toCollectionRecord = (row: CollectionRecordRow): BackyCollectionRecord => 
     scheduledAt: toNullableIso(row.scheduledAt),
 });
 
-export function createCollectionRepository(db: DatabaseInstance): BackyCollectionRepository {
+type RecordWriteScope = { siteId: string; collectionId: string; collection: BackyCollection };
+export function createCollectionRepository(db: DatabaseInstance, options: { adapterType?: string; recordWriteScope?: RecordWriteScope; skipRecordUnique?: boolean; definitionImportScope?: boolean; definitionWriteScope?: RecordWriteScope } = {}): BackyCollectionRepository {
     const database = asDb(db);
+    const adapter = options.adapterType || 'postgres';
+    const jsonText = (column: SQLWrapper, key: string) => adapter === 'sqlite' ? sql`cast(${column} -> ${`$.${key}`} as text)`
+        : adapter === 'mysql' ? sql`cast(json_extract(${column}, ${`$.${key}`}) as char)` : sql`(${column} -> ${key})::text`;
+    // Return selected JSON members only; never transfer a record's full values.
+    const searchValue = (column: SQLWrapper, key: string, alias: string, policy = false) => {
+        const value = jsonText(column, key);
+        const length = adapter === 'sqlite' ? sql`length(cast(${value} as blob))` : sql`octet_length(${value})`;
+        return sql`case when ${value} is null then null ${policy ? sql`when ${value} = ${'null'} then ${'false'}` : sql``} when ${length} <= ${COLLECTION_SEARCH_VALUE_LIMIT} then ${value} else ${policy ? 'false' : null} end`
+            .mapWith((value: unknown) => value === null ? undefined : JSON.parse(String(value))).as(alias);
+    };
+    // Match the repository's legacy default when the permission key is absent;
+    // explicit false/null and malformed non-boolean values remain excluded.
+    const publicCollection = and(eq(contentCollections.status, 'published'), sql`coalesce(${jsonText(contentCollections.permissions, 'publicRead')}, ${'true'}) = ${'true'}`);
+    const searchPage = async <T>(table: typeof contentCollections | typeof contentCollectionRecords, columns: Record<string, unknown>, where: SQL | undefined, input: { limit?: number; offset?: number }) => {
+        const limit = normalizeLimit(input.limit), offset = normalizeOffset(input.offset);
+        const [count] = await database.select({ total: sql<number>`count(*)` }).from(table).where(where) as { total: unknown }[];
+        const total = Number(count?.total);
+        if (!Number.isSafeInteger(total) || total < 0) throw Error('Invalid collection search metadata count.');
+        const items = await database.select(columns).from(table).where(where).orderBy(desc(table.updatedAt), asc(table.id)).limit(limit).offset(offset) as T[];
+        return { items, pagination: { total, limit, offset, hasMore: offset + items.length < total } };
+    };
 
+    const readUniqueInventory = async (siteId: string, collectionId: string) => (await database.select().from(contentCollectionRecords).where(and(eq(contentCollectionRecords.siteId, siteId), eq(contentCollectionRecords.collectionId, collectionId))).orderBy(asc(contentCollectionRecords.id)) as CollectionRecordRow[]).map(toCollectionRecord);
+    const validateUnique = async (collection: BackyCollection, values: Record<string, unknown>, excludeRecordId?: string) => {
+        if (options.skipRecordUnique || !collection.fields.some(field => field.unique)) return;
+        const issues = collectionRecordUniqueIssues(collection, values, await readUniqueInventory(collection.siteId, collection.id), excludeRecordId);
+        if (issues.length) throw new BackyCollectionRecordValidationError(issues);
+    };
     return {
+        async withDefinitionWriteLock(siteId,collectionId,operation) {
+            if(options.adapterType && options.adapterType!=='postgres')throw Object.assign(Error('Guarded collection authoring requires PostgreSQL.'),{code:'COLLECTION_DEFINITION_WRITE_UNAVAILABLE'});
+            const held=options.definitionWriteScope || options.recordWriteScope;
+            if(held?.siteId===siteId && held.collectionId===collectionId)return operation(this,held.collection,createDatabaseRepositories({adapter:{type:'postgres',db,isConnected:async()=>true,close:async()=>{}}}));
+            return database.transaction(async writer=>{
+                const site=await firstOrNull(writer.select().from(sites).where(eq(sites.id,siteId)).limit(1).for('update'));
+                const row=site?await firstOrNull<CollectionRow>(writer.select().from(contentCollections).where(and(eq(contentCollections.siteId,siteId),eq(contentCollections.id,collectionId))).limit(1).for('update')):null;
+                if(!row)throw Object.assign(Error('Collection not found.'),{code:'COLLECTION_NOT_FOUND'});
+                const collection=toCollection(row);
+                return createCollectionRepository(writer as unknown as DatabaseInstance,{...options,definitionWriteScope:{siteId,collectionId,collection},recordWriteScope:{siteId,collectionId,collection}}).withDefinitionWriteLock!(siteId,collectionId,operation);
+            });
+        },
+        async listCollectionDesignRevisions(siteId,collectionId,options={}) {
+            const rows=await database.select().from(collectionDesignRevisions).where(and(eq(collectionDesignRevisions.siteId,siteId),eq(collectionDesignRevisions.collectionId,collectionId))).orderBy(desc(collectionDesignRevisions.createdAt),desc(collectionDesignRevisions.id)).limit(Math.min(100,Math.max(1,options.limit||100))+1).offset(Math.max(0,options.offset||0)) as Array<typeof collectionDesignRevisions.$inferSelect>;
+            return rows.map(row=>({...row,snapshot:row.snapshot as BackyCollectionDesignRevision['snapshot'],operation:row.operation as BackyCollectionDesignRevision['operation'],createdAt:toIso(row.createdAt)}));
+        },
+        async getCollectionDesignRevision(siteId,collectionId,revisionId) {
+            const row=await firstOrNull<typeof collectionDesignRevisions.$inferSelect>(database.select().from(collectionDesignRevisions).where(and(eq(collectionDesignRevisions.siteId,siteId),eq(collectionDesignRevisions.collectionId,collectionId),eq(collectionDesignRevisions.id,revisionId))).limit(1));
+            return row?{...row,snapshot:row.snapshot as BackyCollectionDesignRevision['snapshot'],operation:row.operation as BackyCollectionDesignRevision['operation'],createdAt:toIso(row.createdAt)}:null;
+        },
+        async withRecordWriteLock<T>(siteId: string, collectionId: string, operation: (repository: BackyCollectionRepository, collection: BackyCollection, context: BackyCollectionRecordAdmissionContext) => Promise<T>): Promise<T> {
+            if (options.recordWriteScope?.siteId === siteId && options.recordWriteScope.collectionId === collectionId) return operation(this, options.recordWriteScope.collection, { media: createMediaRepository(db), settings: createSettingsRepository(db), sites: createSiteRepository(db) });
+            return database.transaction(async writer => {
+                // Same order as imports: site before collection before record. FK admission must not invert it.
+                const site = await firstOrNull(writer.select().from(sites).where(eq(sites.id, siteId)).limit(1).for('key share'));
+                const row = site ? await firstOrNull<CollectionRow>(writer.select().from(contentCollections).where(and(eq(contentCollections.siteId, siteId), eq(contentCollections.id, collectionId))).limit(1).for('update')) : null;
+                if (!row) throw new Error('The collection is no longer available. Reload the selected site.');
+                const collection = toCollection(row);
+                return createCollectionRepository(writer as unknown as DatabaseInstance, { ...options, recordWriteScope: { siteId, collectionId, collection } }).withRecordWriteLock(siteId, collectionId, operation);
+            });
+        },
+        async applyImport(siteId, operations, decorateWriter, reconcileRetainedRecords) {
+            // Admit before schema/record locks. The complete import keeps its
+            // existing transaction isolation and final uniqueness validation.
+            return withSiteMediaMutationTransaction(db, options.adapterType || 'postgres', siteId, async transaction => {
+                const writer = transaction as unknown as QueryDatabase;
+                const site = await firstOrNull(writer.select().from(sites).where(eq(sites.id, siteId)).limit(1).for('update'));
+                if (!site) throw new BackyCollectionImportConflictError();
+                // Lock every existing schema and record participating in uniqueness checks.
+                for (const operation of [...operations].sort((a, b) => a.input.slug.localeCompare(b.input.slug))) {
+                    const row = await firstOrNull<CollectionRow>(writer.select().from(contentCollections).where(and(eq(contentCollections.siteId, siteId), eq(contentCollections.slug, operation.input.slug))).limit(1).for('update'));
+                    const records = row ? await writer.select().from(contentCollectionRecords).where(and(eq(contentCollectionRecords.siteId, siteId), eq(contentCollectionRecords.collectionId, row.id))).orderBy(asc(contentCollectionRecords.id)).for('update') as CollectionRecordRow[] : [];
+                    assertBackyCollectionImportExpectation(siteId, operation, row ? toCollection(row) : null, records.map(toCollectionRecord));
+                }
+                const scopedRepository = createCollectionRepository(transaction, { ...options,skipRecordUnique: true,definitionImportScope:true });
+                const scopedRepositories = createDatabaseRepositories({ adapter: { type: 'postgres', db: transaction, isConnected: async () => true, close: async () => {} } });
+                // Preserve import-specific flags; a fresh factory collection
+                // writer would incorrectly check uniqueness between each row.
+                const repository = decorateWriter ? decorateWriter(scopedRepository, scopedRepositories) : scopedRepository;
+                const collections: BackyCollection[] = [], records: BackyCollectionRecord[] = [];
+                let createdCollections = 0, updatedCollections = 0, createdRecords = 0, updatedRecords = 0;
+                for (const operation of operations) {
+                    const collection = operation.expectedCollection
+                        ? (await repository.update(siteId, operation.expectedCollection.id, operation.input)).item
+                        : (await repository.create({ ...operation.input, siteId })).item;
+                    collections.push(collection);
+                    if (operation.expectedCollection) updatedCollections++; else createdCollections++;
+                    for (const record of operation.records) {
+                        const saved = record.expectedRecord
+                            ? (await repository.updateRecord(siteId, collection.id, record.expectedRecord.id, record.input)).item
+                            : (await repository.createRecord({ ...record.input, siteId, collectionId: collection.id })).item;
+                        records.push(saved);
+                        if (record.expectedRecord) updatedRecords++; else createdRecords++;
+                    }
+                }
+                const importedRecordIds = new Set(records.map(record => record.id));
+                for (const collection of collections) {
+                    if (!reconcileRetainedRecords && !collection.fields.some(field => field.unique)) continue;
+                    const rows = await writer.select().from(contentCollectionRecords).where(and(eq(contentCollectionRecords.siteId, siteId), eq(contentCollectionRecords.collectionId, collection.id))).orderBy(asc(contentCollectionRecords.id)) as CollectionRecordRow[];
+                    const finalRecords = rows.map(toCollectionRecord);
+                    assertBackyCollectionRecordInventoryUnique(collection, finalRecords);
+                    // Schema upserts can reinterpret untouched records. The
+                    // same-transaction hook reconciles their references only;
+                    // they remain absent from mutation counts and responses.
+                    const retained = finalRecords.filter(record => !importedRecordIds.has(record.id));
+                    if (reconcileRetainedRecords && retained.length) await reconcileRetainedRecords(scopedRepositories, collection, retained);
+                }
+                return { collections, records, createdCollections, updatedCollections, createdRecords, updatedRecords };
+            });
+        },
+        async listSearchMetadata(input): Promise<BackyListResult<BackyCollectionSearchMetadata>> {
+            const result = await searchPage<Omit<BackyCollectionSearchMetadata, 'updatedAt'> & { updatedAt: Date | string; searchPolicy?: BackyJsonValue }>(contentCollections, {
+                id: contentCollections.id, siteId: contentCollections.siteId, name: contentCollections.name,
+                slug: contentCollections.slug, description: contentCollections.description, status: contentCollections.status,
+                updatedAt: contentCollections.updatedAt, routePattern: contentCollections.routePattern, listRoutePattern: contentCollections.listRoutePattern,
+                searchPolicy: searchValue(contentCollections.metadata, 'publicSearch', 'search_policy', true),
+            }, and(eq(contentCollections.siteId, input.siteId), publicCollection), input);
+            return { ...result, items: result.items.map(({ searchPolicy, ...row }) => ({ ...row, updatedAt: toIso(row.updatedAt),
+                permissions: { publicRead: true }, metadata: searchPolicy === undefined || searchPolicy === null ? {} : { publicSearch: searchPolicy } })) };
+        },
+
+        async listRecordSearchMetadata(input: BackyCollectionRecordSearchInput): Promise<BackyListResult<BackyCollectionRecordSearchMetadata>> {
+            if (!['published', 'scheduled'].includes(input.status) || !Array.isArray(input.valueKeys) || input.valueKeys.length > 16
+                || new Set(input.valueKeys).size !== input.valueKeys.length
+                || !input.valueKeys.every(key => /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key) && !['constructor', 'prototype', '__proto__'].includes(key))) throw Error('Invalid collection search projection.');
+            const fields = Object.fromEntries(input.valueKeys.map((key, index) => [`value${index}`, searchValue(contentCollectionRecords.values, key, `search_value_${index}`)]));
+            const result = await searchPage<Record<string, unknown> & Omit<BackyCollectionRecordSearchMetadata, 'updatedAt' | 'scheduledAt' | 'values'> & { updatedAt: Date | string; scheduledAt?: Date | string | null }>(contentCollectionRecords, {
+                id: contentCollectionRecords.id, siteId: contentCollectionRecords.siteId, collectionId: contentCollectionRecords.collectionId,
+                slug: contentCollectionRecords.slug, status: contentCollectionRecords.status, updatedAt: contentCollectionRecords.updatedAt, scheduledAt: contentCollectionRecords.scheduledAt, ...fields,
+            }, and(eq(contentCollectionRecords.siteId, input.siteId), eq(contentCollectionRecords.collectionId, input.collectionId), eq(contentCollectionRecords.status, input.status),
+                sql`exists (select 1 from ${contentCollections} where ${contentCollections.id} = ${contentCollectionRecords.collectionId} and ${contentCollections.siteId} = ${input.siteId} and ${publicCollection})`), input);
+            return { ...result, items: result.items.map(row => ({ id: row.id, siteId: row.siteId, collectionId: row.collectionId, slug: row.slug, status: row.status,
+                updatedAt: toIso(row.updatedAt), scheduledAt: toNullableIso(row.scheduledAt),
+                values: Object.fromEntries(input.valueKeys.flatMap((key, index) => row[`value${index}`] === undefined || row[`value${index}`] === null ? [] : [[key, row[`value${index}`] as BackyJsonValue]])),
+            })) };
+        },
+
         async list(input: BackyCollectionListInput): Promise<BackyListResult<BackyCollection>> {
             const rows = await database.select().from(contentCollections).where(eq(contentCollections.siteId, input.siteId)).orderBy(desc(contentCollections.updatedAt)) as CollectionRow[];
             const filtered = rows
@@ -303,6 +471,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
         },
 
         async getById(siteId: string, collectionId: string): Promise<BackyCollection | null> {
+            if (!isUuidIdentifier(siteId) || !isUuidIdentifier(collectionId)) return null;
             const row = await firstOrNull<CollectionRow>(
                 database.select().from(contentCollections).where(and(eq(contentCollections.siteId, siteId), eq(contentCollections.id, collectionId))).limit(1),
             );
@@ -334,6 +503,16 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
         },
 
         async update(siteId: string, collectionId: string, input: BackyCollectionUpdateInput): Promise<BackyRepositoryMutationResult<BackyCollection>> {
+            if(options.adapterType && options.adapterType!=='postgres' && (input.expectedVersion!==undefined||input.expectedCollection||input.beforeUpdateCollectionDesignRevision))throw Object.assign(Error('Guarded collection authoring requires PostgreSQL.'),{code:'COLLECTION_DEFINITION_WRITE_UNAVAILABLE'});
+            const held=options.definitionWriteScope || options.recordWriteScope;
+            if((!options.adapterType||options.adapterType==='postgres')&&!options.definitionImportScope&&(held?.siteId!==siteId||held.collectionId!==collectionId))return this.withDefinitionWriteLock!(siteId,collectionId,writer=>writer.update(siteId,collectionId,input));
+            const before=held?.siteId===siteId&&held.collectionId===collectionId?held.collection:null;
+            if((input.expectedVersion!==undefined||input.expectedCollection||input.beforeUpdateCollectionDesignRevision)&&!before)throw Object.assign(Error('The collection write scope is unavailable.'),{code:'COLLECTION_DEFINITION_WRITE_UNAVAILABLE'});
+            if(before){
+                const version=(collection:BackyCollection)=>'collection-v1:'+createHash('sha256').update(serializeBackyCollectionVersion(collection)).digest('hex');
+                if((input.expectedVersion!==undefined&&input.expectedVersion!==version(before))||(input.expectedCollection&&version(input.expectedCollection)!==version(before)))throw Object.assign(Error('The collection changed.'),{code:'COLLECTION_DEFINITION_CONFLICT'});
+                if(input.beforeUpdateCollectionDesignRevision){assertCollectionDesignOnlyUpdate(before,input);const details=input.beforeUpdateCollectionDesignRevision;await database.insert(collectionDesignRevisions).values({siteId,collectionId,snapshot:snapshotCollectionTemplateDesign(before),...details,templateId:details.templateId||null,targetRevisionId:details.targetRevisionId||null,actorId:details.actorId||null}).returning();}
+            }
             const updates: Record<string, unknown> = {
                 updatedAt: new Date(),
             };
@@ -369,7 +548,7 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
                 .where(and(...conditions))
                 .orderBy(input.sortBy
                     ? recordSortColumn(input.sortBy, input.sortDirection)
-                    : desc(contentCollectionRecords.updatedAt))
+                    : desc(contentCollectionRecords.updatedAt), asc(contentCollectionRecords.id))
                 .limit(normalizedLimit)
                 .offset(normalizedOffset) as CollectionRecordRow[];
             const filtered = rows
@@ -420,6 +599,8 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
         },
 
         async createRecord(input: BackyCollectionRecordCreateInput): Promise<BackyRepositoryMutationResult<BackyCollectionRecord>> {
+            if (options.recordWriteScope?.siteId !== input.siteId || options.recordWriteScope.collectionId !== input.collectionId) return this.withRecordWriteLock(input.siteId, input.collectionId, repository => repository.createRecord(input));
+            await validateUnique(options.recordWriteScope.collection, input.values);
             const status = input.status || 'draft';
             const [row] = await database.insert(contentCollectionRecords).values({
                 siteId: input.siteId,
@@ -435,9 +616,18 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
         },
 
         async updateRecord(siteId: string, collectionId: string, recordId: string, input: BackyCollectionRecordUpdateInput): Promise<BackyRepositoryMutationResult<BackyCollectionRecord>> {
-            const existing = await this.getRecordById(siteId, collectionId, recordId);
+            if (options.recordWriteScope?.siteId !== siteId || options.recordWriteScope.collectionId !== collectionId) return this.withRecordWriteLock(siteId, collectionId, repository => repository.updateRecord(siteId, collectionId, recordId, input));
+            const [existingRow] = await database.select().from(contentCollectionRecords).where(and(eq(contentCollectionRecords.siteId, siteId), eq(contentCollectionRecords.collectionId, collectionId), eq(contentCollectionRecords.id, recordId))).for('update') as CollectionRecordRow[];
+            const existing = existingRow ? toCollectionRecord(existingRow) : null;
+            assertBackyCollectionRecordUpdateExpectation(siteId, collectionId, recordId, input, existing, existing ? `record-v1:${createHash('sha256').update(serializeBackyCollectionRecordVersion(existing)).digest('hex')}` : undefined);
+            await validateUnique(options.recordWriteScope.collection, input.values === undefined ? existing?.values || {} : input.values, recordId);
+            if (input.beforeUpdateProductDesignRevision) {
+                if (!existing || !input.expectedRecord || options.recordWriteScope.collection.slug !== "products" || input.status !== undefined || input.slug !== undefined || input.scheduledAt !== undefined) throw Error("PRODUCT_DESIGN_REVISION_INVALID");
+                const details = input.beforeUpdateProductDesignRevision;
+                await database.insert(productDesignRevisions).values({ siteId, collectionId, recordId, snapshot: snapshotProductTemplateDesign(existing.values), ...details, actorId: details.actorId || null, templateId: details.templateId || null, targetRevisionId: details.targetRevisionId || null }).returning();
+            }
             const updates: Record<string, unknown> = {
-                updatedAt: new Date(),
+                updatedAt: new Date(Math.max(Date.now(), Date.parse(existing?.updatedAt || '') + 1 || Date.now())),
             };
             if (input.slug !== undefined) updates.slug = input.slug;
             if (input.values !== undefined) updates.values = input.values;
@@ -455,6 +645,14 @@ export function createCollectionRepository(db: DatabaseInstance): BackyCollectio
             return { item: toCollectionRecord(row) };
         },
 
+        async listProductDesignRevisions(siteId: string, collectionId: string, recordId: string, options: { offset?: number; limit?: number } = {}): Promise<BackyProductDesignRevision[]> {
+            const rows = await database.select().from(productDesignRevisions).where(and(eq(productDesignRevisions.siteId, siteId), eq(productDesignRevisions.collectionId, collectionId), eq(productDesignRevisions.recordId, recordId))).orderBy(desc(productDesignRevisions.createdAt), desc(productDesignRevisions.id)).limit(Math.min(100, Math.max(1, options.limit || 100)) + 1).offset(Math.max(0, options.offset || 0)) as typeof productDesignRevisions.$inferSelect[];
+            return rows.map(row => ({ ...row, snapshot: row.snapshot as BackyProductDesignRevision['snapshot'], operation: row.operation as BackyProductDesignRevision['operation'], createdAt: toIso(row.createdAt) }));
+        },
+        async getProductDesignRevision(siteId: string, collectionId: string, recordId: string, revisionId: string): Promise<BackyProductDesignRevision | null> {
+            const [row] = await database.select().from(productDesignRevisions).where(and(eq(productDesignRevisions.siteId, siteId), eq(productDesignRevisions.collectionId, collectionId), eq(productDesignRevisions.recordId, recordId), eq(productDesignRevisions.id, revisionId))) as typeof productDesignRevisions.$inferSelect[];
+            return row ? { ...row, snapshot: row.snapshot as BackyProductDesignRevision['snapshot'], operation: row.operation as BackyProductDesignRevision['operation'], createdAt: toIso(row.createdAt) } : null;
+        },
         async deleteRecord(siteId: string, collectionId: string, recordId: string): Promise<boolean> {
             await database.delete(contentCollectionRecords).where(and(
                 eq(contentCollectionRecords.siteId, siteId),

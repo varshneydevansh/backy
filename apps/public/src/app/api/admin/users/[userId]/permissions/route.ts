@@ -1,8 +1,10 @@
+import { operatorSiteScopeFromAuth, operatorScopeStatus } from '@/lib/adminOperatorSiteScope';
+import { getAdminSettings } from '@/lib/backyStore';
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { isOwnerAdminSession, requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { updateAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
 import { recordAdminAudit } from '@/lib/adminAudit';
-import { buildUserPermissionMatrix, isAdminPermissionKey } from '@/lib/adminPermissions';
+import { buildUserPermissionMatrix, isAdminPermissionKey, isOwnerOnlyAdminPermission } from '@/lib/adminPermissions';
 import {
   applyAuthSettingsPermissionOverrides,
   listAuthSettingsPermissionOverrides,
@@ -83,6 +85,7 @@ export async function GET(
       ? listAuthSettingsPermissionOverrides((await repositories.settings.get()).auth, user.id)
       : listAdminUserPermissionOverrides(user.id);
 
+    const siteScope = operatorSiteScopeFromAuth(repositories ? (await repositories.settings.get()).auth : getAdminSettings().auth, user.id);
     return NextResponse.json({
       success: true,
       requestId,
@@ -95,6 +98,7 @@ export async function GET(
           status: user.status,
         },
         permissions: buildUserPermissionMatrix(user, overrides),
+        siteAccess: { scope: siteScope, status: user.role === 'owner' ? 'owner-workspace' : operatorScopeStatus(siteScope) },
       },
     });
   } catch (error) {
@@ -122,6 +126,8 @@ export async function PATCH(
     }
 
     const body = await parseJsonBody(request);
+    const ownerError = requireAdminOwnerManagementAccess(access, requestId, { currentRole: user.role });
+    if (ownerError) return ownerError;
     const rawOverrides = body.overrides;
 
     if (!rawOverrides || typeof rawOverrides !== 'object' || Array.isArray(rawOverrides)) {
@@ -136,6 +142,12 @@ export async function PATCH(
 
       if (value !== 'allow' && value !== 'deny' && value !== null) {
         return errorResponse(400, 'INVALID_PERMISSION_VALUE', 'Permission overrides must be allow, deny, or null.', requestId);
+      }
+
+      if (isOwnerOnlyAdminPermission(permissionKey) && (
+        !isOwnerAdminSession(access) || (value === 'allow' && user.role !== 'owner')
+      )) {
+        return errorResponse(403, 'OWNER_PERMISSION_REQUIRED', 'Owner-only permissions can only be managed by owners and cannot be granted to non-owner accounts.', requestId);
       }
 
       overrides[permissionKey] = value;
@@ -157,6 +169,7 @@ export async function PATCH(
       updateAdminSessionPermissionOverrides(user.id, savedOverrides);
     }
     const permissions = buildUserPermissionMatrix(user, savedOverrides);
+    const savedSiteScope = operatorSiteScopeFromAuth(repositories ? (await repositories.settings.get()).auth : getAdminSettings().auth, user.id);
 
     await recordAdminAudit({
       repositories,
@@ -187,6 +200,7 @@ export async function PATCH(
           status: user.status,
         },
         permissions,
+        siteAccess: { scope: savedSiteScope, status: user.role === 'owner' ? 'owner-workspace' : operatorScopeStatus(savedSiteScope) },
       },
     });
   } catch (error) {

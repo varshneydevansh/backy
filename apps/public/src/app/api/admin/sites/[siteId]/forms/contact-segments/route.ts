@@ -1,3 +1,4 @@
+import { collectCompleteFormsInventory, FormsInventoryIncompleteError } from '@/lib/formsInventory';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Contact, FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -32,8 +33,6 @@ interface ContactSegment {
   description: string;
 }
 
-const PAGE_LIMIT = 100;
-const MAX_PAGES = 100;
 const STATUSES: Contact['status'][] = ['new', 'contacted', 'qualified', 'archived'];
 
 const makeRequestId = () => `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -143,27 +142,6 @@ const buildContactSegments = (forms: FormDefinition[], contacts: Contact[]) => {
   };
 };
 
-const fetchRepositoryContacts = async (
-  repositories: Awaited<ReturnType<typeof getRequiredDatabaseRepositories>>,
-  siteId: string,
-  formId?: string,
-): Promise<Contact[]> => {
-  const contacts: Contact[] = [];
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const offset = page * PAGE_LIMIT;
-    const result = await repositories.forms.listContacts({
-      siteId,
-      formId,
-      limit: PAGE_LIMIT,
-      offset,
-    });
-    contacts.push(...result.items);
-    if (!result.pagination.hasMore || contacts.length >= result.pagination.total) break;
-  }
-
-  return contacts;
-};
-
 export async function GET(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'forms.view' });
@@ -183,15 +161,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const formsResult = await repositories.forms.list({ siteId: site.id, limit: PAGE_LIMIT, offset: 0 });
-      const forms = formId
-        ? formsResult.items.filter((form) => form.id === formId)
-        : formsResult.items;
+      const inventory = await collectCompleteFormsInventory(site.id, pagination => repositories.forms.list({ siteId: site.id, ...pagination }));
+      const forms = formId ? inventory.filter(form => form.id === formId) : inventory;
       if (formId && forms.length === 0) {
         return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
       }
 
-      const analytics = buildContactSegments(forms, await fetchRepositoryContacts(repositories, site.id, formId));
+      const analytics = buildContactSegments(forms, await collectCompleteFormsInventory(site.id, pagination => repositories.forms.listContacts({ siteId: site.id, formId, ...pagination }), contact => !formId || contact.formId === formId));
 
       return NextResponse.json({
         success: true,
@@ -217,9 +193,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
-    const contacts = forms.flatMap((form) => (
-      listFormContacts(form.id, { limit: PAGE_LIMIT * MAX_PAGES, offset: 0 }).contacts
-    ));
+    const contacts = (await Promise.all(forms.map(form => collectCompleteFormsInventory(site.id, async pagination => { const result = listFormContacts(form.id, { ...pagination, siteId: site.id }); return { items: result.contacts, pagination: result.pagination }; }, item => item.formId === form.id)))).flat();
     const analytics = buildContactSegments(forms, contacts);
 
     return NextResponse.json({
@@ -235,6 +209,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       summary: analytics.summary,
     });
   } catch (error) {
+    if (error instanceof FormsInventoryIncompleteError) return NextResponse.json({ success: false, requestId, error: { code: error.code, message: error.message } }, { status: 503, headers: { 'cache-control': 'private, no-store' } });
     console.error('Admin form contact segments API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

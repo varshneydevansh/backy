@@ -166,7 +166,6 @@ export const recordMediaDelivery = async (input: {
     requestId: input.requestId,
   });
   const metadata = {
-    ...(media.metadata || {}),
     mediaDelivery,
   };
 

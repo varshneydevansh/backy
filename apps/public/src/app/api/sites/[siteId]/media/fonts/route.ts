@@ -11,6 +11,8 @@ import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 
+import { readCompleteMediaInventory, MediaInventoryIncompleteError } from '@/lib/mediaInventory';
+
 interface RouteParams {
   params: Promise<{
     siteId: string;
@@ -47,16 +49,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
       }
 
-      const result = await repositories.media.list({
-        siteId: site.id,
-        type: 'font',
-        visibility: 'public',
-        limit: 10000,
-        offset: 0,
-      });
+      const result = await readCompleteMediaInventory(site.id, pagination => repositories.media.list({ siteId: site.id, type: 'font', visibility: 'public', ...pagination }));
       const manifest = buildPublicFontManifest(
         site.id,
-        result.items.filter((item) => !isMediaQuarantined(item)),
+        result.filter((item) => !isMediaQuarantined(item)),
       );
       const cacheRevision = await repositories.cacheInvalidations.latestRevision({
         siteId: site.id,
@@ -82,11 +78,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const fonts = getMediaList(site.id, {
-      type: 'font',
-      visibility: 'public',
-      limit: 10000,
-    }).media;
+    const fonts = await readCompleteMediaInventory(site.id, async pagination => {
+      const result = getMediaList(site.id, { type: 'font', visibility: 'public', ...pagination });
+      return { items: result.media, pagination: result.pagination };
+    });
     const manifest = buildPublicFontManifest(
       site.id,
       fonts.filter((item) => !isMediaQuarantined(item)),
@@ -104,6 +99,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       siteId: site.id,
     });
   } catch (error) {
+    if (error instanceof MediaInventoryIncompleteError) return errorResponse(503, error.code, error.message, requestId);
     console.error('Public font manifest API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

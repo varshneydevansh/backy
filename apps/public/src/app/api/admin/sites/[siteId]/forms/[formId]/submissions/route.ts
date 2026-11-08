@@ -118,7 +118,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'FORM_NOT_FOUND', 'Form not found', requestId);
     }
 
-    const submissions = listFormSubmissions(form.id, {
+    const submissions = listFormSubmissions(form.id, { siteId: site.id,
       status,
       requestId: filterRequestId,
       limit,

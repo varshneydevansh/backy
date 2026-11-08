@@ -148,7 +148,10 @@ export const siteMatchesIdentifier = (site: Site, identifier: string): boolean =
 };
 
 export const getSiteSelectionFromSearch = (sites: Site[], fallbackSiteId = 'site-demo'): string => {
-  const requestedSiteId = getSiteSearchParam();
+  const routeSiteId = typeof window === 'undefined' ? '' : window.location.pathname.match(/^\/sites\/([^/]+)\/?$/)?.[1] || '';
+  let decodedRouteSiteId = '';
+  try { decodedRouteSiteId = decodeURIComponent(routeSiteId); } catch { /* Invalid route IDs do not select a different site. */ }
+  const requestedSiteId = (decodedRouteSiteId !== 'new' ? decodedRouteSiteId : '') || getSiteSearchParam();
   const matchedSite = requestedSiteId
     ? sites.find((site) => siteMatchesIdentifier(site, requestedSiteId))
     : undefined;

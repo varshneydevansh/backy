@@ -86,9 +86,10 @@ function assertInteractiveSandboxRouteSource() {
   assert(source.includes("'Referrer-Policy': 'no-referrer'"), 'Interactive sandbox route must set no-referrer');
   assert(source.includes("SANDBOX_SCHEMA_VERSION = 'backy.interactive-component-sandbox.v1'"), 'Interactive sandbox route must define a stable schema version');
   assert(source.includes('publicContractResponse('), 'Interactive sandbox route must use the public contract response wrapper');
-  assert(source.includes("cache: 'discovery'"), 'Interactive sandbox route must use discovery cache for active sandbox HTML');
+  const sandboxCachePolicy = source.match(/cache\s*:\s*bundleBase64\s*\?\s*(['"])([^'"]+)\1\s*:\s*(['"])([^'"]+)\3/);
+  assert(sandboxCachePolicy?.[2] === 'private' && sandboxCachePolicy?.[4] === 'discovery', 'Interactive sandbox route must keep verified executable bundles private and metadata-only shells discovery-cacheable');
   assert(source.includes("cache: 'error'"), 'Interactive sandbox route must use error cache for hidden/disabled sandbox HTML');
-  assert(source.includes('etagSeed'), 'Interactive sandbox route must expose ETag revalidation for active sandbox HTML');
+  assert(source.includes('etagSeed'), 'Interactive sandbox route must retain ETag revalidation for metadata-only sandbox HTML');
   assert(source.includes('schemaVersion: SANDBOX_SCHEMA_VERSION'), 'Interactive sandbox route must emit sandbox schema headers');
   assert(source.includes('parent.postMessage'), 'Interactive sandbox route must use postMessage lifecycle communication');
   assert(!source.includes('/api/admin/'), 'Interactive sandbox route must not call admin APIs');
@@ -955,7 +956,7 @@ function withAdminAuth(headers = {}) {
 
 function assertAdminContract(result) {
   assert(result.response.headers.get('x-backy-request-id'), `${result.url} missing request id header`);
-  assert(result.response.headers.get('cache-control') === 'no-store', `${result.url} expected admin no-store cache control`);
+  assert(result.response.headers.get('cache-control') === 'private, no-store', `${result.url} expected private admin no-store cache control`);
   assert(result.response.headers.get('x-backy-cache-scope') === 'admin', `${result.url} expected admin cache scope`);
   assert(result.response.headers.get('x-backy-admin-contract-version') === 'backy.admin.v1', `${result.url} missing admin contract version`);
   if (new URL(result.url).pathname === '/api/admin/settings') {
@@ -3262,7 +3263,7 @@ try {
 
     const visibleScheduledPage = await request(`/api/sites/${createdSiteId}/pages?slug=${pageSlug}`);
     assert(visibleScheduledPage.response.status === 200, `${visibleScheduledPage.url} expected published page to be visible`);
-    assert(visibleScheduledPage.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPage.url} missing discovery cache scope`);
+    assert(visibleScheduledPage.response.headers.get('x-backy-cache-scope') === 'render', `${visibleScheduledPage.url} missing discovery cache scope`);
     assert(visibleScheduledPage.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPage.url} missing contract version header`);
     assert(visibleScheduledPage.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPage.url} missing site id header`);
     assert(visibleScheduledPage.response.headers.get('x-backy-cache-revision'), `${visibleScheduledPage.url} missing page cache revision`);
@@ -3298,7 +3299,7 @@ try {
 
     const publicPageByPath = await request(`/api/sites/${createdSiteId}/pages?path=/${pageSlug}`);
     assert(publicPageByPath.response.status === 200, `${publicPageByPath.url} expected path lookup 200, got ${publicPageByPath.response.status}`);
-    assertBackyContract(publicPageByPath, 'discovery');
+    assertBackyContract(publicPageByPath, 'render');
     assert(publicPageByPath.json?.success === true, `${publicPageByPath.url} expected success envelope`);
     assert(publicPageByPath.json?.data?.page?.id === createdPageId, `${publicPageByPath.url} returned wrong page for path lookup`);
     assert(publicPageByPath.json?.page?.id === createdPageId, `${publicPageByPath.url} missing legacy page parity for path lookup`);
@@ -3306,7 +3307,7 @@ try {
     const publicPageList = await request(`/api/sites/${createdSiteId}/pages?limit=100`);
     const publicPageListEntry = publicPageList.json?.data?.pages?.find((page) => page.id === createdPageId);
     assert(publicPageList.response.status === 200, `${publicPageList.url} expected public page list`);
-    assertBackyContract(publicPageList, 'discovery');
+    assertBackyContract(publicPageList, 'render');
     assert(publicPageList.json?.success === true, `${publicPageList.url} expected success envelope`);
     assert(Array.isArray(publicPageList.json?.data?.pages), `${publicPageList.url} missing data page list`);
     assert(Array.isArray(publicPageList.json?.pages), `${publicPageList.url} missing legacy page list`);
@@ -3319,7 +3320,7 @@ try {
 
     const pagedPublicPageList = await request(`/api/sites/${createdSiteId}/pages?limit=1&offset=0`);
     assert(pagedPublicPageList.response.status === 200, `${pagedPublicPageList.url} expected paged public page list`);
-    assertBackyContract(pagedPublicPageList, 'discovery');
+    assertBackyContract(pagedPublicPageList, 'render');
     assert(pagedPublicPageList.json?.success === true, `${pagedPublicPageList.url} expected success envelope`);
     assert(Array.isArray(pagedPublicPageList.json?.data?.pages), `${pagedPublicPageList.url} missing paged data page list`);
     assert(pagedPublicPageList.json.data.pages.length <= 1, `${pagedPublicPageList.url} returned more than requested limit`);
@@ -3523,7 +3524,7 @@ try {
 
     const renderPayload = await request(`/api/sites/${createdSiteId}/render?path=/${pageSlug}`);
     assert(renderPayload.response.status === 200, `${renderPayload.url} expected 200, got ${renderPayload.response.status}`);
-    assert(renderPayload.response.headers.get('cache-control')?.includes('max-age=30'), `${renderPayload.url} missing render cache header`);
+    assert(renderPayload.response.headers.get('cache-control') === 'public, no-cache, must-revalidate', `${renderPayload.url} must revalidate current publication state`);
     assert(renderPayload.response.headers.get('x-backy-cache-scope') === 'render', `${renderPayload.url} missing render cache scope`);
     assert(renderPayload.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${renderPayload.url} missing contract version header`);
     assert(renderPayload.response.headers.get('x-backy-schema-version') === 'backy.content-payload.v1', `${renderPayload.url} missing render schema version header`);
@@ -3601,7 +3602,7 @@ try {
 
     const resolvedPage = await request(`/api/sites/${createdSiteId}/resolve?path=/${pageSlug}`);
     assert(resolvedPage.response.status === 200, `${resolvedPage.url} expected 200, got ${resolvedPage.response.status}`);
-    assert(resolvedPage.response.headers.get('x-backy-cache-scope') === 'discovery', `${resolvedPage.url} missing resolve cache scope`);
+    assert(resolvedPage.response.headers.get('x-backy-cache-scope') === 'render', `${resolvedPage.url} missing resolve cache scope`);
     assert(resolvedPage.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${resolvedPage.url} missing resolve contract version`);
     assert(resolvedPage.response.headers.get('x-backy-site-id') === createdSiteId, `${resolvedPage.url} missing resolve site id header`);
     assert(resolvedPage.response.headers.get('x-backy-cache-revision'), `${resolvedPage.url} missing resolve cache revision`);
@@ -3717,7 +3718,7 @@ try {
 
     const redirectedRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(redirectSourcePath)}`);
     assert(redirectedRoute.response.status === 200, `${redirectedRoute.url} expected redirect route resolve`);
-    assert(redirectedRoute.response.headers.get('x-backy-cache-scope') === 'discovery', `${redirectedRoute.url} missing redirect resolve cache scope`);
+    assert(redirectedRoute.response.headers.get('x-backy-cache-scope') === 'render', `${redirectedRoute.url} missing redirect resolve cache scope`);
     assert(redirectedRoute.response.headers.get('etag')?.startsWith('"backy-'), `${redirectedRoute.url} missing redirect resolve etag`);
     assert(redirectedRoute.json?.data?.route?.type === 'redirect', `${redirectedRoute.url} expected redirect route`);
     assert(redirectedRoute.json?.data?.route?.resource?.to === `/${pageSlug}`, `${redirectedRoute.url} returned wrong redirect target`);
@@ -3725,7 +3726,7 @@ try {
 
     const goneRoute = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(goneSourcePath)}`);
     assert(goneRoute.response.status === 410, `${goneRoute.url} expected 410 gone route`);
-    assert(goneRoute.response.headers.get('x-backy-cache-scope') === 'discovery', `${goneRoute.url} missing gone resolve cache scope`);
+    assert(goneRoute.response.headers.get('x-backy-cache-scope') === 'render', `${goneRoute.url} missing gone resolve cache scope`);
     assert(goneRoute.json?.success === false, `${goneRoute.url} expected gone error envelope`);
     assert(goneRoute.json?.data?.route?.type === 'gone', `${goneRoute.url} expected gone route`);
 
@@ -4998,7 +4999,7 @@ try {
 
     const visibleScheduledPost = await request(`/api/sites/${createdSiteId}/blog?slug=${postSlug}`);
     assert(visibleScheduledPost.response.status === 200, `${visibleScheduledPost.url} expected published post to be visible`);
-    assert(visibleScheduledPost.response.headers.get('x-backy-cache-scope') === 'discovery', `${visibleScheduledPost.url} missing discovery cache scope`);
+    assert(visibleScheduledPost.response.headers.get('x-backy-cache-scope') === 'render', `${visibleScheduledPost.url} missing discovery cache scope`);
     assert(visibleScheduledPost.response.headers.get('x-backy-contract-version') === 'backy.ai-frontend.v1', `${visibleScheduledPost.url} missing contract version header`);
     assert(visibleScheduledPost.response.headers.get('x-backy-site-id') === createdSiteId, `${visibleScheduledPost.url} missing site id header`);
     assert(visibleScheduledPost.response.headers.get('x-backy-cache-revision'), `${visibleScheduledPost.url} missing post cache revision`);
@@ -5220,7 +5221,7 @@ try {
 
     const publicCategoryFilter = await request(`/api/sites/${createdSiteId}/blog?categorySlug=${categorySlug}`);
     assert(publicCategoryFilter.response.status === 200, `${publicCategoryFilter.url} expected 200, got ${publicCategoryFilter.response.status}`);
-    assert(publicCategoryFilter.response.headers.get('x-backy-cache-scope') === 'discovery', `${publicCategoryFilter.url} missing discovery cache scope`);
+    assert(publicCategoryFilter.response.headers.get('x-backy-cache-scope') === 'render', `${publicCategoryFilter.url} missing discovery cache scope`);
     assert(publicCategoryFilter.response.headers.get('etag')?.startsWith('"backy-'), `${publicCategoryFilter.url} missing filtered posts etag`);
     assert(publicCategoryFilter.json?.success === true, `${publicCategoryFilter.url} expected success envelope`);
     assert(publicCategoryFilter.json?.data?.posts?.some((post) => post.id === createdPostId), `${publicCategoryFilter.url} missing public category-filtered post in data envelope`);
@@ -7507,7 +7508,7 @@ try {
     const dynamicListPath = `/directory`;
     const dynamicListResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicListPath)}`);
     assert(dynamicListResolve.response.status === 200, `${dynamicListResolve.url} expected 200, got ${dynamicListResolve.response.status}`);
-    assert(dynamicListResolve.response.headers.get('x-backy-cache-scope') === 'discovery', `${dynamicListResolve.url} missing dynamic list resolve cache scope`);
+    assert(dynamicListResolve.response.headers.get('x-backy-cache-scope') === 'render', `${dynamicListResolve.url} missing dynamic list resolve cache scope`);
     assert(dynamicListResolve.response.headers.get('etag')?.startsWith('"backy-'), `${dynamicListResolve.url} missing dynamic list resolve etag`);
     assert(dynamicListResolve.json?.data?.route?.type === 'dynamicList', `${dynamicListResolve.url} expected dynamic list route`);
     assert(dynamicListResolve.json?.data?.route?.resource?.id === createdCollectionId, `${dynamicListResolve.url} returned wrong dynamic list collection`);
@@ -7551,7 +7552,7 @@ try {
     const dynamicItemPath = `/directory/${collectionRecordSlug}`;
     const dynamicResolve = await request(`/api/sites/${createdSiteId}/resolve?path=${encodeURIComponent(dynamicItemPath)}`);
     assert(dynamicResolve.response.status === 200, `${dynamicResolve.url} expected 200, got ${dynamicResolve.response.status}`);
-    assert(dynamicResolve.response.headers.get('x-backy-cache-scope') === 'discovery', `${dynamicResolve.url} missing dynamic item resolve cache scope`);
+    assert(dynamicResolve.response.headers.get('x-backy-cache-scope') === 'render', `${dynamicResolve.url} missing dynamic item resolve cache scope`);
     assert(dynamicResolve.response.headers.get('etag')?.startsWith('"backy-'), `${dynamicResolve.url} missing dynamic item resolve etag`);
     assert(dynamicResolve.json?.data?.route?.type === 'dynamicItem', `${dynamicResolve.url} expected dynamic item route`);
     assert(dynamicResolve.json?.data?.route?.resource?.id === createdCollectionRecordId, `${dynamicResolve.url} returned wrong dynamic item record`);

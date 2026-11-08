@@ -1,4 +1,4 @@
-import type { FormFieldDefinition, FormValidationRule } from '@backy-cms/core';
+import { normalizeBackyJsonObject, type FormFieldDefinition, type FormValidationRule } from '@backy-cms/core';
 
 const FIELD_TYPES = new Set<FormFieldDefinition['type']>([
   'text',
@@ -100,6 +100,7 @@ export const parseFormFields = (value: unknown): FormFieldDefinition[] | undefin
       const type = FIELD_TYPES.has(typeInput) ? typeInput : 'text';
       const label = textValue(record.label) || key.replace(/_/g, ' ');
       const field: FormFieldDefinition = {
+        ...normalizeBackyJsonObject(record),
         key,
         label,
         type,

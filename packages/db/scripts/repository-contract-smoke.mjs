@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { PgDialect } from 'drizzle-orm/pg-core';
 
-import { createBackyContentDocument } from '../../core/dist/index.mjs';
+import { createBackyContentDocument, unrelatedSiteSettingsPatch } from '../../core/dist/index.mjs';
 import {
   createAuditLogRepository,
   createBlogTaxonomyRepository,
@@ -657,7 +658,16 @@ const createFakeDb = () => {
     if (!equalities.length) {
       return true;
     }
-    return equalities.every(([key, value]) => row[key] === value);
+    if (!equalities.every(([key, value]) => row[key] === value)) return false;
+    const leaves = [];
+    const collect = node => { if (typeof node === 'string') leaves.push(node); if (node?.constructor?.name === 'Param') leaves.push(node.value); if (Array.isArray(node?.value)) leaves.push(...node.value); for (const child of node?.queryChunks || []) collect(child); };
+    collect(condition);
+    if (leaves.some(value => typeof value === 'string' && value.includes('jsonb_array_elements_text'))) {
+      const serialized = leaves.find(value => typeof value === 'string' && value.startsWith('['));
+      const selectedIds = JSON.parse(serialized); assert(Array.isArray(selectedIds), 'Expected selected comment ID array');
+      return selectedIds.includes(row.id);
+    }
+    return true;
   };
 
   const readOrderTokens = (value, tokens = []) => {
@@ -720,6 +730,7 @@ const createFakeDb = () => {
         && Object.prototype.hasOwnProperty.call(projection, 'total'),
     );
     const query = {
+      for: () => query,
       where: (condition) => {
         rows = rows.filter((row) => matchesCondition(row, condition));
         return query;
@@ -761,11 +772,28 @@ const createFakeDb = () => {
   return {
     state,
     queryStats,
+    async transaction(run) { return run(this); },
+    async execute(query) {const text=new PgDialect().sqlToQuery(query).sql;if(/^SET LOCAL |^LOCK TABLE public\.(sites|platform_settings|pages|profiles) IN /.test(text))return [];if(text==='SELECT count(*)::int AS count FROM public.sites')return [{count:state.sites.length}];if(text.startsWith('SELECT count(*)::int AS count FROM public.profiles WHERE role IN'))return [{count:state.profiles.filter(row=>(row.role==='owner'||row.role==='admin')&&(row.status==='active'||(!['active','inactive','invited','suspended'].includes(row.status)&&row.isActive===true))).length}];throw Error('Unexpected fake DB admission SQL: '+text);},
     select: (projection) => ({
       from: (table) => queryFor(tableName(table), projection),
     }),
     insert: (table) => ({
       values: (values) => ({
+        onConflictDoUpdate: ({ set, setWhere }) => ({ returning: async () => {
+          const name = tableName(table);
+          const existing = state[name].find(row => row.id === values.id);
+          if (existing) {
+            if (setWhere && !matchesCondition(existing, setWhere)) return [];
+            Object.assign(existing, set);
+            return [existing];
+          }
+          const row = withDefaults(name, values); state[name].push(row); return [row];
+        } }),
+        onConflictDoNothing: () => ({ returning: async () => {
+          const name = tableName(table);
+          if (state[name].some(row => row.id === values.id)) return [];
+          const row = withDefaults(name, values); state[name].push(row); return [row];
+        } }),
         returning: async () => {
           const name = tableName(table);
           const row = withDefaults(name, values);
@@ -784,9 +812,17 @@ const createFakeDb = () => {
               if (!matchesCondition(row, condition)) {
                 return row;
               }
+              let appliedValues = values;
+              if (name === 'media' && values.metadata?.queryChunks) {
+                const leaves = [];
+                const collect = node => { if (typeof node === 'string') leaves.push(node); if (node?.constructor?.name === 'Param') leaves.push(node.value); for (const child of node?.queryChunks || []) collect(child); };
+                collect(values.metadata);
+                const patch = JSON.parse(leaves.find(value => typeof value === 'string' && value.startsWith('{')));
+                appliedValues = { ...values, metadata: { ...row.metadata, ...patch } };
+              }
               const updated = {
                 ...row,
-                ...values,
+                ...appliedValues,
               };
               updatedRows.push(updated);
               return updated;
@@ -797,9 +833,10 @@ const createFakeDb = () => {
       }),
     }),
     delete: (table) => ({
-      where: async (condition) => {
-        const name = tableName(table);
+      where: (condition) => {
+        const name = tableName(table), deleted = state[name].filter(row => matchesCondition(row, condition));
         state[name] = state[name].filter((row) => !matchesCondition(row, condition));
+        return Object.assign(Promise.resolve(), { returning: async projection => projection ? deleted.map(row => Object.fromEntries(Object.keys(projection).map(key => [key, row[key]]))) : deleted });
       },
     }),
   };
@@ -819,8 +856,10 @@ const expectedRepositoryKeys = [
   'blogTaxonomy',
   'cacheInvalidations',
   'collections',
+  'commentDeliveries',
   'comments',
   'contentWorkflows',
+  'formDeliveries',
   'forms',
   'interactiveComponents',
   'media',
@@ -828,9 +867,14 @@ const expectedRepositoryKeys = [
   'posts',
   'reusableSections',
   'settings',
+  'siteBackups',
+  'siteDuplication',
   'sites',
   'teams',
+  'templateRevisions',
   'users',
+  'visitorAccounts',
+  'withMediaReferenceMutation',
 ];
 const actualRepositoryKeys = Object.keys(repositorySet).sort();
 assert(
@@ -838,7 +882,7 @@ assert(
   `Database repository factory must return the full BackyRepositories contract: ${JSON.stringify({ expectedRepositoryKeys, actualRepositoryKeys })}`,
 );
 for (const key of expectedRepositoryKeys) {
-  assert(repositorySet[key] && typeof repositorySet[key] === 'object', `Expected ${key} repository implementation`);
+  assert(repositorySet[key] && typeof repositorySet[key] === (key === 'withMediaReferenceMutation' ? 'function' : 'object'), `Expected ${key} repository implementation`);
 }
 assert(repositorySet.sites && repositorySet.pages && repositorySet.posts, 'Expected repository set factories');
 assert(repositorySet.blogTaxonomy, 'Expected blog taxonomy repository factory');
@@ -995,10 +1039,10 @@ const siteControlPlaneSettings = {
   },
 };
 const settingsSite = (await siteRepository.update(site.id, {
-  settings: {
+  settings: unrelatedSiteSettingsPatch({
     ...site.settings,
     ...siteControlPlaneSettings,
-  },
+  }),
 })).item;
 const reloadedSettingsSite = await siteRepository.getById(site.id);
 assert(settingsSite.settings.domainVerification?.status === 'verified', 'Expected site domain verification settings to return from repository update');
@@ -1880,6 +1924,10 @@ assert(updatedMember.id === member.id && updatedMember.role === 'admin', 'Expect
 assert((await teamRepository.listMembers({ teamId: team.id })).items.length === 1, 'Expected team member list');
 assert(await teamRepository.removeMember(team.id, member.id), 'Expected team member remove');
 assert(await teamRepository.delete(team.id), 'Expected team delete');
+let lastAuthorityDenied = false;
+try { await userRepository.delete(activeUser.id); } catch (error) { lastAuthorityDenied = error.code === 'LAST_ADMIN_AUTHORITY'; }
+assert(lastAuthorityDenied && await userRepository.getById(activeUser.id), 'Final active operator authority must remain');
+await userRepository.create({ fullName: 'Retained authority', email: 'retained.authority@example.test', role: 'admin', status: 'active' });
 assert(await userRepository.delete(activeUser.id), 'Expected user delete');
 
 const settings = await settingsRepository.get();

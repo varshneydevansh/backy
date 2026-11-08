@@ -152,6 +152,7 @@ const templateRegistryEntry = (
     id: template.id,
     type: template.type,
     name: template.name,
+    isDefault: template.isDefault === true,
     description: stringValue(template.description) || null,
     routePattern: stringValue(template.routePattern) || null,
     status: versioning.status,

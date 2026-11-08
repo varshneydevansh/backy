@@ -1636,13 +1636,13 @@ export function ActiveEditorProvider({ children }: { children: React.ReactNode }
     debug('clearActiveEditor', {
       hasActiveEditorRef: !!activeEditorRef.current,
       activeEditorElementId: activeEditorElementIdRef.current,
-      hasActiveState: !!activeEditor,
+      hasActiveState: !!activeEditorRef.current,
     });
     activeEditorElementIdRef.current = null;
     setActiveEditorElementId(null);
     activeEditorRef.current = null;
     setActiveEditorState(null);
-  }, [activeEditor, debug]);
+  }, [debug]);
 
   // Store current selection
   const storeSelection = useCallback(() => {

@@ -825,7 +825,6 @@ function PagesListView() {
   const adminPagePreviewUrl = `${adminPageDetailUrl}/preview`;
   const createPageSearch = useMemo(() => ({
     siteId: activeSiteId,
-    templateSource: 'backy-canvas' as const,
     focus: 'canvas' as const,
   }), [activeSiteId]);
   const buildBackyCanvasPageCreateRoute = useCallback((template: PageCreationTemplate = 'blank') => {
@@ -840,7 +839,7 @@ function PagesListView() {
     return `/pages/new?${params.toString()}`;
   }, [activeSiteId]);
   const getCreatePageSearch = (template: PageCreationTemplate = 'blank') => (
-    template === 'blank' ? createPageSearch : { ...createPageSearch, template }
+    template === 'blank' ? createPageSearch : { ...createPageSearch, templateSource: 'backy-canvas' as const, template }
   );
   const pageStarterGroups = useMemo(() => {
     const assignedKeys = new Set<PageCreationTemplate>();

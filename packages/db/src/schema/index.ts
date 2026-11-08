@@ -21,10 +21,13 @@ import {
     jsonb,
     index,
     uniqueIndex,
+    foreignKey,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 
 // ==========================================================================
+// Canonical migrations use TIMESTAMPTZ: preserve offsets on database reads.
+// template_revisions.created_at is the intentional TIMESTAMP exception (015).
 // ENUMS (Stored as text for cross-DB compatibility)
 // ==========================================================================
 
@@ -72,10 +75,10 @@ export const profiles = pgTable('profiles', {
     status: text('status').default('active').notNull(),
 
     /** Creation timestamp */
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 
     /** Last update timestamp */
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     emailIdx: uniqueIndex('profiles_email_idx').on(table.email),
     roleStatusUpdatedIdx: index('profiles_role_status_updated_idx').on(table.role, table.status, table.updatedAt),
@@ -94,7 +97,7 @@ export const adminUserCredentials = pgTable('admin_user_credentials', {
         .primaryKey(),
     passwordHash: text('password_hash').notNull(),
     salt: text('salt').notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     userUpdatedAtIdx: index('admin_user_credentials_updated_at_idx').on(table.updatedAt),
 }));
@@ -114,7 +117,7 @@ export const teams = pgTable('teams', {
     slug: text('slug').unique().notNull(),
     ownerId: uuid('owner_id').references(() => profiles.id),
     settings: jsonb('settings').default({}).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     ownerCreatedIdx: index('teams_owner_created_idx').on(table.ownerId, table.createdAt),
     createdIdx: index('teams_created_idx').on(table.createdAt),
@@ -132,7 +135,7 @@ export const teamMembers = pgTable('team_members', {
         .references(() => profiles.id, { onDelete: 'cascade' })
         .notNull(),
     role: text('role').$type<UserRole>().default('editor').notNull(),
-    joinedAt: timestamp('joined_at').defaultNow().notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     teamUserIdx: uniqueIndex('team_members_team_user_idx').on(table.teamId, table.userId),
     teamRoleJoinedIdx: index('team_members_team_role_joined_idx').on(table.teamId, table.role, table.joinedAt),
@@ -187,11 +190,11 @@ export const sites = pgTable('sites', {
 
     // --- Publishing ---
     isPublished: boolean('is_published').default(false).notNull(),
-    publishedAt: timestamp('published_at'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
 
     // --- Timestamps ---
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ==========================================================================
@@ -223,8 +226,8 @@ export const pages = pgTable('pages', {
 
     // --- Publishing ---
     status: text('status').$type<PublishStatus>().default('draft').notNull(),
-    publishedAt: timestamp('published_at'),
-    scheduledAt: timestamp('scheduled_at'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
 
     // --- Hierarchy ---
     isHomepage: boolean('is_homepage').default(false).notNull(),
@@ -234,8 +237,8 @@ export const pages = pgTable('pages', {
     // --- Tracking ---
     createdBy: uuid('created_by').references(() => profiles.id),
     updatedBy: uuid('updated_by').references(() => profiles.id),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('pages_site_slug_idx').on(table.siteId, table.slug),
     siteStatusUpdatedIdx: index('pages_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
@@ -265,14 +268,14 @@ export const blogPosts = pgTable('blog_posts', {
     authorId: uuid('author_id').references(() => profiles.id),
 
     status: text('status').$type<PublishStatus>().default('draft').notNull(),
-    publishedAt: timestamp('published_at'),
-    scheduledAt: timestamp('scheduled_at'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
 
     meta: jsonb('meta').default({}),
     viewCount: integer('view_count').default(0).notNull(),
 
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('blog_posts_site_slug_idx').on(table.siteId, table.slug),
     siteStatusUpdatedIdx: index('blog_posts_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
@@ -292,8 +295,8 @@ export const blogCategories = pgTable('blog_categories', {
     description: text('description'),
     color: text('color'),
     sortOrder: integer('sort_order').default(0).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('blog_categories_site_slug_idx').on(table.siteId, table.slug),
     siteSortIdx: index('blog_categories_site_sort_idx').on(table.siteId, table.sortOrder),
@@ -310,8 +313,8 @@ export const blogTags = pgTable('blog_tags', {
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     description: text('description'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('blog_tags_site_slug_idx').on(table.siteId, table.slug),
     siteUpdatedIdx: index('blog_tags_site_updated_idx').on(table.siteId, table.updatedAt),
@@ -346,8 +349,8 @@ export const media = pgTable('media', {
     caption: text('caption'),
 
     uploadedBy: uuid('uploaded_by').references(() => profiles.id),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 /**
@@ -371,11 +374,11 @@ export const mediaVersions = pgTable('media_versions', {
     thumbnailUrl: text('thumbnail_url'),
     storagePath: text('storage_path'),
     storageProvider: text('storage_provider'),
-    replacedAt: timestamp('replaced_at').defaultNow().notNull(),
+    replacedAt: timestamp('replaced_at', { withTimezone: true }).defaultNow().notNull(),
     replacedBy: text('replaced_by'),
     reason: text('reason'),
     metadata: jsonb('metadata').default({}).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 /**
@@ -389,7 +392,7 @@ export const mediaFolders = pgTable('media_folders', {
     parentId: uuid('parent_id'),
     name: text('name').notNull(),
     sortOrder: integer('sort_order').default(0).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ==========================================================================
@@ -421,8 +424,8 @@ export const contentCollections = pgTable('content_collections', {
     }).notNull(),
     metadata: jsonb('metadata').default({}).notNull(),
 
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('content_collections_site_slug_idx').on(table.siteId, table.slug),
     siteStatusUpdatedIdx: index('content_collections_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
@@ -445,10 +448,10 @@ export const contentCollectionRecords = pgTable('content_collection_records', {
     status: text('status').$type<PublishStatus>().default('draft').notNull(),
     values: jsonb('values').default({}).notNull(),
 
-    publishedAt: timestamp('published_at'),
-    scheduledAt: timestamp('scheduled_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteCollectionStatusUpdatedIdx: index('content_collection_records_site_collection_status_updated_idx').on(
         table.siteId,
@@ -496,8 +499,8 @@ export const formDefinitions = pgTable('form_definitions', {
     settings: jsonb('settings').default({}).notNull(),
     createdBy: uuid('created_by').references(() => profiles.id),
     updatedBy: uuid('updated_by').references(() => profiles.id),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteActiveUpdatedIdx: index('form_definitions_site_active_updated_idx').on(table.siteId, table.isActive, table.updatedAt),
     sitePageUpdatedIdx: index('form_definitions_site_page_updated_idx').on(table.siteId, table.pageId, table.updatedAt),
@@ -508,6 +511,8 @@ export const formDefinitions = pgTable('form_definitions', {
  * Form submissions - captured public interaction payloads.
  */
 export const formSubmissions = pgTable('form_submissions', {
+    privacyErasedAt: timestamp('privacy_erased_at', { withTimezone: true }),
+    visitorMemberId: uuid('visitor_member_id').references(() => siteVisitors.id, { onDelete: 'set null' }),
     id: uuid('id').defaultRandom().primaryKey(),
     siteId: uuid('site_id')
         .references(() => sites.id, { onDelete: 'cascade' })
@@ -523,12 +528,12 @@ export const formSubmissions = pgTable('form_submissions', {
     requestId: text('request_id'),
     status: text('status').default('pending').notNull(),
     reviewedBy: text('reviewed_by'),
-    reviewedAt: timestamp('reviewed_at'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     adminNotes: text('admin_notes'),
     collectionRecord: jsonb('collection_record'),
     collectionRecordErrors: jsonb('collection_record_errors').default([]),
-    submittedAt: timestamp('submitted_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteFormSubmittedIdx: index('form_submissions_site_form_submitted_idx').on(table.siteId, table.formId, table.submittedAt),
     siteFormStatusSubmittedIdx: index('form_submissions_site_form_status_submitted_idx').on(table.siteId, table.formId, table.status, table.submittedAt),
@@ -540,6 +545,7 @@ export const formSubmissions = pgTable('form_submissions', {
  * Form contacts - CRM-style leads derived from accepted submissions.
  */
 export const formContacts = pgTable('form_contacts', {
+    provenanceAmbiguous: boolean('provenance_ambiguous').default(true).notNull(),
     id: uuid('id').defaultRandom().primaryKey(),
     siteId: uuid('site_id')
         .references(() => sites.id, { onDelete: 'cascade' })
@@ -555,8 +561,8 @@ export const formContacts = pgTable('form_contacts', {
     notes: text('notes'),
     sourceValues: jsonb('source_values').default({}),
     newsletterSubscriptionStatus: text('newsletter_subscription_status'),
-    newsletterSubscribedAt: timestamp('newsletter_subscribed_at'),
-    newsletterUnsubscribedAt: timestamp('newsletter_unsubscribed_at'),
+    newsletterSubscribedAt: timestamp('newsletter_subscribed_at', { withTimezone: true }),
+    newsletterUnsubscribedAt: timestamp('newsletter_unsubscribed_at', { withTimezone: true }),
     newsletterTopics: text('newsletter_topics'),
     newsletterSource: text('newsletter_source'),
     newsletterConsent: boolean('newsletter_consent'),
@@ -565,8 +571,8 @@ export const formContacts = pgTable('form_contacts', {
     sourceSubmissionId: uuid('source_submission_id').references(() => formSubmissions.id, { onDelete: 'set null' }),
     requestId: text('request_id'),
     sourceIpHash: text('source_ip_hash'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteFormUpdatedIdx: index('form_contacts_site_form_updated_idx').on(table.siteId, table.formId, table.updatedAt),
     siteFormStatusUpdatedIdx: index('form_contacts_site_form_status_updated_idx').on(table.siteId, table.formId, table.status, table.updatedAt),
@@ -589,7 +595,7 @@ export const platformSettings = pgTable('platform_settings', {
     storage: jsonb('storage').default({}).notNull(),
     auth: jsonb('auth').default({}).notNull(),
     integrations: jsonb('integrations').default({}).notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ==========================================================================
@@ -615,8 +621,8 @@ export const reusableSections = pgTable('reusable_sections', {
     sourceElementId: text('source_element_id'),
     createdBy: text('created_by'),
     updatedBy: text('updated_by'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteSlugIdx: uniqueIndex('reusable_sections_site_slug_idx').on(table.siteId, table.slug),
     siteStatusUpdatedIdx: index('reusable_sections_site_status_updated_idx').on(table.siteId, table.status, table.updatedAt),
@@ -659,9 +665,9 @@ export const interactiveComponents = pgTable('interactive_components', {
     createdBy: text('created_by'),
     updatedBy: text('updated_by'),
     reviewedBy: text('reviewed_by'),
-    reviewedAt: timestamp('reviewed_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteKeyVersionIdx: uniqueIndex('interactive_components_site_key_version_idx').on(table.siteId, table.componentKey, table.version),
     siteStatusIdx: index('interactive_components_site_status_idx').on(table.siteId, table.status),
@@ -689,8 +695,25 @@ export const contentRevisions = pgTable('content_revisions', {
     restoreTargetRevisionId: text('restore_target_revision_id'),
     metadata: jsonb('metadata').default({}).notNull(),
     createdBy: text('created_by'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+/** Immutable reusable frontend template snapshots, independent of ordinary audit log retention. */
+export const templateRevisions = pgTable('template_revisions', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(),
+    templateId: text('template_id').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    source: text('source').notNull(),
+    operation: text('operation').notNull(),
+    restoredFromRevisionId: text('restored_from_revision_id'),
+    actorId: text('actor_id'),
+    requestId: text('request_id'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    identity: index('idx_template_revisions_identity').on(table.siteId, table.templateId, table.createdAt),
+}));
 
 /**
  * Preview tokens - short-lived access tokens for draft page/post preview.
@@ -702,8 +725,8 @@ export const previewTokens = pgTable('preview_tokens', {
         .notNull(),
     targetType: text('target_type').notNull(),
     targetId: text('target_id').notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdBy: text('created_by'),
 });
 
@@ -715,6 +738,8 @@ export const previewTokens = pgTable('preview_tokens', {
  * Comments - public page/post discussion threads with moderation metadata.
  */
 export const comments = pgTable('comments', {
+    privacyErasedAt: timestamp('privacy_erased_at', { withTimezone: true }),
+    visitorMemberId: uuid('visitor_member_id').references(() => siteVisitors.id, { onDelete: 'set null' }),
     id: uuid('id').defaultRandom().primaryKey(),
     siteId: uuid('site_id')
         .references(() => sites.id, { onDelete: 'cascade' })
@@ -734,18 +759,18 @@ export const comments = pgTable('comments', {
     parentId: text('parent_id'),
 
     reviewedBy: text('reviewed_by'),
-    reviewedAt: timestamp('reviewed_at'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     rejectionReason: text('rejection_reason'),
     blockReason: text('block_reason'),
     blockedBy: text('blocked_by'),
-    blockedAt: timestamp('blocked_at'),
+    blockedAt: timestamp('blocked_at', { withTimezone: true }),
     reportCount: integer('report_count').default(0).notNull(),
     reportReasons: jsonb('report_reasons').default([]).notNull(),
     requestId: text('request_id'),
     ipHash: text('ip_hash'),
 
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteTargetStatusIdx: index('comments_site_target_status_idx').on(table.siteId, table.targetType, table.targetId, table.status, table.createdAt),
     siteThreadIdx: index('comments_site_thread_idx').on(table.siteId, table.commentThreadId),
@@ -766,7 +791,7 @@ export const commentBlocklist = pgTable('comment_blocklist', {
     reason: text('reason').notNull(),
     actor: text('actor'),
     requestId: text('request_id'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
     siteTypeValueIdx: uniqueIndex('comment_blocklist_site_type_value_idx').on(table.siteId, table.type, table.value),
     siteCreatedIdx: index('comment_blocklist_site_created_idx').on(table.siteId, table.createdAt),
@@ -791,16 +816,16 @@ export const domainMappings = pgTable('domain_mappings', {
 
     verificationRecord: text('verification_record').notNull(),
     isVerified: boolean('is_verified').default(false).notNull(),
-    verifiedAt: timestamp('verified_at'),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
 
     sslStatus: text('ssl_status').$type<DomainStatus>().default('pending'),
-    sslExpiresAt: timestamp('ssl_expires_at'),
+    sslExpiresAt: timestamp('ssl_expires_at', { withTimezone: true }),
     forceHttps: boolean('force_https').default(true).notNull(),
 
     redirectRules: jsonb('redirect_rules').default([]),
 
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ==========================================================================
@@ -820,7 +845,7 @@ export const activityLogs = pgTable('activity_logs', {
     details: jsonb('details').default({}),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 /**
@@ -835,7 +860,7 @@ export const cacheInvalidationEvents = pgTable('cache_invalidation_events', {
     reason: text('reason').notNull(),
     revision: text('revision').notNull(),
     metadata: jsonb('metadata').default({}).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 /**
@@ -853,7 +878,7 @@ export const pageViews = pgTable('page_views', {
     country: text('country'),
     deviceType: text('device_type'),
     browser: text('browser'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 // ==========================================================================
@@ -1043,3 +1068,153 @@ export const previewTokensRelations = relations(previewTokens, ({ one }) => ({
         references: [sites.id],
     }),
 }));
+
+// Site visitor identities are intentionally separate from global CMS profiles.
+export const siteVisitors = pgTable('site_visitors', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(),
+    providerIssuer: text('provider_issuer').notNull(), providerSubject: text('provider_subject').notNull(),
+    email: text('email').notNull(), displayName: text('display_name').default('').notNull(),
+    status: text('status').default('active').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => ({
+    identityIdx: uniqueIndex('site_visitors_identity_idx').on(table.siteId, table.providerIssuer, table.providerSubject),
+    emailIdx: uniqueIndex('site_visitors_email_idx').on(table.siteId, table.email),
+}));
+export const visitorSessions = pgTable('visitor_sessions', {
+    tokenHash: text('token_hash').primaryKey(), siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(),
+    memberId: uuid('member_id').references(() => siteVisitors.id, { onDelete: 'cascade' }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(), createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => ({ memberIdx: index('visitor_sessions_member_idx').on(table.siteId, table.memberId) }));
+export const visitorAuthRateLimits = pgTable('visitor_auth_rate_limits', {
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(), keyHash: text('key_hash').notNull(),
+    count: integer('count').default(1).notNull(), resetAt: timestamp('reset_at', { withTimezone: true }).notNull(),
+}, table => ({ identityIdx: uniqueIndex('visitor_auth_rate_limits_identity_idx').on(table.siteId, table.keyHash) }));
+
+export const visitorRecoveryChallenges = pgTable('visitor_recovery_challenges', {
+    tokenHash: text('token_hash').primaryKey(), siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(),
+    memberId: uuid('member_id').references(() => siteVisitors.id, { onDelete: 'cascade' }).notNull(), expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+});
+
+/** Server-only code verifier store; never expose through browser auth or public APIs. */
+export const visitorPkceFlows = pgTable('visitor_pkce_flows', {
+    stateHash: text('state_hash').primaryKey(), siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }).notNull(),
+    purpose: text('purpose').notNull(), origin: text('origin').notNull(), returnUrl: text('return_url').notNull(),
+    verifier: text('verifier').notNull(), expectedEmail: text('expected_email').notNull(), displayName: text('display_name').default('').notNull(),
+    memberId: uuid('member_id').references(() => siteVisitors.id, { onDelete: 'cascade' }), expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, table => ({ expiryIdx: index('visitor_pkce_flows_expiry_idx').on(table.siteId, table.expiresAt) }));
+
+/** Private server-only media write/cleanup ledger; RESTRICT retains orphan authorization. */
+export const siteBackupRestoreJobs = pgTable('site_backup_restore_jobs', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    sourceSiteId: uuid('source_site_id').references(() => sites.id, { onDelete:'restrict' }).notNull(),
+    targetSiteId: uuid('target_site_id').notNull(),
+    state: text('state').default('pending').notNull(),
+    files: jsonb('files').default([]).notNull(),
+    storageIdentity: text('storage_identity').notNull(),
+    remaining: integer('remaining').default(0).notNull(),
+    createdAt: timestamp('created_at',{withTimezone:true}).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at',{withTimezone:true}).defaultNow().notNull(),
+});
+
+export const mediaStorageJobs = pgTable('media_storage_jobs', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'restrict' }).notNull(),
+    mediaId: uuid('media_id'), operation: text('operation').notNull(), state: text('state').default('pending').notNull(),
+    storageIdentity: text('storage_identity').notNull(), provider: text('provider').notNull(),
+    files: jsonb('files').notNull(), remainingPaths: jsonb('remaining_paths').notNull(),
+    attempts: integer('attempts').default(0).notNull(), lastErrorCode: text('last_error_code'), requestId: text('request_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => ({ siteStateIdx: index('media_storage_jobs_site_state_idx').on(table.siteId, table.state, table.createdAt, table.id) }));
+
+/** Private durable comment notification admission and outcome; no browser policy. */
+export const commentDeliveryAttempts = pgTable('comment_delivery_attempts', {
+ id: uuid('id').defaultRandom().primaryKey(), siteId: uuid('site_id').notNull().references(()=>sites.id,{onDelete:'restrict'}),
+ commentId: uuid('comment_id').notNull(), kind: text('kind').notNull(), channel: text('channel').notNull(), target: text('target').notNull(),
+ sourceEventId: text('source_event_id'), requestId: text('request_id').notNull(), reason: text('reason'), actor: text('actor'),
+ providerEvidence: jsonb('provider_evidence'),
+ state: text('state').notNull().default('pending'), statusCode: integer('status_code'), errorCode: text('error_code'),
+ createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+},t=>({siteAttemptIdx:uniqueIndex('comment_delivery_attempt_site_id').on(t.siteId,t.id),sourceIdx:uniqueIndex('comment_delivery_source_idx').on(t.siteId,t.sourceEventId),siteIdx:index('comment_delivery_site_idx').on(t.siteId,t.createdAt,t.id)}));
+
+/** Private durable form notification admission and outcome; no browser policy. */
+export const formDeliveryAttempts = pgTable('form_delivery_attempts', {
+ id: uuid('id').defaultRandom().primaryKey(), siteId: uuid('site_id').notNull().references(()=>sites.id,{onDelete:'restrict'}),
+ formId: uuid('form_id').notNull(), submissionId: uuid('submission_id').notNull(), kind: text('kind').notNull(), channel: text('channel').notNull(), target: text('target').notNull(),
+ sourceEventId: text('source_event_id'), requestId: text('request_id').notNull(), reason: text('reason'), actor: text('actor'),
+ providerEvidence: jsonb('provider_evidence'),
+ state: text('state').notNull().default('pending'), statusCode: integer('status_code'), errorCode: text('error_code'),
+ createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(), updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+},t=>({siteAttemptIdx:uniqueIndex('form_delivery_attempt_site_id').on(t.siteId,t.id),sourceIdx:uniqueIndex('form_delivery_source_idx').on(t.siteId,t.sourceEventId),siteIdx:index('form_delivery_site_idx').on(t.siteId,t.createdAt,t.id)}));
+
+/** Append-only owner review; provider state remains authoritative and unmodified. */
+export const commentDeliveryReconciliations = pgTable('comment_delivery_reconciliations', {
+ id: uuid('id').defaultRandom().primaryKey(), siteId: uuid('site_id').notNull().references(()=>sites.id,{onDelete:'restrict'}),
+ attemptId: uuid('attempt_id').notNull(), version: integer('version').notNull(),
+ actorId: text('actor_id').notNull(), requestId: text('request_id').notNull(), observedUpdatedAt: timestamp('observed_updated_at',{withTimezone:true}).notNull(),
+ observedState: text('observed_state').notNull(), evidence: text('evidence').notNull(), disposition: text('disposition').notNull(),
+ createdAt: timestamp('created_at',{withTimezone:true}).defaultNow().notNull(),
+},t=>({attemptSiteFk:foreignKey({columns:[t.siteId,t.attemptId],foreignColumns:[commentDeliveryAttempts.siteId,commentDeliveryAttempts.id],name:'comment_delivery_reconciliations_site_id_attempt_id_fkey'}).onDelete('restrict'),versionIdx:uniqueIndex('comment_delivery_review_version_idx').on(t.siteId,t.attemptId,t.version)}));
+
+/** Append-only owner review; provider state remains authoritative and unmodified. */
+export const formDeliveryReconciliations = pgTable('form_delivery_reconciliations', {
+ id: uuid('id').defaultRandom().primaryKey(), siteId: uuid('site_id').notNull().references(()=>sites.id,{onDelete:'restrict'}),
+ attemptId: uuid('attempt_id').notNull(), version: integer('version').notNull(),
+ actorId: text('actor_id').notNull(), requestId: text('request_id').notNull(), observedUpdatedAt: timestamp('observed_updated_at',{withTimezone:true}).notNull(),
+ observedState: text('observed_state').notNull(), evidence: text('evidence').notNull(), disposition: text('disposition').notNull(),
+ createdAt: timestamp('created_at',{withTimezone:true}).defaultNow().notNull(),
+},t=>({attemptSiteFk:foreignKey({columns:[t.siteId,t.attemptId],foreignColumns:[formDeliveryAttempts.siteId,formDeliveryAttempts.id],name:'form_delivery_reconciliations_site_id_attempt_id_fkey'}).onDelete('restrict'),versionIdx:uniqueIndex('form_delivery_review_version_idx').on(t.siteId,t.attemptId,t.version)}));
+
+/** Private recoverable product design preimages, never public collection values. */
+export const productDesignRevisions = pgTable('product_design_revisions', {
+ id: uuid('id').primaryKey().defaultRandom(),
+ siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+ collectionId: uuid('collection_id').notNull().references(() => contentCollections.id, { onDelete: 'cascade' }),
+ recordId: uuid('record_id').notNull().references(() => contentCollectionRecords.id, { onDelete: 'cascade' }),
+ snapshot: jsonb('snapshot').notNull(), operation: text('operation').notNull(),
+ templateId: text('template_id'), targetRevisionId: text('target_revision_id'),
+ actorId: text('actor_id'), requestId: text('request_id').notNull(),
+ createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('product_design_revisions_scope_idx').on(table.siteId, table.collectionId, table.recordId, table.createdAt, table.id)]);
+
+export const formDesignRevisions = pgTable('form_design_revisions', {
+ id: uuid('id').primaryKey().defaultRandom(),
+ siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+ formId: uuid('form_id').notNull().references(() => formDefinitions.id, { onDelete: 'cascade' }),
+ snapshot: jsonb('snapshot').notNull(), operation: text('operation').notNull(),
+ templateId: text('template_id'), targetRevisionId: text('target_revision_id'),
+ actorId: text('actor_id'), requestId: text('request_id').notNull(),
+ createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('form_design_revisions_scope_idx').on(table.siteId, table.formId, table.createdAt, table.id)]);
+
+export const collectionDesignRevisions = pgTable('collection_design_revisions', {
+ id: uuid('id').primaryKey().defaultRandom(),
+ siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'cascade' }),
+ collectionId: uuid('collection_id').notNull().references(() => contentCollections.id, { onDelete: 'cascade' }),
+ snapshot: jsonb('snapshot').notNull(), operation: text('operation').notNull(),
+ templateId: text('template_id'), targetRevisionId: text('target_revision_id'),
+ actorId: text('actor_id'), requestId: text('request_id').notNull(),
+ createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, table => [index('collection_design_revisions_scope_idx').on(table.siteId, table.collectionId, table.createdAt, table.id)]);
+
+export * from './newsletter-campaigns';
+
+/** Durable private send duplicate boundary. Bodies and attachments are never persisted. */
+export const mailboxSendAttempts = pgTable('mailbox_send_attempts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'restrict' }),
+    bindingId: text('binding_id').notNull(), idempotencyKey: text('idempotency_key').notNull(), fingerprint: text('fingerprint').notNull(),
+    state: text('state').notNull().default('pending'), statusCode: integer('status_code'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ keyIdx: uniqueIndex('mailbox_send_site_binding_key_idx').on(t.siteId, t.bindingId, t.idempotencyKey), historyIdx: index('mailbox_send_history_idx').on(t.siteId, t.bindingId, t.createdAt) }));
+
+export const mailboxManagementAttempts = pgTable('mailbox_management_attempts', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id').notNull().references(() => sites.id, { onDelete: 'restrict' }),
+    bindingId: text('binding_id').notNull(), idempotencyKey: text('idempotency_key').notNull(), fingerprint: text('fingerprint').notNull(),
+    operation: text('operation').notNull(), address: text('address').notNull(), targetBindingId: text('target_binding_id'),
+    state: text('state').notNull().default('pending'), statusCode: integer('status_code'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ keyIdx: uniqueIndex('mailbox_management_site_binding_key_idx').on(t.siteId, t.bindingId, t.idempotencyKey), historyIdx: index('mailbox_management_history_idx').on(t.siteId, t.bindingId, t.createdAt) }));

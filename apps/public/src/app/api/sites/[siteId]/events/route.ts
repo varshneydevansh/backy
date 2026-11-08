@@ -145,14 +145,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         siteId: site.id,
         action: kind === 'all' ? undefined : kind,
         requestId: requestId || undefined,
+        formId: formId || undefined,
+        commentId: commentId || undefined,
+        contactId: contactId || undefined,
         limit,
         offset,
       });
-      const events = result.items
-        .map(auditLogToPublicEvent)
-        .filter((event) => formId ? event.formId === formId : true)
-        .filter((event) => commentId ? event.commentId === commentId : true)
-        .filter((event) => contactId ? event.contactId === contactId : true);
+      const events = result.items.map(auditLogToPublicEvent);
 
       return privateResponse({
         success: true,
@@ -160,19 +159,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         data: {
           siteId: site.id,
           events,
-          count: events.length,
-          pagination: {
-            ...result.pagination,
-            total: events.length,
-          },
+          count: result.pagination.total,
+          pagination: result.pagination,
         },
         siteId: site.id,
         events,
-        count: events.length,
-        pagination: {
-          ...result.pagination,
-          total: events.length,
-        },
+        count: result.pagination.total,
+        pagination: result.pagination,
       }, responseRequestId);
     }
 

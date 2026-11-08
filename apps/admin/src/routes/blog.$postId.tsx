@@ -23,7 +23,8 @@ import {
     listBlogTags,
     publishBlogPost,
     rollbackBlogPost,
-    updateBlogPost,
+    updateBlogPostWithOutcome,
+    formatContentSaveWarnings,
     updateComments,
     type AdminComment,
     type AdminUserPermissionMatrix,
@@ -40,7 +41,7 @@ import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost, type ContentStatus } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
-import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
+import { ArticleModeSwitcher, EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import {
     RevisionCanvasVisualDiff,
@@ -49,6 +50,10 @@ import {
 } from '@/components/editor/RevisionCanvasVisualDiff';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
+import { BlogArticleWriter } from '@/lib/blogAuthoring';
+import { blogEditorSnapshotFingerprint } from '@/lib/blogAuthoringSync';
+import { resolveFrontendTemplateProvenance } from '@/lib/frontendTemplateProvenance';
+import { getCanvasHeightForElements } from '@/lib/editorTemplateChrome';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -199,16 +204,6 @@ const getScheduledBlogEditorDateError = (status: ContentStatus, scheduledAt: str
 const isRecord = (value: unknown): value is Record<string, unknown> => (
     typeof value === 'object' && value !== null && !Array.isArray(value)
 );
-
-const getMetaRecord = (meta: Record<string, any> | undefined, key: string): Record<string, unknown> | null => {
-    const value = meta?.[key];
-    return isRecord(value) ? value : null;
-};
-
-const getMetaArray = (meta: Record<string, any> | undefined, key: string): unknown[] => {
-    const value = meta?.[key];
-    return Array.isArray(value) ? value : [];
-};
 
 const recordKeyCount = (value: unknown): number => (
     isRecord(value) ? Object.keys(value).length : 0
@@ -1017,6 +1012,9 @@ function EditBlogPostPage() {
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(savedCanvasSize);
+    const [authoringMode, setAuthoringMode] = useState<'write' | 'layout'>(routeSearch.elementId ? 'layout' : 'write');
+    const [canvasExternalRevision, setCanvasExternalRevision] = useState(0);
+    const [isCanvasHydrated, setIsCanvasHydrated] = useState(Boolean(post));
     const canvasTreeStats = useMemo(() => getBlogCanvasTreeStats(canvasElements), [canvasElements]);
     const revisionDiffById = useMemo(() => new Map(revisions.map((revision) => [
         revision.id,
@@ -1174,7 +1172,11 @@ function EditBlogPostPage() {
     useEffect(() => {
       setCanvasElements(initialElements);
       setCanvasSize(savedCanvasSize);
-    }, [initialElements, savedCanvasSize]);
+      setCanvasExternalRevision((current) => current + 1);
+      // An uncached post arrives after state initialization. Mount the canvas
+      // only after installing its saved baseline, so hydration is not an edit.
+      if (post) setIsCanvasHydrated(true);
+    }, [initialElements, savedCanvasSize, post]);
 
     useEffect(() => {
       if (!post) {
@@ -1230,7 +1232,7 @@ function EditBlogPostPage() {
         };
     }, [activeSiteId, canViewBlog, post, postId]);
 
-    if (isLoadingPost && !post) {
+    if ((isLoadingPost && !post) || (post && !isCanvasHydrated)) {
         return (
             <PageShell title="Loading post" description="Fetching editor content from the backend.">
                 <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
@@ -1321,7 +1323,7 @@ function EditBlogPostPage() {
             metadata: savedDesignMetadata,
         });
         try {
-            const savedPost = await updateBlogPost(activeSiteId, postId, {
+            const saveOutcome = await updateBlogPostWithOutcome(activeSiteId, postId, {
                 title,
                 slug: normalizedSlug,
                 excerpt,
@@ -1345,8 +1347,9 @@ function EditBlogPostPage() {
                 updatedBy: 'admin',
                 expectedUpdatedAt: post.updatedAt,
             });
-            syncPostState(savedPost);
+            syncPostState(saveOutcome.post);
             setSaveConflict(null);
+            setSaveWarning(formatContentSaveWarnings(saveOutcome.completionWarnings));
             setWorkflowNotice('Post saved and revision snapshot recorded.');
             void loadPostReadiness();
         } catch (error) {
@@ -1707,16 +1710,11 @@ function EditBlogPostPage() {
     const selectedTags = tags
         .filter((tag) => selectedTagIds.includes(tag.id))
         .map((tag) => ({ id: tag.id, name: tag.name, slug: tag.slug }));
-    const frontendDesignTemplate = {
-        id: getMetaString(post.meta, 'frontendDesignTemplateId'),
-        name: getMetaString(post.meta, 'frontendDesignTemplateName'),
-        routePattern: getMetaString(post.meta, 'frontendDesignRoutePattern'),
-        source: getMetaRecord(post.meta, 'frontendDesignSource'),
-        chrome: getMetaRecord(post.meta, 'frontendDesignChrome'),
-        tokens: getMetaRecord(post.meta, 'frontendDesignTokens'),
-        customCss: getMetaString(post.meta, 'frontendDesignCustomCss'),
-        bindingHints: getMetaArray(post.meta, 'frontendDesignBindingHints'),
-    };
+    const frontendDesignTemplate = resolveFrontendTemplateProvenance(
+        post.meta,
+        savedDesignMetadata,
+        savedContentDocument?.metadata,
+    );
     const hasFrontendDesignTemplate = frontendDesignTemplate.id.length > 0;
     const isCommentMutationBusy = updatingCommentIds.length > 0;
     const commentsBusy = isCommentsLoading || isCommentMutationBusy;
@@ -1777,7 +1775,7 @@ function EditBlogPostPage() {
             canvasSize,
         },
     };
-    const editorHasUnsavedChanges = JSON.stringify(savedEditorSnapshot) !== JSON.stringify(currentEditorSnapshot);
+    const editorHasUnsavedChanges = blogEditorSnapshotFingerprint(savedEditorSnapshot) !== blogEditorSnapshotFingerprint(currentEditorSnapshot);
     const scheduleValidationMessage = getScheduledBlogEditorDateError(status, scheduledAt);
     const hasFutureSchedule = scheduleValidationMessage === null;
     const minimumScheduledAt = toDateTimeLocalValue(new Date(Date.now() + 60_000).toISOString());
@@ -3330,26 +3328,24 @@ function EditBlogPostPage() {
                             data-default-editor-order={isWorkspaceFocus ? 'focused-canvas' : 'canvas-first'}
                         >
                             <EditorWorkspaceFrame
-                                title={isWorkspaceFocus ? 'Post canvas' : 'Post design canvas'}
+                                title="Post editor"
                                 description={isWorkspaceFocus
                                     ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
                                     : 'Design the public post page with the same component, layer, media, grouping, and data-binding controls used by pages.'}
                                 meta={
                                     <>
-                                        <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                                        {authoringMode === 'layout' && <span className="rounded bg-muted px-2 py-1 tabular-nums">
                                             {canvasSize.width} x {canvasSize.height}px
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
+                                        </span>}
+                                        {authoringMode === 'layout' && <span className="rounded bg-muted px-2 py-1">
                                             {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
+                                        </span>}
+                                        <span className={cn('text-xs font-medium', editorHasUnsavedChanges ? 'text-amber-700' : 'text-slate-500')} role="status">
+                                            {isLoading ? 'Saving…' : editorHasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
                                         </span>
                                         {hasFrontendDesignTemplate && (
                                             <span className="rounded bg-teal-50 px-2 py-1 font-medium text-teal-700">
                                                 Template: {frontendDesignTemplate.name || frontendDesignTemplate.id}
-                                            </span>
-                                        )}
-                                        {isWorkspaceFocus && (
-                                            <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
-                                                Focused
                                             </span>
                                         )}
                                     </>
@@ -3368,6 +3364,21 @@ function EditBlogPostPage() {
                                             data-disabled-reason={blogEditorSaveDisabledReason || undefined}
                                         >
                                             {isLoading ? 'Saving...' : submitLabel}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => void generatePreview()}
+                                            disabled={editorPreviewBusy || isUsingLocalPostCopy || !canPublishBlog}
+                                            title={blogEditorPreviewDisabledReason || undefined}
+                                            iconStart={<Eye className="size-4" />}
+                                            data-testid="blog-editor-canvas-preview"
+                                            data-action-state={blogEditorPreviewDisabledReason ? editorPreviewBusy ? 'busy' : 'blocked' : 'ready'}
+                                            data-action-status={blogEditorPreviewActionStatus}
+                                            data-disabled-reason={blogEditorPreviewDisabledReason || undefined}
+                                        >
+                                            Preview
                                         </Button>
                                         <Button
                                             type="button"
@@ -3426,9 +3437,36 @@ function EditBlogPostPage() {
                                         : 'min-h-[820px] xl:h-[calc(100vh-72px)] xl:min-h-[920px]',
                                 )}
                             >
+                                <div className="flex h-full min-h-0 flex-col">
+                                    <ArticleModeSwitcher mode={authoringMode} onChange={setAuthoringMode} disabled={editorFormDisabled || isUsingLocalPostCopy} />
+                                    <div className="min-h-0 flex-1" hidden={authoringMode !== 'write'}>
+                                        <BlogArticleWriter
+                                            elements={canvasElements}
+                                            disabled={editorFormDisabled || isUsingLocalPostCopy}
+                                            active={authoringMode === 'write'}
+                                            title={title}
+                                            canViewMedia={canViewMedia}
+                                            canCreateMedia={canCreateMedia}
+                                            mediaViewDisabledReason={viewMediaDeniedMessage}
+                                            mediaCreateDisabledReason={createMediaDeniedMessage}
+                                            mediaContext={{ siteId: activeSiteId, scope: 'post', targetId: postId, targetLabel: title.trim() || 'Blog post' }}
+                                            onTitleChange={(nextTitle) => {
+                                                clearEditorFeedback();
+                                                setTitle(nextTitle);
+                                            }}
+                                            onChange={(elements) => {
+                                                clearEditorFeedback();
+                                                setCanvasElements(elements);
+                                                setCanvasSize((current) => ({ ...current, height: Math.max(current.height, getCanvasHeightForElements(elements)) }));
+                                                setCanvasExternalRevision((current) => current + 1);
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="min-h-0 flex-1" hidden={authoringMode !== 'layout'}>
                                 <CanvasEditor
                                     mode="blog"
-                                    initialElements={initialElements}
+                                    initialElements={canvasElements}
+                                    externalElementsRevision={canvasExternalRevision}
                                     initialSettings={dummySettings}
                                     initialSize={canvasSize}
                                     initialSelectedElementId={routeSearch.elementId}
@@ -3437,6 +3475,10 @@ function EditBlogPostPage() {
                                     onSave={() => { }}
                                     onChange={(elements, _settings, size) => {
                                         if (editorBusy || !canEditBlog || isUsingLocalPostCopy) return;
+                                        // Parent hydration and callback identity changes can echo the
+                                        // same canvas with reordered canonical object keys after saving.
+                                        if (blogEditorSnapshotFingerprint({ elements, canvasSize: size || canvasSize })
+                                            === blogEditorSnapshotFingerprint({ elements: canvasElements, canvasSize })) return;
                                         clearEditorFeedback();
                                         setCanvasElements(elements);
                                         if (size) setCanvasSize(size);
@@ -3466,6 +3508,8 @@ function EditBlogPostPage() {
                                       targetLabel: post.title,
                                     }}
                                 />
+                                    </div>
+                                </div>
                                 {(editorBusy || !canEditBlog) && (
                                     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
                                         <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">

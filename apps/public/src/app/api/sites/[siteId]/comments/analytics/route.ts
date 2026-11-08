@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { collectCompleteExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 import { getSiteByIdOrSlug, listComments } from '@/lib/backyStore';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
@@ -75,33 +76,20 @@ function dateBucket(value?: string | null): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-async function listRepositoryComments(siteId: string, targetType: CommentTargetType | 'all', targetId?: string): Promise<Comment[]> {
+async function listRepositoryComments(siteId: string, targetType: CommentTargetType | 'all', targetId?: string): Promise<{ siteId: string; comments: Comment[] }> {
   const repositories = await getRequiredDatabaseRepositories();
   const site = await resolveRepositorySite(repositories, siteId);
   if (!site) {
     throw new Error('SITE_NOT_FOUND');
   }
 
-  const items: Comment[] = [];
-  const limit = 500;
-  let offset = 0;
-
-  for (let page = 0; page < 20; page += 1) {
-    const result = await repositories.comments.list({
-      siteId: site.id,
-      targetType: targetType === 'all' ? undefined : targetType,
-      targetId,
-      status: 'all',
-      sort: 'newest',
-      limit,
-      offset,
-    });
-    items.push(...result.items);
-    if (!result.pagination.hasMore) break;
-    offset += limit;
-  }
-
-  return items;
+  const comments = await collectCompleteExportPages(pagination => repositories.comments.list({
+    siteId: site.id, targetType: targetType === 'all' ? undefined : targetType,
+    targetId, status: 'all', sort: 'newest', ...pagination,
+  }), comment => comment.siteId === site.id
+    && (targetType === 'all' || comment.targetType === targetType)
+    && (!targetId || comment.targetId === targetId));
+  return { siteId: site.id, comments };
 }
 
 function buildCommentAnalytics(siteId: string, comments: Comment[], days: number) {
@@ -253,8 +241,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const targetId = parseTextInput(searchParams.get('targetId'));
 
     if (!shouldUseDemoStoreFallback()) {
-      const comments = await listRepositoryComments(siteId, targetType, targetId);
-      const analytics = buildCommentAnalytics(siteId, comments, days);
+      const inventory = await listRepositoryComments(siteId, targetType, targetId);
+      const analytics = buildCommentAnalytics(inventory.siteId, inventory.comments, days);
       return privateResponse({
         success: true,
         requestId: responseRequestId,
@@ -268,15 +256,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }
 
-    const result = listComments(site.id, {
-      targetType,
-      targetId,
-      status: 'all',
-      sort: 'newest',
-      limit: 10000,
-      offset: 0,
-    });
-    const analytics = buildCommentAnalytics(site.id, result.comments, days);
+    const comments = await collectCompleteExportPages(async pagination => {
+      const result = listComments(site.id, { targetType, targetId, status: 'all', sort: 'newest', ...pagination });
+      return { items: result.comments, pagination: result.pagination };
+    }, comment => comment.siteId === site.id
+      && (targetType === 'all' || comment.targetType === targetType)
+      && (!targetId || comment.targetId === targetId));
+    const analytics = buildCommentAnalytics(site.id, comments, days);
 
     return privateResponse({
       success: true,
@@ -285,6 +271,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       analytics,
     }, responseRequestId);
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'COMMENT_INVENTORY_INCOMPLETE', 'The complete comment inventory could not be verified. Retry after content changes finish.', responseRequestId);
     if (error instanceof Error && error.message === 'SITE_NOT_FOUND') {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', responseRequestId);
     }

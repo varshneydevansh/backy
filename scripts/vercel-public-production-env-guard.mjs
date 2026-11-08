@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { validateAdminOriginProductionEnv } from './vercel-admin-origin-policy.mjs';
+
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
 const valueFor = (key) => {
@@ -45,6 +47,8 @@ for (const key of [
   }
 }
 
+failures.push(...validateAdminOriginProductionEnv(process.env));
+
 for (const key of [
   'BACKY_ALLOW_PRODUCTION_DEMO_MODE',
   'BACKY_ALLOW_PRODUCTION_LOCAL_ADMIN_AUTH',
@@ -66,3 +70,4 @@ if (failures.length > 0) {
 }
 
 console.log('Backy public production env guard passed.');
+console.log('Configuration syntax and required values checked locally; deployed admin cookie/CORS behavior still requires runtime proof.');

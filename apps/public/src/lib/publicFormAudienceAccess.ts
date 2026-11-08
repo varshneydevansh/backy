@@ -1,3 +1,4 @@
+import { requireSiteVisitor, VisitorAccessError } from '@/lib/visitor-auth/routes';
 import { NextRequest, NextResponse } from 'next/server';
 import type { FormDefinition } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
@@ -7,6 +8,7 @@ type FormAudienceAccessAction = 'definition' | 'submit';
 
 type FormAudienceLike = {
   audience?: FormDefinition['audience'] | null;
+  siteId?: string;
 };
 
 const restrictedAudienceMessage = (audience: FormDefinition['audience']) => (
@@ -56,6 +58,14 @@ export const requirePublicFormAudienceAccess = async (
   }
 
   const audience = form.audience || 'public';
+  if (audience === 'authenticated') {
+    try {
+      if (!form.siteId) throw new Error('Missing form site');
+      await requireSiteVisitor(request, form.siteId); return null;
+    } catch (error) {
+      return formAudienceError(error instanceof VisitorAccessError ? error.status : 503, error instanceof VisitorAccessError ? error.code : 'VISITOR_AUTH_UNAVAILABLE', error instanceof VisitorAccessError ? error.message : 'Visitor accounts require the persisted database and identity provider.', requestId);
+    }
+  }
   const permission = action === 'submit' && audience === 'adminOnly' ? 'forms.manage' : 'forms.view';
   const access = await requireAdminAccess(request, requestId, { permission });
 

@@ -229,7 +229,7 @@ async function deliverCommerceOrderEmail(params: {
   target: string;
   requestId: string;
 }) {
-  const config = getEmailDeliveryConfig();
+  const config = getEmailDeliveryConfig(params.siteId);
   const message = buildCommerceOrderNotificationEmail({
     config,
     siteId: params.siteId,
@@ -379,7 +379,7 @@ async function deliverCommerceProductEmail(params: {
   target: string;
   requestId: string;
 }) {
-  const config = getEmailDeliveryConfig();
+  const config = getEmailDeliveryConfig(params.siteId);
   const message = buildCommerceProductLowStockEmail({
     config,
     siteId: params.siteId,

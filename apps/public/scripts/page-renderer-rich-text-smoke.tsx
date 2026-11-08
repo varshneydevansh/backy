@@ -1201,14 +1201,13 @@ assert(html.includes('data-backy-render-scale="1.000"'), `Initial renderer scale
 assert(resolveRendererBreakpoint(390) === 'mobile', '390px did not resolve to mobile breakpoint');
 assert(resolveRendererBreakpoint(768) === 'tablet', '768px did not resolve to tablet breakpoint');
 assert(resolveRendererBreakpoint(1200) === 'desktop', '1200px did not resolve to desktop breakpoint');
-assert(pageRendererSource.includes('const RENDER_BREAKPOINT_CANVAS_SIZE'), 'PageRenderer must define public breakpoint canvas sizes');
-assert(pageRendererSource.includes("tablet: { width: 768, height: 1024 }"), 'PageRenderer tablet canvas size must match editor tablet canvas');
-assert(pageRendererSource.includes("mobile: { width: 375, height: 812 }"), 'PageRenderer mobile canvas size must match editor mobile canvas');
-assert(pageRendererSource.includes('const activeCanvasSize = activeBreakpoint ==='), 'PageRenderer must derive active canvas size from the active breakpoint');
-assert(pageRendererSource.includes('const nextCanvasSize = nextBreakpoint ==='), 'PageRenderer scale calculation must use the next breakpoint canvas size');
+assert(pageRendererSource.includes('const activeCanvasSize = resolveBackyCanvasBreakpointSize(canvasSize, activeBreakpoint)'), 'PageRenderer must resolve public breakpoint dimensions and authored overrides through the same canonical helper as the editor');
+assert(pageRendererSource.includes('resolveBackyCanvasViewport(activeCanvasSize, viewportWidth)'), 'PageRenderer must derive width and scale through the shared fixed/fluid viewport resolver');
+assert(pageRendererSource.includes('adaptBackyFluidCanvasElements(responsiveElements, activeCanvasSize.width, viewport.width)'), 'Fluid rendering must adapt responsive elements to the resolved viewport width');
 assert(pageRendererSource.includes('const collectPublicRenderedContentBounds = ('), 'PageRenderer must measure rendered content bounds for scrollable public previews');
-assert(pageRendererSource.includes('width: activeCanvasSize.width'), 'PageRenderer canvas width must stay locked to the active breakpoint canvas size');
-assert(pageRendererSource.includes('height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48))'), 'PageRenderer canvas height must expand to authored content bounds');
+assert(pageRendererSource.includes('width: viewport.width'), 'PageRenderer canvas width must use the resolved fixed/fluid viewport width');
+assert(pageRendererSource.includes('height: Math.max(activeCanvasSize.height, Math.ceil(contentBounds.maxY + 48), flowContentHeight)'), 'PageRenderer canvas height must expand to authored position bounds and measured intrinsic flow height');
+assert(pageRendererSource.includes('new ResizeObserver(measure)') && pageRendererSource.includes('[data-backy-intrinsic-height="true"]') && pageRendererSource.includes('!isBackyFlowChild(child, resolveBackyChildLayout(element))'), 'Intrinsic measurement must observe auto-sized content while flow children do not contribute obsolete free-position offsets to canvas bounds');
 assert(pageRendererSource.includes('data-backy-render-content-bounds="expanded"'), 'PageRenderer must expose expanded content-bound metadata for responsive smoke coverage');
 const responsiveElements = applyResponsiveOverrides([
   {

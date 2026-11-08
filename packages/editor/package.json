@@ -9,13 +9,17 @@
         "test:inline-markdown": "tsx scripts/inline-markdown-smoke.ts",
         "test:list-indent": "tsx scripts/list-indent-smoke.ts",
         "test:toolbar-controls": "tsx scripts/toolbar-controls-smoke.ts",
-        "test": "npm run test:inline-markdown && npm run test:list-indent && npm run test:toolbar-controls"
+        "test:rich-blocks": "NODE_ENV=production tsx --tsconfig ../../apps/admin/tsconfig.json scripts/rich-blocks-smoke.tsx",
+        "test": "npm run test:inline-markdown && npm run test:list-indent && npm run test:toolbar-controls && npm run test:rich-blocks && npm run test:data-figures && npm run test:interactive-components",
+        "test:data-figures": "NODE_ENV=production tsx --tsconfig ../../apps/admin/tsconfig.json scripts/data-figures-smoke.tsx",
+        "test:interactive-components": "NODE_ENV=production tsx --tsconfig ../../apps/admin/tsconfig.json scripts/interactive-components-smoke.tsx"
     },
     "peerDependencies": {
         "react": "^18.2.0",
         "react-dom": "^18.2.0"
     },
     "dependencies": {
+        "@backy-cms/core": "*",
         "@udecode/plate": "latest",
         "@udecode/plate-basic-marks": "^49.0.0",
         "@udecode/plate-block-quote": "^49.0.0",
@@ -42,5 +46,22 @@
         "@types/react": "^18.2.0",
         "@types/react-dom": "^18.2.0",
         "typescript": "^5.0.0"
+    },
+    "exports": {
+        ".": {
+            "types": "./src/index.tsx",
+            "import": "./src/index.tsx",
+            "require": "./src/index.tsx"
+        },
+        "./rich-text": {
+            "types": "./src/RichTextContent.tsx",
+            "import": "./src/RichTextContent.tsx",
+            "require": "./src/RichTextContent.tsx"
+        },
+        "./data-figure": {
+            "types": "./src/data-figure.ts",
+            "import": "./src/data-figure.ts",
+            "require": "./src/data-figure.ts"
+        }
     }
 }

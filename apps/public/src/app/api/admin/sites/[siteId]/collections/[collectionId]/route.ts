@@ -1,3 +1,4 @@
+import {collectionDefinitionWithVersion} from '@/lib/collectionDefinitionVersion';
 /**
  * Admin CMS collection detail endpoint.
  *
@@ -38,6 +39,7 @@ import {
   normalizeCollectionRoutePattern,
 } from "@/lib/collectionRoutes";
 import { findCollectionRouteConflict } from "@/lib/routeConflicts";
+import { collectCollectionRoutePages, CollectionInventoryIncompleteError } from "@/lib/collectionInventory";
 import { parseAdminCollectionFields } from "@/lib/adminCollectionFields";
 import { deliverSiteWebhooks } from "@/lib/siteWebhookDelivery";
 
@@ -259,7 +261,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         requestId,
-        data: { collection },
+        data: { collection:collectionDefinitionWithVersion(collection as never) },
       });
     }
 
@@ -293,9 +295,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: { collection },
+      data: { collection:collectionDefinitionWithVersion(collection as never) },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection detail API error:", error);
     return errorResponse(
       500,
@@ -345,6 +348,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
 
       const body = await parseJsonBody(request);
+      if(body.expectedVersion!==undefined&&(typeof body.expectedVersion!=='string'||!/^collection-v1:[a-f0-9]{64}$/.test(body.expectedVersion)))return errorResponse(400,'INVALID_COLLECTION_VERSION','Reload before saving the collection.',requestId);
       const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
       const commerceAccess = await requireCommerceCollectionSlugAccess(
         request,
@@ -425,13 +429,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         );
       }
 
-      const pages = await repositories.pages.list({
+      const pages = await collectCollectionRoutePages(site.id, pagination => repositories.pages.list({
         siteId: site.id,
         includeUnpublished: true,
         status: "all",
-        limit: 100,
-        offset: 0,
-      });
+        ...pagination,
+      }));
       const routeConflict = findCollectionRouteConflict(
         {
           id: collection.id,
@@ -445,7 +448,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
               ? collection.listRoutePattern
               : listRoutePattern,
         },
-        pages.items,
+        pages,
       );
       if (routeConflict) {
         return errorResponse(
@@ -458,6 +461,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
       const updated = (
         await repositories.collections.update(site.id, collection.id, {
+          ...(body.expectedVersion===undefined?{}:{expectedVersion:body.expectedVersion as string}),
           ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
           ...(body.description === undefined
             ? {}
@@ -518,7 +522,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({
         success: true,
         requestId,
-        data: { collection: updated, cacheInvalidation },
+        data: { collection:collectionDefinitionWithVersion(updated), cacheInvalidation },
       });
     }
 
@@ -541,6 +545,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const body = await parseJsonBody(request);
+    if(body.expectedVersion!==undefined&&(typeof body.expectedVersion!=='string'||!/^collection-v1:[a-f0-9]{64}$/.test(body.expectedVersion)))return errorResponse(400,'INVALID_COLLECTION_VERSION','Reload before saving the collection.',requestId);
     const nextSlug = body.slug === undefined ? "" : normalizeSlug(body.slug);
     const commerceAccess = await requireCommerceCollectionSlugAccess(
       request,
@@ -645,7 +650,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
 
     const updated = updateAdminCollection(site.id, collection.id, {
-      ...body,
+      ...Object.fromEntries(Object.entries(body).filter(([key])=>['name','description','status','permissions','metadata','expectedVersion'].includes(key))),
       ...(nextSlug ? { slug: nextSlug } : {}),
       ...(parsedFields.fields === undefined
         ? {}
@@ -685,9 +690,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       success: true,
       requestId,
-      data: { collection: updated },
+      data: { collection:collectionDefinitionWithVersion(updated as never) },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if(error?.code==='COLLECTION_DEFINITION_CONFLICT')return errorResponse(409,error.code,'The collection changed. Reload before saving.',requestId);
+    if(error?.code==='COLLECTION_DEFINITION_WRITE_UNAVAILABLE')return errorResponse(503,error.code,'Guarded collection storage is unavailable.',requestId);
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection update API error:", error);
     return errorResponse(
       500,
@@ -860,6 +868,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
   } catch (error) {
+    if (error instanceof CollectionInventoryIncompleteError) return errorResponse(503, "COLLECTION_INVENTORY_INCOMPLETE", error.message, requestId);
     console.error("Admin collection delete API error:", error);
     return errorResponse(
       500,

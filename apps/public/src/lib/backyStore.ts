@@ -1,13 +1,32 @@
-import { isContentPublished } from '@backy-cms/core';
+import { findPageByHierarchyPath } from './pageHierarchy';
+import { mediaMatchesLinkedFilters } from '@backy-cms/core';
+import { snapshotCollectionTemplateDesign, assertCollectionDesignOnlyUpdate, type BackyCollectionDesignRevision } from '@backy-cms/core';
+import { assertBackyCollectionExpectation } from './collectionDefinitionVersion';
+import { snapshotFormTemplateDesign, assertFormDesignOnlyUpdate, type BackyFormUpdateInput, type BackyFormDesignRevision } from '@backy-cms/core';
+import { assertFormDefinitionExpectation } from './formDefinitionVersion';
+import { snapshotProductTemplateDesign } from "@backy-cms/core";
+import { assertNoDemoFormDeliveryEvidence } from './demoFormDeliveryJournal';
+import { assertNoDemoCommentDeliveryEvidence } from './demoCommentDeliveryJournal';
+import { assertSiteCreationQuota, prepareSiteDuplication, SiteCreationAdmissionError, SITE_DUPLICATION_SCOPE, type SiteDuplicationInput, type SiteDuplicationResult } from '@backy-cms/core';
+import { persistDemoSiteDuplication } from './demoSiteDuplicationPersistence';
+import { BackyFormDeliveryError, BackyCommentDeliveryError, collectBackyCommentSubtree, assertBackyCommentParent, BackyCommentLifecycleError, BACKY_COMMENT_INVENTORY_LIMIT } from '@backy-cms/core';
+import { collectionRecordUniqueIssues, BackyCollectionRecordValidationError, serializeBackyCollectionRecordVersion, assertBackyCollectionRecordUpdateExpectation, assertBackyCollectionImportExpectation, BackyCollectionImportConflictError, type BackyCollectionImportOperation, type BackyCollectionImportResult, assertBackyReusableSectionExpectation, BackyReusableSectionConflictError, commitBackyOperatorSiteGrantAuth, preserveBackyOperatorSiteGrants, assertBackyContentUpdateExpectation, isContentPublished, changedTemplateRevisionSnapshots, serializeTemplateRevisionValue } from '@backy-cms/core';
+import type { BackyReusableSectionBatchMutation, BackyReusableSectionPropagationInput, BackyReusableSectionPropagationTarget, BackySettingsOperatorGrantCommitInput, BackyTemplateRevision, BackyTemplateRevisionCommitInput } from '@backy-cms/core';
+import { assertBackyReusableSectionPropagationInventory, BackyReusableSectionPropagationConflictError } from '@backy-cms/core';
 import {
   DEFAULT_SITE_SETTINGS,
   DEFAULT_THEME,
   canvasContentPayloadToBackyContentDocument,
   isBackyContentDocument,
+  normalizeBackyJsonObject,
+  synchronizeBackyElementParentScopes,
   type BackyContentDocument,
+  type BackyCanvasSize,
 } from "@backy-cms/core";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { assertSiteBackupGraph, SITE_BACKUP_TABLES, SiteBackupError, type SiteBackupGraph, type SiteBackupRow } from '@backy-cms/core';
+import { assertNoPendingDemoSiteBackupJobs, commitDemoSiteBackupFiles, recoverDemoSiteBackupCommit } from './demoSiteBackupPersistence';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, renameSync, unlinkSync, openSync, closeSync, fsyncSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   BackyAuditLogEntry,
@@ -119,10 +138,7 @@ interface CanvasElement {
 
 interface PageContent {
   elements: CanvasElement[];
-  canvasSize: {
-    width: number;
-    height: number;
-  };
+  canvasSize: BackyCanvasSize;
   customCSS?: string;
   customJS?: string;
   contentDocument?: BackyContentDocument | Record<string, unknown>;
@@ -189,10 +205,10 @@ const pageContentFromCanvasInput = (
 ): PageContent => {
   const contentInput = toRecord(rawContent);
   const canvasSizeInput = toRecord(contentInput.canvasSize);
-  const fallbackDocument = isBackyContentDocument(input.existing?.contentDocument)
-    ? input.existing.contentDocument
+  const fallbackDocument = input.existing
+    ? contentDocumentFromCanvasPayload(input.existing, input)
     : undefined;
-  const contentDocument = contentDocumentFromCanvasPayload(rawContent, {
+  const normalizedDocument = contentDocumentFromCanvasPayload(rawContent, {
     id: input.id,
     kind: input.kind,
     title: input.title,
@@ -200,23 +216,40 @@ const pageContentFromCanvasInput = (
     status: input.status,
     fallbackDocument,
   });
+  // Validate via the canonical converter before cloning raw legacy fields.
+  // Concrete nesting is authoritative on a full canvas, including outdented roots.
+  const contentDocument = {
+    ...normalizedDocument,
+    elements: synchronizeBackyElementParentScopes(normalizedDocument.elements, { completeTree: true }),
+  };
+  const legacyElements = Array.isArray(contentInput.elements)
+    ? clone(contentInput.elements as CanvasElement[])
+    : Array.isArray(rawContent)
+      ? clone(rawContent as CanvasElement[])
+      : input.existing?.elements
+        ? clone(input.existing.elements)
+        : [];
   const existingCanvasSize = input.existing?.canvasSize || {
     width: 1200,
     height: 900,
   };
+  const mergedCanvasSize = { ...existingCanvasSize, ...toRecord(contentDocument.metadata?.canvasSize), ...canvasSizeInput };
+  const canvasSize: BackyCanvasSize = {
+    ...clone(mergedCanvasSize),
+    width: Number(mergedCanvasSize.width) || 1200,
+    height: Number(mergedCanvasSize.height) || 900,
+  };
 
   return {
-    elements: Array.isArray(contentInput.elements)
-      ? clone(contentInput.elements as CanvasElement[])
-      : Array.isArray(rawContent)
-        ? clone(rawContent as CanvasElement[])
-        : input.existing?.elements
-          ? clone(input.existing.elements)
-          : [],
-    canvasSize: {
-      width: Number(canvasSizeInput.width) || existingCanvasSize.width || 1200,
-      height: Number(canvasSizeInput.height) || existingCanvasSize.height || 900,
-    },
+    // The shared converter safely normalizes unknown JSON extensions. Keep
+    // them on the legacy wrapper too, so save/reopen does not silently change
+    // the shape consumed by registered frontend adapters.
+    ...Object.fromEntries(Object.entries(contentDocument).filter(([key]) =>
+      !["schemaVersion", "id", "kind", "title", "slug", "locale", "status", "version",
+        "elements", "themeTokenRefs", "assets", "interactions", "seo", "dataBindings",
+        "editableMap", "metadata", "canvasSize", "customCSS", "customJS", "animations"].includes(key))),
+    elements: synchronizeBackyElementParentScopes(legacyElements, { completeTree: true }),
+    canvasSize,
     customCSS:
       contentInput.customCSS === undefined
         ? (contentDocument.metadata?.customCSS as string | undefined) ||
@@ -227,7 +260,7 @@ const pageContentFromCanvasInput = (
         ? (contentDocument.metadata?.customJS as string | undefined) ||
           input.existing?.customJS
         : sanitizeString(contentInput.customJS),
-    contentDocument,
+    contentDocument: { ...contentDocument, metadata: { ...contentDocument.metadata, canvasSize } },
     themeTokenRefs: designStateValueFromContent<Record<string, string>>(
       contentInput,
       contentDocument,
@@ -2897,6 +2930,10 @@ const REUSABLE_SECTIONS: StoreReusableSection[] = [
 ];
 
 const CONTENT_REVISIONS: ContentRevision[] = [];
+const COLLECTION_DESIGN_REVISIONS: BackyCollectionDesignRevision[] = [];
+const FORM_DESIGN_REVISIONS: BackyFormDesignRevision[] = [];
+const PRODUCT_DESIGN_REVISIONS: import("@backy-cms/core").BackyProductDesignRevision[] = [];
+const TEMPLATE_REVISIONS: BackyTemplateRevision[] = [];
 const PREVIEW_TOKENS: PreviewToken[] = [];
 const ADMIN_AUDIT_LOGS: BackyAuditLogEntry[] = [];
 const INTERACTIVE_COMPONENTS: StoreInteractiveComponent[] = [];
@@ -3010,6 +3047,7 @@ const MEDIA_FOLDERS: MediaFolder[] = [
   },
 ];
 
+// Mutable filesystem state is provisioned at runtime; compiled constants above supply demo seeds.
 const MEDIA_CATALOG_PATH = join(
   process.cwd(),
   "data",
@@ -3048,6 +3086,10 @@ interface AdminContentSnapshot {
   teamMembers?: StoreTeamMember[];
   settings?: StoreSettings;
   revisions?: ContentRevision[];
+  templateRevisions?: BackyTemplateRevision[];
+  formDesignRevisions?: BackyFormDesignRevision[];
+  collectionDesignRevisions?: BackyCollectionDesignRevision[];
+  productDesignRevisions?: import("@backy-cms/core").BackyProductDesignRevision[];
   previewTokens?: PreviewToken[];
   adminAuditLogs?: BackyAuditLogEntry[];
 }
@@ -3066,6 +3108,7 @@ interface InteractionStoreSnapshot {
 }
 
 function ensurePersistedMediaLoaded() {
+  recoverDemoSiteBackupCommit();
   for (let index = MEDIA_LIBRARY.length - 1; index >= 0; index -= 1) {
     if (MEDIA_LIBRARY[index].id.startsWith("media_")) {
       MEDIA_LIBRARY.splice(index, 1);
@@ -3148,14 +3191,15 @@ function persistRuntimeMediaCatalog() {
   }
 }
 
-function ensurePersistedAdminContentLoaded() {
+function ensurePersistedAdminContentLoaded(strict = false) {
+  recoverDemoSiteBackupCommit();
   if (persistedAdminContentLoaded) {
-    refreshPersistedAdminContent();
+    refreshPersistedAdminContent(strict);
     return;
   }
 
   persistedAdminContentLoaded = true;
-  refreshPersistedAdminContent();
+  refreshPersistedAdminContent(strict);
 }
 
 function getAdminContentFileSignature(): string {
@@ -3167,7 +3211,7 @@ function getAdminContentFileSignature(): string {
   }
 }
 
-function refreshPersistedAdminContent() {
+function refreshPersistedAdminContent(strict = false) {
   if (!existsSync(ADMIN_CONTENT_PATH)) {
     persistedAdminContentSignature = "";
     return;
@@ -3279,6 +3323,11 @@ function refreshPersistedAdminContent() {
       };
     }
 
+    if (Array.isArray(parsed.collectionDesignRevisions)) COLLECTION_DESIGN_REVISIONS.splice(0,COLLECTION_DESIGN_REVISIONS.length,...parsed.collectionDesignRevisions);
+    if (Array.isArray(parsed.formDesignRevisions)) FORM_DESIGN_REVISIONS.splice(0, FORM_DESIGN_REVISIONS.length, ...parsed.formDesignRevisions);
+    if (Array.isArray(parsed.productDesignRevisions)) PRODUCT_DESIGN_REVISIONS.splice(0, PRODUCT_DESIGN_REVISIONS.length, ...parsed.productDesignRevisions);
+    if (Array.isArray(parsed.templateRevisions)) TEMPLATE_REVISIONS.splice(0, TEMPLATE_REVISIONS.length, ...parsed.templateRevisions);
+
     if (Array.isArray(parsed.revisions)) {
       CONTENT_REVISIONS.splice(
         0,
@@ -3299,15 +3348,17 @@ function refreshPersistedAdminContent() {
       );
     }
   } catch (error) {
+    if (strict) throw error;
     console.error("Unable to load persisted admin content:", error);
   }
 }
 
-function persistAdminContent() {
+function persistAdminContent(strict = false) {
+  const target = strict ? `${ADMIN_CONTENT_PATH}.${randomUUID()}.tmp` : ADMIN_CONTENT_PATH;
   try {
     mkdirSync(dirname(ADMIN_CONTENT_PATH), { recursive: true });
     writeFileSync(
-      ADMIN_CONTENT_PATH,
+      target,
       JSON.stringify(
         {
           sites: SITE_LIST,
@@ -3326,6 +3377,10 @@ function persistAdminContent() {
           teamMembers: TEAM_MEMBERS,
           settings: SETTINGS,
           revisions: CONTENT_REVISIONS,
+          templateRevisions: TEMPLATE_REVISIONS,
+          productDesignRevisions: PRODUCT_DESIGN_REVISIONS,
+          formDesignRevisions: FORM_DESIGN_REVISIONS,
+          collectionDesignRevisions: COLLECTION_DESIGN_REVISIONS,
           previewTokens: PREVIEW_TOKENS,
           adminAuditLogs: ADMIN_AUDIT_LOGS,
         } satisfies AdminContentSnapshot,
@@ -3333,10 +3388,84 @@ function persistAdminContent() {
         2,
       ),
     );
+    if (strict) renameSync(target, ADMIN_CONTENT_PATH);
     persistedAdminContentSignature = getAdminContentFileSignature();
   } catch (error) {
+    if (strict) { try { unlinkSync(target); } catch {} throw error; }
     console.error("Unable to persist admin content:", error);
   }
+}
+
+/** Dedicated append-only template history has no ordinary audit retention cap. */
+export function listTemplateRevisions(siteId: string, templateId?: string, options: { limit?: number; offset?: number } = {}): BackyListResult<BackyTemplateRevision> {
+  ensurePersistedAdminContentLoaded();
+  const revisions = TEMPLATE_REVISIONS.filter(revision => revision.siteId === siteId && (!templateId || revision.templateId === templateId));
+  const limit = Math.max(1, Math.min(100, Math.floor(options.limit || 25))), offset = Math.max(0, Math.floor(options.offset || 0));
+  return { items: clone(revisions.slice(offset, offset + limit)), pagination: getPagination(revisions.length, limit, offset) };
+}
+export function getTemplateRevision(siteId: string, templateId: string, revisionId: string): BackyTemplateRevision | null {
+  ensurePersistedAdminContentLoaded();
+  const revision = TEMPLATE_REVISIONS.find(revision => revision.siteId === siteId && revision.templateId === templateId && revision.id === revisionId);
+  return revision ? clone(revision) : null;
+}
+export function commitDemoFrontendDesign(input: BackyTemplateRevisionCommitInput): StoreSite {
+  ensurePersistedAdminContentLoaded(true);
+  const index = SITE_LIST.findIndex(site => site.id === input.siteId);
+  if (index < 0) throw Object.assign(new Error('Site not found'), { code: 'SITE_NOT_FOUND' });
+  const current = SITE_LIST[index];
+  const fingerprint = (value: unknown) => createHash('sha256').update(serializeTemplateRevisionValue(value)).digest('hex');
+  if (fingerprint(current.settings?.frontendDesign ?? null) !== input.expectedDesignFingerprint) throw Object.assign(new Error('The site design changed. Reload template history before restoring or saving.'), { code: 'TEMPLATE_HISTORY_CONFLICT' });
+  const changes = changedTemplateRevisionSnapshots(current.settings?.frontendDesign?.templates || [], input.frontendDesign.templates);
+  const appended: BackyTemplateRevision[] = changes.filter(change => change.operation !== 'baseline' || !TEMPLATE_REVISIONS.some(revision => revision.siteId === input.siteId && revision.templateId === change.snapshot.id && revision.fingerprint === fingerprint(change.snapshot))).map(change => ({
+    schemaVersion: 'backy.template-revision.v1', id: `template_revision_${randomUUID()}`, siteId: input.siteId, templateId: change.snapshot.id,
+    fingerprint: fingerprint(change.snapshot), snapshot: clone(change.snapshot), source: input.source,
+    operation: change.operation === 'save' && input.restoredFromRevisionId ? 'restore' : change.operation,
+    restoredFromRevisionId: change.operation === 'save' ? input.restoredFromRevisionId : null,
+    actorId: input.actorId, requestId: input.requestId, createdAt: new Date().toISOString(),
+  }));
+  const next = { ...current, settings: { ...(clone(DEFAULT_SITE_SETTINGS) as unknown as SiteSettings), ...current.settings, frontendDesign: clone(input.frontendDesign) }, updatedAt: new Date().toISOString() } as StoreSite;
+  SITE_LIST[index] = next; TEMPLATE_REVISIONS.unshift(...appended.reverse());
+  try { persistAdminContent(true); }
+  catch (cause) { SITE_LIST[index] = current; TEMPLATE_REVISIONS.splice(0, appended.length); throw cause; }
+  return clone(next);
+}
+
+
+/** One-process demo admission and one strict persisted commit. Provider/catalog side effects are not part of this store. */
+export function commitDemoFrontendComposition(siteId: string, prepare: () => {
+  design?: BackyTemplateRevisionCommitInput;
+  drafts: Array<{ type: 'page' | 'blogPost'; input: Record<string, unknown> }>;
+}) {
+  ensurePersistedAdminContentLoaded(true);
+  const index = SITE_LIST.findIndex(site => site.id === siteId);
+  if (index < 0) throw Object.assign(new Error('Site not found'), { code: 'SITE_NOT_FOUND' });
+  const current = SITE_LIST[index];
+  // The callback compares a fresh full inventory before any mutation, then prepares all targets synchronously.
+  const plan = prepare();
+  const drafts = plan.drafts.map(draft => ({ type: draft.type, item: draft.type === 'page'
+    ? prepareCompositionPage(siteId, draft.input) : prepareCompositionBlogPost(siteId, draft.input) }));
+  const appended: BackyTemplateRevision[] = [];
+  let next = current;
+  if (plan.design) {
+    const input = plan.design;
+    const fingerprint = (value: unknown) => createHash('sha256').update(serializeTemplateRevisionValue(value)).digest('hex');
+    if (input.siteId !== siteId || fingerprint(current.settings?.frontendDesign ?? null) !== input.expectedDesignFingerprint)
+      throw Object.assign(new Error('Site design changed. Review again.'), { code: 'TEMPLATE_HISTORY_CONFLICT' });
+    for (const change of changedTemplateRevisionSnapshots(current.settings?.frontendDesign?.templates || [], input.frontendDesign.templates)) {
+      if (change.operation === 'baseline' && TEMPLATE_REVISIONS.some(r => r.siteId === siteId && r.templateId === change.snapshot.id && r.fingerprint === fingerprint(change.snapshot))) continue;
+      appended.push({ schemaVersion: 'backy.template-revision.v1', id: `template_revision_${randomUUID()}`, siteId, templateId: change.snapshot.id,
+        fingerprint: fingerprint(change.snapshot), snapshot: clone(change.snapshot), source: input.source, operation: change.operation,
+        restoredFromRevisionId: null, actorId: input.actorId, requestId: input.requestId, createdAt: new Date().toISOString() });
+    }
+    next = { ...current, settings: { ...(clone(DEFAULT_SITE_SETTINGS) as unknown as SiteSettings), ...current.settings, frontendDesign: clone(input.frontendDesign) }, updatedAt: new Date().toISOString() } as StoreSite;
+  }
+  const priorPages = PAGE_LIST.slice(), priorPosts = BLOG_POSTS.slice(), priorRevisions = TEMPLATE_REVISIONS.slice();
+  SITE_LIST[index] = next;
+  for (const draft of drafts) if (draft.type === 'page') PAGE_LIST.unshift(draft.item as StorePage); else BLOG_POSTS.unshift(draft.item as StoreBlogPost);
+  TEMPLATE_REVISIONS.unshift(...appended.reverse());
+  try { persistAdminContent(true); }
+  catch (cause) { SITE_LIST[index] = current; PAGE_LIST.splice(0, PAGE_LIST.length, ...priorPages); BLOG_POSTS.splice(0, BLOG_POSTS.length, ...priorPosts); TEMPLATE_REVISIONS.splice(0, TEMPLATE_REVISIONS.length, ...priorRevisions); throw cause; }
+  return drafts;
 }
 
 const DEFAULT_ADMIN_AUDIT_LIMIT = 50;
@@ -3728,6 +3857,7 @@ function setCommentBlocklist(entries: CommentBlocklistEntry[]) {
 }
 
 function refreshPersistedInteractionStore() {
+  recoverDemoSiteBackupCommit();
   if (!existsSync(INTERACTION_STORE_PATH)) {
     return;
   }
@@ -3759,6 +3889,46 @@ function refreshPersistedInteractionStore() {
   } catch (error) {
     console.error("Unable to load persisted interaction store:", error);
   }
+}
+
+/** Site/settings/page duplication is one synchronous preparation and persisted replacement. */
+export function duplicateAdminSiteAtomically(input: SiteDuplicationInput): SiteDuplicationResult {
+  recoverDemoSiteBackupCommit();ensurePersistedAdminContentLoaded(true);
+  const source=SITE_LIST.find(site=>site.id===input.sourceSiteId||site.slug===input.sourceSiteId);
+  if(!source)throw new SiteCreationAdmissionError('SITE_NOT_FOUND',404,'Site not found.');
+  assertSiteCreationQuota(SETTINGS,SITE_LIST.length);
+  const prepared=prepareSiteDuplication(source,PAGE_LIST.filter(page=>page.siteId===source.id),input,new Set(SITE_LIST.map(site=>site.slug)),randomUUID,new Date().toISOString());
+  const prior=existsSync(ADMIN_CONTENT_PATH)?JSON.parse(readFileSync(ADMIN_CONTENT_PATH,'utf8')):{};
+  persistDemoSiteDuplication({...prior,sites:[...SITE_LIST,prepared.site],pages:[...PAGE_LIST,...prepared.pages]});
+  persistedAdminContentSignature='';refreshPersistedAdminContent(true);
+  const site=SITE_LIST.find(site=>site.id===prepared.site.id);if(!site)throw new SiteCreationAdmissionError('SITE_CREATION_PERSISTENCE_UNCONFIRMED',503,'Site creation could not confirm its outcome. Reload sites before applying again.');
+  return {site:clone(site) as unknown as SiteDuplicationResult['site'],pagesCopied:prepared.pages.length,copiedResourceScope:SITE_DUPLICATION_SCOPE,concurrencyBoundary:'demo-single-process',completionWarnings:[]};
+}
+
+/** Complete private demo snapshot; recovery is deliberately single-process. */
+export function captureDemoSiteBackup(siteId:string): SiteBackupGraph {
+  recoverDemoSiteBackupCommit();
+  // Recovery reads mutable runtime snapshots, never deployment inputs.
+  // Unlike legacy best-effort loaders, a recovery export refuses corrupt disk.
+  for(const path of [ADMIN_CONTENT_PATH,MEDIA_CATALOG_PATH,INTERACTION_STORE_PATH]) if(existsSync(/* turbopackIgnore: true */ path)) JSON.parse(readFileSync(/* turbopackIgnore: true */ path,'utf8'));
+  ensurePersistedAdminContentLoaded(true);ensurePersistedMediaLoaded();refreshPersistedInteractionStore();
+  const site=SITE_LIST.find(site=>site.id===siteId);if(!site)throw new SiteBackupError('SITE_NOT_FOUND',404,'Site not found.');
+  const arrays:Record<typeof SITE_BACKUP_TABLES[number],unknown[]>={pages:PAGE_LIST,blogPosts:BLOG_POSTS,blogCategories:BLOG_CATEGORIES,blogTags:BLOG_TAGS,mediaFolders:MEDIA_FOLDERS,media:MEDIA_LIBRARY,mediaVersions:[],contentCollections:COLLECTIONS,contentCollectionRecords:COLLECTION_RECORDS,siteVisitors:[],formDefinitions:FORM_LIBRARY,formSubmissions,formContacts:contactStore,reusableSections:REUSABLE_SECTIONS,interactiveComponents:INTERACTIVE_COMPONENTS,contentRevisions:CONTENT_REVISIONS,templateRevisions:TEMPLATE_REVISIONS,productDesignRevisions:PRODUCT_DESIGN_REVISIONS,formDesignRevisions:FORM_DESIGN_REVISIONS,collectionDesignRevisions:COLLECTION_DESIGN_REVISIONS,comments:commentStore,commentBlocklist:Array.from(COMMENT_REPORT_BLOCKLIST.values())};
+  const graph={site:clone(site) as unknown as SiteBackupRow,tables:Object.fromEntries(SITE_BACKUP_TABLES.map(name=>[name,clone(arrays[name].filter(row=>(row as SiteBackupRow).siteId===siteId))])) as SiteBackupGraph['tables']};
+  assertSiteBackupGraph(graph,siteId);return graph;
+}
+export function commitDemoSiteBackup(graph:SiteBackupGraph,sourceSiteId:string):void {
+  assertSiteBackupGraph(graph,String(graph.site.id));captureDemoSiteBackup(sourceSiteId);
+  try{assertSiteCreationQuota(SETTINGS,SITE_LIST.length);}catch(error){if((error as any)?.code==='BILLING_SITE_LIMIT')throw new SiteBackupError('BILLING_SITE_LIMIT',402,(error as Error).message);throw error;}
+  if(graph.tables.siteVisitors.length||graph.tables.mediaVersions.length)throw new SiteBackupError('SITE_BACKUP_RUNTIME_MISMATCH',503,'Database visitor and version rows require the database restore runtime. Demo exports retain versions inside media metadata.');
+  if(SITE_LIST.some(site=>site.id===graph.site.id||site.slug===graph.site.slug))throw new SiteBackupError('SITE_BACKUP_SLUG_CONFLICT',409,'The draft site slug is already in use.');
+  const source=SITE_LIST.find(site=>site.id===sourceSiteId);if(!source||source.teamId!==graph.site.teamId)throw new SiteBackupError('SITE_BACKUP_SCOPE_CHANGED',409,'The source ownership changed.');
+  const read=(path:string)=>existsSync(path)?JSON.parse(readFileSync(path,'utf8')):{};
+  const admin={...read(ADMIN_CONTENT_PATH),sites:[...SITE_LIST,{...graph.site,status:'draft'}],pages:[...PAGE_LIST,...graph.tables.pages],blogPosts:[...BLOG_POSTS,...graph.tables.blogPosts],blogCategories:[...BLOG_CATEGORIES,...graph.tables.blogCategories],blogTags:[...BLOG_TAGS,...graph.tables.blogTags],forms:[...FORM_LIBRARY,...graph.tables.formDefinitions],collections:[...COLLECTIONS,...graph.tables.contentCollections],collectionRecords:[...COLLECTION_RECORDS,...graph.tables.contentCollectionRecords],reusableSections:[...REUSABLE_SECTIONS,...graph.tables.reusableSections],interactiveComponents:[...INTERACTIVE_COMPONENTS,...graph.tables.interactiveComponents],revisions:[...CONTENT_REVISIONS,...graph.tables.contentRevisions],templateRevisions:[...TEMPLATE_REVISIONS,...graph.tables.templateRevisions],productDesignRevisions:[...PRODUCT_DESIGN_REVISIONS,...graph.tables.productDesignRevisions],formDesignRevisions:[...FORM_DESIGN_REVISIONS,...graph.tables.formDesignRevisions],collectionDesignRevisions:[...COLLECTION_DESIGN_REVISIONS,...graph.tables.collectionDesignRevisions]};
+  const media={...read(MEDIA_CATALOG_PATH),media:[...MEDIA_LIBRARY.filter(row=>row.id.startsWith('media_')),...graph.tables.media],folders:[...MEDIA_FOLDERS.filter(row=>row.id.startsWith('folder_')),...graph.tables.mediaFolders]};
+  const interactions={...read(INTERACTION_STORE_PATH),comments:[...commentStore,...graph.tables.comments],formSubmissions:[...formSubmissions,...graph.tables.formSubmissions],contacts:[...contactStore,...graph.tables.formContacts],auditEvents,commentBlocklist:[...Array.from(COMMENT_REPORT_BLOCKLIST.values()),...graph.tables.commentBlocklist]};
+  commitDemoSiteBackupFiles([JSON.stringify(admin),JSON.stringify(media),JSON.stringify(interactions)]);
+  persistedAdminContentSignature='';refreshPersistedAdminContent(true);ensurePersistedMediaLoaded();refreshPersistedInteractionStore();
 }
 
 function mergeById<T extends { id: string }>(
@@ -4961,6 +5131,18 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+/** Preserve extensible JSON metadata without admitting prototype mutation keys. */
+function safeIncomingContentMeta(value: Record<string, unknown>): BackyJsonObject {
+  const safeValue = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(safeValue);
+    if (!input || typeof input !== "object") return input;
+    return Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(input))
+      .filter(([key, descriptor]) => !["__proto__", "prototype", "constructor"].includes(key) && "value" in descriptor)
+      .map(([key, descriptor]) => [key, safeValue(descriptor.value)]));
+  };
+  return normalizeBackyJsonObject(safeValue(value));
 }
 
 function normalizeFrontendDesignMetaFields(
@@ -6242,6 +6424,8 @@ function checkCommentSpamSignals(params: {
   startedAt?: string | number | null;
   rateLimitBypass?: boolean;
   blockedTerms?: string[];
+  /** Database intake checks its persisted identities inside SQL admission. */
+  checkBlockedIdentity?: boolean;
 }): CommentSpamResult {
   const flags: string[] = [];
   const now = Date.now();
@@ -6256,7 +6440,7 @@ function checkCommentSpamSignals(params: {
     };
   }
 
-  const blockedActor = isCommentBlockedByIdentity(params.siteId, {
+  const blockedActor = params.checkBlockedIdentity === false ? undefined : isCommentBlockedByIdentity(params.siteId, {
     email: params.authorEmail,
     ipHash: params.ipHash,
   });
@@ -7004,11 +7188,13 @@ function normalizeSiteSettingsInput(
 }
 
 export function createAdminSite(input: Record<string, unknown>): StoreSite {
-  ensurePersistedAdminContentLoaded();
+  recoverDemoSiteBackupCommit();ensurePersistedAdminContentLoaded(true);
 
   const now = new Date().toISOString();
   const name = sanitizeString(input.name) || "Untitled site";
   const slug = normalizeSlugInput(input.slug || name, "site");
+  assertSiteCreationQuota(SETTINGS,SITE_LIST.length);
+  if(SITE_LIST.some(site=>site.slug===slug))throw new SiteCreationAdmissionError('SITE_SLUG_CONFLICT',409,'This site slug is already in use. Choose another slug.');
   const status = parseStatusInput(
     input.status,
     ["draft", "published", "scheduled", "archived"] as const,
@@ -7042,9 +7228,12 @@ export function createAdminSite(input: Record<string, unknown>): StoreSite {
     },
   };
 
-  SITE_LIST.unshift(site);
-  persistAdminContent();
-  return clone(site);
+  const prior=existsSync(ADMIN_CONTENT_PATH)?JSON.parse(readFileSync(ADMIN_CONTENT_PATH,'utf8')):{};
+  persistDemoSiteDuplication({...prior,sites:[site,...SITE_LIST]});
+  persistedAdminContentSignature='';refreshPersistedAdminContent(true);
+  const committed=SITE_LIST.find(row=>row.id===site.id);
+  if(!committed)throw new SiteCreationAdmissionError('SITE_CREATION_PERSISTENCE_UNCONFIRMED',503,'Site creation could not confirm its outcome. Reload sites before applying again.');
+  return clone(committed);
 }
 
 export function updateAdminSite(
@@ -7072,6 +7261,7 @@ export function updateAdminSite(
     input.settings === undefined && input.redirectRules !== undefined
       ? { redirectRules: input.redirectRules }
       : input.settings;
+  if (settingsInput && typeof settingsInput === 'object' && Object.prototype.hasOwnProperty.call(settingsInput, 'frontendDesign')) throw Object.assign(new Error('Change frontendDesign through the atomic template history writer.'), { code: 'FRONTEND_DESIGN_HISTORY_REQUIRED', status: 400 });
 
   const updated: StoreSite = {
     ...current,
@@ -7132,6 +7322,9 @@ export function updateAdminSite(
 
 export function deleteAdminSite(siteId: string): boolean {
   ensurePersistedAdminContentLoaded();
+  assertNoDemoCommentDeliveryEvidence(siteId);
+  assertNoDemoFormDeliveryEvidence(siteId);
+  assertNoPendingDemoSiteBackupJobs(siteId);
 
   const index = SITE_LIST.findIndex((site) => site.id === siteId);
   if (index === -1) {
@@ -7227,6 +7420,11 @@ export function deleteAdminSite(siteId: string): boolean {
       PREVIEW_TOKENS.splice(tokenIndex, 1);
     }
   }
+
+  for (let index = PRODUCT_DESIGN_REVISIONS.length - 1; index >= 0; index--) if (PRODUCT_DESIGN_REVISIONS[index].siteId === siteId) PRODUCT_DESIGN_REVISIONS.splice(index, 1);
+  for (let i = COLLECTION_DESIGN_REVISIONS.length - 1; i >= 0; i--) if (COLLECTION_DESIGN_REVISIONS[i].siteId === siteId) COLLECTION_DESIGN_REVISIONS.splice(i, 1);
+  for (let i = FORM_DESIGN_REVISIONS.length - 1; i >= 0; i--) if (FORM_DESIGN_REVISIONS[i].siteId === siteId) FORM_DESIGN_REVISIONS.splice(i, 1);
+  for (let index = TEMPLATE_REVISIONS.length - 1; index >= 0; index--) if (TEMPLATE_REVISIONS[index].siteId === siteId) TEMPLATE_REVISIONS.splice(index, 1);
 
   persistAdminContent();
   return true;
@@ -7473,6 +7671,13 @@ export function createAdminUser(input: Record<string, unknown>): StoreUser {
   return clone(user);
 }
 
+const assertDemoOperatorAuthorityRemains = (current: StoreUser, next: Pick<StoreUser, 'role' | 'status'> | null) => {
+  const active = (value: Pick<StoreUser, 'role' | 'status'>) => (value.role === 'owner' || value.role === 'admin') && value.status === 'active';
+  if (active(current) && (!next || !active(next)) && !USER_LIST.some(user => user.id !== current.id && active(user))) {
+    throw Object.assign(new Error('At least one active owner or admin must remain.'), { code: 'LAST_ADMIN_AUTHORITY', status: 409 });
+  }
+};
+
 export function updateAdminUser(
   userId: string,
   input: Record<string, unknown>,
@@ -7513,6 +7718,7 @@ export function updateAdminUser(
         : current.lastActiveAt,
   };
 
+  assertDemoOperatorAuthorityRemains(current, updated);
   USER_LIST[index] = updated;
   persistAdminContent();
   return clone(updated);
@@ -7526,6 +7732,7 @@ export function deleteAdminUser(userId: string): boolean {
     return false;
   }
 
+  assertDemoOperatorAuthorityRemains(USER_LIST[index], null);
   USER_LIST.splice(index, 1);
   for (
     let overrideIndex = USER_PERMISSION_OVERRIDES.length - 1;
@@ -7774,6 +7981,16 @@ export function getAdminSettings(): StoreSettings {
   return clone(SETTINGS);
 }
 
+/** Synchronous compare + mutation is atomic within this demo-store process. */
+export function commitAdminOperatorSiteGrant(input: BackySettingsOperatorGrantCommitInput): StoreSettings {
+  ensurePersistedAdminContentLoaded();
+  const previous = SETTINGS;
+  const auth = commitBackyOperatorSiteGrantAuth(SETTINGS.auth, input);
+  SETTINGS = { ...SETTINGS, auth, updatedAt: new Date().toISOString() };
+  try { persistAdminContent(true); } catch (error) { SETTINGS = previous; throw error; }
+  return clone(SETTINGS);
+}
+
 export function updateAdminSettings(
   input: Record<string, unknown>,
 ): StoreSettings {
@@ -7805,7 +8022,7 @@ export function updateAdminSettings(
         ? SETTINGS.auth
         : {
             ...(SETTINGS.auth || {}),
-            ...authInput,
+            ...preserveBackyOperatorSiteGrants(SETTINGS.auth, authInput),
           },
     integrations:
       input.integrations === undefined
@@ -7946,6 +8163,7 @@ const normalizeCollectionField = (
     : existing?.options;
 
   return {
+    ...normalizeBackyJsonObject(input),
     id: sanitizeString(input.id) || existing?.id || createRuntimeId("field"),
     key,
     label,
@@ -8114,6 +8332,7 @@ const normalizeCollectionRecordValue = (
   }
 
   if (type === "number") {
+    if (typeof value === "string" && !value.trim()) return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -8158,11 +8377,13 @@ const normalizeCollectionRecordFieldValue = (
   return normalizeCollectionRecordValue(field.type, value);
 };
 
-const normalizeCollectionRecordValues = (
+export const normalizeCollectionRecordValues = (
   collection: StoreCollection,
   values: Record<string, unknown>,
   existingValues: Record<string, unknown> = {},
 ): Record<string, unknown> => {
+  values = normalizeBackyJsonObject(values);
+  existingValues = normalizeBackyJsonObject(existingValues);
   const normalized: Record<string, unknown> = {};
 
   for (const field of collection.fields) {
@@ -8175,7 +8396,7 @@ const normalizeCollectionRecordValues = (
     }
 
     if (existingValues[field.key] !== undefined) {
-      normalized[field.key] = existingValues[field.key];
+      normalized[field.key] = normalizeCollectionRecordFieldValue(field, existingValues[field.key]);
       continue;
     }
 
@@ -8248,11 +8469,10 @@ export function getCollectionByIdOrSlug(
   return clone(collection);
 }
 
-export function createAdminCollection(
+const prepareAdminCollection = (
   siteId: string,
   input: Record<string, unknown>,
-): StoreCollection {
-  ensurePersistedAdminContentLoaded();
+): StoreCollection => {
 
   const now = new Date().toISOString();
   const name = sanitizeString(input.name) || "Untitled collection";
@@ -8283,9 +8503,13 @@ export function createAdminCollection(
     updatedAt: now,
   };
 
-  COLLECTIONS.unshift(collection);
-  persistAdminContent();
-  return clone(collection);
+  return collection;
+};
+
+export function createAdminCollection(siteId: string, input: Record<string, unknown>): StoreCollection {
+  ensurePersistedAdminContentLoaded();
+  const collection = prepareAdminCollection(siteId, input);
+  COLLECTIONS.unshift(collection); persistAdminContent(); return clone(collection);
 }
 
 export function updateAdminCollection(
@@ -8304,6 +8528,9 @@ export function updateAdminCollection(
   }
 
   const current = COLLECTIONS[index];
+  assertBackyCollectionExpectation(current as never,input as never);
+  const details = input.beforeUpdateCollectionDesignRevision as any;
+  if(details)assertCollectionDesignOnlyUpdate(current as never,input as never);
   const nextSlug =
     input.slug === undefined
       ? current.slug
@@ -8370,7 +8597,7 @@ export function updateAdminCollection(
     fields:
       input.fields === undefined
         ? current.fields
-        : normalizeCollectionFields(input.fields, current.fields),
+        : details ? clone(input.fields as StoreCollectionField[]) : normalizeCollectionFields(input.fields, current.fields),
     permissions:
       input.permissions === undefined
         ? current.permissions
@@ -8382,12 +8609,53 @@ export function updateAdminCollection(
       input.metadata === undefined
         ? current.metadata
         : asJsonObject(input.metadata) || {},
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date(Math.max(Date.now(),Date.parse(current.updatedAt)+1)).toISOString(),
   };
 
+  const revision: BackyCollectionDesignRevision|null = details ? {id:randomUUID(),siteId,collectionId:current.id,snapshot:snapshotCollectionTemplateDesign(current as never),...details,templateId:details.templateId||null,targetRevisionId:details.targetRevisionId||null,actorId:details.actorId||null,createdAt:new Date().toISOString()} : null;
+  if(revision)COLLECTION_DESIGN_REVISIONS.push(revision);
   COLLECTIONS[index] = updated;
-  persistAdminContent();
+  try {persistAdminContent(true);}catch(error){COLLECTIONS[index]=current;if(revision)COLLECTION_DESIGN_REVISIONS.splice(COLLECTION_DESIGN_REVISIONS.indexOf(revision),1);throw error;}
   return clone(updated);
+}
+
+/** One synchronous demo-store commit; no intermediate snapshots or provider operations. */
+export function applyAdminCollectionImport(siteId: string, operations: BackyCollectionImportOperation[]): BackyCollectionImportResult {
+  ensurePersistedAdminContentLoaded(true);
+  if (!SITE_LIST.some(site => site.id === siteId)) throw new BackyCollectionImportConflictError();
+  const beforeCollections = [...COLLECTIONS], beforeRecords = [...COLLECTION_RECORDS], beforeMedia = clone(MEDIA_LIBRARY);
+  const pendingCollections = [...COLLECTIONS], pendingRecords = [...COLLECTION_RECORDS];
+  const collections: StoreCollection[] = [], records: StoreCollectionRecord[] = [];
+  let createdCollections = 0, updatedCollections = 0, createdRecords = 0, updatedRecords = 0;
+  for (const operation of operations) {
+    const current = pendingCollections.find(item => item.siteId === siteId && item.slug === operation.input.slug) || null;
+    const existingRecords = current ? pendingRecords.filter(item => item.siteId === siteId && item.collectionId === current.id) : [];
+    assertBackyCollectionImportExpectation(siteId, operation, current as never, existingRecords as never);
+    const collection = { ...current, ...prepareAdminCollection(siteId, { ...current, ...operation.input }), ...(current ? { id: current.id, createdAt: current.createdAt } : {}) };
+    if (current) { pendingCollections[pendingCollections.indexOf(current)] = collection; updatedCollections++; }
+    else { pendingCollections.unshift(collection); createdCollections++; }
+    collections.push(collection);
+    for (const record of operation.records) {
+      const now = new Date().toISOString();
+      const saved: StoreCollectionRecord = { ...record.expectedRecord, id: record.expectedRecord?.id || createRuntimeId('record'), siteId, collectionId: collection.id,
+        slug: record.input.slug || 'record', status: record.input.status || 'draft', values: clone(record.input.values),
+        createdAt: record.expectedRecord?.createdAt || now, updatedAt: now,
+        publishedAt: record.input.status === 'published' ? record.expectedRecord?.publishedAt || now : record.expectedRecord?.publishedAt || null,
+        scheduledAt: record.input.scheduledAt || null };
+      if (record.expectedRecord) { const index = pendingRecords.findIndex(item => item.id === record.expectedRecord!.id && item.siteId === siteId && item.collectionId === collection.id); if (index < 0) throw new BackyCollectionImportConflictError(); pendingRecords[index] = saved; updatedRecords++; }
+      else { pendingRecords.unshift(saved); createdRecords++; }
+      records.push(saved);
+    }
+  }
+  COLLECTIONS.splice(0, COLLECTIONS.length, ...pendingCollections); COLLECTION_RECORDS.splice(0, COLLECTION_RECORDS.length, ...pendingRecords);
+  try {
+    persistAdminContent(true);
+  } catch (error) {
+    COLLECTIONS.splice(0, COLLECTIONS.length, ...beforeCollections); COLLECTION_RECORDS.splice(0, COLLECTION_RECORDS.length, ...beforeRecords); MEDIA_LIBRARY.splice(0, MEDIA_LIBRARY.length, ...beforeMedia); throw error;
+  }
+  // The media index is derived from durable records and stored separately in demo mode.
+  for (const record of records) syncMediaReferencesForCollectionRecord(siteId, record.collectionId, record.id, record.values);
+  return clone({ collections, records, createdCollections, updatedCollections, createdRecords, updatedRecords }) as unknown as BackyCollectionImportResult;
 }
 
 export function deleteAdminCollection(
@@ -8404,6 +8672,7 @@ export function deleteAdminCollection(
     return false;
   }
 
+  for(let i=COLLECTION_DESIGN_REVISIONS.length-1;i>=0;i--)if(COLLECTION_DESIGN_REVISIONS[i].siteId===siteId&&COLLECTION_DESIGN_REVISIONS[i].collectionId===collectionId)COLLECTION_DESIGN_REVISIONS.splice(i,1);
   COLLECTIONS.splice(index, 1);
   for (
     let recordIndex = COLLECTION_RECORDS.length - 1;
@@ -8418,6 +8687,7 @@ export function deleteAdminCollection(
     }
   }
 
+  for (let i = PRODUCT_DESIGN_REVISIONS.length - 1; i >= 0; i--) if (PRODUCT_DESIGN_REVISIONS[i].siteId === siteId && PRODUCT_DESIGN_REVISIONS[i].collectionId === collectionId) PRODUCT_DESIGN_REVISIONS.splice(i, 1);
   persistAdminContent();
   return true;
 }
@@ -8437,6 +8707,12 @@ const normalizeReusableSectionContent = (
     : isObjectRecord(input.contentDocument)
       ? clone(input.contentDocument)
     : existing?.contentDocument;
+  const mergedCanvasSize = { ...existingCanvasSize, ...toRecord(toRecord(toRecord(contentDocument).metadata).canvasSize), ...canvasSizeInput };
+  const canvasSize: BackyCanvasSize = {
+    ...clone(mergedCanvasSize),
+    width: Number(mergedCanvasSize.width) || 1200,
+    height: Number(mergedCanvasSize.height) || 600,
+  };
   const designStateValue = <T = unknown>(key: string): T | undefined => {
     if (input[key] === undefined) return existing?.[key as keyof PageContent] as T | undefined;
     const next = input[key];
@@ -8444,16 +8720,14 @@ const normalizeReusableSectionContent = (
   };
 
   return {
+    ...clone(existing || {}),
+    ...clone(input),
     elements: Array.isArray(input.elements)
       ? clone(input.elements as CanvasElement[])
       : existing?.elements
         ? clone(existing.elements)
         : [],
-    canvasSize: {
-      width: Number(canvasSizeInput.width) || existingCanvasSize.width || 1200,
-      height:
-        Number(canvasSizeInput.height) || existingCanvasSize.height || 600,
-    },
+    canvasSize,
     customCSS:
       input.customCSS === undefined
         ? existing?.customCSS
@@ -8462,7 +8736,7 @@ const normalizeReusableSectionContent = (
       input.customJS === undefined
         ? existing?.customJS
         : sanitizeString(input.customJS),
-    contentDocument,
+    ...(contentDocument ? { contentDocument: { ...contentDocument, metadata: { ...toRecord(toRecord(contentDocument).metadata), canvasSize } } } : {}),
     themeTokenRefs: designStateValue<Record<string, string>>("themeTokenRefs"),
     assets: designStateValue<unknown[] | Record<string, unknown>>("assets"),
     animations: designStateValue<unknown[] | Record<string, unknown>>("animations"),
@@ -8546,12 +8820,10 @@ export function getReusableSectionByIdOrSlug(
   return section ? clone(section) : undefined;
 }
 
-export function createReusableSection(
+function prepareReusableSection(
   siteId: string,
   input: Record<string, unknown>,
 ): StoreReusableSection {
-  ensurePersistedAdminContentLoaded();
-
   const now = new Date().toISOString();
   const name = sanitizeString(input.name) || "Untitled reusable section";
   const section: StoreReusableSection = {
@@ -8579,26 +8851,19 @@ export function createReusableSection(
     updatedAt: now,
   };
 
+  return section;
+}
+
+export function createReusableSection(siteId: string, input: Record<string, unknown>): StoreReusableSection {
+  ensurePersistedAdminContentLoaded();
+  const section = prepareReusableSection(siteId, input);
   REUSABLE_SECTIONS.unshift(section);
   persistAdminContent();
   return clone(section);
 }
 
-export function updateReusableSection(
-  siteId: string,
-  sectionId: string,
-  input: Record<string, unknown>,
-): StoreReusableSection | undefined {
-  ensurePersistedAdminContentLoaded();
-
-  const index = REUSABLE_SECTIONS.findIndex(
-    (section) => section.siteId === siteId && section.id === sectionId,
-  );
-  if (index === -1) {
-    return undefined;
-  }
-
-  const current = REUSABLE_SECTIONS[index];
+function prepareReusableSectionUpdate(current: StoreReusableSection, input: Record<string, unknown>): StoreReusableSection {
+  assertBackyReusableSectionExpectation(input, current);
   const updated: StoreReusableSection = {
     ...current,
     name:
@@ -8648,9 +8913,111 @@ export function updateReusableSection(
     updatedAt: new Date().toISOString(),
   };
 
+  return updated;
+}
+
+export function updateReusableSection(
+  siteId: string,
+  sectionId: string,
+  input: Record<string, unknown>,
+): StoreReusableSection | undefined {
+  ensurePersistedAdminContentLoaded();
+
+  const index = REUSABLE_SECTIONS.findIndex(
+    (section) => section.siteId === siteId && section.id === sectionId,
+  );
+  if (index === -1) {
+    return undefined;
+  }
+
+  const current = REUSABLE_SECTIONS[index];
+  const updated = prepareReusableSectionUpdate(current, input);
   REUSABLE_SECTIONS[index] = updated;
-  persistAdminContent();
+  try { persistAdminContent(input.expectedSection !== undefined); }
+  catch (error) { REUSABLE_SECTIONS[index] = current; throw error; }
   return clone(updated);
+}
+
+/** Demo-only single-process atomic import; one strict snapshot rename, rollback on failure. */
+export function applyReusableSectionBatch(siteId: string, operations: BackyReusableSectionBatchMutation[]): StoreReusableSection[] {
+  ensurePersistedAdminContentLoaded();
+  const before = [...REUSABLE_SECTIONS], pending = [...before], items: StoreReusableSection[] = [];
+  for (const operation of operations) {
+    if (operation.type === 'create') {
+      if (operation.input.siteId !== siteId || pending.some(item => item.siteId === siteId && item.slug === operation.input.slug)) throw new BackyReusableSectionConflictError();
+      const item = prepareReusableSection(siteId, operation.input as unknown as Record<string, unknown>);
+      pending.unshift(item); items.push(item);
+    } else {
+      const index = pending.findIndex(item => item.siteId === siteId && item.id === operation.sectionId);
+      if (index === -1) throw new BackyReusableSectionConflictError();
+      const item = prepareReusableSectionUpdate(pending[index], operation.input as unknown as Record<string, unknown>);
+      if (pending.some(other => other.siteId === siteId && other.id !== item.id && other.slug === item.slug)) throw new BackyReusableSectionConflictError();
+      pending[index] = item; items.push(item);
+    }
+  }
+  REUSABLE_SECTIONS.splice(0, REUSABLE_SECTIONS.length, ...pending);
+  try { persistAdminContent(true); }
+  catch (error) { REUSABLE_SECTIONS.splice(0, REUSABLE_SECTIONS.length, ...before); throw error; }
+  return clone(items);
+}
+
+/** Synchronous single-process demo propagation; one strict durable commit including revisions. */
+export function applyReusableSectionPropagation(siteId: string, input: BackyReusableSectionPropagationInput, actor: string): string[] {
+  ensurePersistedAdminContentLoaded(true);
+  const source = REUSABLE_SECTIONS.find(section => section.siteId === siteId && section.id === input.source.id);
+  try { assertBackyReusableSectionExpectation({ expectedSection: input.source }, source); }
+  catch { throw new BackyReusableSectionPropagationConflictError(); }
+  if (input.source.siteId !== siteId) throw new BackyReusableSectionPropagationConflictError();
+  const included = (type: string) => input.scope.targetType === 'all' || input.scope.targetType === type;
+  const selected = (item: { id: string; siteId: string }) => item.siteId === siteId && (!input.scope.targetId || item.id === input.scope.targetId);
+  if (included('product') && input.scope.includeProducts) {
+    const productCollection = COLLECTIONS.find(item => item.siteId === siteId && item.slug === 'products');
+    if (productCollection?.id !== input.scope.productCollectionId) throw new BackyReusableSectionPropagationConflictError();
+  }
+  const inventory: BackyReusableSectionPropagationTarget[] = [
+    ...(included('page') ? PAGE_LIST.filter(selected).map(item => ({ type: 'page' as const, id: item.id, updatedAt: item.updatedAt, content: item.content })) : []),
+    ...(included('post') ? BLOG_POSTS.filter(selected).map(item => ({ type: 'post' as const, id: item.id, updatedAt: item.updatedAt, content: item.content })) : []),
+    ...(included('product') && input.scope.includeProducts ? COLLECTION_RECORDS.filter(item => selected(item) && item.collectionId === input.scope.productCollectionId).map(item => ({ type: 'product' as const, id: item.id, collectionId: item.collectionId, updatedAt: item.updatedAt, values: item.values })) : []),
+  ];
+  assertBackyReusableSectionPropagationInventory(input.inventory, inventory);
+  const beforePages = [...PAGE_LIST], beforePosts = [...BLOG_POSTS], beforeRecords = [...COLLECTION_RECORDS], beforeRevisions = [...CONTENT_REVISIONS];
+  const touched = new Set<string>();
+  const prepared = input.mutations.map(mutation => {
+    const key = `${mutation.expected.type}:${mutation.expected.id}`;
+    const baseline = inventory.find(item => `${item.type}:${item.id}` === key);
+    if (!baseline || touched.has(key)) throw new BackyReusableSectionPropagationConflictError();
+    touched.add(key); assertBackyReusableSectionPropagationInventory([mutation.expected], [baseline]);
+    if (baseline.type === 'product') {
+      const current = COLLECTION_RECORDS.find(item => item.siteId === siteId && item.id === baseline.id && item.collectionId === baseline.collectionId);
+      const collection = COLLECTIONS.find(item => item.siteId === siteId && item.id === baseline.collectionId);
+      if (!current || !collection || !mutation.values) throw new BackyReusableSectionPropagationConflictError();
+      return { type: baseline.type, current, next: { ...current, values: normalizeCollectionRecordValues(collection, mutation.values, current.values), updatedAt: new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString() } };
+    }
+    const current = (baseline.type === 'page' ? PAGE_LIST : BLOG_POSTS).find(item => selected(item) && item.id === baseline.id);
+    if (!current || !mutation.content) throw new BackyReusableSectionPropagationConflictError();
+    return { type: baseline.type, current, next: { ...current, content: pageContentFromCanvasInput(mutation.content, { id: current.id, kind: baseline.type, title: current.title, slug: current.slug, status: current.status, existing: current.content as PageContent }), updatedAt: new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString() } };
+  });
+  try {
+    for (const plan of prepared) {
+      if (plan.type === 'product') COLLECTION_RECORDS[COLLECTION_RECORDS.findIndex(item => item === plan.current)] = plan.next as StoreCollectionRecord;
+      else {
+        createContentRevision(plan.type, plan.current as StorePage | StoreBlogPost, `Before reusable section ${input.source.name} refresh`, actor, { operation: 'update' });
+        if (plan.type === 'page') PAGE_LIST[PAGE_LIST.findIndex(item => item === plan.current)] = plan.next as StorePage;
+        else BLOG_POSTS[BLOG_POSTS.findIndex(item => item === plan.current)] = plan.next as unknown as StoreBlogPost;
+      }
+    }
+    persistAdminContent(true);
+  } catch (error) {
+    PAGE_LIST.splice(0, PAGE_LIST.length, ...beforePages); BLOG_POSTS.splice(0, BLOG_POSTS.length, ...beforePosts); COLLECTION_RECORDS.splice(0, COLLECTION_RECORDS.length, ...beforeRecords); CONTENT_REVISIONS.splice(0, CONTENT_REVISIONS.length, ...beforeRevisions); throw error;
+  }
+  const warnings: string[] = [];
+  for (const plan of prepared) {
+    try {
+      if (plan.type === 'product') { const item = plan.next as StoreCollectionRecord; syncMediaReferencesForCollectionRecord(siteId, item.collectionId, item.id, item.values); }
+      else { const item = plan.next as StorePage | StoreBlogPost; syncMediaReferencesForTarget(siteId, plan.type, item.id, mediaReferencePayloadForContent(item.content, item.meta), 'featuredImageId' in item && item.featuredImageId ? [item.featuredImageId] : []); }
+    } catch { warnings.push('Content committed; derived media reference indexing needs retry.'); }
+  }
+  return [...new Set(warnings)];
 }
 
 export function deleteReusableSection(
@@ -9242,12 +9609,40 @@ export function rollbackInteractiveComponentVersion(
   };
 }
 
+/** Reject malformed declared values before conversion can erase their original shape. */
+export function validateCollectionRecordValueTypes(
+  collection: StoreCollection,
+  values: Record<string, unknown>,
+  existingValues: Record<string, unknown> = {},
+): SubmissionValidationDetail[] {
+  const errors: SubmissionValidationDetail[] = [];
+  for (const field of collection.fields) {
+    const value = values[field.key] !== undefined ? values[field.key]
+      : existingValues[field.key] !== undefined ? existingValues[field.key] : field.defaultValue;
+    if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) continue;
+    let valid = true;
+    if (field.type === 'number') {
+      valid = (typeof value === 'number' || typeof value === 'string') && Number.isFinite(Number(value));
+    } else if (field.type === 'boolean') {
+      valid = typeof value === 'boolean' || value === 0 || value === 1
+        || (typeof value === 'string' && /^(true|false|1|0|yes|no)$/i.test(value.trim()));
+    } else if (field.type === 'tags' || field.type === 'multiReference' || isCollectionMultiFileField(field)) {
+      valid = typeof value === 'string' || (Array.isArray(value) && value.every(item => typeof item === 'string'));
+    } else if (field.type !== 'json') {
+      valid = typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value));
+    }
+    if (!valid) errors.push({ field: field.key, code: 'invalid_type', label: field.label, message: `${field.label} must contain a valid ${field.type} value.` });
+  }
+  return errors;
+}
+
 export function validateCollectionRecordValues(
   collection: StoreCollection,
   values: Record<string, unknown>,
   options: {
     existingValues?: Record<string, unknown>;
     excludeRecordId?: string;
+    skipUnique?: boolean;
   } = {},
 ): SubmissionValidationDetail[] {
   ensurePersistedAdminContentLoaded();
@@ -9257,7 +9652,8 @@ export function validateCollectionRecordValues(
     values,
     options.existingValues,
   );
-  const errors: SubmissionValidationDetail[] = [];
+  const errors = validateCollectionRecordValueTypes(collection, values, options.existingValues);
+  if (!options.skipUnique) errors.push(...collectionRecordUniqueIssues(collection as unknown as import("@backy-cms/core").BackyCollection, normalizedValues, COLLECTION_RECORDS.filter(record => record.siteId === collection.siteId && record.collectionId === collection.id) as unknown as import("@backy-cms/core").BackyCollectionRecord[], options.excludeRecordId));
 
   for (const field of collection.fields) {
     const value = normalizedValues[field.key];
@@ -9277,25 +9673,6 @@ export function validateCollectionRecordValues(
       continue;
     }
 
-    if (field.unique && !empty) {
-      const duplicate = COLLECTION_RECORDS.find(
-        (record) =>
-          record.siteId === collection.siteId &&
-          record.collectionId === collection.id &&
-          record.id !== options.excludeRecordId &&
-          sanitizeString(record.values[field.key]).toLowerCase() ===
-            sanitizeString(value).toLowerCase(),
-      );
-
-      if (duplicate) {
-        errors.push({
-          field: field.key,
-          code: "unique",
-          message: `${field.label} must be unique.`,
-          label: field.label,
-        });
-      }
-    }
 
     if (isCollectionMultiFileField(field) && Array.isArray(value)) {
       const maxItems = collectionFileMaxItems(field);
@@ -9528,8 +9905,11 @@ export function createAdminCollectionRecord(
     scheduledAt: sanitizeString(input.scheduledAt) || null,
   };
 
+  const issues = collectionRecordUniqueIssues(collection as unknown as import("@backy-cms/core").BackyCollection, normalizedValues, COLLECTION_RECORDS.filter(item => item.siteId === siteId && item.collectionId === collection.id) as unknown as import("@backy-cms/core").BackyCollectionRecord[]);
+  if (issues.length) throw new BackyCollectionRecordValidationError(issues);
   COLLECTION_RECORDS.unshift(record);
-  persistAdminContent();
+  try { persistAdminContent(true); }
+  catch (error) { COLLECTION_RECORDS.splice(COLLECTION_RECORDS.indexOf(record), 1); throw error; }
   syncMediaReferencesForCollectionRecord(
     siteId,
     collection.id,
@@ -9562,6 +9942,7 @@ export function updateAdminCollectionRecord(
   }
 
   const current = COLLECTION_RECORDS[index];
+  assertBackyCollectionRecordUpdateExpectation(siteId, collection.id, recordId, input, current as unknown as import("@backy-cms/core").BackyCollectionRecord, `record-v1:${createHash("sha256").update(serializeBackyCollectionRecordVersion(current as unknown as import("@backy-cms/core").BackyCollectionRecord)).digest("hex")}`);
   const rawValues =
     input.values === undefined ? current.values : toRecord(input.values);
   const status =
@@ -9582,9 +9963,9 @@ export function updateAdminCollectionRecord(
     values: normalizeCollectionRecordValues(
       collection,
       rawValues,
-      input.values === undefined ? {} : current.values,
+      input.values === undefined || input.beforeUpdateProductDesignRevision ? {} : current.values,
     ),
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date(Math.max(Date.now(), Date.parse(current.updatedAt) + 1)).toISOString(),
     publishedAt:
       status === "published" && !current.publishedAt
         ? new Date().toISOString()
@@ -9595,8 +9976,17 @@ export function updateAdminCollectionRecord(
         : sanitizeString(input.scheduledAt) || null,
   };
 
+  const issues = collectionRecordUniqueIssues(collection as unknown as import("@backy-cms/core").BackyCollection, updated.values, COLLECTION_RECORDS.filter(item => item.siteId === siteId && item.collectionId === collection.id) as unknown as import("@backy-cms/core").BackyCollectionRecord[], recordId);
+  if (issues.length) throw new BackyCollectionRecordValidationError(issues);
+  const details = input.beforeUpdateProductDesignRevision as import('@backy-cms/core').BackyProductDesignRevisionInput | undefined;
+  const revision = details ? (() => {
+    if (collection.slug !== 'products' || !input.expectedRecord || input.status !== undefined || input.slug !== undefined || input.scheduledAt !== undefined) throw Error('PRODUCT_DESIGN_REVISION_INVALID');
+    return { id: randomUUID(), siteId, collectionId: collection.id, recordId, snapshot: snapshotProductTemplateDesign(current.values), ...details, templateId: details.templateId || null, targetRevisionId: details.targetRevisionId || null, actorId: details.actorId || null, createdAt: new Date().toISOString() };
+  })() : null;
+  if (revision) PRODUCT_DESIGN_REVISIONS.push(revision);
   COLLECTION_RECORDS[index] = updated;
-  persistAdminContent();
+  try { persistAdminContent(true); }
+  catch (error) { COLLECTION_RECORDS[index] = current; if (revision) PRODUCT_DESIGN_REVISIONS.splice(PRODUCT_DESIGN_REVISIONS.indexOf(revision), 1); throw error; }
   syncMediaReferencesForCollectionRecord(
     siteId,
     collection.id,
@@ -9632,6 +10022,7 @@ export function deleteAdminCollectionRecord(
   }
 
   COLLECTION_RECORDS.splice(index, 1);
+  for (let i = PRODUCT_DESIGN_REVISIONS.length - 1; i >= 0; i--) if (PRODUCT_DESIGN_REVISIONS[i].siteId === siteId && PRODUCT_DESIGN_REVISIONS[i].collectionId === collection.id && PRODUCT_DESIGN_REVISIONS[i].recordId === recordId) PRODUCT_DESIGN_REVISIONS.splice(i,1);
   persistAdminContent();
   removeMediaReferencesForCollectionRecord(siteId, collection.id, recordId);
   return true;
@@ -9704,10 +10095,11 @@ export function getPageByPath(
     normalizedPath === "" ||
     normalizedPath === "index" ||
     normalizedPath === "home";
+  const sitePages = PAGE_LIST.filter((page) => page.siteId === siteId);
   if (isHomepagePath) {
-    const homepage = PAGE_LIST.find(
-      (page) => page.siteId === siteId && page.isHomepage,
-    );
+    const homepages = sitePages.filter((page) => page.isHomepage);
+    if (homepages.length > 1) return undefined;
+    const homepage = homepages[0];
     if (
       homepage &&
       (includeUnpublished || isPublished(homepage.status, homepage.scheduledAt))
@@ -9716,10 +10108,13 @@ export function getPageByPath(
     }
   }
 
-  return (
-    getPageBySlug(siteId, isHomepagePath ? "index" : normalizedPath, options) ||
-    (isHomepagePath ? getPageBySlug(siteId, "home", options) : undefined)
-  );
+  const target = isHomepagePath
+    ? findPageByHierarchyPath(sitePages.filter((page) => page.slug === "index"), siteId, "/", sitePages, true)
+      || findPageByHierarchyPath(sitePages, siteId, "/home", sitePages, true)
+    : findPageByHierarchyPath(sitePages, siteId, normalizedPath, sitePages, true);
+  return target && (includeUnpublished || isPublished(target.status, target.scheduledAt))
+    ? clone(target)
+    : undefined;
 }
 
 export function getAdminPageById(
@@ -9750,11 +10145,10 @@ export function listAdminPages(
   );
 }
 
-export function createAdminPage(
+function prepareCompositionPage(
   siteId: string,
   input: Record<string, unknown>,
 ): StorePage {
-  ensurePersistedAdminContentLoaded();
 
   const now = new Date().toISOString();
   const title = sanitizeString(input.title) || "Untitled page";
@@ -9789,6 +10183,7 @@ export function createAdminPage(
     sortOrder: Number(input.sortOrder) || 0,
     content,
     meta: {
+      ...safeIncomingContentMeta(metaInput),
       title: sanitizeString(metaInput.title) || title,
       description:
         sanitizeString(metaInput.description) ||
@@ -9821,6 +10216,16 @@ export function createAdminPage(
     scheduledAt: sanitizeString(input.scheduledAt) || null,
   };
 
+  return page;
+}
+
+export function createAdminPage(
+  siteId: string,
+  input: Record<string, unknown>,
+): StorePage {
+  ensurePersistedAdminContentLoaded();
+
+  const page = prepareCompositionPage(siteId, input);
   PAGE_LIST.unshift(page);
   persistAdminContent();
   syncMediaReferencesForTarget(
@@ -9837,17 +10242,21 @@ export function updateAdminPage(
   pageId: string,
   input: Record<string, unknown>,
 ): StorePage | undefined {
-  ensurePersistedAdminContentLoaded();
+  ensurePersistedAdminContentLoaded(input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined);
 
   const index = PAGE_LIST.findIndex(
     (page) => page.siteId === siteId && page.id === pageId,
   );
   if (index === -1) {
+    assertBackyContentUpdateExpectation(input, null);
     return undefined;
   }
 
   const current = PAGE_LIST[index];
-  const now = new Date().toISOString();
+  // Synchronous compare + mutation is atomic within this demo-store process.
+  assertBackyContentUpdateExpectation(input, current);
+  const guarded = input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined;
+  const now = new Date(Math.max(Date.now(), guarded ? Date.parse(current.updatedAt) + 1 : 0)).toISOString();
   const status =
     input.status === undefined
       ? current.status
@@ -9876,7 +10285,7 @@ export function updateAdminPage(
           status,
           existing: current.content,
         });
-  createContentRevision(
+  const beforeRevision = createContentRevision(
     "page",
     current,
     sanitizeString(input.revisionNote) || "Before page update",
@@ -9917,6 +10326,7 @@ export function updateAdminPage(
           }
         : {
             ...current.meta,
+            ...safeIncomingContentMeta(metaInput),
             title:
               metaInput.title === undefined
                 ? current.meta.title
@@ -9983,7 +10393,8 @@ export function updateAdminPage(
   };
 
   PAGE_LIST[index] = updated;
-  persistAdminContent();
+  try { persistAdminContent(input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined); }
+  catch (error) { PAGE_LIST[index] = current; const revisionIndex = CONTENT_REVISIONS.findIndex(item => item.id === beforeRevision.id); if (revisionIndex !== -1) CONTENT_REVISIONS.splice(revisionIndex, 1); throw error; }
   syncMediaReferencesForTarget(
     siteId,
     "page",
@@ -10498,11 +10909,10 @@ export function getAdminBlogPostById(
   return post ? clone(post) : undefined;
 }
 
-export function createAdminBlogPost(
+function prepareCompositionBlogPost(
   siteId: string,
   input: Record<string, unknown>,
 ): StoreBlogPost {
-  ensurePersistedAdminContentLoaded();
 
   const now = new Date().toISOString();
   const title = sanitizeString(input.title) || "Untitled post";
@@ -10533,6 +10943,7 @@ export function createAdminBlogPost(
     featuredImageId: sanitizeString(input.featuredImageId) || null,
     authorId: sanitizeString(input.authorId) || "admin",
     meta: {
+      ...safeIncomingContentMeta(metaInput),
       title: sanitizeString(metaInput.title) || title,
       description:
         sanitizeString(metaInput.description) || sanitizeString(input.excerpt),
@@ -10561,6 +10972,16 @@ export function createAdminBlogPost(
     scheduledAt: sanitizeString(input.scheduledAt) || null,
   };
 
+  return post;
+}
+
+export function createAdminBlogPost(
+  siteId: string,
+  input: Record<string, unknown>,
+): StoreBlogPost {
+  ensurePersistedAdminContentLoaded();
+
+  const post = prepareCompositionBlogPost(siteId, input);
   BLOG_POSTS.unshift(post);
   persistAdminContent();
   syncMediaReferencesForTarget(
@@ -10578,17 +10999,21 @@ export function updateAdminBlogPost(
   postId: string,
   input: Record<string, unknown>,
 ): StoreBlogPost | undefined {
-  ensurePersistedAdminContentLoaded();
+  ensurePersistedAdminContentLoaded(input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined);
 
   const index = BLOG_POSTS.findIndex(
     (post) => post.siteId === siteId && post.id === postId,
   );
   if (index === -1) {
+    assertBackyContentUpdateExpectation(input, null);
     return undefined;
   }
 
   const current = BLOG_POSTS[index];
-  const now = new Date().toISOString();
+  // Synchronous compare + mutation is atomic within this demo-store process.
+  assertBackyContentUpdateExpectation(input, current);
+  const guarded = input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined;
+  const now = new Date(Math.max(Date.now(), guarded ? Date.parse(current.updatedAt) + 1 : 0)).toISOString();
   const status =
     input.status === undefined
       ? current.status
@@ -10617,7 +11042,7 @@ export function updateAdminBlogPost(
           status,
           existing: current.content as unknown as PageContent,
         }) as unknown as Record<string, unknown>);
-  createContentRevision(
+  const beforeRevision = createContentRevision(
     "post",
     current,
     sanitizeString(input.revisionNote) || "Before post update",
@@ -10654,6 +11079,7 @@ export function updateAdminBlogPost(
           }
         : {
             ...current.meta,
+            ...safeIncomingContentMeta(metaInput),
             title:
               metaInput.title === undefined
                 ? current.meta.title
@@ -10705,7 +11131,8 @@ export function updateAdminBlogPost(
   };
 
   BLOG_POSTS[index] = updated;
-  persistAdminContent();
+  try { persistAdminContent(input.expectedContent !== undefined || input.expectedUpdatedAt !== undefined); }
+  catch (error) { BLOG_POSTS[index] = current; const revisionIndex = CONTENT_REVISIONS.findIndex(item => item.id === beforeRevision.id); if (revisionIndex !== -1) CONTENT_REVISIONS.splice(revisionIndex, 1); throw error; }
   syncMediaReferencesForTarget(
     siteId,
     "post",
@@ -11043,6 +11470,8 @@ export function getMediaList(
     folderId?: string | null;
     pageId?: string;
     postId?: string;
+    linkedPageId?: string;
+    linkedPostId?: string;
     blogId?: string;
     global?: boolean;
     limit?: number;
@@ -11118,6 +11547,7 @@ export function getMediaList(
     }),
   );
 
+  media = media.filter(item => mediaMatchesLinkedFilters(item, params));
   const paginated = media.slice(offset, offset + limit);
 
   return {
@@ -11470,6 +11900,41 @@ export function getFormById(
   return form ? clone(form) : undefined;
 }
 
+/** One strict disk commit; only process-local synchronous admission is guaranteed. */
+export function commitDemoFormTemplatePack(
+  siteId: string,
+  prepare: () => Array<Omit<FormDefinition, "id" | "createdAt" | "updatedAt">>,
+  finalize: (form: FormDefinition) => FormDefinition = form => form,
+): FormDefinition[] {
+  ensurePersistedAdminContentLoaded(true);
+  if (getSiteByIdOrSlug(siteId)?.id !== siteId) throw Object.assign(new Error("Site not found."), { status: 404, code: "SITE_NOT_FOUND" });
+  const snapshot = existsSync(ADMIN_CONTENT_PATH) ? JSON.parse(readFileSync(ADMIN_CONTENT_PATH, "utf8")) : {};
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) throw new Error("Invalid store snapshot.");
+  const inputs = prepare();
+  const now = new Date().toISOString();
+  const created = inputs.map(input => finalize({ ...clone(input), id: `form-${randomUUID()}`, siteId, pageId: null, postId: null, isActive: false, createdAt: now, updatedAt: now }));
+  const nextForms = [...FORM_LIBRARY, ...created];
+  const next = { ...snapshot, sites: snapshot.sites || clone(SITE_LIST), forms: clone(nextForms) };
+  const temporary = `${ADMIN_CONTENT_PATH}.${randomUUID()}.form-import.tmp`;
+  let fd: number | undefined;
+  try {
+    mkdirSync(dirname(ADMIN_CONTENT_PATH), { recursive: true });
+    fd = openSync(temporary, "wx", 0o600);
+    const serialized = JSON.stringify(next);
+    writeFileSync(fd, serialized, "utf8");
+    fsyncSync(fd); closeSync(fd); fd = undefined;
+    if (readFileSync(temporary, "utf8") !== serialized) throw new Error("Store verification failed.");
+    renameSync(temporary, ADMIN_CONTENT_PATH);
+  } catch (error) {
+    if (fd !== undefined) closeSync(fd);
+    try { unlinkSync(temporary); } catch {}
+    throw error;
+  }
+  FORM_LIBRARY.splice(0, FORM_LIBRARY.length, ...nextForms);
+  persistedAdminContentSignature = getAdminContentFileSignature();
+  return clone(created);
+}
+
 export function createAdminForm(
   input: Omit<FormDefinition, "id" | "createdAt" | "updatedAt"> & {
     id?: string;
@@ -11553,9 +12018,7 @@ export function createAdminForm(
 export function updateAdminForm(
   siteId: string,
   formId: string,
-  input: Partial<
-    Omit<FormDefinition, "id" | "siteId" | "createdAt" | "updatedAt">
-  >,
+  input: BackyFormUpdateInput,
 ): FormDefinition | null {
   ensurePersistedAdminContentLoaded();
   const site = getSiteByIdOrSlug(siteId);
@@ -11573,11 +12036,13 @@ export function updateAdminForm(
   }
 
   const before = FORM_LIBRARY[index];
+  assertFormDefinitionExpectation(before, input);
+  if (input.beforeUpdateFormDesignRevision) assertFormDesignOnlyUpdate(before, input);
   const inputSettings = isObjectRecord(input.settings)
     ? input.settings
     : undefined;
   const beforeSettings = isObjectRecord(before.settings) ? before.settings : {};
-  const nextSettings = inputSettings
+  const nextSettings = input.beforeUpdateFormDesignRevision && inputSettings ? inputSettings : inputSettings
     ? {
         ...beforeSettings,
         ...inputSettings,
@@ -11663,11 +12128,15 @@ export function updateAdminForm(
         : before.collectionTarget,
     settings: nextSettings,
     updatedBy: input.updatedBy || "admin",
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date(Math.max(Date.now(), Date.parse(before.updatedAt) + 1)).toISOString(),
   };
 
+  const details = input.beforeUpdateFormDesignRevision;
+  const revision: BackyFormDesignRevision | null = details ? { id: randomUUID(), siteId: site.id, formId: before.id, snapshot: snapshotFormTemplateDesign(before), ...details, templateId: details.templateId || null, targetRevisionId: details.targetRevisionId || null, actorId: details.actorId || null, createdAt: new Date().toISOString() } : null;
+  if (revision) FORM_DESIGN_REVISIONS.push(revision);
   FORM_LIBRARY[index] = updated;
-  persistAdminContent();
+  try { persistAdminContent(true); }
+  catch (error) { FORM_LIBRARY[index] = before; if (revision) FORM_DESIGN_REVISIONS.splice(FORM_DESIGN_REVISIONS.indexOf(revision), 1); throw error; }
   recordAdminAuditLog({
     siteId: site.id,
     actorId: input.updatedBy || "admin",
@@ -11706,6 +12175,7 @@ export function deleteAdminForm(
   }
 
   const [removed] = FORM_LIBRARY.splice(index, 1);
+  for (let i = FORM_DESIGN_REVISIONS.length - 1; i >= 0; i--) if (FORM_DESIGN_REVISIONS[i].siteId === site.id && FORM_DESIGN_REVISIONS[i].formId === removed.id) FORM_DESIGN_REVISIONS.splice(i, 1);
   refreshPersistedInteractionStore();
   setFormSubmissions(
     formSubmissions.filter((submission) => submission.formId !== removed.id),
@@ -11792,6 +12262,8 @@ export function validateAndClassifyComment(params: {
   startedAt?: string | number | null;
   rateLimitBypass?: boolean;
   blockedTerms?: string[];
+  /** Trusted server option; never copied from a public request body. */
+  checkBlockedIdentity?: boolean;
 }): {
   ok: boolean;
   status: Comment["status"];
@@ -11811,6 +12283,7 @@ export function validateAndClassifyComment(params: {
     startedAt: params.startedAt,
     rateLimitBypass: params.rateLimitBypass,
     blockedTerms: params.blockedTerms,
+    checkBlockedIdentity: params.checkBlockedIdentity,
   });
 
   return {
@@ -11982,6 +12455,34 @@ export function trackWebhookEvent(event: {
   persistInteractionStore();
 }
 
+/** Authoritative scoped notification admission; never fall back to cached interaction state. */
+export function getPersistedCommentDeliverySource(siteId:string,commentId:string,eventId?:string): {comment:Comment|null;event:AuditEvent|null} {
+  try {
+    recoverDemoSiteBackupCommit();
+    if(!existsSync(INTERACTION_STORE_PATH))return {comment:null,event:null};
+    if(statSync(INTERACTION_STORE_PATH).size>50_000_000)throw Error('Inventory limit');
+    const snapshot=JSON.parse(readFileSync(INTERACTION_STORE_PATH,'utf8'));
+    if(!snapshot||!Array.isArray(snapshot.comments)||!Array.isArray(snapshot.auditEvents))throw Error('Invalid delivery source inventory');
+    for(const values of [snapshot.comments,snapshot.auditEvents]){const ids=new Set<string>();for(const row of values){if(!row||typeof row.id!=='string'||typeof row.siteId!=='string'||ids.has(row.id))throw Error('Invalid delivery source identity');ids.add(row.id);}}
+    const comment=snapshot.comments.find((row:Comment)=>row.siteId===siteId&&row.id===commentId)||null;
+    const event=eventId?snapshot.auditEvents.find((row:AuditEvent)=>row.siteId===siteId&&row.commentId===commentId&&row.id===eventId)||null:null;
+    return {comment:clone(comment),event:clone(event)};
+  }catch{throw new BackyCommentDeliveryError('DELIVERY_JOURNAL_UNAVAILABLE',503,'The persisted delivery source cannot be verified. No provider request was made.');}
+}
+
+/** Scoped persisted form submission and legacy notification source, independent of audit paging. */
+export function getPersistedFormDeliverySource(siteId:string,formId:string,submissionId:string,eventId?:string): {submission:FormSubmission|null;event:AuditEvent|null} {
+ try {
+  recoverDemoSiteBackupCommit();
+  if(!existsSync(INTERACTION_STORE_PATH))return {submission:null,event:null};
+  if(statSync(INTERACTION_STORE_PATH).size>50_000_000)throw Error('Inventory limit');
+  const snapshot=JSON.parse(readFileSync(INTERACTION_STORE_PATH,'utf8'));
+  if(!snapshot||!Array.isArray(snapshot.formSubmissions)||!Array.isArray(snapshot.auditEvents))throw Error('Invalid source inventory');
+  for(const values of [snapshot.formSubmissions,snapshot.auditEvents]){const ids=new Set<string>();for(const row of values){if(!row||typeof row.id!=='string'||typeof row.siteId!=='string'||ids.has(row.id))throw Error('Invalid source identity');ids.add(row.id);}}
+  return {submission:clone(snapshot.formSubmissions.find((row:FormSubmission)=>row.siteId===siteId&&row.formId===formId&&row.id===submissionId)||null),event:clone(eventId?snapshot.auditEvents.find((row:AuditEvent)=>row.siteId===siteId&&row.formId===formId&&row.submissionId===submissionId&&row.id===eventId)||null:null)};
+ }catch{throw new BackyFormDeliveryError('DELIVERY_JOURNAL_UNAVAILABLE',503,'Persisted form delivery source cannot be verified. No provider request was made.');}
+}
+
 export function listAuditEvents(
   siteId: string,
   params: {
@@ -12037,6 +12538,68 @@ export function listAuditEvents(
   };
 }
 
+/** One durable replacement for comment/identity moderation. Single-process admission only. */
+function commitCommentModerationSnapshot<T>(siteId: string, mutate: (snapshot: InteractionStoreSnapshot) => T): T {
+  let snapshot: InteractionStoreSnapshot;
+  try {
+    snapshot = existsSync(INTERACTION_STORE_PATH) ? JSON.parse(readFileSync(INTERACTION_STORE_PATH, 'utf8')) : {
+      comments: clone(commentStore), formSubmissions: clone(formSubmissions), contacts: clone(contactStore), auditEvents: clone(auditEvents), commentBlocklist: clone(Array.from(COMMENT_REPORT_BLOCKLIST.values())),
+    };
+    if (!snapshot || !Array.isArray(snapshot.comments) || !Array.isArray(snapshot.commentBlocklist || [])) throw Error('Invalid snapshot');
+    for (const values of [snapshot.comments, snapshot.commentBlocklist || []]) {
+      const ids = new Set<string>();
+      for (const value of values) { if (!value || !value.id || typeof value.siteId !== 'string' || ids.has(value.id)) throw Error('Invalid inventory'); ids.add(value.id); }
+    }
+    if (snapshot.comments.filter(comment => comment.siteId === siteId).length > BACKY_COMMENT_INVENTORY_LIMIT) throw Error('Inventory limit');
+  } catch { throw new BackyCommentLifecycleError('COMMENT_INVENTORY_INCOMPLETE', 'The persisted moderation inventory could not be verified.'); }
+  if (getSiteByIdOrSlug(siteId)?.id !== siteId) throw new BackyCommentLifecycleError('COMMENT_MODERATION_CONFLICT', 'The selected site no longer exists.');
+  const result = mutate(snapshot), serialized = JSON.stringify(snapshot, null, 2), temporary = `${INTERACTION_STORE_PATH}.${randomUUID()}.tmp`;
+  try {
+    mkdirSync(dirname(INTERACTION_STORE_PATH), { recursive: true }); writeFileSync(temporary, serialized, { flag: 'wx', mode: 0o600 });
+    const descriptor = openSync(temporary, 'r'); try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+    if (readFileSync(temporary, 'utf8') !== serialized) throw Error('Readback failed'); renameSync(temporary, INTERACTION_STORE_PATH);
+  } catch { try { unlinkSync(temporary); } catch {} throw new BackyCommentLifecycleError('COMMENT_MODERATION_UNAVAILABLE', 'The moderation could not be persisted. No moderation was committed.'); }
+  setCommentStore(snapshot.comments || []); setCommentBlocklist(snapshot.commentBlocklist || []);
+  auditEvents.splice(0, auditEvents.length, ...(snapshot.auditEvents || []));
+  return result === undefined ? result : clone(result);
+}
+
+function addSnapshotIdentityBlocks(snapshot: InteractionStoreSnapshot, params: { siteId: string; reason: string; actor?: string | null; requestId?: string; email?: string | null; ipHash?: string | null }) {
+  const values = new Map((snapshot.commentBlocklist || []).map(entry => [entry.id, entry]));
+  for (const [type, value] of [['email', params.email], ['ip', params.ipHash]] as const) {
+    if (!value) continue;
+    const id = getCommentBlockKey(params.siteId, type, value);
+    const existing = values.get(id); if (existing && existing.siteId !== params.siteId) throw new BackyCommentLifecycleError('COMMENT_MODERATION_CONFLICT', 'The identity scope changed.');
+    values.set(id, { id, siteId: params.siteId, type, value: normalizeIdentifier(value), reason: params.reason, actor: params.actor || undefined, requestId: params.requestId, createdAt: new Date().toISOString() });
+  }
+  snapshot.commentBlocklist = Array.from(values.values());
+}
+
+function moderateDemoComments(params: { siteId: string; commentIds: string[]; status?: Comment['status']; reviewedBy?: string | null; actor?: string | null; rejectionReason?: string | null; blockReason?: string | null; requestId?: string; clearReports?: boolean }): { updated: Comment[]; missingIds: string[] } {
+  const ids = Array.from(new Set(params.commentIds.map(id => id.trim()).filter(Boolean)));
+  if (ids.length > BACKY_COMMENT_INVENTORY_LIMIT) throw new BackyCommentLifecycleError('COMMENT_INVENTORY_INCOMPLETE', 'The selected moderation inventory exceeds the supported limit.');
+  return commitCommentModerationSnapshot(params.siteId, snapshot => {
+    const current = new Map((snapshot.comments || []).filter(comment => comment.siteId === params.siteId).map(comment => [comment.id, comment]));
+    const updated: Comment[] = [], missingIds: string[] = [], reviewer = params.actor || params.reviewedBy || 'admin';
+    for (const id of ids) {
+      const comment = current.get(id); if (!comment) { missingIds.push(id); continue; }
+      comment.reviewedBy = reviewer; comment.reviewedAt = new Date().toISOString(); comment.updatedAt = comment.reviewedAt;
+      const requestId = params.requestId || comment.requestId || undefined; if (params.requestId) comment.requestId = params.requestId;
+      if (params.clearReports) { comment.reportCount = 0; comment.reportReasons = []; }
+      if (params.status) {
+        comment.status = params.status; comment.rejectionReason = params.rejectionReason ?? null;
+        if (params.status === 'blocked') {
+          comment.blockReason = params.blockReason || 'manual-block'; comment.blockedBy = reviewer; comment.blockedAt = comment.reviewedAt;
+          addSnapshotIdentityBlocks(snapshot, { siteId: params.siteId, reason: comment.blockReason, actor: reviewer, requestId, email: comment.authorEmail, ipHash: comment.ipHash });
+        } else if (params.status !== 'rejected' && params.status !== 'spam') { comment.blockReason = null; comment.blockedBy = null; comment.blockedAt = null; comment.rejectionReason = null; }
+      }
+      updated.push(comment);
+      snapshot.auditEvents = [{ id: `event-${randomUUID()}`, kind: 'comment-status', siteId: params.siteId, commentId: id, formId: null, contactId: null, submissionId: null, target: `comment:${id}`, status: 'succeeded', requestId, reason: params.status || 'reports-cleared', actor: reviewer, metadata: { targetType: comment.targetType, targetId: comment.targetId, status: comment.status, reportsCleared: params.clearReports === true }, createdAt: new Date().toISOString() }, ...(snapshot.auditEvents || [])];
+    }
+    return { updated, missingIds };
+  });
+}
+
 export function blockCommentIdentity(params: {
   siteId: string;
   reason: string;
@@ -12045,35 +12608,7 @@ export function blockCommentIdentity(params: {
   email?: string | null;
   ipHash?: string | null;
 }) {
-  if (params.email) {
-    const id = getCommentBlockKey(params.siteId, "email", params.email);
-    COMMENT_REPORT_BLOCKLIST.set(id, {
-      id,
-      siteId: params.siteId,
-      type: "email",
-      value: normalizeIdentifier(params.email),
-      reason: params.reason,
-      actor: params.actor,
-      requestId: params.requestId,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  if (params.ipHash) {
-    const id = getCommentBlockKey(params.siteId, "ip", params.ipHash);
-    COMMENT_REPORT_BLOCKLIST.set(id, {
-      id,
-      siteId: params.siteId,
-      type: "ip",
-      value: normalizeIdentifier(params.ipHash),
-      reason: params.reason,
-      actor: params.actor,
-      requestId: params.requestId,
-      createdAt: new Date().toISOString(),
-    });
-  }
-
-  persistInteractionStore();
+  commitCommentModerationSnapshot(params.siteId, snapshot => addSnapshotIdentityBlocks(snapshot, params));
 }
 
 export function listCommentBlocklist(
@@ -12133,29 +12668,14 @@ export function deleteCommentBlocklistEntries(params: {
   siteId: string;
   ids: string[];
 }): { deleted: CommentBlocklistEntry[]; missingIds: string[] } {
-  refreshPersistedInteractionStore();
-
-  const ids = Array.from(
-    new Set(params.ids.map((id) => sanitizeString(id)).filter(Boolean)),
-  );
-  const deleted: CommentBlocklistEntry[] = [];
-  const missingIds = new Set(ids);
-
-  for (const id of ids) {
-    const entry = COMMENT_REPORT_BLOCKLIST.get(id);
-    if (entry?.siteId === params.siteId) {
-      COMMENT_REPORT_BLOCKLIST.delete(id);
-      deleted.push(entry);
-      missingIds.delete(id);
-    }
-  }
-
-  persistInteractionStore({ mergePersisted: false });
-
-  return {
-    deleted: clone(deleted),
-    missingIds: Array.from(missingIds),
-  };
+  const ids = Array.from(new Set(params.ids.map(id => sanitizeString(id)).filter(Boolean)));
+  if (ids.length > BACKY_COMMENT_INVENTORY_LIMIT) throw new BackyCommentLifecycleError('COMMENT_INVENTORY_INCOMPLETE', 'The selected blocklist inventory exceeds the supported limit.');
+  return commitCommentModerationSnapshot(params.siteId, snapshot => {
+    const byId = new Map((snapshot.commentBlocklist || []).filter(entry => entry.siteId === params.siteId).map(entry => [entry.id, entry]));
+    const deleted = ids.filter(id => byId.has(id)).map(id => byId.get(id)!);
+    const removed = new Set(deleted.map(entry => entry.id)); snapshot.commentBlocklist = (snapshot.commentBlocklist || []).filter(entry => entry.siteId !== params.siteId || !removed.has(entry.id));
+    return { deleted, missingIds: ids.filter(id => !byId.has(id)) };
+  });
 }
 
 export function getCommentReportReasons(): CommentReportReason[] {
@@ -12180,8 +12700,11 @@ export function reportComment(params: {
     (item) => item.id === params.commentId && item.siteId === params.siteId,
   );
 
-  if (!comment) {
-    return undefined;
+  const site = getSiteByIdOrSlug(params.siteId);
+  const target = comment?.targetType === "page" ? getAdminPageById(params.siteId, comment.targetId)
+    : comment ? getAdminBlogPostById(params.siteId, comment.targetId) : undefined;
+  if (!comment || comment.status !== "approved" || !site?.isPublished || !isContentPublished(target) || site.settings?.commentPolicy?.enableReports === false) {
+    throw new BackyCommentLifecycleError("COMMENT_REPORT_CONFLICT", "The comment is no longer reportable. Reload the thread.");
   }
 
   const normalizedReason = normalizeReportReason(params.reason || null);
@@ -12195,9 +12718,8 @@ export function reportComment(params: {
 
   comment.reportCount = reportCount;
   comment.reportReasons = Array.from(reportReasons);
-  comment.reviewedBy = params.actor || null;
-  comment.reviewedAt = new Date().toISOString();
-  comment.updatedAt = comment.reviewedAt;
+  comment.updatedAt = new Date().toISOString();
+  if (params.requestId !== undefined) comment.requestId = params.requestId;
 
   if (reportCount >= 3 && comment.status === "approved") {
     comment.status = "spam";
@@ -12230,166 +12752,12 @@ export function reportComment(params: {
   return clone(comment);
 }
 
-export function bulkUpdateCommentStatus(params: {
-  siteId: string;
-  commentIds: string[];
-  status: Comment["status"];
-  reviewedBy?: string | null;
-  rejectionReason?: string | null;
-  blockReason?: string | null;
-  actor?: string | null;
-  requestId?: string;
-  clearReports?: boolean;
-}): { updated: Comment[]; missingIds: string[] } {
-  refreshPersistedInteractionStore();
-
-  const ids = Array.from(
-    new Set(params.commentIds.map((id) => id.trim()).filter(Boolean)),
-  );
-  if (ids.length === 0) {
-    return { updated: [], missingIds: [] };
-  }
-
-  const missingIds = new Set(ids);
-  const reviewer = params.actor || params.reviewedBy || "admin";
-  const normalizedBlockReason = normalizeReportReason(
-    params.blockReason || null,
-  );
-  const updated: Comment[] = [];
-
-  setCommentStore(
-    commentStore.map((comment) => {
-      if (comment.siteId !== params.siteId || !ids.includes(comment.id)) {
-        return comment;
-      }
-
-      missingIds.delete(comment.id);
-      comment.status = params.status;
-      comment.reviewedBy = reviewer;
-      comment.reviewedAt = new Date().toISOString();
-      comment.updatedAt = comment.reviewedAt;
-      const resolvedRequestId =
-        params.requestId || comment.requestId || undefined;
-      if (params.clearReports) {
-        comment.reportCount = 0;
-        comment.reportReasons = [];
-      }
-
-      if (params.status === "blocked") {
-        comment.blockReason = normalizedBlockReason || "manual-block";
-        comment.blockedBy = reviewer;
-        comment.blockedAt = comment.reviewedAt;
-        comment.rejectionReason = params.rejectionReason ?? null;
-
-        blockCommentIdentity({
-          siteId: params.siteId,
-          reason: comment.blockReason || "manual-block",
-          actor: reviewer,
-          requestId: resolvedRequestId,
-          email: comment.authorEmail,
-          ipHash: comment.ipHash,
-        });
-      } else if (params.status !== "rejected" && params.status !== "spam") {
-        comment.blockReason = null;
-        comment.blockedBy = null;
-        comment.blockedAt = null;
-        comment.rejectionReason = null;
-      } else if (params.status === "rejected" || params.status === "spam") {
-        comment.rejectionReason = params.rejectionReason ?? null;
-      }
-
-      updated.push(comment);
-      trackWebhookEvent({
-        kind: "comment-status",
-        siteId: params.siteId,
-        commentId: comment.id,
-        target: `comment:${comment.id}`,
-        status: "succeeded",
-        requestId: resolvedRequestId,
-        reason: params.status,
-        actor: reviewer,
-        metadata: {
-          targetType: comment.targetType,
-          targetId: comment.targetId,
-          status: params.status,
-          blockReason: comment.blockReason,
-          reportsCleared: params.clearReports === true,
-        },
-      });
-
-      return comment;
-    }),
-  );
-  persistInteractionStore();
-
-  return {
-    updated: clone(updated),
-    missingIds: Array.from(missingIds),
-  };
+export function bulkUpdateCommentStatus(params: { siteId: string; commentIds: string[]; status: Comment['status']; reviewedBy?: string | null; rejectionReason?: string | null; blockReason?: string | null; actor?: string | null; requestId?: string; clearReports?: boolean }): { updated: Comment[]; missingIds: string[] } {
+  return moderateDemoComments(params);
 }
 
-export function bulkClearCommentReports(params: {
-  siteId: string;
-  commentIds: string[];
-  reviewedBy?: string | null;
-  actor?: string | null;
-  requestId?: string;
-}): { updated: Comment[]; missingIds: string[] } {
-  refreshPersistedInteractionStore();
-
-  const ids = Array.from(
-    new Set(params.commentIds.map((id) => id.trim()).filter(Boolean)),
-  );
-  if (ids.length === 0) {
-    return { updated: [], missingIds: [] };
-  }
-
-  const missingIds = new Set(ids);
-  const reviewer = params.actor || params.reviewedBy || "admin";
-  const updated: Comment[] = [];
-
-  setCommentStore(
-    commentStore.map((comment) => {
-      if (comment.siteId !== params.siteId || !ids.includes(comment.id)) {
-        return comment;
-      }
-
-      missingIds.delete(comment.id);
-      comment.reportCount = 0;
-      comment.reportReasons = [];
-      comment.reviewedBy = reviewer;
-      comment.reviewedAt = new Date().toISOString();
-      comment.updatedAt = comment.reviewedAt;
-      const resolvedRequestId =
-        params.requestId || comment.requestId || undefined;
-
-      updated.push(comment);
-      trackWebhookEvent({
-        kind: "comment-status",
-        siteId: params.siteId,
-        commentId: comment.id,
-        target: `comment:${comment.id}`,
-        status: "succeeded",
-        requestId: resolvedRequestId,
-        reason: "reports-cleared",
-        actor: reviewer,
-        metadata: {
-          targetType: comment.targetType,
-          targetId: comment.targetId,
-          reportCount: 0,
-          reportReasons: [],
-        },
-      });
-
-      return comment;
-    }),
-  );
-  persistInteractionStore();
-
-  return {
-    updated: clone(updated),
-    missingIds: Array.from(missingIds),
-  };
+export function bulkClearCommentReports(params: { siteId: string; commentIds: string[]; reviewedBy?: string | null; actor?: string | null; requestId?: string }): { updated: Comment[]; missingIds: string[] } {
+  return moderateDemoComments({ ...params, clearReports: true });
 }
 
 export function createFormSubmission(record: {
@@ -12602,9 +12970,17 @@ export function attachCollectionRecordToSubmission(
   return clone(submission);
 }
 
+// Omitted legacy scope is safe only when exactly one site owns this form.
+function resolveFormInteractionSite(formId: string, siteId?: string): string | undefined {
+  if (siteId) return siteId;
+  const owners = getSites({ includeUnpublished: true }).filter(site => Boolean(getFormById(site.id, formId)));
+  return owners.length === 1 ? owners[0].id : undefined;
+}
+
 export function listFormSubmissions(
   formId: string,
   params: {
+    siteId?: string;
     status?: FormSubmission["status"];
     requestId?: string;
     limit?: number;
@@ -12612,11 +12988,12 @@ export function listFormSubmissions(
   } = {},
 ): { data: FormSubmission[]; pagination: Pagination } {
   refreshPersistedInteractionStore();
+  const siteId = resolveFormInteractionSite(formId, params.siteId);
 
   const { status, requestId, limit = 20, offset = 0 } = params;
 
   const records = formSubmissions
-    .filter((submission) => submission.formId === formId)
+    .filter((submission) => submission.formId === formId && submission.siteId === siteId)
     .filter((submission) => (status ? submission.status === status : true))
     .filter((submission) =>
       requestId ? submission.requestId === requestId : true,
@@ -12633,6 +13010,7 @@ export function listFormSubmissions(
 export function listFormContacts(
   formId: string,
   params: {
+    siteId?: string;
     status?: Contact["status"];
     newsletterSubscriptionStatus?: NonNullable<Contact["newsletterSubscriptionStatus"]> | "all";
     newsletterOnly?: boolean;
@@ -12642,6 +13020,7 @@ export function listFormContacts(
   } = {},
 ): { contacts: Contact[]; count: number; pagination: Pagination } {
   refreshPersistedInteractionStore();
+  const siteId = resolveFormInteractionSite(formId, params.siteId);
 
   const {
     status,
@@ -12652,7 +13031,7 @@ export function listFormContacts(
     offset = 0,
   } = params;
   const records = contactStore
-    .filter((contact) => contact.formId === formId)
+    .filter((contact) => contact.formId === formId && contact.siteId === siteId)
     .filter((contact) => (status ? contact.status === status : true))
     .filter((contact) => (newsletterOnly ? Boolean(contact.newsletterSubscriptionStatus) : true))
     .filter((contact) => (
@@ -12795,11 +13174,13 @@ export function anonymizeFormSubmissionConsentEvidence(
   submissionId: string,
   consentFieldKeys: string[],
   actor = "admin",
+  siteId?: string,
 ): FormSubmission | undefined {
   refreshPersistedInteractionStore();
+  const scopedSiteId = resolveFormInteractionSite(formId, siteId);
 
   const submission = formSubmissions.find(
-    (item) => item.id === submissionId && item.formId === formId,
+    (item) => item.id === submissionId && item.formId === formId && item.siteId === scopedSiteId,
   );
   if (!submission) return undefined;
 
@@ -12935,11 +13316,13 @@ export function anonymizeFormContactConsentEvidence(
   contactId: string,
   consentFieldKeys: string[],
   actor = "admin",
+  siteId?: string,
 ): Contact | undefined {
   refreshPersistedInteractionStore();
+  const scopedSiteId = resolveFormInteractionSite(formId, siteId);
 
   const contact = contactStore.find(
-    (item) => item.id === contactId && item.formId === formId,
+    (item) => item.id === contactId && item.formId === formId && item.siteId === scopedSiteId,
   );
   if (!contact) return undefined;
 
@@ -13118,77 +13501,9 @@ export function getCommentById(commentId: string): Comment | undefined {
   return comment ? clone(comment) : undefined;
 }
 
-export function updateCommentStatus(
-  commentId: string,
-  updates: {
-    status: Comment["status"];
-    reviewedBy?: string | null;
-    rejectionReason?: string | null;
-    blockReason?: string | null;
-    actor?: string | null;
-    requestId?: string;
-    clearReports?: boolean;
-  },
-): Comment | undefined {
-  refreshPersistedInteractionStore();
-
-  const comment = commentStore.find((item) => item.id === commentId);
-  if (!comment) return undefined;
-
-  const resolvedRequestId = updates.requestId || comment.requestId || undefined;
-  comment.status = updates.status;
-  comment.reviewedBy = updates.reviewedBy ?? updates.actor ?? null;
-  comment.rejectionReason = updates.rejectionReason ?? null;
-  comment.reviewedAt = new Date().toISOString();
-  comment.updatedAt = comment.reviewedAt;
-  if (updates.clearReports) {
-    comment.reportCount = 0;
-    comment.reportReasons = [];
-  }
-
-  if (updates.status === "blocked") {
-    comment.blockReason = updates.blockReason
-      ? normalizeReportReason(updates.blockReason) || updates.blockReason
-      : "manual-block";
-    comment.blockedBy = comment.reviewedBy;
-    comment.blockedAt = comment.reviewedAt;
-
-    blockCommentIdentity({
-      siteId: comment.siteId,
-      reason: comment.blockReason || "manual-block",
-      actor: comment.reviewedBy || undefined,
-      requestId: resolvedRequestId,
-      email: comment.authorEmail,
-      ipHash: comment.ipHash,
-    });
-  } else if (updates.status !== "rejected" && updates.status !== "spam") {
-    comment.blockReason = null;
-    comment.blockedBy = null;
-    comment.blockedAt = null;
-  }
-
-  setCommentStore(
-    commentStore.map((item) => (item.id === comment.id ? comment : item)),
-  );
-  persistInteractionStore();
-
-  trackWebhookEvent({
-    kind: "comment-status",
-    siteId: comment.siteId,
-    commentId: comment.id,
-    target: `comment:${comment.id}`,
-    status: "succeeded",
-    requestId: resolvedRequestId,
-    reason: updates.status,
-    actor: comment.reviewedBy || undefined,
-    metadata: {
-      targetType: comment.targetType,
-      targetId: comment.targetId,
-      status: updates.status,
-    },
-  });
-
-  return clone(comment);
+export function updateCommentStatus(commentId: string, updates: { status: Comment['status']; reviewedBy?: string | null; rejectionReason?: string | null; blockReason?: string | null; actor?: string | null; requestId?: string; clearReports?: boolean }, trustedSiteId?: string): Comment | undefined {
+  refreshPersistedInteractionStore(); const comment = commentStore.find(item => item.id === commentId && (!trustedSiteId || item.siteId === trustedSiteId)); if (!comment) return undefined;
+  return moderateDemoComments({ ...updates, siteId: comment.siteId, commentIds: [commentId] }).updated[0];
 }
 
 export function updateCommentThread(
@@ -13205,13 +13520,21 @@ export function updateCommentThread(
   const comment = commentStore.find((item) => item.id === commentId);
   if (!comment) return undefined;
 
+  const parent = updates.parentId ? commentStore.find(item => item.id === updates.parentId && item.siteId === comment.siteId) || null : null;
+  assertBackyCommentParent({ ...comment, commentThreadId: updates.commentThreadId || undefined }, parent, updates.parentId);
+  const visited = new Set<string>([comment.id]); let ancestor = parent;
+  while (ancestor) {
+    if (visited.has(ancestor.id) || visited.size > BACKY_COMMENT_INVENTORY_LIMIT) throw new BackyCommentLifecycleError('COMMENT_TREE_INVALID', 'A reply cannot be moved into its own subtree.');
+    visited.add(ancestor.id); ancestor = ancestor.parentId ? commentStore.find(item => item.id === ancestor!.parentId && item.siteId === comment.siteId) || null : null;
+  }
+
   const previousParentId = comment.parentId;
   const previousThreadId = comment.commentThreadId || null;
   const reviewedAt = new Date().toISOString();
   const resolvedRequestId = updates.requestId || comment.requestId || undefined;
 
   comment.parentId = updates.parentId;
-  comment.commentThreadId = updates.commentThreadId || undefined;
+  comment.commentThreadId = updates.commentThreadId || parent?.commentThreadId || undefined;
   comment.reviewedBy = updates.actor || comment.reviewedBy || "admin";
   comment.reviewedAt = reviewedAt;
   comment.updatedAt = reviewedAt;
@@ -13241,6 +13564,36 @@ export function updateCommentThread(
   });
 
   return clone(comment);
+}
+
+/** One synchronous atomic file replacement. Admission is local to this process. */
+export function deleteCommentSubtree(siteId: string, commentId: string): Comment[] {
+  let snapshot: InteractionStoreSnapshot;
+  try {
+    snapshot = existsSync(INTERACTION_STORE_PATH) ? JSON.parse(readFileSync(INTERACTION_STORE_PATH, 'utf8')) as InteractionStoreSnapshot : {
+      comments: clone(commentStore), formSubmissions: clone(formSubmissions), contacts: clone(contactStore), auditEvents: clone(auditEvents), commentBlocklist: clone(Array.from(COMMENT_REPORT_BLOCKLIST.values())),
+    };
+    if (!snapshot || !Array.isArray(snapshot.comments) || snapshot.comments.some(comment => !comment || typeof comment.siteId !== 'string' || typeof comment.id !== 'string')) throw Error('Invalid interaction snapshot');
+  } catch { throw new BackyCommentLifecycleError('COMMENT_INVENTORY_INCOMPLETE', 'The complete persisted comment inventory could not be verified.'); }
+  const all = snapshot.comments!;
+  const selected = collectBackyCommentSubtree(siteId, commentId, all.filter(comment => comment.siteId === siteId));
+  if (!selected.length) return [];
+  const ids = new Set(selected.map(comment => comment.id));
+  const next = all.filter(comment => comment.siteId !== siteId || !ids.has(comment.id));
+  const serialized = JSON.stringify({ ...snapshot, comments: next }, null, 2);
+  const temporary = `${INTERACTION_STORE_PATH}.${randomUUID()}.tmp`;
+  try {
+    mkdirSync(dirname(INTERACTION_STORE_PATH), { recursive: true });
+    writeFileSync(temporary, serialized, { flag: 'wx', mode: 0o600 });
+    const descriptor = openSync(temporary, 'r'); try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+    if (readFileSync(temporary, 'utf8') !== serialized) throw Error('Snapshot readback failed');
+    renameSync(temporary, INTERACTION_STORE_PATH);
+  } catch {
+    try { unlinkSync(temporary); } catch { /* No persisted mutation completed. */ }
+    throw new BackyCommentLifecycleError('COMMENT_LIFECYCLE_UNAVAILABLE', 'The comment subtree could not be persisted. No comments were removed.');
+  }
+  setCommentStore(next);
+  return clone(selected);
 }
 
 export function deleteCommentRecord(commentId: string): Comment | undefined {
@@ -13288,15 +13641,19 @@ export function createComment(params: {
   parentId?: string | null;
   requestId?: string;
   ipHash?: string | null;
+  /** Internal management routes handle activity after commit with outcome warnings. */
+  skipActivity?: boolean;
 }): Comment {
   refreshPersistedInteractionStore();
+
+  assertBackyCommentParent({ id: '', siteId: params.siteId, targetType: params.targetType, targetId: params.targetId, commentThreadId: params.commentThreadId }, params.parentId ? commentStore.find(comment => comment.id === params.parentId && comment.siteId === params.siteId) || null : null, params.parentId);
 
   const comment: Comment = {
     id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     siteId: params.siteId,
     targetType: params.targetType,
     targetId: params.targetId,
-    commentThreadId: params.commentThreadId || undefined,
+    commentThreadId: params.commentThreadId || (params.parentId ? commentStore.find(item => item.id === params.parentId && item.siteId === params.siteId)?.commentThreadId : undefined),
     authorName: params.authorName || null,
     authorEmail: params.authorEmail || null,
     authorWebsite: params.authorWebsite || null,
@@ -13318,8 +13675,24 @@ export function createComment(params: {
     updatedAt: new Date().toISOString(),
   };
 
+  if (params.skipActivity) {
+    // Moderator creation commits independently of followup activity. Use the
+    // existing durable single-process admission, including a fresh parent and
+    // identity read, before exposing success to the management route.
+    return commitCommentModerationSnapshot(params.siteId, snapshot => {
+      assertBackyCommentParent(comment, params.parentId ? snapshot.comments!.find(item => item.id === params.parentId && item.siteId === params.siteId) || null : null, params.parentId);
+      const blocked = (snapshot.commentBlocklist || []).some(entry => entry.siteId === params.siteId && (
+        entry.type === 'email' && Boolean(params.authorEmail) && entry.value.trim().toLowerCase() === params.authorEmail!.trim().toLowerCase()
+        || entry.type === 'ip' && Boolean(params.ipHash) && entry.value.trim().toLowerCase() === params.ipHash!.trim().toLowerCase()
+      ));
+      if (blocked) throw new BackyCommentLifecycleError('COMMENT_IDENTITY_BLOCKED', 'The current identity cannot create a reply.');
+      snapshot.comments = [comment, ...snapshot.comments!];
+      return comment;
+    });
+  }
+
   setCommentStore([comment, ...commentStore]);
-  trackWebhookEvent({
+  if (!params.skipActivity) trackWebhookEvent({
     kind: "comment-submitted",
     siteId: comment.siteId,
     commentId: comment.id,
@@ -13378,3 +13751,32 @@ export {
   type StoreUser,
   type StoreUserPermissionOverride,
 };
+
+export function listProductDesignRevisions(siteId: string, collectionId: string, recordId: string, options: {offset?: number;limit?: number} = {}) {
+ ensurePersistedAdminContentLoaded();
+ const items = PRODUCT_DESIGN_REVISIONS.filter(item => item.siteId === siteId && item.collectionId === collectionId && item.recordId === recordId).sort((a,b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+ const offset = Math.max(0, options.offset || 0), limit = Math.min(100, Math.max(1, options.limit || 100));
+ return clone(items.slice(offset,offset+limit+1));
+}
+export function getProductDesignRevision(siteId: string, collectionId: string, recordId: string, revisionId: string) {
+ ensurePersistedAdminContentLoaded(); return clone(PRODUCT_DESIGN_REVISIONS.find(item => item.siteId === siteId && item.collectionId === collectionId && item.recordId === recordId && item.id === revisionId) || null);
+}
+
+export function listFormDesignRevisions(siteId: string, formId: string, options: { offset?: number; limit?: number } = {}) {
+ ensurePersistedAdminContentLoaded();
+ const items = FORM_DESIGN_REVISIONS.filter(item => item.siteId === siteId && item.formId === formId).sort((a,b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+ const offset = Math.max(0, options.offset || 0), limit = Math.min(100, Math.max(1, options.limit || 100));
+ return clone(items.slice(offset, offset + limit + 1));
+}
+export function getFormDesignRevision(siteId: string, formId: string, revisionId: string) {
+ ensurePersistedAdminContentLoaded();
+ const revision = FORM_DESIGN_REVISIONS.find(item => item.siteId === siteId && item.formId === formId && item.id === revisionId);
+ return revision ? clone(revision) : null;
+}
+
+export function listCollectionDesignRevisions(siteId:string,collectionId:string,options:{offset?:number;limit?:number}={}) {
+ ensurePersistedAdminContentLoaded(true);const offset=Math.max(0,options.offset||0),limit=Math.min(100,Math.max(1,options.limit||100));return clone(COLLECTION_DESIGN_REVISIONS.filter(row=>row.siteId===siteId&&row.collectionId===collectionId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id)).slice(offset,offset+limit+1));
+}
+export function getCollectionDesignRevision(siteId:string,collectionId:string,revisionId:string) {
+ ensurePersistedAdminContentLoaded(true);return clone(COLLECTION_DESIGN_REVISIONS.find(row=>row.siteId===siteId&&row.collectionId===collectionId&&row.id===revisionId)||null);
+}

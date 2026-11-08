@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import {
   CheckCircle2,
@@ -20,7 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
-  createComment,
+  createCommentWithOutcome,
   deleteComment,
   getAdminSite,
   getCommentAnalytics,
@@ -33,8 +33,9 @@ import {
   listAllComments,
   listPages,
   retryCommentDelivery,
+  recordCommentDeliveryReview,
   updateSite,
-  updateCommentThread,
+  updateCommentThreadWithOutcome,
   updateComments,
   type AdminComment,
   type AdminCommentBlocklistEntry,
@@ -46,7 +47,9 @@ import {
   type AdminUserPermissionMatrix,
 } from '@/lib/adminContentApi';
 import type { SiteCommentPolicy } from '@backy-cms/core';
-import { adminPermissionReason, isAdminPermissionAllowed, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { adminPermissionReason, isAdminPermissionDeniedError } from '@/lib/adminPermissionUi';
+import { isCommentPermissionAllowedForSite, type CommentPermissionKey } from '@/lib/commentPermissions';
+import { createCommentLoadAuthority } from '@/lib/commentLoadAuthority';
 import { useAuthStore, type User as AuthUser } from '@/stores/authStore';
 import { useStore } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
@@ -54,6 +57,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { DeliveryReviewDialog, DeliveryReviewBadge, isDeliveryReviewable } from '@/components/delivery/DeliveryReviewDialog';
 import { getSiteSelectionFromSearch, siteMatchesIdentifier } from '@/lib/siteSelection';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
 import { cn, formatDate } from '@/lib/utils';
@@ -70,7 +74,7 @@ type CommentTriageFilter =
   | 'reviewed'
   | 'unreviewed';
 type CommentSortFilter = 'newest' | 'oldest';
-type CommentPermissionKey = 'comments.view' | 'comments.manage' | 'comments.configure' | 'activity.export';
+
 
 interface CommentsSearch {
   siteId?: string;
@@ -112,6 +116,15 @@ const normalizedSearchString = (value: unknown): string | undefined => {
 };
 
 const safeActionId = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '-');
+
+const commentFollowUpNotice = (warnings: string[] = []): string => {
+  if (!warnings.length) return '';
+  const tasks: string[] = [];
+  if (warnings.includes('COMMENT_ACTIVITY_PENDING')) tasks.push('activity recording');
+  if (warnings.includes('COMMENT_DELIVERY_PENDING')) tasks.push('notification delivery');
+  if (warnings.includes('COMMENT_AUDIT_PENDING')) tasks.push('audit recording');
+  return ` Follow-up pending: ${tasks.length ? tasks.join(', ') : 'background updates'}. Your change was saved.`;
+};
 
 export const Route = createFileRoute('/comments')({
   validateSearch: (search: Record<string, unknown>): CommentsSearch => ({
@@ -373,7 +386,7 @@ function CommentsRoute() {
   const currentAdmin = useAuthStore((state) => state.user);
   const navigate = useNavigate();
   const routeSearch = Route.useSearch();
-  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites));
+  const [selectedSiteId, setSelectedSiteId] = useState(() => routeSearch.siteId || getSiteSelectionFromSearch(sites, ''));
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [commentAnalytics, setCommentAnalytics] = useState<CommentAnalytics | null>(null);
   const [commentDeliveryEvents, setCommentDeliveryEvents] = useState<CommentDeliveryEvent[]>([]);
@@ -411,6 +424,7 @@ function CommentsRoute() {
   const [isPermissionsLoading, setIsPermissionsLoading] = useState(Boolean(currentAdmin?.id));
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [retryingDeliveryIds, setRetryingDeliveryIds] = useState<string[]>([]);
+  const [deliveryReview, setDeliveryReview] = useState<{ event: CommentDeliveryEvent; contextKey: string } | null>(null);
   const [deletingBlocklistIds, setDeletingBlocklistIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -422,29 +436,40 @@ function CommentsRoute() {
     || retryingDeliveryIds.length > 0
     || Boolean(isReplyingId)
     || Boolean(isMovingId);
-  const canUseCommentRoleDefaults = isPermissionsLoading && !permissionMatrix && Boolean(currentAdmin);
-  const isPermissionMatrixPending = isPermissionsLoading && !permissionMatrix && !canUseCommentRoleDefaults;
+  const requestedSiteId = routeSearch.siteId || selectedSiteId;
+  const activeSite = useMemo(
+    () => sites.find((site) => siteMatchesIdentifier(site, requestedSiteId)) || (!requestedSiteId ? sites[0] : undefined),
+    [requestedSiteId, sites],
+  );
+  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || requestedSiteId || 'site-demo';
+  const isPermissionMatrixPending = isPermissionsLoading;
   const isCommentPermissionAllowed = (key: CommentPermissionKey) => (
-    isAdminPermissionAllowed(permissionMatrix, currentAdmin, key, COMMENT_PERMISSION_ROLE_DEFAULTS)
-    || (canUseCommentRoleDefaults && Boolean(currentAdmin && COMMENT_PERMISSION_ROLE_DEFAULTS[key].includes(currentAdmin.role)))
+    Boolean(activeSite) && isCommentPermissionAllowedForSite(permissionMatrix, currentAdmin?.id, activeSiteId, key, isPermissionsLoading)
   );
   const canViewComments = isCommentPermissionAllowed('comments.view');
   const canManageComments = isCommentPermissionAllowed('comments.manage');
+  const canReviewDelivery = currentAdmin?.role === 'owner' && canManageComments;
+  const deliveryReviewContext = JSON.stringify([activeSiteId, currentAdmin?.id, currentAdmin?.role, canReviewDelivery, routeSearch.siteId]);
+  useEffect(() => { setDeliveryReview(null); }, [deliveryReviewContext]);
   const canConfigureComments = isCommentPermissionAllowed('comments.configure');
   const canExportActivity = isCommentPermissionAllowed('activity.export');
-  const viewPermissionTitle = canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const managePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const configurePermissionTitle = canConfigureComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS);
-  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS);
+  const commentLoadAuthority = useRef(createCommentLoadAuthority());
+  const deferredCommentLoad = useRef(false);
+  // Invalidate before effects run, including the route-to-selected-site transition.
+  commentLoadAuthority.current.setContext(JSON.stringify([
+    activeSiteId, currentAdmin?.id, routeSearch.siteId,
+    canViewComments, canManageComments, canExportActivity, isPermissionMatrixPending,
+    routeSearch.q, routeSearch.sort, routeSearch.status, routeSearch.targetId,
+    routeSearch.targetType, routeSearch.thread,
+  ]));
+  const viewPermissionTitle = requestedSiteId && !activeSite ? 'The selected site is unavailable. Choose an accessible site from the workspace selector.' : canViewComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.view', COMMENT_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const managePermissionTitle = canManageComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.manage', COMMENT_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const configurePermissionTitle = canConfigureComments ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'comments.configure', COMMENT_PERMISSION_ROLE_DEFAULTS, activeSiteId);
+  const activityPermissionTitle = canExportActivity ? undefined : adminPermissionReason(permissionMatrix, currentAdmin, 'activity.export', COMMENT_PERMISSION_ROLE_DEFAULTS, activeSiteId);
   const isCommentPolicyBusy = isSavingPolicy;
   const isCommentsBusy = isLoading || isCommentMutationBusy;
   const isCommentPolicyDisabled = isCommentsBusy || isCommentPolicyBusy || !canConfigureComments;
 
-  const activeSite = useMemo(
-    () => sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || sites[0],
-    [selectedSiteId, sites],
-  );
-  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const activeSiteSearch = useMemo(() => ({ siteId: activeSiteId }), [activeSiteId]);
   const publicBaseUrl = useMemo(() => getPublicBaseUrl(), []);
   const targetByKey = useMemo(() => {
@@ -479,6 +504,24 @@ function CommentsRoute() {
     });
     return map;
   }, [comments]);
+  const pendingDeleteDescendantCount = useMemo(() => {
+    if (!pendingDeleteComment) return 0;
+    const children = new Map<string, string[]>();
+    for (const comment of comments) {
+      if (!comment.parentId || comment.siteId !== pendingDeleteComment.siteId
+        || comment.targetType !== pendingDeleteComment.targetType || comment.targetId !== pendingDeleteComment.targetId) continue;
+      children.set(comment.parentId, [...(children.get(comment.parentId) || []), comment.id]);
+    }
+    const visited = new Set([pendingDeleteComment.id]);
+    const queue = [pendingDeleteComment.id];
+    for (let index = 0; index < queue.length; index += 1) {
+      for (const id of children.get(queue[index]) || []) {
+        if (visited.has(id)) continue;
+        visited.add(id); queue.push(id);
+      }
+    }
+    return visited.size - 1;
+  }, [comments, pendingDeleteComment]);
   const threadSummaries = useMemo(() => {
     const map = new Map<string, CommentThreadSummary>();
 
@@ -856,6 +899,8 @@ function CommentsRoute() {
       analytics: moderationAnalyticsUrl,
       blocklist: blocklistUrl,
       events: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/events?kind=all&limit=100`,
+      deliveryAttempts: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/delivery-attempts?limit=100`,
+      retryDelivery: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/{commentId}/delivery-retry`,
       publicPageThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/pages/{pageId}/comments`,
       publicBlogThread: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/blog/{postId}/comments`,
       reportReasons: `${publicBaseUrl}/api/sites/${encodeURIComponent(activeSiteId)}/comments/report-reasons`,
@@ -887,6 +932,7 @@ function CommentsRoute() {
       daily: commentAnalytics.daily,
     } : null,
     delivery: {
+      retryPolicy: 'One retry per definitively failed attempt. Pending, uncertain and unverified legacy events cannot be replayed.',
       metrics: deliveryMetrics,
       recent: commentDeliveryEvents.slice(0, 20).map((event) => ({
         id: event.id,
@@ -1131,6 +1177,7 @@ function CommentsRoute() {
       };
     }
 
+    setPermissionMatrix(null);
     setIsPermissionsLoading(true);
     getUserPermissions(currentAdmin.id)
       .then((matrix) => {
@@ -1183,7 +1230,7 @@ function CommentsRoute() {
   };
 
   const refreshCommentDeliveryEvents = async () => {
-    if (!canManageComments) {
+    if (!canViewComments) {
       setCommentDeliveryEvents([]);
       setCommentDeliveryError(null);
       return null;
@@ -1240,7 +1287,7 @@ function CommentsRoute() {
       await refreshCommentDeliveryEvents().catch(() => null);
       await refreshCommentAuditLogs().catch(() => null);
       const channel = typeof event.metadata?.channel === 'string' ? event.metadata.channel : 'delivery';
-      setNotice(`Comment ${channel} retry ${result.delivery.status}.`);
+      setNotice(`Comment ${channel} retry ${result.delivery.status}.${result.delivery.durableState === 'pending' || result.delivery.status === 'uncertain' ? ' Provider completion needs investigation; do not replay this attempt.' : ''}${result.completionWarnings.length ? ' Delivery evidence has pending follow-ups; refresh history.' : ''}`);
     } catch (retryError) {
       setError(retryError instanceof Error ? retryError.message : 'Unable to retry comment delivery');
     } finally {
@@ -1249,8 +1296,10 @@ function CommentsRoute() {
   };
 
   const loadComments = async () => {
-    if (isCommentsBusy) return;
     if (!canViewComments) {
+      commentLoadAuthority.current.invalidate();
+      deferredCommentLoad.current = false;
+      setIsLoading(false);
       setComments([]);
       setTargets([]);
       setCommentAnalytics(null);
@@ -1263,11 +1312,19 @@ function CommentsRoute() {
       return;
     }
 
+    if (isCommentMutationBusy) {
+      deferredCommentLoad.current = true;
+      return;
+    }
+    deferredCommentLoad.current = false;
+
     setIsLoading(true);
     setError(null);
     setNotice(null);
 
-    try {
+    await commentLoadAuthority.current.run(async () => {
+      let deliveryReadError: string | null = null;
+      let auditReadError: string | null = null;
       const [commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult, auditResult] = await Promise.all([
         listAllComments(activeSiteId, {
           status: routeSearch.status || 'all',
@@ -1281,69 +1338,75 @@ function CommentsRoute() {
         listPages(activeSiteId).catch(() => []),
         listBlogPosts(activeSiteId).catch(() => []),
         getAdminSite(activeSiteId).catch(() => null),
-        canManageComments ? refreshBlocklist().catch(() => ({ blocklist: [], count: 0 })) : Promise.resolve({ blocklist: [], count: 0 }),
-        canManageComments ? listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
-          setCommentDeliveryError(deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events');
+        canManageComments ? listCommentBlocklist(activeSiteId, { limit: 100 }).catch(() => ({ blocklist: [], count: 0 })) : Promise.resolve({ blocklist: [], count: 0 }),
+        canViewComments ? listCommentDeliveryEvents(activeSiteId, { limit: 100 }).catch((deliveryError) => {
+          deliveryReadError = deliveryError instanceof Error ? deliveryError.message : 'Unable to load comment delivery events';
           return null;
         }) : Promise.resolve(null),
         canExportActivity ? listAdminAuditLogs({ siteId: activeSiteId, limit: 80 }).catch((auditError) => {
-          setCommentAuditError(auditError instanceof Error ? auditError.message : 'Unable to load comment audit logs');
+          auditReadError = auditError instanceof Error ? auditError.message : 'Unable to load comment audit logs';
           return null;
         }) : Promise.resolve(null),
       ]);
       const analyticsResult = await getCommentAnalytics(activeSiteId, { days: 30 }).catch(() => null);
-      const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
+      return { commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult,
+        auditResult, analyticsResult, deliveryReadError, auditReadError };
+    }, {
+      success: ({ commentResult, pages, posts, siteDetail, blocklistResult, deliveryResult,
+        auditResult, analyticsResult, deliveryReadError, auditReadError }) => {
+        const nextPolicy = normalizeCommentPolicyDraft(siteDetail?.settings?.commentPolicy);
 
-      setComments(commentResult.comments);
-      setCommentAnalytics(analyticsResult);
-      setCommentDeliveryEvents(deliveryResult?.events || []);
-      if (deliveryResult) setCommentDeliveryError(null);
-      setCommentAuditLogs(auditResult?.logs.filter(isCommentAuditLog) || []);
-      if (auditResult) setCommentAuditError(null);
-      setBlocklist(blocklistResult.blocklist || []);
-      setBlocklistCount(blocklistResult.count || 0);
-      setCommentPolicyDraft(nextPolicy);
-      setSavedCommentPolicy(nextPolicy);
-      setTargets([
-        ...pages.map((page) => ({
-          id: page.id,
-          type: 'page' as const,
-          label: page.title || page.slug || page.id,
-          path: page.slug ? `/${page.slug}` : '/',
-        })),
-        ...posts.map((post) => ({
-          id: post.id,
-          type: 'post' as const,
-          label: post.title || post.slug || post.id,
-          path: post.slug ? `/blog/${post.slug}` : '/blog',
-        })),
-      ]);
-      setSelectedIds((current) => current.filter((id) => commentResult.comments.some((comment) => comment.id === id)));
-    } catch (loadError) {
-      if (isAdminPermissionDeniedError(loadError)) {
-        setComments([]);
-        setTargets([]);
-        setCommentAnalytics(null);
-        setCommentDeliveryEvents([]);
-        setCommentAuditLogs([]);
-        setBlocklist([]);
-        setBlocklistCount(0);
-      }
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load comments');
-    } finally {
-      setIsLoading(false);
-    }
+        setComments(commentResult.comments);
+        setCommentAnalytics(analyticsResult);
+        setCommentDeliveryEvents(deliveryResult?.events || []);
+        setCommentDeliveryError(deliveryReadError);
+        setCommentAuditLogs(auditResult?.logs.filter(isCommentAuditLog) || []);
+        setCommentAuditError(auditReadError);
+        setBlocklist(blocklistResult.blocklist || []);
+        setBlocklistCount(blocklistResult.count || 0);
+        setCommentPolicyDraft(nextPolicy);
+        setSavedCommentPolicy(nextPolicy);
+        setTargets([
+          ...pages.map((page) => ({
+            id: page.id,
+            type: 'page' as const,
+            label: page.title || page.slug || page.id,
+            path: page.slug ? `/${page.slug}` : '/',
+          })),
+          ...posts.map((post) => ({
+            id: post.id,
+            type: 'post' as const,
+            label: post.title || post.slug || post.id,
+            path: post.slug ? `/blog/${post.slug}` : '/blog',
+          })),
+        ]);
+        setSelectedIds((current) => current.filter((id) => commentResult.comments.some((comment) => comment.id === id)));
+      },
+      error: (loadError) => {
+        if (isAdminPermissionDeniedError(loadError)) {
+          setComments([]);
+          setTargets([]);
+          setCommentAnalytics(null);
+          setCommentDeliveryEvents([]);
+          setCommentAuditLogs([]);
+          setBlocklist([]);
+          setBlocklistCount(0);
+        }
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load comments');
+      },
+      finish: () => setIsLoading(false),
+    });
   };
 
   useEffect(() => {
-    if (sites.length > 0 && !sites.some((site) => siteMatchesIdentifier(site, selectedSiteId))) {
+    if (!routeSearch.siteId && !selectedSiteId && sites.length > 0) {
       setSelectedSiteId(sites[0].publicSiteId || sites[0].id);
     }
-  }, [selectedSiteId, sites]);
+  }, [routeSearch.siteId, selectedSiteId, sites]);
 
   useEffect(() => {
     const nextSiteId = routeSearch.siteId
-      ? getSiteSelectionFromSearch(sites, routeSearch.siteId)
+      ? routeSearch.siteId
       : selectedSiteId;
     const siteChanged = nextSiteId !== selectedSiteId;
 
@@ -1377,16 +1440,44 @@ function CommentsRoute() {
   ]);
 
   useEffect(() => {
+    setComments([]);
+    setTargets([]);
+    setSelectedIds([]);
+    setPendingDeleteComment(null);
+    setModerationReason('');
+    setReplyingToId(null);
+    setReplyDraft(DEFAULT_REPLY_DRAFT);
+    setMovingCommentId(null);
+    setMoveParentDraft('');
+    setCommentAnalytics(null);
+    setCommentDeliveryEvents([]);
+    setCommentDeliveryError(null);
+    setCommentAuditLogs([]);
+    setCommentAuditError(null);
+    setBlocklist([]);
+    setBlocklistCount(0);
+    setCommentPolicyDraft(DEFAULT_COMMENT_POLICY);
+    setSavedCommentPolicy(DEFAULT_COMMENT_POLICY);
+    setError(null);
+    setNotice(null);
+    setIsLoading(false);
+  }, [activeSiteId, currentAdmin?.id, canViewComments]);
+
+  useEffect(() => () => commentLoadAuthority.current.invalidate(), []);
+
+  useEffect(() => {
     if (!isPermissionMatrixPending) {
       void loadComments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeSiteId,
+    currentAdmin?.id,
     canViewComments,
     canManageComments,
     canExportActivity,
     isPermissionMatrixPending,
+    routeSearch.siteId,
     routeSearch.q,
     routeSearch.sort,
     routeSearch.status,
@@ -1394,6 +1485,14 @@ function CommentsRoute() {
     routeSearch.targetType,
     routeSearch.thread,
   ]);
+
+  useEffect(() => {
+    if (!isCommentMutationBusy && !isPermissionMatrixPending && deferredCommentLoad.current) {
+      void loadComments();
+    }
+    // Only replay a read deferred by a mutation, preserving unrelated policy drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCommentMutationBusy, isPermissionMatrixPending]);
 
   const toggleVisibleSelection = () => {
     if (isCommentsBusy) return;
@@ -1447,7 +1546,7 @@ function CommentsRoute() {
       await refreshCommentDeliveryEvents().catch(() => null);
       await refreshCommentAuditLogs().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
-      setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.`);
+      setNotice(`${result.updatedCount} comment${result.updatedCount === 1 ? '' : 's'} marked ${status}.${commentFollowUpNotice(result.completionWarnings)}`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to update comments');
     } finally {
@@ -1483,7 +1582,10 @@ function CommentsRoute() {
       setPendingDeleteComment(null);
       await refreshCommentAnalytics().catch(() => null);
       await refreshCommentAuditLogs().catch(() => null);
-      setNotice(`${result.deletedCount} comment${result.deletedCount === 1 ? '' : 's'} deleted.`);
+      const followUp = result.completionWarnings.length
+        ? ' Follow-up pending: deletion completed, but the audit entry needs attention.'
+        : '';
+      setNotice(`${result.deletedCount} comment${result.deletedCount === 1 ? '' : 's'} deleted.${followUp}`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete comment');
     } finally {
@@ -1521,7 +1623,7 @@ function CommentsRoute() {
       setBlocklist((current) => current.filter((entry) => !result.deleted.some((deleted) => deleted.id === entry.id)));
       setBlocklistCount((current) => Math.max(0, current - result.deletedCount));
       await refreshCommentAuditLogs().catch(() => null);
-      setNotice(`${result.deletedCount} author blocklist entr${result.deletedCount === 1 ? 'y' : 'ies'} removed.`);
+      setNotice(`${result.deletedCount} author blocklist entr${result.deletedCount === 1 ? 'y' : 'ies'} removed.${commentFollowUpNotice(result.completionWarnings)}`);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Unable to remove author blocklist entries');
     } finally {
@@ -1614,7 +1716,7 @@ function CommentsRoute() {
       await refreshCommentDeliveryEvents().catch(() => null);
       await refreshCommentAuditLogs().catch(() => null);
       setSelectedIds((current) => current.filter((id) => !commentIds.includes(id)));
-      setNotice(`${result.updatedCount} report flag${result.updatedCount === 1 ? '' : 's'} resolved.`);
+      setNotice(`${result.updatedCount} report flag${result.updatedCount === 1 ? '' : 's'} resolved.${commentFollowUpNotice(result.completionWarnings)}`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : 'Unable to resolve comment reports');
     } finally {
@@ -1672,7 +1774,7 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const created = await createComment(activeSiteId, {
+      const result = await createCommentWithOutcome(activeSiteId, {
         targetType: parentComment.targetType,
         targetId: parentComment.targetId,
         content,
@@ -1683,6 +1785,7 @@ function CommentsRoute() {
         moderationMode: replyDraft.moderationMode,
         requestId: `comments-admin-reply-${Date.now().toString(36)}`,
       });
+      const created = result.comment;
       setComments((current) => [created, ...current.filter((comment) => comment.id !== created.id)]);
       setReplyingToId(null);
       setReplyDraft((current) => ({ ...current, content: '' }));
@@ -1690,7 +1793,7 @@ function CommentsRoute() {
       setThreadFilter(getCommentThreadKey(parentComment));
       await refreshCommentAnalytics().catch(() => null);
       await refreshCommentDeliveryEvents().catch(() => null);
-      setNotice(`Reply added to ${parentComment.authorName || parentComment.authorEmail || 'the selected comment'}.`);
+      setNotice(`Reply added to ${parentComment.authorName || parentComment.authorEmail || 'the selected comment'}.${commentFollowUpNotice(result.completionWarnings)}`);
     } catch (replyError) {
       setError(replyError instanceof Error ? replyError.message : 'Unable to create reply');
     } finally {
@@ -1745,12 +1848,13 @@ function CommentsRoute() {
     setNotice(null);
 
     try {
-      const updated = await updateCommentThread(activeSiteId, comment.id, {
+      const result = await updateCommentThreadWithOutcome(activeSiteId, comment.id, {
         parentId: nextParent.id,
         commentThreadId: getCommentThreadKey(nextParent),
         actor: 'admin',
         requestId: `comments-reparent-${Date.now().toString(36)}`,
       });
+      const updated = result.comment;
       setComments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMovingCommentId(null);
       setMoveParentDraft('');
@@ -1758,7 +1862,7 @@ function CommentsRoute() {
       await refreshCommentAnalytics().catch(() => null);
       await refreshCommentDeliveryEvents().catch(() => null);
       await refreshCommentAuditLogs().catch(() => null);
-      setNotice(`Reply moved under ${nextParent.authorName || nextParent.authorEmail || 'the selected parent'}.`);
+      setNotice(`Reply moved under ${nextParent.authorName || nextParent.authorEmail || 'the selected parent'}.${commentFollowUpNotice(result.completionWarnings)}`);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : 'Unable to move reply');
     } finally {
@@ -2610,8 +2714,8 @@ function CommentsRoute() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={isCommentsBusy || !canManageComments}
-                  title={managePermissionTitle}
+                  disabled={isCommentsBusy || !canViewComments}
+                  title={viewPermissionTitle}
                   onClick={() => void refreshCommentDeliveryEvents()}
                   iconStart={<RefreshCw className="size-4" />}
                   data-testid="comments-delivery-refresh"
@@ -2625,10 +2729,10 @@ function CommentsRoute() {
                 <div className="rounded-lg border border-border bg-muted/30 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <Code2 className="size-4" />
-                    Events API
+                    Delivery attempts API
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Custom admin dashboards can poll comment events to show submission intake, reports, moderation decisions, and thread updates.
+                    Durable notification attempts retain retry admission and provider outcomes independently of the audit trail. Pending or uncertain attempts require provider investigation and cannot be replayed.
                   </p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <MetaTile label="Activity events" value={`${deliveryMetrics.total}`} />
@@ -2648,7 +2752,7 @@ function CommentsRoute() {
                     <div>
                       <div className="text-sm font-semibold text-foreground">Recent comment handoffs</div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        Newest events from the site events API filtered to comment activity.
+                        Newest durable attempts. Earlier audit-only events remain in Activity; their event IDs still support scoped retry lookup.
                       </div>
                     </div>
                     <span className={cn(
@@ -2677,6 +2781,8 @@ function CommentsRoute() {
                           canManageComments={canManageComments}
                           disabledReason={managePermissionTitle}
                           onRetry={handleRetryCommentDelivery}
+                          canReviewDelivery={canReviewDelivery && !isCommentsBusy}
+                          onReview={() => setDeliveryReview({ event, contextKey: deliveryReviewContext })}
                         />
                       ))}
                     </div>
@@ -3431,6 +3537,7 @@ function CommentsRoute() {
                 return (
                   <CommentCard
                     key={comment.id}
+                    siteId={activeSiteId}
                     comment={comment}
                     target={targetByKey.get(`${comment.targetType}:${comment.targetId}`)}
                     parentComment={comment.parentId ? commentById.get(comment.parentId) : undefined}
@@ -3484,6 +3591,12 @@ function CommentsRoute() {
           )}
         </PanelContent>
       </Panel>
+      {deliveryReview && deliveryReview.contextKey === deliveryReviewContext && canReviewDelivery && (
+        <DeliveryReviewDialog key={deliveryReviewContext} event={deliveryReview.event} contextKey={deliveryReviewContext} canReview={canReviewDelivery}
+          onSave={body => recordCommentDeliveryReview(activeSiteId, deliveryReview.event, body)}
+          onSaved={({ attempt }) => setCommentDeliveryEvents(current => current.map(event => event.id === attempt.id ? attempt : event))}
+          onClose={() => setDeliveryReview(null)} />
+      )}
       {pendingDeleteComment && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 backdrop-blur-sm"
@@ -3510,11 +3623,10 @@ function CommentsRoute() {
               <div className="mt-1">
                 Comment ID: <span className="font-mono font-medium text-foreground">{pendingDeleteComment.id}</span>
               </div>
-              {!pendingDeleteComment.parentId && (replyCountByParent.get(pendingDeleteComment.id) || 0) > 0 ? (
-                <div className="mt-1 text-amber-700">
-                  This also deletes {replyCountByParent.get(pendingDeleteComment.id)} repl{replyCountByParent.get(pendingDeleteComment.id) === 1 ? 'y' : 'ies'} attached to this thread.
-                </div>
-              ) : null}
+              <div className="mt-1 text-amber-700">
+                This also deletes all nested replies, including replies to replies.
+                {pendingDeleteDescendantCount > 0 ? ` ${pendingDeleteDescendantCount} repl${pendingDeleteDescendantCount === 1 ? 'y is' : 'ies are'} currently loaded beneath this comment.` : ' Additional replies may exist beyond the loaded comments.'}
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button
@@ -3639,6 +3751,7 @@ function commentDeliveryChannel(event: CommentDeliveryEvent) {
 function isRetryableCommentDeliveryEvent(event: CommentDeliveryEvent) {
   const channel = commentDeliveryChannel(event);
   return event.status === 'failed'
+    && event.metadata?.retryAdmitted !== true
     && Boolean(event.commentId)
     && (channel === 'webhook' || channel === 'email');
 }
@@ -3734,12 +3847,16 @@ function CommentDeliveryEventCard({
   canManageComments,
   disabledReason,
   onRetry,
+  canReviewDelivery,
+  onReview,
 }: {
   event: CommentDeliveryEvent;
   isRetrying: boolean;
   canManageComments: boolean;
   disabledReason?: string;
   onRetry: (event: CommentDeliveryEvent) => void;
+  canReviewDelivery: boolean;
+  onReview: () => void;
 }) {
   const statusClass = event.status === 'succeeded'
     ? 'bg-success/10 text-success'
@@ -3775,6 +3892,9 @@ function CommentDeliveryEventCard({
           <div className="mt-1 truncate font-mono text-xs text-muted-foreground">
             {event.requestId || 'no-request-id'}
           </div>
+          {event.metadata?.retryAdmitted === true ? <div className="mt-2 text-xs text-muted-foreground">Retry already admitted. Inspect the newer attempt.</div> : null}
+          {event.status === 'pending' || event.status === 'uncertain' ? <div className="mt-2 text-xs text-warning">Provider completion is unverified. Automatic replay is blocked.</div> : null}
+          <DeliveryReviewBadge event={event} />
           {event.error ? (
             <div className="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
               {event.error}
@@ -3800,6 +3920,7 @@ function CommentDeliveryEventCard({
             {isRetrying ? 'Retrying' : 'Retry'}
           </Button>
         ) : null}
+        {canReviewDelivery && event.commentId && isDeliveryReviewable(event) ? <Button variant="outline" size="sm" onClick={onReview} data-testid="comments-delivery-review">Review without resend</Button> : null}
       </div>
     </div>
   );
@@ -3889,6 +4010,7 @@ function ModerationWorkflowStep({ index, label, detail }: { index: number; label
 }
 
 function CommentCard({
+  siteId,
   comment,
   target,
   parentComment,
@@ -3922,6 +4044,7 @@ function CommentCard({
   onMoveParentChange,
   onSubmitMove,
 }: {
+  siteId: string;
   comment: AdminComment;
   target?: CommentTargetSummary;
   parentComment?: AdminComment;
@@ -4013,6 +4136,7 @@ function CommentCard({
                 <Link
                   to={target.type === 'page' ? '/pages/$pageId/edit' : '/blog/$postId'}
                   params={target.type === 'page' ? { pageId: target.id } : { postId: target.id }}
+                  search={{ siteId }}
                   aria-disabled={disabled}
                   className={cn(
                     'inline-flex items-center gap-1 text-primary hover:underline',

@@ -59,6 +59,7 @@ import { getDefaultMediaSiteId, listMedia } from '@/lib/mediaApi';
 import { PageShell } from '@/components/layout/PageShell';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { getLocalBackendOrigin } from '@/lib/localBackendOrigin';
+import { getDashboardCreationPermissions } from '@/lib/dashboardCreationPermissions';
 import { formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -1296,22 +1297,21 @@ function Index() {
   const canViewSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.view');
   const canConfigureSettings = isDashboardPermissionAllowed(permissionMatrix, user, 'settings.configure');
   const canExportActivity = isDashboardPermissionAllowed(permissionMatrix, user, 'activity.export');
-  const canCreateSites = isDashboardPermissionAllowed(permissionMatrix, user, 'sites.create');
-  const canEditPages = isDashboardPermissionAllowed(permissionMatrix, user, 'pages.edit');
+  const activeSite = dashboard.sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || dashboard.sites[0] || fallbackStore.sites[0];
+  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
+  const { canCreateSites, canEditPages, canCreateForms, canEditCommerce } = getDashboardCreationPermissions(
+    permissionMatrix, user?.id, activeSite?.id || activeSiteId,
+  );
   const canViewMedia = isDashboardPermissionAllowed(permissionMatrix, user, 'media.view');
   const canViewCollections = isDashboardPermissionAllowed(permissionMatrix, user, 'collections.view');
   const canViewForms = isDashboardPermissionAllowed(permissionMatrix, user, 'forms.view');
-  const canCreateForms = isDashboardPermissionAllowed(permissionMatrix, user, 'forms.create');
   const canViewCommerce = isDashboardPermissionAllowed(permissionMatrix, user, 'commerce.view');
-  const canEditCommerce = isDashboardPermissionAllowed(permissionMatrix, user, 'commerce.edit');
   const rbacSummary = {
     role: permissionMatrix?.role || user?.role || 'unknown',
     allowed: permissionMatrix?.summary.allowed ?? null,
     total: permissionMatrix?.summary.total ?? null,
     source: permissionMatrix ? 'permission matrix' : 'unavailable',
   };
-  const activeSite = dashboard.sites.find((site) => siteMatchesIdentifier(site, selectedSiteId)) || dashboard.sites[0] || fallbackStore.sites[0];
-  const activeSiteId = activeSite?.publicSiteId || activeSite?.id || selectedSiteId || 'site-demo';
   const publicBaseUrl = getPublicBaseUrl();
   const adminBaseUrl = getAdminBaseUrl();
   const frontendContractUrls = useMemo<Record<string, string>>(() => ({
@@ -1329,7 +1329,7 @@ function Index() {
   const adminContractUrls = useMemo(() => ({
     sites: `${adminBaseUrl}/sites`,
     pages: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/pages`,
-    blog: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog/posts`,
+    blog: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/blog`,
     media: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/media`,
     collections: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/collections`,
     forms: `${adminBaseUrl}/sites/${encodeURIComponent(activeSiteId)}/forms`,
@@ -1456,10 +1456,10 @@ function Index() {
     to: DashboardRouteTarget,
   ) => {
     if (to === '/pages/new') {
-      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
+      return { siteId: activeSiteId, focus: 'canvas' as const };
     }
     if (to === '/blog/new') {
-      return { siteId: activeSiteId, templateSource: 'backy-canvas' as const, focus: 'canvas' as const };
+      return { siteId: activeSiteId, focus: 'canvas' as const };
     }
     return ['/sites', '/pages', '/blog', '/media', '/collections', '/forms', '/comments', '/products', '/orders', '/users'].includes(to)
       ? { siteId: activeSiteId }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { BackyJsonObject, BackyJsonValue } from '@backy-cms/core';
+import { collectCompleteExportPages, collectBoundedExportPages, CollectionExportIncompleteError } from '@/lib/collectionExportPagination';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { recordAdminAudit } from '@/lib/adminAudit';
 import { resolveRepositorySite } from '@/lib/commentRepositorySupport';
@@ -236,28 +237,21 @@ async function handleCommerceReconciliation(
       const ordersCollection = await repositories.collections.getBySlug(site.id, ORDERS_COLLECTION_SLUG);
       if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
 
-      const [recordsResult, eventsResult] = await Promise.all([
-        repositories.collections.listRecords({
-          siteId: site.id,
-          collectionId: ordersCollection.id,
-          includeUnpublished: true,
-          limit: 1000,
-          offset: 0,
-        }),
-        repositories.auditLogs.list({
-          siteId: site.id,
-          action: 'commerce-webhook',
-          limit: runOptions.limit,
-          offset: 0,
-        }),
+      const [records, eventRows] = await Promise.all([
+        collectCompleteExportPages(pagination => repositories.collections.listRecords({
+          siteId: site.id, collectionId: ordersCollection.id, includeUnpublished: true, ...pagination,
+        }), record => record.siteId === site.id && record.collectionId === ordersCollection.id),
+        collectBoundedExportPages(pagination => repositories.auditLogs.list({
+          siteId: site.id, action: 'commerce-webhook', ...pagination,
+        }), runOptions.limit, event => event.siteId === site.id && event.action === 'commerce-webhook'),
       ]);
-      const events = eventsResult.items.map(mapAdminAuditEvent).filter(Boolean) as CommerceReconciliationEvent[];
+      const events = eventRows.map(mapAdminAuditEvent).filter(Boolean) as CommerceReconciliationEvent[];
       const updates = [];
       const unmatchedEvents = [];
 
       const processedOrderIds = new Set<string>();
       for (const event of newestEventsFirst(events)) {
-        const record = recordsResult.items.find((candidate) => isOrderMatchedByEvent(candidate, event));
+        const record = records.find((candidate) => isOrderMatchedByEvent(candidate, event));
         if (!record) {
           unmatchedEvents.push(event);
           continue;
@@ -341,27 +335,23 @@ async function handleCommerceReconciliation(
     const ordersCollection = getCollectionByIdOrSlug(site.id, ORDERS_COLLECTION_SLUG, { includeUnpublished: true });
     if (!ordersCollection) return errorResponse(404, 'ORDER_QUEUE_NOT_FOUND', 'Private order queue not found', requestId);
 
-    const records = listCollectionRecords(site.id, ordersCollection.id, {
-      includeUnpublished: true,
-      limit: 1000,
-      offset: 0,
-    }).records;
-    const webhookEvents = listAuditEvents(site.id, {
-      kind: 'commerce-webhook',
-      limit: runOptions.limit,
-      offset: 0,
-    }).events;
-    const adminEvents = listAdminAuditLogs({
-      siteId: site.id,
-      action: 'commerce-webhook',
-      limit: runOptions.limit,
-      offset: 0,
-    }).items;
+    const records = await collectCompleteExportPages(async pagination => {
+      const result = listCollectionRecords(site.id, ordersCollection.id, { includeUnpublished: true, ...pagination });
+      return { items: result.records, pagination: result.pagination };
+    }, record => record.siteId === site.id && record.collectionId === ordersCollection.id);
+    const [webhookEvents, adminEvents] = await Promise.all([
+      collectBoundedExportPages(async pagination => {
+        const result = listAuditEvents(site.id, { kind: 'commerce-webhook', ...pagination });
+        return { items: result.events, pagination: result.pagination };
+      }, runOptions.limit, event => event.siteId === site.id && event.kind === 'commerce-webhook'),
+      collectBoundedExportPages(async pagination => listAdminAuditLogs({ siteId: site.id, action: 'commerce-webhook', ...pagination }),
+        runOptions.limit, event => event.siteId === site.id && event.action === 'commerce-webhook'),
+    ]);
     const events = [
       ...webhookEvents.map(mapInteractionEvent),
       ...adminEvents.map(mapAdminAuditEvent),
     ].filter(Boolean) as CommerceReconciliationEvent[];
-    const uniqueEvents = events.filter((event, index, all) => all.findIndex((candidate) => candidate.id === event.id) === index);
+    const uniqueEvents = newestEventsFirst(events).filter((event, index, all) => all.findIndex((candidate) => candidate.id === event.id) === index).slice(0, runOptions.limit);
     const updates = [];
     const unmatchedEvents = [];
 
@@ -444,6 +434,7 @@ async function handleCommerceReconciliation(
       },
     }, { status: 200, requestId, request, cache: 'private', schemaVersion: RECONCILIATION_SCHEMA_VERSION, siteId: site.id });
   } catch (error) {
+    if (error instanceof CollectionExportIncompleteError) return errorResponse(503, 'ORDER_INVENTORY_INCOMPLETE', 'The order inventory or selected event window could not be verified. Retry after content changes finish.', requestId);
     console.error('Commerce reconciliation API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

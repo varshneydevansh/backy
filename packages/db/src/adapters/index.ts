@@ -13,11 +13,13 @@
 
 /// <reference path="./third-party-shims.d.ts" />
 
-import { drizzle } from 'drizzle-orm/postgres-js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
 import type { MySql2Database } from 'drizzle-orm/mysql2';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../schema';
+import { postgresSslConfiguration } from './postgres-ssl';
 
 const importOptionalDatabaseProvider = async <TModule>(
     specifier: string
@@ -37,7 +39,7 @@ export type DatabaseType = 'postgres' | 'mysql' | 'sqlite';
 
 /** Generic database instance type */
 export type DatabaseInstance =
-    | PostgresJsDatabase<typeof schema>
+    | NodePgDatabase<typeof schema>
     | MySql2Database<typeof schema>
     | BetterSQLite3Database<typeof schema>;
 
@@ -48,6 +50,9 @@ export interface DatabaseConfig {
 
     /** Connection URL (for Postgres/MySQL) */
     url?: string;
+
+    /** Server-only PostgreSQL CA PEM; TLS and hostname verification remain required. */
+    sslCaPem?: string;
 
     /** File path (for SQLite) */
     path?: string;
@@ -103,17 +108,55 @@ export async function createPostgresAdapter(
         throw new Error('PostgreSQL requires a connection URL');
     }
 
-    // Dynamic import to keep package size small
-    const postgres = (await import('postgres').catch(() => {
-        throw new Error(
-            'postgres package is not installed. Install "postgres" to enable PostgreSQL adapter functionality.'
-        );
-    })) as {
-        default: (connectionString: string, options?: unknown) => unknown;
+    // Four existing media/backup admission leases can coexist; their callbacks
+    // retain independent commits through the remaining connection. Queries are
+    // sequential and unnamed, including on transaction-mode server poolers.
+    const pool = new Pool({ ...postgresSslConfiguration(config.url, config.sslCaPem), max: 5, pipeline: false });
+    // pg removes a failed idle client before emitting this notification. An
+    // idle socket failure must not crash the process; active queries still reject.
+    pool.on('error', () => {});
+    const db = drizzle(pool, { schema, logger: config.logging });
+    db.transaction = async (callback, transactionConfig) => {
+        const client = await pool.connect();
+        let discard = false;
+        const onClientError = () => { discard = true; };
+        client.on('error', onClientError);
+        // Keep Drizzle's transaction/savepoint implementation, while owning the
+        // checkout even when BEGIN fails before Drizzle enters its finally block.
+        const transactionClient = new Proxy(client, {
+            get(target, key, receiver) {
+                if (key !== 'query') return Reflect.get(target, key, receiver);
+                return (...args: unknown[]) => {
+                    const text = typeof args[0] === 'string' ? args[0]
+                        : (args[0] as { text?: string } | undefined)?.text;
+                    const commit = typeof text === 'string' && /^\s*commit\s*;?\s*$/i.test(text);
+                    if (commit && target.getTransactionStatus() === 'I') {
+                        throw new Error('PostgreSQL transaction ended before commit confirmation.');
+                    }
+                    const result = Reflect.apply(target.query, target, args);
+                    if (!commit && text?.trim().toLowerCase() !== 'rollback') return result;
+                    return Promise.resolve(result).then(result => {
+                        // COMMIT of an aborted transaction returns ROLLBACK
+                        // without a server error. Never admit it as a successful save.
+                        if (commit && result.command !== 'COMMIT') {
+                            throw new Error('PostgreSQL transaction did not confirm COMMIT.');
+                        }
+                        return result;
+                    }, error => {
+                        if (!commit) discard = true;
+                        throw error;
+                    });
+                };
+            },
+        });
+        try {
+            return await drizzle(transactionClient, { schema, logger: config.logging })
+                .transaction(callback, transactionConfig);
+        } finally {
+            client.release(discard || client.getTransactionStatus() !== 'I');
+            client.off('error', onClientError);
+        }
     };
-
-    const client = postgres.default(config.url);
-    const db = drizzle(client, { schema, logger: config.logging });
 
     return {
         type: 'postgres',
@@ -121,7 +164,7 @@ export async function createPostgresAdapter(
 
         async isConnected(): Promise<boolean> {
             try {
-                await (client as any)`SELECT 1`;
+                await pool.query('SELECT 1');
                 return true;
             } catch {
                 return false;
@@ -129,7 +172,7 @@ export async function createPostgresAdapter(
         },
 
         async close(): Promise<void> {
-            await (client as any).end();
+            await pool.end();
         },
     };
 }

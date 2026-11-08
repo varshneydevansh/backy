@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["collection-design-runtime-fixture.tsx", "../src/**/*.ts", "../src/**/*.tsx"],
+  "references": []
+}

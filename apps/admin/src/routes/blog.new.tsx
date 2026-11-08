@@ -26,7 +26,7 @@ import { fromDateTimeLocalValue, toDateTimeLocalValue } from '@/lib/dateTime';
 import { useStore, type BlogPost } from '@/stores/mockStore';
 import { PageShell } from '@/components/layout/PageShell';
 import { CanvasEditor, collectInteractiveReadinessIssues } from '@/components/editor/CanvasEditor';
-import { EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
+import { ArticleModeSwitcher, EditorWorkspaceFrame } from '@/components/editor/EditorWorkspaceFrame';
 import { MediaLibraryModal } from '@/components/editor/MediaLibraryModal';
 import { useAuthStore, type User } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
@@ -35,6 +35,8 @@ import { Notice } from '@/components/ui/Notice';
 import { Panel, PanelContent, PanelHeader } from '@/components/ui/Panel';
 import { siteMatchesIdentifier } from '@/lib/siteSelection';
 import { cn } from '@/lib/utils';
+import { BlogArticleWriter } from '@/lib/blogAuthoring';
+import { blogWritingPlainText, reflowBlogRootGrowth, updateBlogEditorialText } from '@/lib/blogAuthoringModel';
 import { getPublicMediaFileUrl } from '@/lib/mediaApi';
 import { getCanvasHeightForElements, withPageChrome } from '@/lib/editorTemplateChrome';
 import {
@@ -47,6 +49,7 @@ import type { CanvasElement } from '@/types/editor';
 import type { CanvasSize } from '@/types/editor';
 import type { PageSettings } from '@/components/editor/PageSettingsModal';
 import type { SiteSettings } from '@backy-cms/core';
+import { inheritRegisteredFrontendChrome, selectDefaultFrontendDesignTemplate } from '@backy-cms/core';
 import {
   DEFAULT_CANVAS_SIZE,
   createCanvasElement,
@@ -333,6 +336,10 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
         id: 'blog-article-hero',
         width: DEFAULT_CANVAS_SIZE.width,
         height: 360,
+        responsive: {
+            tablet: { x: 0, y: 0, width: 768, height: 360 },
+            mobile: { x: 0, y: 0, width: 375, height: 580 },
+        },
         dataBindings: [{ source: 'blog', mode: 'current', fields: ['title', 'excerpt', 'author', 'publishedAt', 'coverImage'] }],
         props: { backgroundColor: '#f8fafc', borderRadius: 0, padding: 0 },
         children: [
@@ -340,24 +347,40 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
                 id: 'blog-article-kicker',
                 width: 220,
                 height: 28,
+                responsive: {
+                    tablet: { x: 40, y: 64, width: 220, height: 28 },
+                    mobile: { x: 20, y: 32, width: 335, height: 28 },
+                },
                 props: { content: 'Article', fontSize: 13, fontWeight: '800', color: '#0f766e', textTransform: 'uppercase' },
             }),
             createCanvasElement('heading', 72, 104, {
                 id: 'blog-article-heading',
                 width: 660,
                 height: 106,
-                props: { content: 'Article title', level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827' },
+                responsive: {
+                    tablet: { x: 40, y: 104, width: 440, height: 106 },
+                    mobile: { x: 20, y: 76, width: 335, height: 106 },
+                },
+                props: { content: 'Article title', level: 'h1', fontSize: 52, fontWeight: '800', lineHeight: 1.08, color: '#111827', binding: 'post.title' },
             }),
             createCanvasElement('paragraph', 76, 226, {
                 id: 'blog-article-excerpt',
                 width: 560,
                 height: 72,
-                props: { content: 'Use the excerpt for feed previews, SEO summaries, and the public article opening.', fontSize: 17, lineHeight: 1.55, color: '#475569' },
+                responsive: {
+                    tablet: { x: 40, y: 226, width: 440, height: 72 },
+                    mobile: { x: 20, y: 206, width: 335, height: 104 },
+                },
+                props: { content: 'Use the excerpt for feed previews, SEO summaries, and the public article opening.', fontSize: 17, lineHeight: 1.55, color: '#475569', binding: 'post.excerpt' },
             }),
             createCanvasElement('box', 790, 70, {
                 id: 'blog-article-cover',
                 width: 300,
                 height: 220,
+                responsive: {
+                    tablet: { x: 520, y: 70, width: 208, height: 220 },
+                    mobile: { x: 20, y: 342, width: 335, height: 220 },
+                },
                 dataBindings: [{ source: 'blog', mode: 'current', fields: ['coverImage'] }],
                 props: { backgroundColor: '#e2e8f0', borderRadius: 8, borderColor: '#cbd5e1', borderWidth: 1, borderStyle: 'solid' },
             }),
@@ -367,6 +390,10 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
         id: 'blog-article-body',
         width: DEFAULT_CANVAS_SIZE.width,
         height: 480,
+        responsive: {
+            tablet: { x: 0, y: 360, width: 768, height: 480 },
+            mobile: { x: 0, y: 580, width: 375, height: 480 },
+        },
         dataBindings: [{ source: 'blog', mode: 'current', fields: ['content'] }],
         props: { backgroundColor: '#ffffff', borderRadius: 0, padding: 0 },
         children: [
@@ -374,6 +401,10 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
                 id: 'blog-article-lede',
                 width: 760,
                 height: 112,
+                responsive: {
+                    tablet: { x: 48, y: 72, width: 672, height: 112 },
+                    mobile: { x: 20, y: 72, width: 335, height: 112 },
+                },
                 props: {
                     content: 'Start writing your story here. Replace this with rich text, media, quotes, product embeds, forms, or collection-backed sections.',
                     fontSize: 20,
@@ -385,6 +416,10 @@ const createInitialBlogElements = (): CanvasElement[] => withPageChrome([
                 id: 'blog-article-quote',
                 width: 680,
                 height: 120,
+                responsive: {
+                    tablet: { x: 68, y: 226, width: 632, height: 120 },
+                    mobile: { x: 20, y: 226, width: 335, height: 120 },
+                },
                 props: {
                     content: 'Save reusable article sections and reuse them across posts when the publication has a repeated style.',
                     fontSize: 22,
@@ -954,54 +989,12 @@ function buildFrontendBlogTemplateElements(
 
 function updateFrontendBlogTemplateText(
     elements: CanvasElement[],
-    template: SiteFrontendDesignTemplate,
+    template: SiteFrontendDesignTemplate | null,
     input: { title: string; excerpt: string },
 ): CanvasElement[] {
-    const headingId = `frontend-blog-template-${template.id}-heading`;
-    const excerptId = `frontend-blog-template-${template.id}-excerpt`;
-    const nextTitle = input.title.trim();
-    const nextExcerpt = input.excerpt.trim();
-    let didUpdate = false;
-
-    const updateElement = (element: CanvasElement): CanvasElement => {
-        const nextChildren = Array.isArray(element.children)
-            ? element.children.map(updateElement)
-            : element.children;
-
-        if (element.id === headingId && nextTitle && element.props?.content !== nextTitle) {
-            didUpdate = true;
-            return {
-                ...element,
-                props: {
-                    ...element.props,
-                    content: nextTitle,
-                },
-                children: nextChildren,
-            };
-        }
-
-        if (element.id === excerptId && nextExcerpt && element.props?.content !== nextExcerpt) {
-            didUpdate = true;
-            return {
-                ...element,
-                props: {
-                    ...element.props,
-                    content: nextExcerpt,
-                },
-                children: nextChildren,
-            };
-        }
-
-        if (nextChildren === element.children) {
-            return element;
-        }
-
-        didUpdate = true;
-        return { ...element, children: nextChildren };
-    };
-
-    const nextElements = elements.map(updateElement);
-    return didUpdate ? nextElements : elements;
+    const headingId = template ? `frontend-blog-template-${template.id}-heading` : 'blog-article-heading';
+    const excerptId = template ? `frontend-blog-template-${template.id}-excerpt` : 'blog-article-excerpt';
+    return updateBlogEditorialText(elements, input, { title: headingId, excerpt: excerptId });
 }
 
 function hasFrontendBlogTemplateRoot(elements: CanvasElement[], template: SiteFrontendDesignTemplate): boolean {
@@ -1127,9 +1120,7 @@ function collectCanvasText(elements: CanvasElement[]): string {
     const chunks: string[] = [];
     const visit = (element: CanvasElement) => {
         const content = element.props?.content;
-        if (typeof content === 'string') {
-            chunks.push(content);
-        }
+        chunks.push(blogWritingPlainText(content));
 
         if (Array.isArray(element.children)) {
             element.children.forEach(visit);
@@ -1359,7 +1350,8 @@ function appendLongFormBlockToElements(
     }
 
     const sequence = options.sequence;
-    const y = getCanvasHeightForElements(elements) + 40;
+    const footer = elements.find((element) => element.type === 'footer' || element.props.chromeRole === 'site.footer');
+    const y = footer?.y ?? getCanvasHeightForElements(elements) + 40;
     let fallback: CanvasElement;
 
     if (options.kind === 'section') {
@@ -1799,6 +1791,7 @@ function NewBlogPostPage() {
         setCanvasElements(nextElements);
         setCanvasSize({
             ...DEFAULT_CANVAS_SIZE,
+            layout: 'fluid',
             height: getCanvasHeightForElements(nextElements),
         });
         setCanvasSeedKey(`blog-starter-blog-post-${Date.now()}`);
@@ -1838,11 +1831,13 @@ function NewBlogPostPage() {
     const initialElements: CanvasElement[] = useMemo(() => createBlogStarterTemplateElements(initialBlogStarterTemplate), [initialBlogStarterTemplate]);
     const initialCanvasSize = useMemo<CanvasSize>(() => ({
         ...DEFAULT_CANVAS_SIZE,
+        layout: 'fluid',
         height: getCanvasHeightForElements(initialElements),
     }), [initialElements]);
 
     const [canvasElements, setCanvasElements] = useState<CanvasElement[]>(initialElements);
     const [canvasSize, setCanvasSize] = useState<CanvasSize>(initialCanvasSize);
+    const [authoringMode, setAuthoringMode] = useState<'write' | 'layout'>('write');
     const [canvasSeedKey, setCanvasSeedKey] = useState('default-blog-template');
     const [canvasExternalRevision, setCanvasExternalRevision] = useState(0);
     const interactiveReadinessIssues = useMemo(
@@ -1854,6 +1849,7 @@ function NewBlogPostPage() {
         : null;
     const interactivePublishReady = interactiveReadinessIssues.length === 0;
     const appliedSearchTemplateRef = useRef<string | null>(null);
+    const defaultTemplateResolvedSiteRef = useRef<string | null>(null);
     const selectedBlogStarterTemplateOption = useMemo(
         () => getBlogStarterTemplate(selectedBlogStarterTemplate),
         [selectedBlogStarterTemplate],
@@ -1937,10 +1933,6 @@ function NewBlogPostPage() {
     const effectiveCanvasSource = effectiveFrontendTemplate ? 'frontend-design' : 'backy-starter';
     const templateSourceReady = !isCustomFrontendTemplateSource || Boolean(effectiveFrontendTemplate);
     const syncFrontendTemplateDraftText = useCallback((input: { title: string; excerpt: string }) => {
-        if (!effectiveFrontendTemplate || !hasFrontendBlogTemplateRoot(canvasElements, effectiveFrontendTemplate)) {
-            return;
-        }
-
         const nextElements = updateFrontendBlogTemplateText(canvasElements, effectiveFrontendTemplate, input);
         if (nextElements === canvasElements) {
             return;
@@ -2062,17 +2054,17 @@ function NewBlogPostPage() {
         }
 
         clearCreationFeedback();
-        const nextElements = appendLongFormBlockToElements(canvasElements, {
+        const nextElements = reflowBlogRootGrowth(canvasElements, appendLongFormBlockToElements(canvasElements, {
             kind,
             selectedFrontendTemplateId: effectiveFrontendTemplate?.id,
             sequence: Date.now(),
-        });
+        }));
         setCanvasElements(nextElements);
         setCanvasSize((current) => ({
             ...current,
             height: Math.max(current.height, getCanvasHeightForElements(nextElements)),
         }));
-        setCanvasSeedKey(`longform-${kind}-${Date.now()}`);
+        setCanvasExternalRevision((value) => value + 1);
         const noticeByKind: Record<BlogLongFormBlockKind, string> = {
             section: 'Added an editable article section to the canvas.',
             quote: 'Added an editable pull quote to the canvas.',
@@ -2096,6 +2088,7 @@ function NewBlogPostPage() {
             setCanvasElements(nextElements);
             setCanvasSize({
                 ...DEFAULT_CANVAS_SIZE,
+                layout: 'fluid',
                 height: getCanvasHeightForElements(nextElements),
             });
             setCanvasSeedKey(`blog-starter-${selectedBlogStarterTemplate}-${Date.now()}`);
@@ -2143,6 +2136,7 @@ function NewBlogPostPage() {
             setCanvasElements(nextElements);
             setCanvasSize({
                 ...DEFAULT_CANVAS_SIZE,
+                layout: 'fluid',
                 height: getCanvasHeightForElements(nextElements),
             });
             setCanvasSeedKey(`blog-starter-${nextTemplateId}-${Date.now()}`);
@@ -2178,7 +2172,7 @@ function NewBlogPostPage() {
 
     const applyFrontendTemplate = (
         template: SiteFrontendDesignTemplate,
-        options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate } = {},
+        options: { syncRoute?: boolean; starterTemplateId?: BlogStarterTemplate; preserveEditorialFields?: boolean } = {},
     ) => {
         if (isCreateBusy) return;
         if (!canEditBlog) {
@@ -2188,12 +2182,14 @@ function NewBlogPostPage() {
         }
 
         const currentSlugValue = slug || slugify(title);
-        const nextElements = buildFrontendBlogTemplateElements(template, {
+        const templateElements = buildFrontendBlogTemplateElements(template, {
             title: title.trim() || template.name,
             slug: currentSlugValue || routeSlugFromPattern(template.routePattern) || 'post-slug',
             excerpt,
         });
-        const nextCanvasSize = getFrontendBlogTemplateCanvasSize(template, nextElements);
+        const inherited = inheritRegisteredFrontendChrome({ elements: templateElements, canvasSize: getFrontendBlogTemplateCanvasSize(template, templateElements) }, frontendDesign?.chrome);
+        const nextElements = inherited.elements as CanvasElement[];
+        const nextCanvasSize = inherited.canvasSize as CanvasSize;
         const routeSlug = routeSlugFromPattern(template.routePattern);
 
         clearCreationFeedback();
@@ -2204,13 +2200,13 @@ function NewBlogPostPage() {
         setCanvasSize(nextCanvasSize);
         setCanvasSeedKey(`frontend-${template.id}-${Date.now()}`);
 
-        if (!title.trim()) {
+        if (!options.preserveEditorialFields && !title.trim()) {
             setTitle(template.name);
         }
-        if (routeSlug && !slug.trim()) {
+        if (!options.preserveEditorialFields && routeSlug && !slug.trim()) {
             setSlug(routeSlug);
         }
-        if (!excerpt.trim() && template.description) {
+        if (!options.preserveEditorialFields && !excerpt.trim() && template.description) {
             setExcerpt(template.description);
         }
 
@@ -2271,6 +2267,7 @@ function NewBlogPostPage() {
             setCanvasElements(nextElements);
             setCanvasSize({
                 ...DEFAULT_CANVAS_SIZE,
+                layout: 'fluid',
                 height: getCanvasHeightForElements(nextElements),
             });
             setCanvasSeedKey(`blog-starter-${nextStarterTemplate}-${Date.now()}`);
@@ -2300,6 +2297,16 @@ function NewBlogPostPage() {
     }, [canvasElements, designTemplateId, frontendBlogTemplates, frontendDesign, frontendDesignLoading, templateSourceMode]);
 
     useEffect(() => {
+        if (!frontendDesign || frontendDesignLoading || !hasHydratedAutosave || isCreateBusy || !canEditBlog || defaultTemplateResolvedSiteRef.current === activeSiteId) return;
+        if (draftRecovery) return;
+        defaultTemplateResolvedSiteRef.current = activeSiteId;
+        if (search.templateSource || search.starterTemplate || search.designTemplate || title || slug || excerpt || JSON.stringify(canvasElements) !== JSON.stringify(initialElements)) return;
+        const defaultTemplate = selectDefaultFrontendDesignTemplate(frontendDesign, 'blogPost');
+        if (defaultTemplate) applyFrontendTemplate(defaultTemplate, { syncRoute: true, preserveEditorialFields: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSiteId, canEditBlog, draftRecovery, frontendDesign, frontendDesignLoading, hasHydratedAutosave, isCreateBusy]);
+
+    useEffect(() => {
         if (!selectedFrontendTemplate) {
             return;
         }
@@ -2313,7 +2320,7 @@ function NewBlogPostPage() {
             return;
         }
 
-        const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate);
+        const templateCanvasApplied = hasFrontendBlogTemplateRoot(canvasElements, selectedFrontendTemplate) || appliedSearchTemplateRef.current === selectedFrontendTemplate.id;
         if (templateCanvasApplied) {
             appliedSearchTemplateRef.current = selectedFrontendTemplate.id;
             return;
@@ -2452,11 +2459,13 @@ function NewBlogPostPage() {
         canvas: {
             width: canvasSize.width,
             height: canvasSize.height,
+            layout: canvasSize.layout,
         },
     }), [
         canvasElements.length,
         canvasSize.height,
         canvasSize.width,
+        canvasSize.layout,
         effectiveFrontendTemplate,
         existingBlogPosts.length,
         excerpt,
@@ -2569,6 +2578,7 @@ function NewBlogPostPage() {
         canvas: {
             width: canvasSize.width,
             height: canvasSize.height,
+            layout: canvasSize.layout,
             rootLayerCount: canvasElements.length,
             siteChrome: effectiveFrontendTemplate ? 'frontend design contract' : ['header', 'navigation', 'article hero', 'article body', 'footer'],
             supportsGrouping: true,
@@ -2590,6 +2600,7 @@ function NewBlogPostPage() {
         canvasElements.length,
         canvasSize.height,
         canvasSize.width,
+        canvasSize.layout,
         createPayloadPreview,
         effectiveCanvasSource,
         effectiveFrontendTemplate,
@@ -2649,17 +2660,20 @@ function NewBlogPostPage() {
         || designTemplateId.trim().length > 0
         || canvasSize.width !== initialCanvasSize.width
         || canvasSize.height !== initialCanvasSize.height
+        || canvasSize.layout !== initialCanvasSize.layout
         || JSON.stringify(canvasElements) !== JSON.stringify(initialElements)
     ), [
         canonicalPath,
         canvasElements,
         canvasSize.height,
         canvasSize.width,
+        canvasSize.layout,
         designTemplateId,
         excerpt,
         featuredImageId,
         initialCanvasSize.height,
         initialCanvasSize.width,
+        initialCanvasSize.layout,
         initialElements,
         noFollow,
         noIndex,
@@ -2801,6 +2815,7 @@ function NewBlogPostPage() {
         const recoveredTemplateSourceMode = draftRecovery.templateSourceMode || (draftRecovery.designTemplateId ? 'custom-frontend' : 'backy-canvas');
         setTemplateSourceMode(recoveredTemplateSourceMode);
         setDesignTemplateId(draftRecovery.designTemplateId || '');
+        appliedSearchTemplateRef.current = recoveredTemplateSourceMode === 'custom-frontend' ? draftRecovery.designTemplateId || null : null;
         setRecoveredFrontendDesignSnapshot(
             draftRecovery.frontendDesignSource || draftRecovery.frontendDesignTokens || draftRecovery.frontendDesignChrome
                 ? {
@@ -2923,7 +2938,8 @@ function NewBlogPostPage() {
 
     const buildPostInput = (nextStatus: BlogPostInput['status'] = status): BlogPostInput => {
         const resolvedStatus = nextStatus || status;
-        const frontendTemplateElements = effectiveFrontendTemplate && hasFrontendBlogTemplateRoot(canvasElements, effectiveFrontendTemplate)
+        const hasAppliedFrontendCanvas = Boolean(effectiveFrontendTemplate && (appliedSearchTemplateRef.current === effectiveFrontendTemplate.id || hasFrontendBlogTemplateRoot(canvasElements, effectiveFrontendTemplate)));
+        const frontendTemplateElements = hasAppliedFrontendCanvas
             ? canvasElements
             : effectiveFrontendTemplate
                 ? buildFrontendBlogTemplateElements(effectiveFrontendTemplate, {
@@ -2938,7 +2954,7 @@ function NewBlogPostPage() {
                 excerpt,
             })
             : canvasElements;
-        const contentCanvasSize = effectiveFrontendTemplate
+        const contentCanvasSize = effectiveFrontendTemplate && !hasAppliedFrontendCanvas
             ? getFrontendBlogTemplateCanvasSize(effectiveFrontendTemplate, contentElements)
             : canvasSize;
         const frontendTemplateDesignState = effectiveFrontendTemplate
@@ -4230,29 +4246,25 @@ function NewBlogPostPage() {
 
                         <div id="blog-create-canvas" className={cn('scroll-mt-24', isWorkspaceFocus && 'h-full min-h-0')} data-testid="blog-create-canvas-shell">
                             <EditorWorkspaceFrame
-                                title={isWorkspaceFocus ? 'Post canvas' : 'Post design canvas'}
+                                title="Post editor"
                                 description={isWorkspaceFocus
                                     ? 'Focused article design workspace with the same component, layer, media, grouping, and data-binding controls used by pages.'
                                     : 'Use components, layers, grouping, resizing, reusable sections, and data bindings to design the public post page.'}
                                 meta={
                                     <>
-                                        <span className="rounded bg-muted px-2 py-1 tabular-nums">
+                                        {authoringMode === 'layout' && <span className="rounded bg-muted px-2 py-1 tabular-nums">
                                             {canvasSize.width} x {canvasSize.height}px
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
+                                        </span>}
+                                        {authoringMode === 'layout' && <span className="rounded bg-muted px-2 py-1">
                                             {canvasElements.length} root layer{canvasElements.length === 1 ? '' : 's'}
-                                        </span>
-                                        <span className="rounded bg-muted px-2 py-1">
+                                        </span>}
+                                        {authoringMode === 'layout' && <span className="rounded bg-muted px-2 py-1">
                                             {effectiveFrontendTemplate ? 'Frontend contract seed' : 'Header/nav/footer seeded'}
-                                        </span>
+                                        </span>}
+                                        <span className="text-xs font-medium text-slate-500" role="status">{isLoading ? 'Saving…' : 'New draft'}</span>
                                         {effectiveFrontendTemplate && (
                                             <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
                                                 {effectiveFrontendTemplate.name}
-                                            </span>
-                                        )}
-                                        {isWorkspaceFocus && (
-                                            <span className="rounded bg-primary/10 px-2 py-1 font-medium text-primary">
-                                                Focused
                                             </span>
                                         )}
                                     </>
@@ -4304,7 +4316,7 @@ function NewBlogPostPage() {
                                         >
                                             {isPreviewAfterCreateBusy ? 'Creating preview...' : 'Save draft and preview'}
                                         </Button>
-                                        <Button
+                                        {authoringMode === 'layout' && <><Button
                                             type="button"
                                             variant="outline"
                                             size="sm"
@@ -4363,7 +4375,7 @@ function NewBlogPostPage() {
                                             iconStart={<Download className="size-4" />}
                                         >
                                             File
-                                        </Button>
+                                        </Button></>}
                                         <Button
                                             type="button"
                                             variant="outline"
@@ -4385,6 +4397,33 @@ function NewBlogPostPage() {
                                         : 'min-h-[780px] xl:h-[calc(100vh-120px)] xl:min-h-[900px]',
                                 )}
                             >
+                                <div className="flex h-full min-h-0 flex-col">
+                                    <ArticleModeSwitcher mode={authoringMode} onChange={setAuthoringMode} disabled={createFormDisabled} />
+                                    <div className="min-h-0 flex-1" hidden={authoringMode !== 'write'}>
+                                        <BlogArticleWriter
+                                            elements={canvasElements}
+                                            disabled={createFormDisabled}
+                                            active={authoringMode === 'write'}
+                                            title={title}
+                                            canViewMedia={canViewMedia}
+                                            canCreateMedia={canCreateMedia}
+                                            mediaViewDisabledReason={viewMediaDeniedMessage}
+                                            mediaCreateDisabledReason={createMediaDeniedMessage}
+                                            mediaContext={{ siteId: activeSiteId, scope: 'post', targetId: 'new-post', targetLabel: title.trim() || 'New blog post' }}
+                                            onTitleChange={(nextTitle) => {
+                                                clearCreationFeedback();
+                                                setTitle(nextTitle);
+                                                syncFrontendTemplateDraftText({ title: nextTitle, excerpt });
+                                            }}
+                                            onChange={(elements) => {
+                                                clearCreationFeedback();
+                                                setCanvasElements(elements);
+                                                setCanvasSize((current) => ({ ...current, height: Math.max(current.height, getCanvasHeightForElements(elements)) }));
+                                                setCanvasExternalRevision((current) => current + 1);
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="min-h-0 flex-1" hidden={authoringMode !== 'layout'}>
                                 <CanvasEditor
                                     key={canvasSeedKey}
                                     mode="blog"
@@ -4425,6 +4464,8 @@ function NewBlogPostPage() {
                                     mediaCreateDisabledReason={createMediaDeniedMessage}
                                     collectionsViewDisabledReason={viewCollectionsDeniedMessage}
                                 />
+                                    </div>
+                                </div>
                                 {isCreateBusy && (
                                     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/75 backdrop-blur-sm">
                                         <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground shadow-sm">

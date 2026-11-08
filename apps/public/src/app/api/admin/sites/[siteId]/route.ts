@@ -1,3 +1,16 @@
+import { CommerceEntitlementError } from '@backy-cms/core';
+import { assertNoDemoMailboxManagementEvidence } from '@/lib/demoMailboxManagementJournal';
+import { withVisitorPrivacyDeletion, visitorPrivacyDeletionErrorResponse } from '@/lib/visitorPrivacyTeardown';
+import { assertNoDemoMailboxSendEvidence } from '@/lib/demoMailboxSendJournal';
+import { runCommittedMutationFollowUp, hasFailedWebhookDelivery } from '@/lib/committedMutationFollowUp';
+import {siteFormDeliveryDeletionResponse,siteFormDeliveryDeletionErrorResponse} from '@/lib/siteFormDeliveryLifecycle';
+import { siteCommentDeliveryDeletionResponse, siteCommentDeliveryDeletionErrorResponse } from '@/lib/siteCommentDeliveryLifecycle';
+import { withMediaStorageMutation } from '@/lib/mediaStorageMutation';
+import { assertSiteMediaStorageJobsSettled, mediaStorageRecoveryErrorResponse } from '@/lib/mediaStorageRecovery';
+import { assertSiteFormAttachmentsDeleted, FormAttachmentLifecycleError } from '@/lib/formAttachmentLifecycle';
+import { assertSiteBackupJobsSettled } from '@/lib/siteBackup';
+import { SiteBackupError } from '@backy-cms/core';
+import { unrelatedSiteSettingsPatch } from "@backy-cms/core";
 /**
  * Admin site detail endpoint.
  *
@@ -920,6 +933,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     return access;
   }
 
+  if (isRecord(body.settings) && Object.prototype.hasOwnProperty.call(body.settings, "frontendDesign")) {
+    return errorResponse(400, "FRONTEND_DESIGN_ENDPOINT_REQUIRED", "Update frontendDesign through /api/admin/sites/:siteId/frontend-design so template snapshots are retained atomically.", requestId);
+  }
+
   try {
     const { siteId } = await params;
     if (!shouldUseDemoStoreFallback()) {
@@ -993,7 +1010,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
               : undefined,
         isPublished:
           typeof body.isPublished === "boolean" ? body.isPublished : undefined,
-        settings: nextSettings,
+        settings: unrelatedSiteSettingsPatch(nextSettings),
       });
       let cacheInvalidation: Awaited<
         ReturnType<typeof recordSiteCacheInvalidation>
@@ -1154,7 +1171,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const updated = updateAdminSite(site.id, body);
+    const updated = updateAdminSite(site.id, { ...body, settings: unrelatedSiteSettingsPatch(body.settings as Partial<SiteSettings> | undefined) });
 
     if (!updated) {
       return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
@@ -1297,9 +1314,25 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         return scopeError;
       }
 
-      await recordAdminAudit({
+      return await withVisitorPrivacyDeletion(repositories, site.id, null, () => withMediaStorageMutation(repositories.media, site.id, requestId, async () => {
+      const deliveryBlocked=await siteCommentDeliveryDeletionResponse(site.id,repositories,requestId);if(deliveryBlocked)return deliveryBlocked;
+      const formDeliveryBlocked=await siteFormDeliveryDeletionResponse(site.id,repositories,requestId);if(formDeliveryBlocked)return formDeliveryBlocked;
+      if(repositories.mailboxManagement && (await repositories.mailboxManagement.list({siteId:site.id,limit:1,offset:0})).items.length) return errorResponse(409,'SITE_MAILBOX_MANAGEMENT_EVIDENCE_REMAINS','This site retains mailbox provisioning outcomes. Preserve the operation evidence before deleting it.',requestId);
+      if(repositories.mailboxSends && (await repositories.mailboxSends.list({siteId:site.id,limit:1,offset:0})).items.length) return errorResponse(409,'SITE_MAILBOX_SEND_EVIDENCE_REMAINS','This site retains mailbox send attempts. Preserve duplicate-protection evidence before deleting it.',requestId);
+      if(repositories.mediaUploadSessions) { await repositories.mediaUploadSessions.pruneExpired(site.id); if(await repositories.mediaUploadSessions.reservedBytes(site.id)>0) return errorResponse(409,'SITE_UPLOAD_STAGING_REMAINS','Cancel or finish outstanding uploads before deleting this website.',requestId); }
+      try { await repositories.commerceEntitlements?.assertPrivateFilesDeleted(site.id); } catch(error) { return errorResponse(error instanceof CommerceEntitlementError ? error.status : 503,error instanceof CommerceEntitlementError ? error.code : 'COMMERCE_PRIVATE_STORAGE_UNAVAILABLE',error instanceof CommerceEntitlementError ? error.message : 'Private paid files could not be verified. Resolve their retained files and recovery jobs before deleting this website.',requestId); }
+      await assertSiteMediaStorageJobsSettled(site.id, repositories);
+      try { await assertSiteBackupJobsSettled(site.id,repositories); } catch(error) { return errorResponse(error instanceof SiteBackupError ? error.status : 503,error instanceof SiteBackupError ? error.code : 'SITE_BACKUP_UNAVAILABLE',error instanceof SiteBackupError ? error.message : 'Restore staging could not be verified. The site was not deleted.',requestId); }
+      try { await assertSiteFormAttachmentsDeleted(site.id, repositories); } catch (error) {
+        return errorResponse(error instanceof FormAttachmentLifecycleError && error.code.startsWith('SITE_') ? 409 : 503, error instanceof FormAttachmentLifecycleError ? error.code : 'FORM_ATTACHMENT_INVENTORY_UNAVAILABLE', error instanceof FormAttachmentLifecycleError ? error.message : 'Unable to verify private form attachment cleanup. The site was not deleted.', requestId);
+      }
+
+      const deleted = await repositories.sites.delete(site.id);
+      if (!deleted) return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
+      const completionWarnings: string[] = [];
+      await runCommittedMutationFollowUp(completionWarnings, "SITE_DELETION_AUDIT_PENDING", () => recordAdminAudit({
         repositories,
-        siteId: site.id,
+        siteId: null,
         teamId: site.teamId,
         actorId: access.session?.user.id,
         entity: "site",
@@ -1307,13 +1340,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         action: "site.deleted",
         before: adminSiteFromRepositorySite(site) || {},
         metadata: {
+          deletedSiteId: site.id,
           slug: site.slug,
           status: statusForRepositorySite(site),
           source: "admin-site-delete",
         },
         requestId,
-      });
-      await deliverSiteWebhooks({
+      }));
+      await runCommittedMutationFollowUp(completionWarnings, "SITE_DELETION_WEBHOOK_PENDING", () => deliverSiteWebhooks({
         repositories,
         site: adminSiteFromRepositorySite(site) || site,
         kind: "site-deleted",
@@ -1328,8 +1362,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           source: "admin-site-delete",
           lifecycle: "deleted",
         },
-      });
-      await repositories.sites.delete(site.id);
+      }), hasFailedWebhookDelivery);
 
       return NextResponse.json({
         success: true,
@@ -1337,8 +1370,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         data: {
           deleted: true,
           siteId: site.id,
+          completionWarnings,
         },
       });
+      }));
     }
 
     const site = getSiteByIdOrSlug(siteId);
@@ -1356,21 +1391,36 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return scopeError;
     }
 
-    await recordAdminAudit({
-      siteId: site.id,
+    return await withMediaStorageMutation(null, site.id, requestId, async () => {
+    const deliveryBlocked=await siteCommentDeliveryDeletionResponse(site.id,null,requestId);if(deliveryBlocked)return deliveryBlocked;
+    const formDeliveryBlocked=await siteFormDeliveryDeletionResponse(site.id,null,requestId);if(formDeliveryBlocked)return formDeliveryBlocked;
+    try { assertNoDemoMailboxManagementEvidence(site.id); } catch { return errorResponse(409,'SITE_MAILBOX_MANAGEMENT_EVIDENCE_REMAINS','This site retains mailbox provisioning outcomes. Preserve the operation evidence before deleting it.',requestId); }
+    try { assertNoDemoMailboxSendEvidence(site.id); } catch { return errorResponse(409,'SITE_MAILBOX_SEND_EVIDENCE_REMAINS','This site retains mailbox send attempts. Preserve duplicate-protection evidence before deleting it.',requestId); }
+    await assertSiteMediaStorageJobsSettled(site.id, null);
+    try { await assertSiteBackupJobsSettled(site.id,null); } catch(error) { return errorResponse(error instanceof SiteBackupError ? error.status : 503,error instanceof SiteBackupError ? error.code : 'SITE_BACKUP_UNAVAILABLE',error instanceof SiteBackupError ? error.message : 'Restore staging could not be verified. The site was not deleted.',requestId); }
+    try { await assertSiteFormAttachmentsDeleted(site.id, null); } catch (error) {
+      return errorResponse(error instanceof FormAttachmentLifecycleError && error.code.startsWith('SITE_') ? 409 : 503, error instanceof FormAttachmentLifecycleError ? error.code : 'FORM_ATTACHMENT_INVENTORY_UNAVAILABLE', error instanceof FormAttachmentLifecycleError ? error.message : 'Unable to verify private form attachment cleanup. The site was not deleted.', requestId);
+    }
+
+    const deleted = deleteAdminSite(site.id);
+    if (!deleted) return errorResponse(404, "SITE_NOT_FOUND", "Site not found", requestId);
+    const completionWarnings: string[] = [];
+    await runCommittedMutationFollowUp(completionWarnings, "SITE_DELETION_AUDIT_PENDING", () => recordAdminAudit({
+      siteId: null,
       actorId: access.session?.user.id,
       entity: "site",
       entityId: site.id,
       action: "site.deleted",
       before: site,
       metadata: {
+        deletedSiteId: site.id,
         slug: site.slug,
         status: site.status,
         source: "admin-site-delete",
       },
       requestId,
-    });
-    await deliverSiteWebhooks({
+    }));
+    await runCommittedMutationFollowUp(completionWarnings, "SITE_DELETION_WEBHOOK_PENDING", () => deliverSiteWebhooks({
       site,
       kind: "site-deleted",
       requestId,
@@ -1384,8 +1434,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         source: "admin-site-delete",
         lifecycle: "deleted",
       },
-    });
-    deleteAdminSite(site.id);
+    }), hasFailedWebhookDelivery);
 
     return NextResponse.json({
       success: true,
@@ -1393,9 +1442,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       data: {
         deleted: true,
         siteId: site.id,
+        completionWarnings,
       },
     });
+    });
   } catch (error) {
+    const privacyError = visitorPrivacyDeletionErrorResponse(error, requestId, 'site'); if (privacyError) return privacyError;
+    const deliveryError=siteCommentDeliveryDeletionErrorResponse(error,requestId);if(deliveryError)return deliveryError;
+    const formDeliveryError=siteFormDeliveryDeletionErrorResponse(error,requestId);if(formDeliveryError)return formDeliveryError;
+    const recoveryError = mediaStorageRecoveryErrorResponse(error, requestId); if (recoveryError) return recoveryError;
     console.error("Admin site delete API error:", error);
     return errorResponse(
       500,

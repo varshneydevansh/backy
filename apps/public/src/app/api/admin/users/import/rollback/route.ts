@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminAccess } from '@/lib/adminAccess';
+import { requireAdminAccess, requireAdminOwnerManagementAccess } from '@/lib/adminAccess';
 import { listAdminAudit, recordAdminAudit } from '@/lib/adminAudit';
 import { deleteAdminUser, getAdminUserByEmail, getAdminUserById, listAdminUsers, updateAdminUser } from '@/lib/backyStore';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
@@ -152,6 +152,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const ownerError = requireAdminOwnerManagementAccess(manageAccess, requestId, { currentRole: existing.role });
+      if (ownerError) {
+        const denied = await ownerError.json();
+        skipped.push({ userId: existing.id, email: existing.email, reason: denied.error.message });
+        continue;
+      }
+
       const deleted = repositories
         ? await repositories.users.delete(user.id)
         : deleteAdminUser(user.id);
@@ -175,6 +182,13 @@ export async function POST(request: NextRequest) {
         : getAdminUserByEmail(snapshot.email);
       if (emailOwner && emailOwner.id !== snapshot.id) {
         skipped.push({ userId: snapshot.id, email: snapshot.email, reason: 'Original email is now owned by another user.' });
+        continue;
+      }
+
+      const ownerError = requireAdminOwnerManagementAccess(manageAccess, requestId, { currentRole: existing.role, nextRole: snapshot.role });
+      if (ownerError) {
+        const denied = await ownerError.json();
+        skipped.push({ userId: existing.id, email: existing.email, reason: denied.error.message });
         continue;
       }
 

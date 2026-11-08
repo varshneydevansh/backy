@@ -131,12 +131,12 @@ const appendAnonymizedNote = (submission: FormSubmission, actor: string) => (
   ].filter(Boolean).join('\n')
 );
 
-const listAllDemoSubmissions = (formId: string): FormSubmission[] => {
+const listAllDemoSubmissions = (formId: string, siteId: string): FormSubmission[] => {
   const items: FormSubmission[] = [];
   let offset = 0;
 
   while (true) {
-    const page = listFormSubmissions(formId, { limit: PAGE_SIZE, offset });
+    const page = listFormSubmissions(formId, { siteId, limit: PAGE_SIZE, offset });
     items.push(...page.data);
     if (!page.pagination.hasMore) break;
     offset += PAGE_SIZE;
@@ -283,11 +283,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const forms = listFormsBySite(site.id);
     const results = forms.map((form) => {
-      const result = buildFormResult(form, listAllDemoSubmissions(form.id), now);
+      const result = buildFormResult(form, listAllDemoSubmissions(form.id, site.id), now);
       const updated = dryRun
         ? []
         : result.dueSubmissions.flatMap((submission) => {
-          const anonymized = anonymizeFormSubmissionConsentEvidence(form.id, submission.id, result.consentFieldKeys, actor);
+          const anonymized = anonymizeFormSubmissionConsentEvidence(form.id, submission.id, result.consentFieldKeys, actor, site.id);
           return anonymized ? [anonymized] : [];
         });
 

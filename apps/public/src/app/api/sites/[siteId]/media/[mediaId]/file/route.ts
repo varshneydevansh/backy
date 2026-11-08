@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { MEDIA_BUFFERED_DELIVERY_MAX_BYTES, selectMediaBytes, streamMediaBytes } from '@/lib/mediaByteDelivery';
 import { getMediaById, getSiteByIdOrSlug } from '@/lib/backyStore';
 import { recordMediaDelivery } from '@/lib/mediaDeliveryAnalytics';
 import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
@@ -7,6 +8,7 @@ import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/medi
 import { verifySignedMediaAccess } from '@/lib/mediaSigning';
 import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
+import { getRepositorySitePublication } from '@/lib/repositorySitePublication';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +37,7 @@ const jsonError = (status: number, code: string, message: string, requestId: str
       status,
       requestId,
       cache: 'error',
+      headers: { 'cdn-cache-control': 'no-store', 'vercel-cdn-cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
       schemaVersion: MEDIA_FILE_SCHEMA_VERSION,
     },
   )
@@ -58,15 +61,16 @@ const parseContentDisposition = (value: string | null): { value: 'inline' | 'att
   return { value: 'inline', invalid: value };
 };
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+async function deliverMediaFile(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
 
   try {
     const { siteId, mediaId } = await params;
     const { searchParams } = new URL(request.url);
     const repositories = !shouldUseDemoStoreFallback() ? await getRequiredDatabaseRepositories() : null;
-    const repositorySite = repositories ? await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId) : null;
-    const site = repositorySite || getSiteByIdOrSlug(siteId);
+    const site = repositories
+      ? await getRepositorySitePublication(repositories.sites, siteId)
+      : getSiteByIdOrSlug(siteId);
 
     if (!site) {
       return jsonError(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
@@ -117,7 +121,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       disposition,
     });
     const commonHeaders = {
-      'cache-control': isPrivateMedia ? 'private, max-age=60' : 'public, max-age=31536000, immutable',
+      // The asset ID is mutable: visibility, bytes and quarantine can change.
+      'cache-control': isPrivateMedia ? 'private, no-store' : 'no-store',
+      'cdn-cache-control': 'no-store',
+      'vercel-cdn-cache-control': 'no-store',
       vary: 'Accept, Origin',
       'x-content-type-options': 'nosniff',
       'x-backy-cache-scope': isPrivateMedia ? 'private' : 'discovery',
@@ -138,25 +145,59 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       });
     }
 
+    if (media.sizeBytes > MEDIA_BUFFERED_DELIVERY_MAX_BYTES) {
+      return jsonError(413, 'MEDIA_BUFFERED_DELIVERY_TOO_LARGE', 'Buffered media delivery currently supports files up to 50 MiB.', requestId);
+    }
     const storage = await getMediaStorageAdapter();
+    const deliveryHeaders = {
+      ...commonHeaders,
+      'accept-ranges': 'bytes',
+      'content-type': media.mimeType || 'application/octet-stream',
+      'content-disposition': contentDispositionHeader(disposition, media.originalName || media.filename),
+    };
+    if (request.method === 'HEAD') {
+      // Check storage existence and actual size without downloading the original.
+      // Admission above remains identical to GET; Range only applies to GET.
+      const item = await storage.stat(storagePath);
+      if (!item) {
+        return jsonError(404, 'MEDIA_FILE_NOT_FOUND', 'Media file could not be resolved from storage.', requestId);
+      }
+      if (!Number.isSafeInteger(item.size) || item.size < 0) {
+        return jsonError(502, 'MEDIA_FILE_METADATA_INVALID', 'Media file size could not be verified from storage.', requestId);
+      }
+      if (item.size > MEDIA_BUFFERED_DELIVERY_MAX_BYTES) {
+        return jsonError(413, 'MEDIA_BUFFERED_DELIVERY_TOO_LARGE', 'Buffered media delivery currently supports files up to 50 MiB.', requestId);
+      }
+      return new NextResponse(null, {
+        status: 200,
+        headers: { ...deliveryHeaders, 'content-length': String(item.size) },
+      });
+    }
     const buffer = await storage.read(storagePath);
-    await recordMediaDelivery({
+    if (buffer.byteLength > MEDIA_BUFFERED_DELIVERY_MAX_BYTES) {
+      return jsonError(413, 'MEDIA_BUFFERED_DELIVERY_TOO_LARGE', 'Buffered media delivery currently supports files up to 50 MiB.', requestId);
+    }
+    const selection = selectMediaBytes(request, buffer.byteLength, cacheMetadata.etag);
+    if (selection.status === 416) return new NextResponse(null, {
+      status: 416, headers: { ...deliveryHeaders, 'content-range': `bytes */${buffer.byteLength}`, 'content-length': '0' },
+    });
+    const bytesServed = selection.endExclusive - selection.start;
+    if (request.method !== 'HEAD') await recordMediaDelivery({
       repositories,
       siteId: site.id,
       media,
       deliveryType: 'file',
-      bytesServed: buffer.byteLength,
+      bytesServed,
       requestId,
     }).catch((error) => {
       console.error('Media delivery analytics update failed:', error);
     });
-    const response = new NextResponse(new Uint8Array(buffer), {
-      status: 200,
+    const response = new NextResponse(request.method === 'HEAD' ? null : streamMediaBytes(buffer, selection.start, selection.endExclusive, request.signal), {
+      status: selection.status,
       headers: {
-        ...commonHeaders,
-        'content-type': media.mimeType || 'application/octet-stream',
-        'content-length': String(buffer.byteLength),
-        'content-disposition': contentDispositionHeader(disposition, media.originalName || media.filename),
+        ...deliveryHeaders,
+        'content-length': String(bytesServed),
+        ...(selection.status === 206 ? { 'content-range': `bytes ${selection.start}-${selection.endExclusive - 1}/${buffer.byteLength}` } : {}),
       },
     });
 
@@ -165,4 +206,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error('Public media file API error:', error);
     return jsonError(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }
+}
+
+export async function GET(request: NextRequest, context: RouteParams) {
+  return deliverMediaFile(request, context);
+}
+
+export async function HEAD(request: NextRequest, context: RouteParams) {
+  const response = await deliverMediaFile(request, context);
+  // Suppress JSON error bodies too; HEAD always follows the same admission path.
+  return new NextResponse(null, { status: response.status, headers: response.headers });
 }

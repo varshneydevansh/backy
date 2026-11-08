@@ -13,7 +13,7 @@ import {
   type BackyBlogCategory,
   type BackyBlogTag,
   type BackyCollection,
-  type BackyPage,
+  type BackyPageSummary,
   type BackyPost,
   type BackyReusableSection,
   type FormDefinition,
@@ -28,7 +28,6 @@ import {
   getMediaList,
   getPageSummary,
   getSiteByIdOrSlug,
-  getSiteNavigation,
   listBlogAuthors,
   listBlogCategories,
   listBlogTags,
@@ -36,7 +35,9 @@ import {
   listFormsBySite,
   listReusableSections,
 } from '@/lib/backyStore';
-import { publicContractJson } from '@/lib/publicContractResponse';
+import { publicContractJson as canonicalPublicContractJson, type PublicContractResponseOptions } from '@/lib/publicContractResponse';
+import { projectVisitorManifestPayload, responseProfile } from '@/lib/visitorResponseProfile';
+import { getEmailDeliveryCapabilitySummary } from '@/lib/formEmailDelivery';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { normalizeCollectionListRoutePattern, normalizeCollectionRoutePattern } from '@/lib/collectionRoutes';
 import { PRODUCT_COLLECTION_SLUG, buildCommerceStorefrontContract } from '@/lib/commerceCatalog';
@@ -46,6 +47,9 @@ import {
   frontendFormFieldKeyMapFromMetadata,
 } from '@/lib/frontendDesignContract';
 import { buildSiteNavigation } from '@/lib/navigation';
+import { listRepositoryPageSummaries } from '@/lib/repositoryPages';
+import { collectCompleteExportPages } from '@/lib/collectionExportPagination';
+import { pageHierarchyPaths } from '@/lib/pageHierarchy';
 import { NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION, isNewsletterForm } from '@/lib/newsletterSubscribers';
 import { normalizeRedirectRules } from '@/lib/redirectRules';
 import { getAdminSessionWithPersistence, listAdminSessionPermissionOverrides } from '@/lib/admin-auth/sessionStore';
@@ -56,6 +60,16 @@ import { localizedRoutePatternVariants, normalizeSiteLocalization, type PublicRo
 import { liveManagementEditorCommandRegistry } from '@/lib/liveManagementEditorCommandRegistry';
 import { buildBackyPartialClosureReadiness } from '@/lib/completionStatusClosure';
 import { buildCustomFrontendAgentHandoff } from '@/lib/customFrontendAgentHandoff';
+
+// Projection never changes the default discovery contract or its eligibility/cache policy.
+const publicContractJson = <TBody>(body: TBody, options: PublicContractResponseOptions) => {
+  const visitor = options.cache === 'discovery' && options.request
+    && responseProfile(new URL(options.request.url).searchParams) === 'visitor';
+  if (!visitor) return canonicalPublicContractJson(body, options);
+  const headers = new Headers(options.headers);
+  headers.set('x-backy-response-profile', 'visitor');
+  return canonicalPublicContractJson(projectVisitorManifestPayload(body), { ...options, headers });
+};
 
 interface RouteParams {
   params: Promise<{
@@ -99,6 +113,7 @@ type ManifestReusableSectionDiscoverySource = {
 };
 
 type ManifestPageDiscoverySource = {
+  id: string;
   slug: string;
   status: string;
   isHomepage: boolean;
@@ -605,7 +620,7 @@ const buildBackyCompletionStatus = () => {
     supabase: Boolean(envValue(['BACKY_SUPABASE_URL', 'SUPABASE_URL'])) && Boolean(envValue(['BACKY_SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE_KEY'])),
     storage: Boolean(envValue(['BACKY_MEDIA_STORAGE_PROVIDER', 'BACKY_STORAGE_PROVIDER', 'AWS_ACCESS_KEY_ID', 'SUPABASE_SERVICE_ROLE_KEY'])),
     vercel: Boolean(envValue(['BACKY_VERCEL_TOKEN', 'VERCEL_TOKEN'])),
-    notifications: Boolean(envValue(['BACKY_EMAIL_DELIVERY_ENDPOINT', 'BACKY_TRANSACTIONAL_EMAIL_WEBHOOK_URL', 'BACKY_RESEND_API_KEY', 'RESEND_API_KEY', 'SMTP_HOST'])),
+    notifications: getEmailDeliveryCapabilitySummary().configured,
     commerce: Boolean(envValue(['BACKY_STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY', 'BACKY_PAYPAL_ACCESS_TOKEN', 'PAYPAL_ACCESS_TOKEN', 'BACKY_COMMERCE_WEBHOOK_SECRET', 'COMMERCE_WEBHOOK_SECRET'])),
   };
   const commerceProviderFamilies = {
@@ -944,7 +959,7 @@ const buildBackyCompletionStatus = () => {
     schemaVersion: 'backy.completion-status.v1',
     generatedAt: new Date().toISOString(),
     status: blockedGates.length === 0 ? 'certification-ready' : 'external-gates-required',
-    summary: 'Backy core backend/editor/API parity is implemented for the audited local scope; Forms and SDK database gates are certified, and the remaining Partial rows require live provider certification evidence.',
+    summary: 'Legacy release-audit counts cover a bounded 45-surface provider checklist. They do not certify current builder completion, deployed behavior or the connected website. Follow docs/audits/backy-builder-readiness-2026-10-04.md for open authoring, frontend, identity and verification requirements; provider artifact acceptance cannot close those requirements.',
     audit: {
       source: 'specs/page-completion-audit/backy-page-surface-audit.md',
       ready: 41,
@@ -1244,10 +1259,6 @@ const isPubliclyReadable = (item: { status: string; scheduledAt?: string | null 
   )
 );
 
-const pagePath = (page: Pick<BackyPage, 'isHomepage' | 'slug'>) => (
-  page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`
-);
-
 const collectionField = (field: BackyCollection['fields'][number], index: number) => ({
   key: field.key,
   label: field.label,
@@ -1355,8 +1366,10 @@ const blogFeedDiscovery = (site: Pick<Site, 'id' | 'name'>) => [
     schemaVersion: 'rss.2.0',
     scope: 'public-blog-posts',
     visibility: 'published-and-past-scheduled',
+    indexEligibility: 'Current route/global robots, managed redirect/gone and same-origin canonical policy apply before publication-date sort and limit.',
     cache: {
-      scope: 'discovery',
+      scope: 'render',
+      control: 'public, no-cache, must-revalidate',
       etag: true,
       revisionHeader: 'x-backy-cache-revision',
     },
@@ -1395,6 +1408,15 @@ const buildManifestCommentDiscovery = (
       reportReasons: `/api/sites/${siteId}/comments/report-reasons`,
       report: `/api/sites/${siteId}/comments/{commentId}/report`,
       blocklist: `/api/sites/${siteId}/comments/blocklist`,
+      deliveryAttempts: `/api/sites/${siteId}/comments/delivery-attempts`,
+      deliveryRetry: `/api/sites/${siteId}/comments/{commentId}/delivery-retry`,
+      deliveryReconciliation: `/api/sites/${siteId}/comments/{commentId}/delivery-attempts/{attemptId}/reconciliation`,
+    },
+    deliveryManagement: {
+      historyPermission: 'comments.view', retryPermission: 'comments.manage', cache: 'private-no-store',
+      sdkHelpers: ['listCommentDeliveryAttempts', 'retryCommentDelivery', 'reconcileCommentDelivery'],
+      reconciliation: { permission: 'comments.manage', ownerSessionRequired: true, disposition: 'retain-without-resend', states: ['pending', 'uncertain'], snapshotFields: ['updatedAt', 'status', 'reconciliationVersion'], boundary: 'Owner investigation preserves the original outcome and never sends or certifies provider success.' },
+      retryBoundary: 'One durable admission per rejected source. Pending, uncertain and consumed attempts cannot replay. Observed provider success and persisted outcome are separate; warnings require investigation, not automatic retry. Provider arrival is not certified.',
     },
     reporting: {
       enabled: policy.enableReports,
@@ -1542,11 +1564,14 @@ const buildManifestMediaDiscovery = (
         'scope',
         'pageId',
         'postId',
+        'linkedPageId',
+        'linkedPostId',
         'blogId',
         'global',
         'limit',
         'offset',
       ],
+      exactAssociationRule: 'Use one linkedPageId or linkedPostId. Exact stored pageIds/postIds, scoped target or matching binding; global availability alone is excluded. Existing pageId/postId are editor context and include global assets.',
       maxLimit: 100,
       aliases: {
         q: 'search',
@@ -1600,6 +1625,8 @@ const buildManifestMediaDiscovery = (
         bind: `/api/admin/sites/${siteId}/media/{mediaId}/bind`,
         transforms: `/api/admin/sites/${siteId}/media/{mediaId}/transforms`,
         providerAnalytics: `/api/admin/sites/${siteId}/media/provider-analytics`,
+        storageRecovery: `/api/admin/sites/${siteId}/media/storage-recovery`,
+        storageRecoveryJob: `/api/admin/sites/${siteId}/media/storage-recovery/{jobId}`,
       },
       methods: {
         list: 'GET',
@@ -1618,6 +1645,8 @@ const buildManifestMediaDiscovery = (
         bind: 'POST',
         transforms: 'POST',
         providerAnalytics: 'POST',
+        storageRecovery: 'GET',
+        retryStorageRecovery: 'POST',
       },
       auth: {
         modes: ['session', 'api-key'],
@@ -1666,10 +1695,13 @@ const buildManifestMediaDiscovery = (
           'folderId',
           'pageId',
           'postId',
+          'linkedPageId',
+          'linkedPostId',
           'blogId',
           'limit',
           'offset',
         ],
+        exactAssociationRule: 'Use one linkedPageId or linkedPostId. Exact stored pageIds/postIds, scoped target or matching binding; global availability alone is excluded. Existing pageId/postId are editor context and include global assets.',
         maxLimit: 100,
         aliases: {
           blogId: 'postId',
@@ -2329,6 +2361,7 @@ const buildManifestLiveManagementDiscovery = (siteId: string) => ({
 const buildManifestPagesDiscovery = (
   siteId: string,
   pages: ManifestPageDiscoverySource[],
+  pagePath: (page: ManifestPageDiscoverySource) => string,
 ) => ({
   schemaVersion: 'backy.pages-discovery.v1',
   count: pages.length,
@@ -3048,11 +3081,15 @@ const buildManifestFormsDiscovery = (
     },
     managementPolicy: {
       schemaVersion: 'backy.forms-management.v1',
+      reconciliationPolicy: { permission: 'forms.manage', ownerSessionRequired: true, disposition: 'retain-without-resend', states: ['pending', 'uncertain'], sdkHelper: 'reconcileFormDelivery', boundary: 'Owner investigation preserves the original outcome and never sends or certifies provider success.' },
       endpoints: {
         adminList: `/api/admin/sites/${siteId}/forms`,
         create: `/api/admin/sites/${siteId}/forms`,
         detail: `/api/admin/sites/${siteId}/forms/{formId}`,
         clone: `/api/admin/sites/${siteId}/forms/{formId}/clone`,
+        deliveryAttempts: `/api/admin/sites/${siteId}/forms/{formId}/delivery-attempts`,
+        deliveryReconciliation: `/api/admin/sites/${siteId}/forms/{formId}/submissions/{submissionId}/delivery-attempts/{attemptId}/reconciliation`,
+        templatePackImport: `/api/admin/sites/${siteId}/forms/template-pack/import`,
         embedBlock: `/api/admin/sites/${siteId}/forms/{formId}/embed-block`,
         analytics: `/api/admin/sites/${siteId}/forms/analytics`,
         contactSegments: `/api/admin/sites/${siteId}/forms/contact-segments`,
@@ -3078,6 +3115,7 @@ const buildManifestFormsDiscovery = (
         update: 'PATCH',
         delete: 'DELETE',
         clone: 'POST',
+        templatePackImport: 'POST',
         embedBlock: 'POST',
         analytics: 'GET',
         contactSegments: 'GET',
@@ -3091,6 +3129,7 @@ const buildManifestFormsDiscovery = (
         reviewSubmission: 'POST',
         retryWebhook: 'POST',
         retryEmail: 'POST',
+        reconcileDelivery: 'POST',
         formConsentRetention: 'POST',
         contacts: 'GET',
         createContact: 'POST',
@@ -3123,6 +3162,8 @@ const buildManifestFormsDiscovery = (
         update: 'updateAdminForm',
         delete: 'deleteAdminForm',
         clone: 'cloneAdminForm',
+        reviewTemplatePack: 'reviewAdminFormTemplatePack',
+        applyTemplatePack: 'applyAdminFormTemplatePack',
         embedBlock: 'createAdminFormEmbedBlock',
         analytics: 'formsAnalytics',
         contactSegments: 'formContactSegments',
@@ -3135,6 +3176,7 @@ const buildManifestFormsDiscovery = (
         reviewSubmission: 'reviewFormSubmission',
         retryWebhook: 'retryFormSubmissionWebhook',
         retryEmail: 'retryFormSubmissionEmail',
+        reconcileDelivery: 'reconcileFormDelivery',
         formConsentRetention: 'applyAdminFormConsentRetention',
         formsConsentRetention: 'applyAdminFormsConsentRetention',
         contacts: 'formContacts',
@@ -3188,6 +3230,13 @@ const buildManifestNewsletterDiscovery = (
     schemaVersion: NEWSLETTER_SUBSCRIBERS_SCHEMA_VERSION,
     count: newsletterForms.length,
     activeCount: newsletterForms.filter((form) => form.isActive).length,
+    publicReceipt: {
+      schemaVersion: 'backy.newsletter-subscriber-receipt.v1',
+      status: 200,
+      subscriberDataReturned: false,
+      existenceDisclosed: false,
+      providerConfirmation: false,
+    },
     endpoints: {
       publicSubscribers: `/api/sites/${siteId}/newsletter/subscribers`,
       adminSubscribers: `/api/admin/sites/${siteId}/newsletter/subscribers`,
@@ -3262,7 +3311,8 @@ const buildManifestNewsletterDiscovery = (
       blogPost: `/blog/new?siteId=${siteId}&starterTemplate=newsletter&templateSource=backy-canvas&focus=canvas`,
     },
     providerBoundary: {
-      nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private subscriber API', 'public signup API'],
+      nativeBackyScope: ['subscriber records', 'consent evidence', 'topic/source metadata', 'CSV export', 'private subscriber API', 'public signup API', 'durable campaigns', 'bounded SMTP processing', 'signed unsubscribe', 'recorded delivery feedback'],
+      campaigns: { endpoint: `/api/admin/sites/${siteId}/newsletter/campaigns`, runtime: 'PostgreSQL migration030 and explicit campaign configuration', scheduledProcessing: 'Requires an authenticated processor invocation', automaticSmtpBounceComplaint: false, actualDeliveryProof: 'pending' },
       deliveryProviderScope: ['mailbox delivery', 'unsubscribe links in delivered email', 'bounce handling', 'SPF/DKIM/DMARC', 'abuse monitoring', 'IP/domain reputation'],
       secretPolicy: 'Provider API keys stay server-side in Settings/environment variables; public manifests expose only subscriber API contracts and route templates.',
     },
@@ -3413,7 +3463,8 @@ const buildRepositoryManifest = (
   input: {
     requestId: string;
     site: Site;
-    pages: BackyPage[];
+    pages: BackyPageSummary[];
+    pagePaths: ReadonlyMap<string, string>;
     posts: BackyPost[];
     categories: BackyBlogCategory[];
     tags: BackyBlogTag[];
@@ -3427,6 +3478,7 @@ const buildRepositoryManifest = (
     delivery: ManifestDeliveryDiscovery;
   },
 ) => {
+  const pagePath = (page: ManifestPageDiscoverySource): string => input.pagePaths.get(page.id)!;
   const fonts = input.media.filter((item) => item.type === 'font');
   const publicCollections = input.collections.filter((collection) => collection.permissions.publicRead);
   const productCollection = publicCollections.find((collection) => collection.slug === PRODUCT_COLLECTION_SLUG);
@@ -3467,6 +3519,7 @@ const buildRepositoryManifest = (
       },
       contract: {
         version: 'backy.ai-frontend.v1',
+        emailDelivery: getEmailDeliveryCapabilitySummary(input.site.id),
         docs: '/specs/ai-frontend-contract/README.md',
         databaseCertification: frontendDatabaseCertification,
         frontendLaunchReadiness: null as ReturnType<typeof buildFrontendLaunchReadiness> | null,
@@ -3476,10 +3529,12 @@ const buildRepositoryManifest = (
           customDomain: input.site.customDomain,
           domainVerificationDomain: input.site.settings?.domainVerification?.domain,
           domainAliases: input.site.settings?.domainAliases,
+          visitorAccounts: input.site.settings?.visitorAccounts,
         }),
         schemas: {
           manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
           renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
+          runtimeRenderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload-runtime.schema.json',
           themeTokens: 'https://backy.dev/schemas/ai-frontend-contract/theme-tokens.schema.json',
           elementActions: 'https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json',
           dataBindings: 'https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json',
@@ -3589,7 +3644,7 @@ const buildRepositoryManifest = (
             frontendDesign: contentFrontendDesign(page),
           })),
         },
-        pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages),
+        pagesRuntime: buildManifestPagesDiscovery(input.site.id, input.pages, pagePath),
         blog: {
           count: input.posts.length,
           rssUrl: `/api/sites/${input.site.id}/blog/rss`,
@@ -3728,6 +3783,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   try {
     const { siteId } = await params;
+    const searchParams = new URL(request.url).searchParams;
+    const profile = responseProfile(searchParams);
+    if (profile === 'invalid') {
+      return errorResponse(400, 'UNSUPPORTED_RESPONSE_PROFILE', 'Unsupported response profile', requestId);
+    }
+    if (profile === 'visitor' && searchParams.has('previewToken')) {
+      return errorResponse(406, 'VISITOR_PROFILE_UNSUPPORTED', 'Visitor responses do not accept private previews', requestId);
+    }
     if (!shouldUseDemoStoreFallback()) {
       const repositories = await getRequiredDatabaseRepositories();
       const site = await repositories.sites.getById(siteId) || await repositories.sites.getBySlug(siteId);
@@ -3737,7 +3800,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       const [pages, posts, categories, tags, authors, collections, reusableSections, forms, media, settings] = await Promise.all([
-        repositories.pages.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
+        collectCompleteExportPages(async ({ limit, offset }) => {
+          // Ancestors may be private: read summaries only for verified paths,
+          // never expose their titles, metadata or content as public items.
+          const result = await listRepositoryPageSummaries(repositories.pages, { siteId: site.id, status: 'all', includeUnpublished: true, limit, offset });
+          if (result.pagination.total > 10_000) throw new Error('Page hierarchy inventory exceeds its read budget');
+          return result;
+        }, page => page.siteId === site.id),
         repositories.posts.list({ siteId: site.id, status: 'published', includeUnpublished: false, limit: 100, offset: 0 }),
         repositories.blogTaxonomy.listCategories(site.id),
         repositories.blogTaxonomy.listTags(site.id),
@@ -3748,6 +3817,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         repositories.media.list({ siteId: site.id, visibility: 'public', limit: 10000, offset: 0 }),
         repositories.settings.get(),
       ]);
+      const pagePaths = pageHierarchyPaths(pages, site.id);
       const admin = await buildAdminDiscovery(request, site.id, {
         configuredAdminKey: settings.apiKeys?.secretKeyId,
         getUserById: repositories.users.getById,
@@ -3759,7 +3829,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       const manifest = buildRepositoryManifest({
         requestId,
         site,
-        pages: pages.items.filter(isPubliclyReadable),
+        pages: pages.filter(page => page.status === 'published' && isPubliclyReadable(page) && pagePaths.has(page.id)),
+        pagePaths,
         posts: posts.items.filter(isPubliclyReadable),
         categories,
         tags,
@@ -3788,7 +3859,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
     }
 
-    const pages = getPageSummary(site.id);
+    const pageInventory = getPageSummary(site.id, { includeUnpublished: true });
+    const pagePaths = pageHierarchyPaths(pageInventory, site.id);
+    const pages = pageInventory.filter(page => isPubliclyReadable(page) && pagePaths.has(page.id));
+    const pagePath = (page: ManifestPageDiscoverySource): string => pagePaths.get(page.id)!;
     const posts = getBlogPosts(site.id, { limit: 100 }).posts;
     const collections = listCollections(site.id);
     const forms = listFormsBySite(site.id);
@@ -3850,10 +3924,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             customDomain: site.customDomain,
             domainVerificationDomain: site.settings?.domainVerification?.domain,
             domainAliases: site.settings?.domainAliases,
+            visitorAccounts: site.settings?.visitorAccounts,
           }),
           schemas: {
             manifest: 'https://backy.dev/schemas/ai-frontend-contract/frontend-manifest.schema.json',
             renderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload.schema.json',
+          runtimeRenderPayload: 'https://backy.dev/schemas/ai-frontend-contract/content-payload-runtime.schema.json',
             themeTokens: 'https://backy.dev/schemas/ai-frontend-contract/theme-tokens.schema.json',
             elementActions: 'https://backy.dev/schemas/ai-frontend-contract/element-actions.schema.json',
             dataBindings: 'https://backy.dev/schemas/ai-frontend-contract/data-bindings.schema.json',
@@ -3957,13 +4033,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               id: page.id,
               title: page.title,
               slug: page.slug,
-              path: page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`,
+              path: pagePath(page),
               status: page.status,
-              renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(page.isHomepage || page.slug === 'index' ? '/' : `/${page.slug}`)}`,
+              renderUrl: `/api/sites/${site.id}/render?path=${encodeURIComponent(pagePath(page))}`,
               frontendDesign: contentFrontendDesign(page),
             })),
           },
-          pagesRuntime: buildManifestPagesDiscovery(site.id, pages),
+          pagesRuntime: buildManifestPagesDiscovery(site.id, pages, pagePath),
           blog: {
             count: posts.length,
             rssUrl: `/api/sites/${site.id}/blog/rss`,
@@ -4071,7 +4147,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
         admin,
         delivery,
-        navigation: getSiteNavigation(site.id),
+        navigation: buildSiteNavigation(site.settings, pages.map(page => ({ ...page, meta: { ...page.meta, canonical: pagePath(page) } }))),
       },
     };
 

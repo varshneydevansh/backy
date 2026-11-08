@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  deleteCommentRecord,
+  deleteCommentSubtree,
   getCommentById,
   getSiteByIdOrSlug,
-  listComments,
   updateCommentStatus,
   updateCommentThread,
 } from '@/lib/backyStore';
+import { BackyCommentLifecycleError } from '@backy-cms/core';
 import { requireAdminAccess } from '@/lib/adminAccess';
 import { isCommentPubliclyVisible, hasCommentCredentials, serializeComment } from '@/lib/commentPrivacy';
 import { recordAdminAudit } from '@/lib/adminAudit';
@@ -259,9 +259,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       }
       const requestId = payload.requestId || baseRequestId;
 
+      const completionWarnings: string[] = [];
       let updated: Comment;
       if (payload.status) {
         updated = await updateRepositoryCommentStatus(repositories, site.id, comment, {
+          completionWarnings,
           status: payload.status,
           reviewedBy: payload.reviewedBy || null,
           actor: payload.actor,
@@ -297,9 +299,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           actor: payload.actor,
           requestId: payload.requestId,
           defaultReviewer: 'admin',
+          completionWarnings,
         });
       }
-      await notifyCommentDelivery({
+      try { const delivery = await notifyCommentDelivery({
         repositories,
         siteId: site.id,
         comment: updated,
@@ -307,8 +310,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         requestId,
         reason: payload.status || 'thread-updated',
         actor: payload.actor || payload.reviewedBy,
-      });
-      await recordAdminAudit({
+      }); if (delivery.failedChannels > 0 && !completionWarnings.includes("COMMENT_DELIVERY_PENDING")) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { if (!completionWarnings.includes("COMMENT_DELIVERY_PENDING")) completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
+      try { await recordAdminAudit({
         repositories,
         siteId: site.id,
         actorId: access.session?.user.id,
@@ -336,15 +339,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           parentId: updated.parentId || null,
         },
         requestId,
-      });
+      }); } catch { if (!completionWarnings.includes("COMMENT_AUDIT_PENDING")) completionWarnings.push("COMMENT_AUDIT_PENDING"); }
 
       return privateResponse({
         success: true,
         requestId,
         data: {
           comment: updated as Comment,
+          completionWarnings,
         },
         comment: updated as Comment,
+        completionWarnings,
       }, requestId);
     }
 
@@ -370,6 +375,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     }
     const requestId = payload.requestId || baseRequestId;
 
+    const completionWarnings: string[] = [];
     let updated: Comment | undefined;
     if (payload.status) {
       updated = updateCommentStatus(comment.id, {
@@ -379,7 +385,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         rejectionReason: payload.rejectionReason || null,
         blockReason: payload.blockReason || null,
         requestId: payload.requestId,
-      });
+      }, site.id);
     } else {
       if (!comment.parentId) {
         return errorResponse(422, 'TOP_LEVEL_COMMENT', 'Only replies can be moved to another parent.', requestId);
@@ -414,15 +420,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (!updated) {
       return errorResponse(409, 'COMMENT_UPDATE_FAILED', 'Unable to update comment', requestId);
     }
-    await notifyCommentDelivery({
+    try { const delivery = await notifyCommentDelivery({
       siteId: site.id,
       comment: updated,
       kind: 'comment-status',
       requestId,
       reason: payload.status || 'thread-updated',
       actor: payload.actor || payload.reviewedBy,
-    });
-    await recordAdminAudit({
+    }); if (delivery.failedChannels > 0 && !completionWarnings.includes("COMMENT_DELIVERY_PENDING")) completionWarnings.push("COMMENT_DELIVERY_PENDING"); } catch { if (!completionWarnings.includes("COMMENT_DELIVERY_PENDING")) completionWarnings.push("COMMENT_DELIVERY_PENDING"); }
+    try { await recordAdminAudit({
       siteId: site.id,
       actorId: access.session?.user.id,
       entity: 'comment',
@@ -449,18 +455,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         parentId: updated.parentId || null,
       },
       requestId,
-    });
+    }); } catch { if (!completionWarnings.includes("COMMENT_AUDIT_PENDING")) completionWarnings.push("COMMENT_AUDIT_PENDING"); }
 
     return privateResponse({
       success: true,
       requestId,
       data: {
         comment: updated as Comment,
+        completionWarnings,
       },
       comment: updated as Comment,
     }, requestId);
   } catch (error) {
     console.error('API Error:', error);
+    if (['COMMENT_MODERATION_UNAVAILABLE', 'COMMENT_INVENTORY_INCOMPLETE'].includes((error as { code?: string })?.code || '')) return errorResponse(503, (error as { code: string }).code, 'The comment could not be moderated atomically. No moderation was committed.', baseRequestId);
+    if (['COMMENT_MODERATION_CONFLICT', 'COMMENT_PARENT_CONFLICT', 'COMMENT_TREE_INVALID'].includes((error as { code?: string })?.code || '')) return errorResponse(409, (error as { code: string }).code, 'The comment parent changed or is invalid. Reload the thread before retrying.', baseRequestId);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', baseRequestId);
   }
 }
@@ -468,141 +477,34 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   const requestId = request.headers.get('x-request-id') || makeRequestId();
   const access = await requireAdminAccess(request, requestId, { permission: 'comments.manage' });
-  if (access instanceof NextResponse) {
-    return access;
-  }
-
+  if (access instanceof NextResponse) return access;
   try {
     const { siteId, commentId } = await params;
-
-    if (!shouldUseDemoStoreFallback()) {
-      const repositories = await getRequiredDatabaseRepositories();
-      const site = await resolveRepositorySite(repositories, siteId);
-      if (!site) {
-        return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
-      }
-
-      const comment = await repositories.comments.getById(site.id, commentId);
-      if (!comment) {
-        return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
-      }
-
-      const replies = comment.parentId
-        ? []
-        : (await repositories.comments.list({
-          siteId: site.id,
-          status: 'all',
-          parentOnly: true,
-          parentId: comment.id,
-          limit: 100,
-        })).items;
-      const deleted: Comment[] = [];
-
-      for (const reply of replies) {
-        if (await repositories.comments.delete(site.id, reply.id)) {
-          deleted.push(reply);
-        }
-      }
-
-      const rootDeleted = await repositories.comments.delete(site.id, comment.id);
-      if (!rootDeleted) {
-        return errorResponse(409, 'COMMENT_DELETE_FAILED', 'Unable to delete comment', requestId);
-      }
-      deleted.unshift(comment);
-
-      await recordAdminAudit({
-        repositories,
-        siteId: site.id,
-        actorId: access.session?.user.id,
-        entity: 'comment',
-        entityId: comment.id,
-        action: 'comment.delete',
-        before: comment,
-        after: null,
-        metadata: {
-          permission: 'comments.manage',
-          targetType: comment.targetType,
-          targetId: comment.targetId,
-          deletedCount: deleted.length,
-          deletedIds: deleted.map((item) => item.id),
-        },
-        requestId,
-      });
-
-      return privateResponse({
-        success: true,
-        requestId,
-        data: {
-          deleted,
-          deletedCount: deleted.length,
-        },
-        deleted,
-        deletedCount: deleted.length,
-      }, requestId);
-    }
-
-    const site = getSiteByIdOrSlug(siteId);
-    if (!site) {
-      return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
-    }
-
-    const comment = getCommentById(commentId);
-    if (!comment || comment.siteId !== site.id) {
-      return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
-    }
-
-    const replies = comment.parentId
-      ? []
-      : listComments(site.id, {
-        status: 'all',
-        parentOnly: true,
-        parentId: comment.id,
-        limit: 100,
-      }).comments;
-    const deleted: Comment[] = [];
-
-    for (const reply of replies) {
-      const deletedReply = deleteCommentRecord(reply.id);
-      if (deletedReply) {
-        deleted.push(deletedReply);
-      }
-    }
-
-    const deletedComment = deleteCommentRecord(comment.id);
-    if (!deletedComment) {
-      return errorResponse(409, 'COMMENT_DELETE_FAILED', 'Unable to delete comment', requestId);
-    }
-    deleted.unshift(deletedComment);
-
-    await recordAdminAudit({
-      siteId: site.id,
-      actorId: access.session?.user.id,
-      entity: 'comment',
-      entityId: comment.id,
-      action: 'comment.delete',
-      before: comment,
-      after: null,
-      metadata: {
-        permission: 'comments.manage',
-        targetType: comment.targetType,
-        targetId: comment.targetId,
-        deletedCount: deleted.length,
-        deletedIds: deleted.map((item) => item.id),
-      },
-      requestId,
-    });
-
-    return privateResponse({
-      success: true,
-      requestId,
-      data: {
-        deleted,
-        deletedCount: deleted.length,
-      },
-      deleted,
-      deletedCount: deleted.length,
-    }, requestId);
+    const repositories = shouldUseDemoStoreFallback() ? null : await getRequiredDatabaseRepositories();
+    const site = repositories ? await resolveRepositorySite(repositories, siteId) : getSiteByIdOrSlug(siteId);
+    if (!site) return errorResponse(404, 'SITE_NOT_FOUND', 'Site not found', requestId);
+    if (repositories && typeof repositories.comments.deleteSubtree !== 'function') return errorResponse(503, 'COMMENT_LIFECYCLE_UNAVAILABLE', 'Atomic comment deletion is unavailable. Configure a supported repository before retrying.', requestId);
+    const deleted = repositories ? await repositories.comments.deleteSubtree(site.id, commentId) : await deleteCommentSubtree(site.id, commentId);
+    if (!deleted.length) return errorResponse(404, 'COMMENT_NOT_FOUND', 'Comment not found', requestId);
+    const comment = deleted[0], completionWarnings: string[] = [];
+    // The content transaction has committed. Follow-up audit failure cannot undo deletion.
+    try {
+      await recordAdminAudit({ repositories, siteId: site.id, actorId: access.session?.user.id,
+        entity: 'comment', entityId: comment.id, action: 'comment.delete', before: comment, after: null,
+        metadata: { permission: 'comments.manage', targetType: comment.targetType, targetId: comment.targetId,
+          deletedCount: deleted.length, deletedIds: deleted.map(item => item.id) }, requestId });
+    } catch { completionWarnings.push('COMMENT_AUDIT_PENDING'); }
+    return privateResponse({ success: true, requestId,
+      data: { deleted, deletedCount: deleted.length, completionWarnings,
+        concurrencyBoundary: repositories ? 'database-site-row-lock' : 'demo-single-process' },
+      deleted, deletedCount: deleted.length }, requestId);
   } catch (error) {
+    const code = (error as { code?: string })?.code;
+    if (error instanceof BackyCommentLifecycleError || ['COMMENT_INVENTORY_INCOMPLETE', 'COMMENT_TREE_INVALID', 'COMMENT_PARENT_CONFLICT', 'COMMENT_LIFECYCLE_UNAVAILABLE'].includes(code || '')) {
+      const status = code === 'COMMENT_INVENTORY_INCOMPLETE' || code === 'COMMENT_LIFECYCLE_UNAVAILABLE' ? 503 : 409;
+      const message = code === 'COMMENT_TREE_INVALID' ? 'The selected comment subtree has invalid parent or target relationships. Repair the thread before deleting it.' : code === 'COMMENT_PARENT_CONFLICT' ? 'The comment site or parent changed. Reload the thread before retrying.' : 'The complete comment subtree could not be deleted safely. Retry after storage access is restored.';
+      return errorResponse(status, code!, message, requestId);
+    }
     console.error('API Error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);
   }

@@ -1,3 +1,4 @@
+import type { BackyVisitorAccountSettings } from '../visitor-accounts';
 /**
  * ============================================================================
  * BACKY CMS - CORE TYPES
@@ -251,6 +252,7 @@ export interface ThemeConfig {
  * Global settings for a site
  */
 export interface SiteSettings {
+  visitorAccounts?: BackyVisitorAccountSettings;
   /** Admin lifecycle status for the site workspace. Public rendering still uses isPublished as the delivery gate. */
   siteStatus?: "draft" | "published" | "archived";
 
@@ -592,6 +594,7 @@ export interface SiteFrontendDesignTemplateContent {
   canvasSize?: {
     width?: number;
     height?: number;
+    layout?: 'fixed' | 'fluid';
     [key: string]: unknown;
   };
 
@@ -722,19 +725,24 @@ export interface SiteFrontendDesignContract {
     id: string;
     type: "page" | "blogPost" | "form" | "product" | "collection" | "section";
     name: string;
+    /** Preferred template for this resource type when creating without an explicit choice. */
+    isDefault?: boolean;
     status?: "active" | "draft" | "deprecated" | "archived" | string;
     version?: string | number;
     createdAt?: string;
     updatedAt?: string;
     routePattern?: string;
     description?: string;
-    canvasSize?: { width: number; height: number };
+    canvasSize?: { width: number; height: number; layout?: 'fixed' | 'fluid'; [key: string]: unknown };
     content?: SiteFrontendDesignTemplateContent;
     bindingHints?: Array<Record<string, unknown>>;
   }>;
 
   /** Optional mapping from frontend selectors/components to Backy editable fields */
   editableMap: SiteFrontendDesignEditableMapEntry[];
+
+  /** Declared runtime capabilities; declarations do not certify actual frontend behavior. */
+  runtime?: import('../frontend-compatibility').FrontendRuntimeDeclaration;
 
   /** Human notes for setup state, extraction limitations, or manual decisions */
   notes?: string;
@@ -1574,6 +1582,8 @@ export type FormAudience = "public" | "authenticated" | "adminOnly";
 
 /** Form definition tied to a site/page/post/editor block */
 export interface FormDefinition {
+  /** Derived admin response token; never persisted or included in its own fingerprint. */
+  version?: string;
   /** Unique identifier */
   id: string;
 
@@ -1713,6 +1723,8 @@ export interface FormCollectionRecordLink {
 
 /** Submission payload received from frontend */
 export interface FormSubmission {
+  /** Verified site visitor identity, assigned by the server for authenticated forms. */
+  visitorMemberId?: string | null;
   /** Submission identifier */
   id: string;
 
@@ -1768,6 +1780,8 @@ export type CommentTargetType = "page" | "post";
 
 /** Standardized public comment payload */
 export interface Comment {
+  /** Verified site visitor identity; distinct from legacy operator userId. */
+  visitorMemberId?: string | null;
   /** Unique identifier */
   id: string;
 

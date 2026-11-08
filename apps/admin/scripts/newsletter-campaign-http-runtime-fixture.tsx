@@ -1,0 +1,4 @@
+import {createRoot} from 'react-dom/client';
+import {NewsletterCampaignDesk} from '../src/components/newsletter/NewsletterCampaignDesk';
+const root=document.getElementById('root')!,siteId=root.dataset.siteId!,formId=root.dataset.formId!;
+createRoot(root).render(<main className="mx-auto max-w-6xl p-5"><h1 className="text-xl font-semibold">Newsletter joined acceptance</h1><p className="my-3 text-sm">Actual React workspace and API handlers, owned migrated PostgreSQL, synthetic SMTP and admin context. No real mail provider or deployed data.</p><button className="mb-4 min-h-11 rounded border px-3" onClick={()=>void fetch('/fixture/stop',{method:'POST'})}>Stop owned fixture</button><NewsletterCampaignDesk siteId={siteId} canView={true} canManage={true} canExport={true} forms={[{id:formId,name:'Synthetic signup form'}]}/></main>);
