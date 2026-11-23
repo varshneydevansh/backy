@@ -5,7 +5,7 @@ import { mediaDeliveryCacheMetadata } from '@/lib/mediaDeliveryCache';
 import { isMediaQuarantined } from '@/lib/mediaSafety';
 import { getMediaStorageAdapter, getMediaStoragePathFromMedia } from '@/lib/mediaStorage';
 import sharp from 'sharp';
-import { BACKY_PUBLIC_CONTRACT_VERSION, publicContractJson } from '@/lib/publicContractResponse';
+import { BACKY_PUBLIC_CONTRACT_VERSION, PUBLIC_CDN_MAX_CACHEABLE_BYTES, applyPublicCdnCache, publicContractJson } from '@/lib/publicContractResponse';
 import { getRequiredDatabaseRepositories, shouldUseDemoStoreFallback } from '@/lib/repositoryRuntime';
 import { getRepositorySitePublication } from '@/lib/repositorySitePublication';
 
@@ -60,6 +60,20 @@ const boundedInteger = (
   }
 
   return { value: parsed };
+};
+
+/**
+ * Lets Vercel's CDN keep an anonymous, unconditional 200 under the same
+ * purgeable site/media tags as /file, so each width is read from storage and
+ * resized about once a day instead of on every view. Admin media mutations
+ * purge those tags, so visibility, byte and quarantine changes still apply at
+ * once. Browsers keep `no-store`; every other response stays out of the CDN.
+ */
+const cdnCachedImage = (request: NextRequest, siteId: string, mediaId: string, response: NextResponse, bytes: number) => {
+  if (!request.headers.has('if-none-match') && !request.headers.has('range') && bytes <= PUBLIC_CDN_MAX_CACHEABLE_BYTES) {
+    applyPublicCdnCache(response.headers, { kind: 'media', request, status: response.status, siteId, mediaId });
+  }
+  return response;
 };
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -164,13 +178,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (variant) {
       const storage = await getMediaStorageAdapter();
       const buffer = await storage.read(variant.storagePath);
-      return new NextResponse(new Uint8Array(buffer), {
+      return cdnCachedImage(request, site.id, media.id, new NextResponse(new Uint8Array(buffer), {
         headers: {
           ...commonHeaders,
           'content-type': 'image/webp',
           'content-length': String(buffer.byteLength),
         },
-      });
+      }), buffer.byteLength);
     }
 
     // Next's optimizer keeps a separate cache even when upstream is no-store.
@@ -181,9 +195,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const original = await storage.read(storagePath);
     const buffer = await sharp(original, { limitInputPixels: 32_000_000 })
       .rotate().resize({ width, withoutEnlargement: true }).webp({ quality }).toBuffer();
-    return new NextResponse(new Uint8Array(buffer), {
+    return cdnCachedImage(request, site.id, media.id, new NextResponse(new Uint8Array(buffer), {
       headers: { ...commonHeaders, 'content-type': 'image/webp', 'content-length': String(buffer.byteLength) },
-    });
+    }), buffer.byteLength);
   } catch (error) {
     console.error('Public media transform API error:', error);
     return errorResponse(500, 'INTERNAL_SERVER_ERROR', 'Internal server error', requestId);

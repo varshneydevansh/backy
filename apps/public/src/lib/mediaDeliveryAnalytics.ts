@@ -145,6 +145,9 @@ export const buildNextMediaDeliveryAnalytics = (
   };
 };
 
+/** Minimum time between analytics writes for one media asset. */
+export const MEDIA_DELIVERY_WRITE_INTERVAL_MS = 15 * 60 * 1000;
+
 export const recordMediaDelivery = async (input: {
   repositories: BackyRepositories | null;
   siteId: string;
@@ -155,9 +158,15 @@ export const recordMediaDelivery = async (input: {
   quality?: number;
   requestId?: string;
 }) => {
-  const media = input.repositories
-    ? await input.repositories.media.getById(input.siteId, input.media.id) || input.media
-    : input.media;
+  // The route loaded this row moments ago; do not read it again. Counters are
+  // sampled: at most one write per asset per window, because a write on every
+  // view re-sent the growing metadata JSON to the database each time. Views
+  // served by the CDN never reach here, so these numbers are approximate.
+  const media = input.media;
+  const previous = existingDeliveryAnalytics(media.metadata);
+  if (previous && Date.now() - Date.parse(previous.lastDeliveredAt) < MEDIA_DELIVERY_WRITE_INTERVAL_MS) {
+    return;
+  }
   const mediaDelivery = buildNextMediaDeliveryAnalytics(media.metadata, {
     deliveryType: input.deliveryType,
     bytesServed: input.bytesServed,

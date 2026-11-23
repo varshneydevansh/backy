@@ -850,7 +850,11 @@ export function createPageRepository(db: DatabaseInstance, adapterType = 'postgr
         },
 
         async list(input: BackyPageListInput): Promise<BackyListResult<BackyPage>> {
-            const rows = await database.select().from(pages).where(eq(pages.siteId, input.siteId)).orderBy(desc(pages.updatedAt)) as PageRow[];
+            const conditions = [eq(pages.siteId, input.siteId)];
+            const pageStatus = input.status && input.status !== 'all' ? input.status
+                : !input.includeUnpublished && input.status !== 'all' ? 'published' : null;
+            if (pageStatus) conditions.push(eq(pages.status, pageStatus as PageRow['status']));
+            const rows = await database.select().from(pages).where(and(...conditions)).orderBy(desc(pages.updatedAt)) as PageRow[];
             const filtered = rows
                 .map(toPage)
                 .filter((page) => input.includeUnpublished || input.status === 'all' || page.status === 'published')
@@ -1020,7 +1024,14 @@ export function createPostRepository(db: DatabaseInstance, adapterType = 'postgr
             return { ...result, items: result.items.map(row => ({ ...searchIdentity(row), excerpt: row.excerpt })) };
         },
         async list(input: BackyPostListInput): Promise<BackyListResult<BackyPost>> {
-            const rows = await database.select().from(blogPosts).where(eq(blogPosts.siteId, input.siteId)).orderBy(desc(blogPosts.updatedAt)) as BlogPostRow[];
+            // Status and author narrow in SQL so public reads never transfer draft or
+            // unrelated bodies; the JS filters below keep the exact previous semantics.
+            const conditions = [eq(blogPosts.siteId, input.siteId)];
+            const postStatus = input.status && input.status !== 'all' ? input.status
+                : !input.includeUnpublished && input.status !== 'all' ? 'published' : null;
+            if (postStatus) conditions.push(eq(blogPosts.status, postStatus as BlogPostRow['status']));
+            if (input.authorId) conditions.push(eq(blogPosts.authorId, input.authorId));
+            const rows = await database.select().from(blogPosts).where(and(...conditions)).orderBy(desc(blogPosts.updatedAt)) as BlogPostRow[];
             const filtered = rows
                 .map(toPost)
                 .filter((post) => input.includeUnpublished || input.status === 'all' || post.status === 'published')

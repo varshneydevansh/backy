@@ -69,7 +69,7 @@ for (const demo of [true, false]) {
     }
     checks++;
   };
-  // Anonymous, unconditional public file 200s may be held by Vercel's CDN only
+  // Anonymous, unconditional public file and transform 200s may be held by Vercel's CDN only
   // (purged by site/media tag on admin mutation); browser and downstream CDN
   // layers stay no-store. Every other delivery below remains no-store everywhere.
   const vercelCdnOnly = (response: Response) => {
@@ -84,7 +84,7 @@ for (const demo of [true, false]) {
   const initialEtags: Record<string, string> = {};
   for (const kind of ['file', 'transform'] as const) {
     const response = await get(kind); assert.equal(response.status, 200);
-    if (kind === 'file') vercelCdnOnly(response); else noStore(response, true);
+    vercelCdnOnly(response); // file and transform 200s are both Vercel-CDN-only
     initialEtags[kind] = response.headers.get('etag')!; assert.ok(initialEtags[kind]);
     assert.equal(await response.text(), kind === 'file' ? 'one' : 'variant-one');
     const conditional = await get(kind, { etag: initialEtags[kind] });
@@ -147,7 +147,7 @@ for (const demo of [true, false]) {
   bytes.set(media.metadata.storagePath, original);
   for (const [width, quality] of [[16, 40], [32, 90], [128, 75]]) {
     const fallback = await get('transform', { width, quality });
-    assert.equal(fallback.status, 200); noStore(fallback, true);
+    assert.equal(fallback.status, 200); vercelCdnOnly(fallback);
     assert.equal(fallback.headers.get('location'), null);
     assert.equal(fallback.headers.get('content-type'), 'image/webp');
     const output = Buffer.from(await fallback.arrayBuffer()), metadata = await sharp(output).metadata();
